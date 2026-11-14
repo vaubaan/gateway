@@ -64,7 +64,7 @@ export function summarizeRestriction(
 export interface EnvLabelling {
   /** The plugin derives the environment from the call itself: no label is needed. */
   readonly derivesEnv: boolean;
-  /** Environments carried by at least one reachable resource of the connection. */
+  /** Environments carried by at least one reachable resource of the account. */
   readonly labelledEnvs: readonly string[];
   /** Reachable resources that carry no environment label. */
   readonly unlabelledResources: number;

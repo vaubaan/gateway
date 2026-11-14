@@ -11,7 +11,7 @@
 > **Two sets of words.** The interface people use says _account_,
 > _permission_, _limit_, _key_, _teammate_. The protocol you speak keeps its
 > names, and so do the fields, codes, tool names and variables on this page:
-> `connections` (accounts), `risk_id` / `RiskId` (a permission, by its id),
+> `accounts` (accounts), `risk_id` / `RiskId` (a permission, by its id),
 > `quota` and `rate_limit` (limits), `gate` (`auto`: runs freely; `approval`:
 > asks first), `token` (a key), `member` (a teammate), `named` (a machine
 > key). When you talk to a human, use the first set; when you read or write
@@ -159,8 +159,8 @@ according to the code:
 | `approval-required`       | The mission creator asked to be asked first for one or more permissions of the call. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait for their yes, then replay the call with **exactly** the same arguments.      |
 | `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                                       | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                                   |
 | `rate-limited`            | Too many actions on a permission in a short window.                                                                                      | Wait `retry_after_seconds`, retry once. Nothing was counted against the limit.                                                             |
-| `connection-unavailable`  | The account behind the call needs reconnecting.                                                                                          | Nothing you can do fixes it. Tell the human who owns the account (`owner`).                                                                |
-| `connection-revoked`      | The account behind the call no longer serves this mission: removed (`final: true`) or its creator lost access (`final: false`).          | Keep using the mission's other accounts. Do not retry through that one; tell the human, who can have a mission issued for its replacement. |
+| `account-unavailable`     | The account behind the call needs reconnecting.                                                                                          | Nothing you can do fixes it. Tell the human who owns the account (`owner`).                                                                |
+| `account-revoked`         | The account behind the call no longer serves this mission: removed (`final: true`) or its creator lost access (`final: false`).          | Keep using the mission's other accounts. Do not retry through that one; tell the human, who can have a mission issued for its replacement. |
 | `mission-inactive`        | The mission is expired, without an owner (`orphaned`) or stopped (`revoked`).                                                            | Stop calling with this key and report to the human.                                                                                        |
 | `wrong-credential-kind`   | The key was presented on the wrong door.                                                                                                 | A mission key only opens the execution endpoint (`/mcp`).                                                                                  |
 
@@ -199,7 +199,7 @@ the list of permissions and confirms **Create mission**.
 ```json
 {
   "name": "Ship the billing page",
-  "connections": [
+  "accounts": [
     {
       "provider": "github",
       "trust_levels": { "read": "careful", "propose": "trusting" },
@@ -226,7 +226,7 @@ the list of permissions and confirms **Create mission**.
 Rules of a draft (the field names are the protocol's):
 
 - an account is named by `provider` (when the human can use exactly one
-  account of that service) or by `connection_id`;
+  account of that service) or by `account_id`;
 - `resources` is `{ "scope": "all" }` or a selection by `resource_refs`;
 - `trust_levels` ticks the service's macro-actions (its `get_catalog` names
   them), each at a trust level: `careful`, `trusting` or `autonomous`. Alone,
@@ -257,7 +257,7 @@ that mission accepts:
 
 | Tool                            | What it does                                                                                  |
 | ------------------------------- | --------------------------------------------------------------------------------------------- |
-| `vaubaan__list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, macro-actions |
+| `vaubaan__list_my_accounts`     | the accounts the person owns or was given access to: permission ids, resources, macro-actions |
 | `vaubaan__get_catalog`          | one service's permissions as explicit ids, its macro-actions and its trust levels             |
 | `vaubaan__list_my_missions`     | the person's missions: state, permissions, what is left of each limit, who prepared each      |
 | `vaubaan__preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow                     |
@@ -267,7 +267,7 @@ that mission accepts:
 
 How to compose a draft that passes the first time:
 
-1. `vaubaan__list_my_connections`, then `vaubaan__get_catalog` for each
+1. `vaubaan__list_my_accounts`, then `vaubaan__get_catalog` for each
    service the task needs.
 2. Tick, per account, **the macro-actions the task needs**, each at the
    lowest trust level that lets it run; add or trim single permissions with

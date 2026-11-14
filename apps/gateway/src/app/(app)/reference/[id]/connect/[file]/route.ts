@@ -1,7 +1,7 @@
 /**
  * `GET /reference/<id>/connect/<file>` — a screenshot of a service's connect guide,
- * read from the plugin's folder, bundled or pinned (handbook connections). Thin
- * adapter over `connections.handlers.connectFile`: signed-in users only, 404 for
+ * read from the plugin's folder, bundled or pinned (handbook accounts). Thin
+ * adapter over `accounts.handlers.connectFile`: signed-in users only, 404 for
  * anything the registered plugin's guide does not declare.
  */
 import { getRoot } from '@/server/compose';
@@ -14,5 +14,5 @@ export async function GET(
   context: { params: Promise<{ id: string; file: string }> },
 ): Promise<Response> {
   const { id, file } = await context.params;
-  return (await getRoot()).connections.handlers.connectFile(request, id, file);
+  return (await getRoot()).accounts.handlers.connectFile(request, id, file);
 }

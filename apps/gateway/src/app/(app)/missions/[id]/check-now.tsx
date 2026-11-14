@@ -16,13 +16,13 @@ import styles from '../cards/cards.module.css';
 
 export function CheckNow({
   missionId,
-  connectionId,
+  accountId,
   lastCheckedAt,
   now,
   canCheck,
 }: {
   missionId: string;
-  connectionId: string;
+  accountId: string;
   lastCheckedAt: string | null;
   /** The instant the page was rendered at, so that "12 min ago" reads the same on both sides. */
   now: string;
@@ -48,7 +48,7 @@ export function CheckNow({
             onClick={async () => {
               const answer = await run(
                 `/api/missions/${encodeURIComponent(missionId)}/resources/check`,
-                { connection_id: connectionId },
+                { account_id: accountId },
               );
               if (answer.ok) router.refresh();
             }}

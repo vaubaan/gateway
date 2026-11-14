@@ -1,6 +1,6 @@
 /**
  * The issuance decision, as a pure function: a draft, checked against the
- * connections the creator holds authority on, yields a preview — what passes,
+ * accounts the creator holds authority on, yields a preview — what passes,
  * what exceeds the authority, what cannot resolve, and whether the draft can
  * be issued as written.
  *
@@ -9,7 +9,7 @@
  * rendered with, for instant feedback. `issue()` always recomputes it
  * server-side: the browser's copy decides nothing.
  *
- * Spec §3.1 (monotonicity, enumeration, partition per connection, resource
+ * Spec §3.1 (monotonicity, enumeration, partition per account, resource
  * selection), §3.2 (mandatory budget, macro-actions and trust levels), §0 "Resource" (env-qualified
  * ids resolve against the selected resources). Browser-safe: no IO.
  */
@@ -34,20 +34,20 @@ import {
 } from './macro-actions';
 import type {
   CatalogRisk,
-  ConnectionPreview,
-  DraftConnection,
+  AccountPreview,
+  DraftAccount,
   DraftPeriod,
   DraftPolicyEntry,
   DraftResourceSet,
   DraftResources,
-  IssuanceConnection,
+  IssuanceAccount,
   IssuanceResource,
   LeftOutEntry,
   MissionDraft,
   MissionPreview,
   PreviewIssue,
   PreviewNotice,
-  ResolvedDraftConnection,
+  ResolvedDraftAccount,
   ResourceSetPreview,
   UnresolvableEntry,
 } from './model';
@@ -60,8 +60,8 @@ export const MIN_PERIOD_SECONDS = 60;
 export const MAX_PERIOD_SECONDS = 366 * 24 * 3600;
 
 export interface PreviewContext {
-  /** Connections the creator holds a non-empty authority on. */
-  readonly connections: readonly IssuanceConnection[];
+  /** Accounts the creator holds a non-empty authority on. */
+  readonly accounts: readonly IssuanceAccount[];
   readonly now: Date;
 }
 
@@ -122,10 +122,8 @@ interface ResourceResolution {
  * What "all resources" means: not hidden by the owner, still returned by
  * discovery, and not one of the instance's own (never reachable by a mission).
  */
-export function defaultResources(
-  connection: Pick<IssuanceConnection, 'resources'>,
-): IssuanceResource[] {
-  return connection.resources.filter((r) => !r.hidden && !r.stale && !r.self);
+export function defaultResources(account: Pick<IssuanceAccount, 'resources'>): IssuanceResource[] {
+  return account.resources.filter((r) => !r.hidden && !r.stale && !r.self);
 }
 
 /**
@@ -133,41 +131,41 @@ export function defaultResources(
  * ones where the provider needs a label (`needsEnvLabel`). What a form preselects.
  */
 export function enterableResources(
-  connection: Pick<IssuanceConnection, 'resources' | 'risks' | 'derives_env'>,
+  account: Pick<IssuanceAccount, 'resources' | 'risks' | 'derives_env'>,
 ): IssuanceResource[] {
-  const labelled = needsEnvLabel(connection);
-  return defaultResources(connection).filter((r) => !labelled || r.env !== null);
+  const labelled = needsEnvLabel(account);
+  return defaultResources(account).filter((r) => !labelled || r.env !== null);
 }
 
 /** The "M" of "N of M resources": the default set plus hidden resources picked on purpose. */
 function resourcesTotal(
-  connection: Pick<IssuanceConnection, 'resources'>,
+  account: Pick<IssuanceAccount, 'resources'>,
   selected: readonly IssuanceResource[],
 ): number {
-  return defaultResources(connection).length + selected.filter((r) => r.hidden).length;
+  return defaultResources(account).length + selected.filter((r) => r.hidden).length;
 }
 
 /**
- * The resources one set asks for. A set taking "the rest" (`all`, `connection`) gets
- * every resource of `defaultResources` no other set of the connection selects
+ * The resources one set asks for. A set taking "the rest" (`all`, `account`) gets
+ * every resource of `defaultResources` no other set of the account selects
  * (`elsewhere`); with one set, nothing is elsewhere.
  */
 function resolveResources(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   wanted: DraftResources,
   where: Where,
   elsewhere: ReadonlySet<string> = new Set(),
   future = false,
 ): ResourceResolution {
-  if (wanted.scope === 'all' || wanted.scope === 'connection') {
+  if (wanted.scope === 'all' || wanted.scope === 'account') {
     return {
-      selected: defaultResources(connection).filter((r) => !elsewhere.has(r.id)),
+      selected: defaultResources(account).filter((r) => !elsewhere.has(r.id)),
       issues: [],
     };
   }
 
-  const byId = new Map(connection.resources.map((r) => [r.id, r]));
-  const byRef = new Map(connection.resources.map((r) => [r.ref, r]));
+  const byId = new Map(account.resources.map((r) => [r.id, r]));
+  const byRef = new Map(account.resources.map((r) => [r.ref, r]));
   const selected = new Map<string, IssuanceResource>();
   const foreign: string[] = [];
   for (const id of wanted.resource_ids ?? []) {
@@ -183,10 +181,10 @@ function resolveResources(
   const issues: PreviewIssue[] = [];
   if (foreign.length > 0) {
     issues.push({
-      code: 'resource-not-in-connection',
+      code: 'resource-not-in-account',
       message: `${foreign.length === 1 ? 'Resource' : 'Resources'} ${foreign.join(', ')} ${
         foreign.length === 1 ? 'does' : 'do'
-      } not belong to connection "${connection.display_name}".`,
+      } not belong to account "${account.display_name}".`,
       resource_refs: foreign,
       ...where,
     });
@@ -195,9 +193,9 @@ function resolveResources(
   if (stale.length > 0) {
     issues.push({
       code: 'resource-stale',
-      message: `No longer found on "${connection.display_name}" at the provider: ${stale
+      message: `No longer found on "${account.display_name}" at the provider: ${stale
         .map((r) => r.ref)
-        .join(', ')}. Refresh the connection's resources or leave ${
+        .join(', ')}. Refresh the account's resources or leave ${
         stale.length === 1 ? 'it' : 'them'
       } out.`,
       resource_refs: stale.map((r) => r.ref),
@@ -206,12 +204,12 @@ function resolveResources(
     for (const r of stale) selected.delete(r.id);
   }
   // One of the instance's own resources (SEC 2026-10-15 H1): refused whoever
-  // selects it, the creator's authority on the connection notwithstanding.
+  // selects it, the creator's authority on the account notwithstanding.
   const self = [...selected.values()].filter((r) => r.self);
   if (self.length > 0) {
     issues.push({
       code: 'resource-self',
-      message: `${self.map((r) => r.ref).join(', ')} on "${connection.display_name}" ${
+      message: `${self.map((r) => r.ref).join(', ')} on "${account.display_name}" ${
         self.length === 1 ? 'hosts' : 'host'
       } this instance: never reachable by a mission. Leave ${
         self.length === 1 ? 'it' : 'them'
@@ -226,26 +224,26 @@ function resolveResources(
   if (selected.size === 0 && nothing && !future) {
     issues.push({
       code: 'no-resource-selected',
-      message: `Connection "${connection.display_name}" has no resource selected: the mission could touch nothing on it.`,
+      message: `Account "${account.display_name}" has no resource selected: the mission could touch nothing on it.`,
       ...where,
     });
   }
-  // Keep the connection's own order, so the persisted list is stable.
-  return { selected: connection.resources.filter((r) => selected.has(r.id)), issues };
+  // Keep the account's own order, so the persisted list is stable.
+  return { selected: account.resources.filter((r) => selected.has(r.id)), issues };
 }
 
-interface ConnectionOutcome {
-  readonly preview: ConnectionPreview;
+interface AccountOutcome {
+  readonly preview: AccountPreview;
   readonly issues: PreviewIssue[];
   /** Non-blocking: what the creator should know about a selection that passes. */
   readonly notices: PreviewNotice[];
 }
 
-/** Where an issue or a notice points: the draft line and the connection it resolved to. */
+/** Where an issue or a notice points: the draft line and the account it resolved to. */
 interface Where {
-  readonly connection_index: number;
-  readonly connection_id: string;
-  /** The resource set of the connection, when the connection has several. */
+  readonly account_index: number;
+  readonly account_id: string;
+  /** The resource set of the account, when the account has several. */
   readonly resource_set_index?: number;
 }
 
@@ -254,13 +252,13 @@ function list(ids: readonly string[]): string {
 }
 
 /**
- * What writes a connection's policy when the draft gives no explicit lines:
+ * What writes an account's policy when the draft gives no explicit lines:
  * `everything-i-hold`, or the trust levels of its macro-actions.
  */
 interface Prefill {
   /** Set when the draft names `everything-i-hold`. */
   readonly everything: boolean;
-  /** The lines it writes on this connection, explicit ids only. */
+  /** The lines it writes on this account, explicit ids only. */
   readonly lines: readonly MissionPolicyEntry[];
   /** What it left out, reported when it writes the policy. */
   readonly left_out: readonly LeftOutEntry[];
@@ -269,34 +267,34 @@ interface Prefill {
   readonly issues: PreviewIssue[];
 }
 
-/** The prefill a draft names on a connection, against the selected resources. */
+/** The prefill a draft names on an account, against the selected resources. */
 function resolvePrefill(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   draft: DraftResourceSet,
   selected: readonly IssuanceResource[],
   where: Where,
 ): Prefill {
-  const trustLevels = knownTrustLevels(connection, draft.trust_levels);
+  const trustLevels = knownTrustLevels(account, draft.trust_levels);
   const issues: PreviewIssue[] = [];
   // The built-in `everything-i-hold` is computed here, against this selection (ADR
   // preset-everything-i-hold-expands-explicitly).
   if (draft.everything_i_hold === true) {
-    const lines = everythingIHold(connection, selected).entries;
+    const lines = everythingIHold(account, selected).entries;
     return { everything: true, lines, left_out: [], trustLevels, issues };
   }
   // Trust levels naming nothing here: dropped beside explicit lines (they then only
   // redraw the form), refused when they are what writes the policy.
-  const unknown = unknownMacroActions(connection, draft.trust_levels);
+  const unknown = unknownMacroActions(account, draft.trust_levels);
   if ((draft.policy ?? []).length === 0 && unknown.length > 0) {
     issues.push({
       code: 'unknown-macro-action',
-      message: `Not ${unknown.length === 1 ? 'a macro-action' : 'macro-actions'} of ${connection.provider_label}: ${list(unknown)} (known: ${list(
-        connection.macro_actions.map((action) => action.id),
+      message: `Not ${unknown.length === 1 ? 'a macro-action' : 'macro-actions'} of ${account.provider_label}: ${list(unknown)} (known: ${list(
+        account.macro_actions.map((action) => action.id),
       )}).`,
       ...where,
     });
   }
-  const written = prefillOfTrustLevels(connection, trustLevels, selected);
+  const written = prefillOfTrustLevels(account, trustLevels, selected);
   const lines = written.lines.map(({ risk_id, quota, rate_limit, gate }): MissionPolicyEntry => ({
     risk_id,
     quota,
@@ -306,7 +304,7 @@ function resolvePrefill(
   return { everything: false, lines, left_out: written.left_out, trustLevels, issues };
 }
 
-/** Where each line of a connection's policy ends up. */
+/** Where each line of an account's policy ends up. */
 interface LineBuckets {
   /** Accepted, inside the authority, resolvable, with a valid resolved budget. */
   readonly passes: MissionPolicyEntry[];
@@ -321,7 +319,7 @@ interface LineBuckets {
 }
 
 interface ClassifyInput {
-  readonly connection: IssuanceConnection;
+  readonly account: IssuanceAccount;
   readonly selected: readonly IssuanceResource[];
   /** The prefill writes the policy: what the creator does not hold or cannot resolve is left out. */
   readonly prefillOnly: boolean;
@@ -335,12 +333,12 @@ interface ClassifyInput {
  * no budget, invalid budget — otherwise it passes.
  */
 function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput): LineBuckets {
-  const { connection, selected, prefillOnly, defaultsOf } = input;
-  const catalog = new Map(connection.risks.map((r) => [r.risk_id, r]));
+  const { account, selected, prefillOnly, defaultsOf } = input;
+  const catalog = new Map(account.risks.map((r) => [r.risk_id, r]));
   // Monotonicity (spec §3.1): the lines the creator's authority does not cover.
   const outside = new Set(
     uncoveredRisks(
-      { riskIds: connection.authority },
+      { riskIds: account.authority },
       lines.map((line) => line.risk_id),
     ),
   );
@@ -373,7 +371,7 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
       } else buckets.exceeds.push(line.risk_id);
       continue;
     }
-    if (!isResolvable(risk, connection, selected)) {
+    if (!isResolvable(risk, account, selected)) {
       if (prefillOnly) {
         buckets.leftOut.push({ risk_id: line.risk_id, reason: 'unresolvable-env', env: risk.env });
       } else buckets.unresolvable.push({ risk_id: line.risk_id, env: risk.env ?? '' });
@@ -397,16 +395,16 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
 /** One issue per non-empty refusing bucket, in a fixed order. */
 function issuesOf(
   buckets: LineBuckets,
-  connection: Pick<IssuanceConnection, 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'display_name' | 'provider_label'>,
   where: Where,
 ): PreviewIssue[] {
   const { unknown, duplicates, exceeds, unresolvable, missingBudget, invalid } = buckets;
-  const name = connection.display_name;
+  const name = account.display_name;
   const issues: PreviewIssue[] = [];
   if (unknown.length > 0) {
     issues.push({
       code: 'unknown-risk',
-      message: `Not ${unknown.length === 1 ? 'a risk' : 'risks'} of the ${connection.provider_label} catalog: ${list(unknown)}. A mission policy is an explicit enumeration of catalog ids.`,
+      message: `Not ${unknown.length === 1 ? 'a risk' : 'risks'} of the ${account.provider_label} catalog: ${list(unknown)}. A mission policy is an explicit enumeration of catalog ids.`,
       risk_ids: unknown,
       ...where,
     });
@@ -469,24 +467,24 @@ function issuesOf(
  * refs are in `resource_refs`, for whoever reads the notice as data.
  */
 export function envNotices(
-  connection: Pick<IssuanceConnection, 'risks' | 'derives_env' | 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'risks' | 'derives_env' | 'display_name' | 'provider_label'>,
   selected: readonly (Pick<IssuanceResource, 'ref' | 'env'> &
     Partial<Pick<IssuanceResource, 'display_name'>>)[],
   passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
   where: Where,
 ): PreviewNotice[] {
-  if (connection.derives_env) return [];
-  const envScoped = connection.risks.filter((r) => r.env !== null);
+  if (account.derives_env) return [];
+  const envScoped = account.risks.filter((r) => r.env !== null);
   if (envScoped.length === 0) return [];
   const envs = [...new Set(envScoped.flatMap((r) => (r.env === null ? [] : [r.env])))];
   const scopedIds = new Set(envScoped.map((r) => r.risk_id));
   const accepted = passes.map((p) => p.risk_id).filter((id) => scopedIds.has(id));
-  const name = connection.display_name;
-  const consequence = `${connection.provider_label} risks that depend on the environment can never be touched there: a call that touches one is refused (risk-not-accepted), whatever the mission accepts${
+  const name = account.display_name;
+  const consequence = `${account.provider_label} risks that depend on the environment can never be touched there: a call that touches one is refused (risk-not-accepted), whatever the mission accepts${
     accepted.length > 0 ? ` — including ${list(accepted)}` : ''
   }.`;
-  const remedy = `Label the resource on the connection's page (${list(envs)}) or leave it out.`;
-  const unlabelledRemedy = `Label the resource on the connection's page (${list(envs)}), give the connection a default environment for its unlabelled resources, or leave it out.`;
+  const remedy = `Label the resource on the account's page (${list(envs)}) or leave it out.`;
+  const unlabelledRemedy = `Label the resource on the account's page (${list(envs)}), give the account a default environment for its unlabelled resources, or leave it out.`;
 
   const notices: PreviewNotice[] = [];
   const called = (r: (typeof selected)[number]): string => r.display_name || r.ref;
@@ -504,7 +502,7 @@ export function envNotices(
   if (foreign.length > 0) {
     notices.push({
       code: 'resource-env-not-in-catalog',
-      message: `${list(foreign.map((r) => `${called(r)} (labelled "${r.env}")`))} on "${name}": no ${connection.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
+      message: `${list(foreign.map((r) => `${called(r)} (labelled "${r.env}")`))} on "${name}": no ${account.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
       resource_refs: foreign.map((r) => r.ref),
       risk_ids: accepted,
       ...where,
@@ -515,7 +513,7 @@ export function envNotices(
 
 /**
  * Lines of a policy checked exactly as issuance checks the explicit lines of a draft
- * on one connection (`classifyLines`, then `issuesOf`): known to the catalog, inside
+ * on one account (`classifyLines`, then `issuesOf`): known to the catalog, inside
  * the creator's authority now, resolvable on the selected resources, with a budget
  * that `budgetProblem` accepts. A change of a mission's limits after issuance
  * (`MissionService.setLimits`) is judged by this and nothing else, so that whatever
@@ -523,35 +521,35 @@ export function envNotices(
  * macro-action fills anything in.
  */
 export function checkPolicyLines(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   selected: readonly IssuanceResource[],
   lines: readonly MissionPolicyEntry[],
   index = 0,
 ): { readonly passes: readonly MissionPolicyEntry[]; readonly issues: readonly PreviewIssue[] } {
-  const where: Where = { connection_index: index, connection_id: connection.id };
+  const where: Where = { account_index: index, account_id: account.id };
   const buckets = classifyLines(lines, {
-    connection,
+    account,
     selected,
     prefillOnly: false,
     defaultsOf: () => null,
   });
-  return { passes: buckets.passes, issues: issuesOf(buckets, connection, where) };
+  return { passes: buckets.passes, issues: issuesOf(buckets, account, where) };
 }
 
 /**
- * What the built-in `everything-i-hold` wrote out on this connection,
+ * What the built-in `everything-i-hold` wrote out on this account,
  * said before anything is issued: how many lines, the hardest to repair, those
  * that cannot be repaired and run freely, and the fallback by id (ADR
  * preset-everything-i-hold-expands-explicitly). `risk_ids`: the row-4 ids
  * running freely, then the fallback. The lines themselves are `passes`.
  */
 export function everythingNotice(
-  connection: Pick<IssuanceConnection, 'risks' | 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'risks' | 'display_name' | 'provider_label'>,
   passes: readonly Pick<MissionPolicyEntry, 'risk_id' | 'gate'>[],
   where: Where,
 ): PreviewNotice {
-  const digest = expansionDigest(passes, connection.risks);
-  const name = connection.display_name;
+  const digest = expansionDigest(passes, account.risks);
+  const name = account.display_name;
   const severe = digest.hardest
     ? ` The hardest to repair: ${digest.hardest.risk_id} (${ROW_WORDS[digest.hardest.row]}).`
     : '';
@@ -565,7 +563,7 @@ export function everythingNotice(
     digest.fallback.length > 0
       ? ` Includes the fallback ${list(
           digest.fallback.map((r) => r.risk_id),
-        )}: writes no other entry of the ${connection.provider_label} catalog names, which nobody reviewed.`
+        )}: writes no other entry of the ${account.provider_label} catalog names, which nobody reviewed.`
       : '';
   return {
     code: 'everything-i-hold-expanded',
@@ -581,7 +579,7 @@ export function everythingNotice(
   };
 }
 
-/** What one set of a connection yields, with the issues and notices about it. */
+/** What one set of an account yields, with the issues and notices about it. */
 interface SetOutcome {
   readonly preview: ResourceSetPreview;
   readonly resourcesTotal: number;
@@ -590,7 +588,7 @@ interface SetOutcome {
 }
 
 /**
- * One set of a connection after normalization: its draft as `resource_sets` gives it —
+ * One set of an account after normalization: its draft as `resource_sets` gives it —
  * an explicit selection, `future`, the policy lines that apply in its environment, and
  * `env` when it lists no resource — and the resources that selection resolved to.
  * Previewing the normalized draft again yields the same sets (`normalizeDraft`).
@@ -602,9 +600,9 @@ interface NormalSet {
   readonly split?: true;
 }
 
-/** One set of a draft connection, on the resources it was given. */
+/** One set of a draft account, on the resources it was given. */
 function previewSet(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   set: NormalSet,
   index: number,
   where: Where,
@@ -613,8 +611,8 @@ function previewSet(
   // Several sets: each sentence names its set beside the account ("acme — resource set 2").
   const named =
     where.resource_set_index === undefined
-      ? connection
-      : { ...connection, display_name: `${connection.display_name} — resource set ${index + 1}` };
+      ? account
+      : { ...account, display_name: `${account.display_name} — resource set ${index + 1}` };
   const prefill = resolvePrefill(named, draft, resources.selected, where);
 
   // A draft with explicit lines accepts exactly those; a draft without writes
@@ -629,13 +627,13 @@ function previewSet(
     (prefillOnly || prefill.everything ? prefill.lines : []).map((line) => [line.risk_id, line]),
   );
   const buckets = classifyLines(lines, {
-    connection,
+    account,
     selected: resources.selected,
     prefillOnly,
     defaultsOf: (risk) => fills.get(risk.risk_id) ?? null,
   });
 
-  const env = envOfSet(connection, set, named, where);
+  const env = envOfSet(account, set, named, where);
   const issues = [
     ...resources.issues,
     ...env.issues,
@@ -645,7 +643,7 @@ function previewSet(
   if (lines.length === 0 || (prefillOnly && buckets.passes.length === 0)) {
     issues.push({
       code: 'no-accepted-risk',
-      message: `Connection "${named.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
+      message: `Account "${named.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the account out.`,
       ...where,
     });
   }
@@ -666,7 +664,7 @@ function previewSet(
       left_out: prefillOnly ? [...prefill.left_out, ...buckets.leftOut] : [],
       trust_levels: prefill.trustLevels,
     },
-    resourcesTotal: resourcesTotal(connection, resources.selected),
+    resourcesTotal: resourcesTotal(account, resources.selected),
     issues,
     notices: [
       ...(prefill.everything ? [everythingNotice(named, buckets.passes, where)] : []),
@@ -676,14 +674,12 @@ function previewSet(
 }
 
 /**
- * True when a resource of this connection must carry an environment label to enter a
+ * True when a resource of this account must carry an environment label to enter a
  * set: its catalog has env-qualified risks and the plugin does not read the environment
  * from the call itself (ADR resource-set-is-one-environment-with-optional-future-resources).
  */
-export function needsEnvLabel(
-  connection: Pick<IssuanceConnection, 'risks' | 'derives_env'>,
-): boolean {
-  return !connection.derives_env && connection.risks.some((r) => r.env !== null);
+export function needsEnvLabel(account: Pick<IssuanceAccount, 'risks' | 'derives_env'>): boolean {
+  return !account.derives_env && account.risks.some((r) => r.env !== null);
 }
 
 /**
@@ -693,9 +689,9 @@ export function needsEnvLabel(
  * needs one (`resource-unlabelled`).
  */
 function envOfSet(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   set: NormalSet,
-  named: Pick<IssuanceConnection, 'display_name'>,
+  named: Pick<IssuanceAccount, 'display_name'>,
   where: Where,
 ): { readonly env: string | null; readonly issues: PreviewIssue[] } {
   const envs = new Set(set.resources.selected.map((r) => r.env));
@@ -715,7 +711,7 @@ function envOfSet(
   const unlabelled = set.resources.selected.filter((r) => r.env === null);
   const futureOnly = set.draft.future === true && set.resources.selected.length === 0;
   if (
-    needsEnvLabel(connection) &&
+    needsEnvLabel(account) &&
     envs.size <= 1 &&
     env === null &&
     (unlabelled.length > 0 || futureOnly)
@@ -724,8 +720,8 @@ function envOfSet(
       code: 'resource-unlabelled',
       message:
         unlabelled.length > 0
-          ? `No environment label on ${list(unlabelled.map((r) => r.display_name || r.ref))} ("${named.display_name}"): ${connection.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled. Label it on the connection's page, give the connection a default environment, or leave it out.`
-          : `"${named.display_name}" takes future resources without an environment: ${connection.provider_label} has permissions that depend on the environment. Name the environment of the set.`,
+          ? `No environment label on ${list(unlabelled.map((r) => r.display_name || r.ref))} ("${named.display_name}"): ${account.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled. Label it on the account's page, give the account a default environment, or leave it out.`
+          : `"${named.display_name}" takes future resources without an environment: ${account.provider_label} has permissions that depend on the environment. Name the environment of the set.`,
       resource_refs: unlabelled.map((r) => r.ref),
       ...where,
     });
@@ -757,7 +753,7 @@ function linesForEnv(
   });
 }
 
-/** The resources grouped by environment, in the connection's own order. */
+/** The resources grouped by environment, in the account's own order. */
 function byEnvironment(
   resources: readonly IssuanceResource[],
 ): Map<string | null, IssuanceResource[]> {
@@ -766,10 +762,10 @@ function byEnvironment(
   return groups;
 }
 
-/** True when a set takes "the rest" of the connection: every resource no other set selects. */
+/** True when a set takes "the rest" of the account: every resource no other set selects. */
 function takesTheRest(set: DraftResourceSet): boolean {
   const scope = set.resources?.scope ?? 'all';
-  return scope === 'all' || scope === 'connection';
+  return scope === 'all' || scope === 'account';
 }
 
 /**
@@ -822,17 +818,17 @@ function splitByEnvironment(
 }
 
 /**
- * The sets of a connection as they would be stored (risk model §4.7; ADR
+ * The sets of an account as they would be stored (risk model §4.7; ADR
  * resource-set-is-one-environment-with-optional-future-resources): the explicit
  * selections first, each resource in one set only; then the one set that takes the
- * rest (`all`, `connection`), if any. A legacy selection — the flat shape, `all`,
- * `connection` — is split by environment (a resource without a label left out of the
+ * rest (`all`, `account`), if any. A legacy selection — the flat shape, `all`,
+ * `account` — is split by environment (a resource without a label left out of the
  * rest where the provider needs one); a set given in `resource_sets` with `selected` is
  * kept whole, and refused if it mixes environments.
  */
 function normalizeSets(
-  connection: IssuanceConnection,
-  draft: DraftConnection,
+  account: IssuanceAccount,
+  draft: DraftAccount,
   where: Where,
 ): {
   readonly sets: NormalSet[];
@@ -848,7 +844,7 @@ function normalizeSets(
     takesTheRest(set)
       ? null
       : resolveResources(
-          connection,
+          account,
           set.resources ?? { scope: 'all' },
           whereOf(index),
           new Set(),
@@ -868,7 +864,7 @@ function normalizeSets(
   if (twice.size > 0) {
     issues.push({
       code: 'resource-sets-overlap',
-      message: `On "${connection.display_name}", ${[...twice].join(', ')} ${
+      message: `On "${account.display_name}", ${[...twice].join(', ')} ${
         twice.size === 1 ? 'is' : 'are'
       } in two resource sets: a resource belongs to one set only.`,
       resource_refs: [...twice],
@@ -879,7 +875,7 @@ function normalizeSets(
   if (rest.length > 1) {
     issues.push({
       code: 'resource-sets-overlap',
-      message: `On "${connection.display_name}", ${rest.length} resource sets take every resource no other set selects ("All resources" or "The whole account"): only one set may.`,
+      message: `On "${account.display_name}", ${rest.length} resource sets take every resource no other set selects ("All resources" or "The whole account"): only one set may.`,
       ...where,
     });
   }
@@ -893,22 +889,22 @@ function normalizeSets(
         ? splitByEnvironment(set, given, set.future === true, set.env ?? null)
         : [{ draft: set, resources: given }];
     }
-    const legacyFuture = set.resources?.scope === 'connection';
+    const legacyFuture = set.resources?.scope === 'account';
     const future = set.future ?? legacyFuture;
     let resolution = resolveResources(
-      connection,
+      account,
       set.resources ?? { scope: 'all' },
       whereOf(index),
       elsewhere,
     );
-    if (needsEnvLabel(connection)) {
+    if (needsEnvLabel(account)) {
       const unlabelled = resolution.selected.filter((r) => r.env === null);
       if (unlabelled.length > 0) {
         notices.push({
           code: 'unlabelled-resources-left-out',
-          message: `Left out on "${connection.display_name}", without an environment label: ${list(
+          message: `Left out on "${account.display_name}", without an environment label: ${list(
             unlabelled.map((r) => r.display_name || r.ref),
-          )}. ${connection.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled.`,
+          )}. ${account.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled.`,
           resource_refs: unlabelled.map((r) => r.ref),
           risk_ids: [],
           ...whereOf(index),
@@ -917,13 +913,13 @@ function normalizeSets(
       }
     }
     // A set of future resources only takes the environment later resources inherit.
-    const emptyEnv = set.env !== undefined ? set.env : future ? connection.default_env : null;
+    const emptyEnv = set.env !== undefined ? set.env : future ? account.default_env : null;
     return splitByEnvironment(set, resolution, future, emptyEnv);
   });
   if (normal.length > sets.length) {
     notices.push({
       code: 'split-by-environment',
-      message: `"${connection.display_name}" is given as ${normal.length} resource sets, one per environment, each with the permissions that apply there: a resource set holds the resources of one environment.`,
+      message: `"${account.display_name}" is given as ${normal.length} resource sets, one per environment, each with the permissions that apply there: a resource set holds the resources of one environment.`,
       resource_refs: [],
       risk_ids: [],
       ...where,
@@ -939,7 +935,7 @@ function normalizeSets(
     if (count < 2) continue;
     issues.push({
       code: 'resource-sets-overlap',
-      message: `On "${connection.display_name}", ${count} resource sets take the future resources of ${
+      message: `On "${account.display_name}", ${count} resource sets take the future resources of ${
         env === null ? 'no environment' : `"${env}"`
       }: only one set may, so a new resource knows where it goes.`,
       ...where,
@@ -949,15 +945,15 @@ function normalizeSets(
 }
 
 /** Each set previewed at its place: "resource set N" only when there are several. */
-function previewSets(connection: IssuanceConnection, sets: readonly NormalSet[], where: Where) {
+function previewSets(account: IssuanceAccount, sets: readonly NormalSet[], where: Where) {
   const several = sets.length > 1;
   return sets.map((set, index) =>
-    previewSet(connection, set, index, several ? { ...where, resource_set_index: index } : where),
+    previewSet(account, set, index, several ? { ...where, resource_set_index: index } : where),
   );
 }
 
 /**
- * The normalized sets of a connection and what each yields. A set a split made that
+ * The normalized sets of an account and what each yields. A set a split made that
  * accepts nothing, and is refused for that alone (`no-accepted-risk`), is dropped while
  * another set of the split accepts something: the lines of a legacy draft apply to some
  * environments only (a macro-action of prod risks), and its other environments are left
@@ -965,12 +961,12 @@ function previewSets(connection: IssuanceConnection, sets: readonly NormalSet[],
  * narrowed silently.
  */
 function settledSets(
-  connection: IssuanceConnection,
-  draft: DraftConnection,
+  account: IssuanceAccount,
+  draft: DraftAccount,
   where: Where,
 ): { readonly normalized: ReturnType<typeof normalizeSets>; readonly outcomes: SetOutcome[] } {
-  const normalized = normalizeSets(connection, draft, where);
-  const outcomes = previewSets(connection, normalized.sets, where);
+  const normalized = normalizeSets(account, draft, where);
+  const outcomes = previewSets(account, normalized.sets, where);
   const idle = (o: SetOutcome): boolean =>
     o.preview.passes.length === 0 && o.issues.every((i) => i.code === 'no-accepted-risk');
   if (!outcomes.some((o) => !idle(o))) return { normalized, outcomes };
@@ -981,17 +977,17 @@ function settledSets(
   if (kept.length === normalized.sets.length) return { normalized, outcomes };
   return {
     normalized: { ...normalized, sets: kept },
-    outcomes: previewSets(connection, kept, where),
+    outcomes: previewSets(account, kept, where),
   };
 }
 
-/** One connection of a draft against the creator's authority on it. */
-export function previewConnection(
-  connection: IssuanceConnection,
-  draft: DraftConnection,
+/** One account of a draft against the creator's authority on it. */
+export function previewAccount(
+  account: IssuanceAccount,
+  draft: DraftAccount,
   index = 0,
-): ConnectionOutcome {
-  const where: Where = { connection_index: index, connection_id: connection.id };
+): AccountOutcome {
+  const where: Where = { account_index: index, account_id: account.id };
   const issues: PreviewIssue[] = [];
   const mixed =
     draft.resource_sets !== undefined &&
@@ -1004,32 +1000,32 @@ export function previewConnection(
   if (mixed) {
     issues.push({
       code: 'resource-sets-mixed',
-      message: `Connection "${connection.display_name}" gives resource_sets and, beside them, its own resources, policy, trust_levels or everything_i_hold: give each set its own, and nothing beside them.`,
+      message: `Account "${account.display_name}" gives resource_sets and, beside them, its own resources, policy, trust_levels or everything_i_hold: give each set its own, and nothing beside them.`,
       ...where,
     });
   }
   if (draftSetsOf(draft).length === 0) {
     issues.push({
       code: 'no-resource-selected',
-      message: `Connection "${connection.display_name}" has no resource set: the mission could touch nothing on it.`,
+      message: `Account "${account.display_name}" has no resource set: the mission could touch nothing on it.`,
       ...where,
     });
   }
-  const { normalized, outcomes } = settledSets(connection, draft, where);
+  const { normalized, outcomes } = settledSets(account, draft, where);
   issues.push(...normalized.issues);
   const previews = outcomes.map((o) => o.preview);
-  const resources = connection.resources.filter((r) =>
+  const resources = account.resources.filter((r) =>
     previews.some((set) => set.resources.some((own) => own.id === r.id)),
   );
   const [first] = previews;
   return {
     preview: {
-      connection_id: connection.id,
-      provider: connection.provider,
-      display_name: connection.display_name,
+      account_id: account.id,
+      provider: account.provider,
+      display_name: account.display_name,
       resources,
       future: previews.some((set) => set.future),
-      resources_total: resourcesTotal(connection, resources),
+      resources_total: resourcesTotal(account, resources),
       everything_i_hold: previews.some((set) => set.everything_i_hold),
       passes: previews.flatMap((set) => set.passes),
       exceeds: [...new Set(previews.flatMap((set) => set.exceeds))],
@@ -1046,9 +1042,9 @@ export function previewConnection(
 }
 
 /**
- * The draft with every connection the context knows given as `resource_sets` of one
+ * The draft with every account the context knows given as `resource_sets` of one
  * environment each — what `previewDraft` stores — and the notices the normalization
- * gave. A connection that gives `resource_sets` beside its own fields is left as it is
+ * gave. An account that gives `resource_sets` beside its own fields is left as it is
  * (`resource-sets-mixed`). The edit's judgement reads the normalized draft, so that its
  * draft sets and the preview's sets are the same list.
  */
@@ -1057,8 +1053,8 @@ export function normalizeDraft(
   draft: MissionDraft,
 ): { readonly draft: MissionDraft; readonly notices: readonly PreviewNotice[] } {
   const notices: PreviewNotice[] = [];
-  const connections = draft.connections.map((line, index): DraftConnection => {
-    const found = findConnection(context, line, index);
+  const accounts = draft.accounts.map((line, index): DraftAccount => {
+    const found = findAccount(context, line, index);
     if ('issue' in found) return line;
     const mixed =
       line.resource_sets !== undefined &&
@@ -1069,62 +1065,62 @@ export function normalizeDraft(
         line.trust_levels !== undefined ||
         line.everything_i_hold !== undefined);
     if (mixed) return line;
-    const where: Where = { connection_index: index, connection_id: found.connection.id };
-    const { normalized } = settledSets(found.connection, line, where);
+    const where: Where = { account_index: index, account_id: found.account.id };
+    const { normalized } = settledSets(found.account, line, where);
     notices.push(...normalized.notices);
     return {
-      connection_id: found.connection.id,
+      account_id: found.account.id,
       resource_sets: normalized.sets.map((set) => set.draft),
     };
   });
-  return { draft: { ...draft, connections }, notices };
+  return { draft: { ...draft, accounts }, notices };
 }
 
-/** The connection a draft line names, by id or by provider. */
-function findConnection(
+/** The account a draft line names, by id or by provider. */
+function findAccount(
   context: PreviewContext,
-  draft: DraftConnection,
+  draft: DraftAccount,
   index: number,
-): { connection: IssuanceConnection } | { issue: PreviewIssue } {
-  if (draft.connection_id) {
-    const found = context.connections.find((c) => c.id === draft.connection_id);
-    if (found) return { connection: found };
-    // One answer for "does not exist" and "not yours": no probing of other people's connections.
+): { account: IssuanceAccount } | { issue: PreviewIssue } {
+  if (draft.account_id) {
+    const found = context.accounts.find((c) => c.id === draft.account_id);
+    if (found) return { account: found };
+    // One answer for "does not exist" and "not yours": no probing of other people's accounts.
     return {
       issue: {
-        code: 'connection-unknown',
-        message: `Connection ${draft.connection_id} does not exist or you hold no authority on it.`,
-        connection_index: index,
-        connection_id: draft.connection_id,
+        code: 'account-unknown',
+        message: `Account ${draft.account_id} does not exist or you hold no authority on it.`,
+        account_index: index,
+        account_id: draft.account_id,
       },
     };
   }
   if (draft.provider) {
-    const candidates = context.connections.filter(
+    const candidates = context.accounts.filter(
       (c) => c.provider === draft.provider && c.status === 'active',
     );
     const [only] = candidates;
-    if (candidates.length === 1 && only) return { connection: only };
+    if (candidates.length === 1 && only) return { account: only };
     return {
       issue:
         candidates.length === 0
           ? {
-              code: 'connection-unknown',
-              message: `You hold no active ${draft.provider} connection.`,
-              connection_index: index,
+              code: 'account-unknown',
+              message: `You hold no active ${draft.provider} account.`,
+              account_index: index,
             }
           : {
-              code: 'connection-ambiguous',
-              message: `You hold ${candidates.length} ${draft.provider} connections; name one by connection_id (${list(candidates.map((c) => c.id))}).`,
-              connection_index: index,
+              code: 'account-ambiguous',
+              message: `You hold ${candidates.length} ${draft.provider} accounts; name one by account_id (${list(candidates.map((c) => c.id))}).`,
+              account_index: index,
             },
     };
   }
   return {
     issue: {
-      code: 'connection-unknown',
-      message: 'A connection is named by connection_id or by provider.',
-      connection_index: index,
+      code: 'account-unknown',
+      message: 'An account is named by account_id or by provider.',
+      account_index: index,
     },
   };
 }
@@ -1168,57 +1164,57 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       message: `The name is longer than ${MISSION_NAME_MAX_LENGTH} characters.`,
     });
   }
-  if (draft.connections.length === 0) {
-    issues.push({ code: 'no-connection', message: 'A mission carries at least one connection.' });
+  if (draft.accounts.length === 0) {
+    issues.push({ code: 'no-account', message: 'A mission carries at least one account.' });
   }
 
   const notices: PreviewNotice[] = [];
-  const previews: ConnectionPreview[] = [];
-  const used: IssuanceConnection[] = [];
-  const seenConnections = new Set<string>();
+  const previews: AccountPreview[] = [];
+  const used: IssuanceAccount[] = [];
+  const seenAccounts = new Set<string>();
   const seenProviders = new Map<string, string>();
 
-  draft.connections.forEach((draftConnection, index) => {
-    const found = findConnection(context, draftConnection, index);
+  draft.accounts.forEach((draftAccount, index) => {
+    const found = findAccount(context, draftAccount, index);
     if ('issue' in found) {
       issues.push(found.issue);
       return;
     }
-    const { connection } = found;
-    const where = { connection_index: index, connection_id: connection.id };
-    if (seenConnections.has(connection.id)) {
+    const { account } = found;
+    const where = { account_index: index, account_id: account.id };
+    if (seenAccounts.has(account.id)) {
       issues.push({
-        code: 'duplicate-connection',
-        message: `Connection "${connection.display_name}" is listed twice.`,
+        code: 'duplicate-account',
+        message: `Account "${account.display_name}" is listed twice.`,
         ...where,
       });
       return;
     }
-    seenConnections.add(connection.id);
-    const sameProvider = seenProviders.get(connection.provider);
+    seenAccounts.add(account.id);
+    const sameProvider = seenProviders.get(account.provider);
     if (sameProvider !== undefined) {
       // The policy is keyed by RiskId, whose first segment is the provider: two
-      // connections of one provider would share one partition and one budget.
+      // accounts of one provider would share one partition and one budget.
       issues.push({
         code: 'duplicate-provider',
-        message: `A mission carries one connection per provider, and "${sameProvider}" and "${connection.display_name}" are both ${connection.provider_label} connections. The risks and the budget of a mission are counted per provider, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
+        message: `A mission carries one account per provider, and "${sameProvider}" and "${account.display_name}" are both ${account.provider_label} accounts. The risks and the budget of a mission are counted per provider, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
         ...where,
       });
       return;
     }
-    seenProviders.set(connection.provider, connection.display_name);
-    if (connection.status !== 'active') {
+    seenProviders.set(account.provider, account.display_name);
+    if (account.status !== 'active') {
       issues.push({
-        code: 'connection-unavailable',
-        message: `Connection "${connection.display_name}" is ${connection.status}; reconnect it before issuing a mission on it.`,
+        code: 'account-unavailable',
+        message: `Account "${account.display_name}" is ${account.status}; reconnect it before issuing a mission on it.`,
         ...where,
       });
     }
-    const outcome = previewConnection(connection, draftConnection, index);
+    const outcome = previewAccount(account, draftAccount, index);
     issues.push(...outcome.issues);
     notices.push(...outcome.notices);
     previews.push(outcome.preview);
-    used.push(connection);
+    used.push(account);
   });
 
   const period = periodIssue(draft.period);
@@ -1226,8 +1222,8 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
   const expiry = expiryIssue(draft.expires_at, context.now);
   if (expiry) issues.push(expiry);
 
-  const resolved: ResolvedDraftConnection[] = previews.map((p) => ({
-    connection_id: p.connection_id,
+  const resolved: ResolvedDraftAccount[] = previews.map((p) => ({
+    account_id: p.account_id,
     resource_sets: p.resource_sets.map((set) => ({
       ...(set.id !== null ? { id: set.id } : {}),
       resources: { scope: 'selected', resource_ids: set.resources.map((r) => r.id) },
@@ -1244,12 +1240,12 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
     issues,
     notices,
     name,
-    connections: previews,
+    accounts: previews,
     policy: previews.flatMap((p) => p.passes),
     period: draft.period,
     expires_at: draft.expires_at,
     summary: summarize({
-      connections: used,
+      accounts: used,
       previews,
       period: draft.period,
       expires_at: draft.expires_at,
@@ -1259,6 +1255,6 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
 }
 
 /** The uncovered list of a preview: every accepted id outside the authority (spec §3.1). */
-export function uncoveredOf(preview: Pick<MissionPreview, 'connections'>): RiskId[] {
-  return preview.connections.flatMap((c) => c.exceeds);
+export function uncoveredOf(preview: Pick<MissionPreview, 'accounts'>): RiskId[] {
+  return preview.accounts.flatMap((c) => c.exceeds);
 }

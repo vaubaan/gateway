@@ -6,12 +6,8 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import type {
-  IssuanceConnection,
-  MissionDraft,
-  ResolvedDraftConnection,
-} from '@/lib/missions/model';
-import { draftConnectionOf, type MissionSnapshot } from '@/lib/missions/mission-edit';
+import type { IssuanceAccount, MissionDraft, ResolvedDraftAccount } from '@/lib/missions/model';
+import { draftAccountOf, type MissionSnapshot } from '@/lib/missions/mission-edit';
 import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
 import {
@@ -29,7 +25,7 @@ import {
  * and the level it goes to. The server checked it is offered.
  */
 export interface EditRaise {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly resourceSetId: string;
   readonly macroActionId: string;
   readonly to: TrustLevel;
@@ -40,16 +36,16 @@ export interface EditRaise {
  * whose card the screen does not show leaves the state as it is.
  */
 export function raisedEditState(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: FormState,
   raise: EditRaise,
 ): { readonly state: FormState; readonly replaced: readonly RiskId[] } {
-  const connection = context.find((c) => c.id === raise.connectionId);
+  const account = context.find((c) => c.id === raise.accountId);
   const card = state.cards.find(
-    (c) => c.connectionId === raise.connectionId && c.id === raise.resourceSetId,
+    (c) => c.accountId === raise.accountId && c.id === raise.resourceSetId,
   );
-  if (!connection || !card) return { state, replaced: [] };
-  const raised = raiseMacroAction(connection, card, raise.macroActionId, raise.to);
+  if (!account || !card) return { state, replaced: [] };
+  const raised = raiseMacroAction(account, card, raise.macroActionId, raise.to);
   return { state: replaceCard(state, raised.card), replaced: raised.replaced };
 }
 
@@ -68,9 +64,9 @@ export interface EditSource {
 }
 
 /** The mission's accounts as the form loads them: their stored selection and lines. */
-export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConnection[] {
-  return snapshot.connections.map((c) => ({
-    connection_id: c.connection_id,
+export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftAccount[] {
+  return snapshot.accounts.map((c) => ({
+    account_id: c.account_id,
     resource_sets: c.resource_sets.map((set) => ({
       ...(set.id !== null ? { id: set.id } : {}),
       resources: { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
@@ -88,7 +84,7 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
  * resources and permissions, its period, and its end date "as it is".
  */
 export function initialEditState(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   snapshot: MissionSnapshot,
 ): FormState {
   const loaded = loadResolved(context, initialFormState(), resolvedOfSnapshot(snapshot));
@@ -108,19 +104,17 @@ export function initialEditState(
  * nothing is removed that the person did not see.
  */
 export function editDraftOf(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: FormState,
   snapshot: MissionSnapshot,
   now: Date,
 ): MissionDraft {
   const draft = draftOf(context, state, now);
   const shown = new Set(context.map((c) => c.id));
-  const carried = snapshot.connections
-    .filter((c) => !shown.has(c.connection_id))
-    .map(draftConnectionOf);
+  const carried = snapshot.accounts.filter((c) => !shown.has(c.account_id)).map(draftAccountOf);
   return {
     ...draft,
     period: snapshot.period,
-    connections: [...draft.connections, ...carried],
+    accounts: [...draft.accounts, ...carried],
   };
 }

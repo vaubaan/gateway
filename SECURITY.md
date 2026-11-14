@@ -76,7 +76,7 @@ In scope — anything that breaks what the gateway promises:
 - a secret or call arguments written in clear to logs, or a telemetry report
   carrying anything other than what the specification lists;
 - flaws in sign-in, sessions, the OAuth authorization server, or the provider
-  connection flows (replay, redirect, installation not bound to its user).
+  connect flows (replay, redirect, installation not bound to its user).
 
 Out of scope:
 
@@ -144,7 +144,7 @@ findings without a demonstrated impact are out of scope).
 1. **One instance, one company, one trust domain.** Whoever operates the
    instance can reach decrypted credentials in the memory of the running
    process. The gateway does not defend against its own operator.
-2. **An agent never holds a connection's stored credential.** It holds a
+2. **An agent never holds an account's stored credential.** It holds a
    mission token; the gateway decrypts the credential for the duration of one
    call and returns only the result. No tool hands a provider token to the
    agent: the plugin SDK has no way to declare one.
@@ -156,7 +156,7 @@ findings without a demonstrated impact are out of scope).
    account, which never acts on itself), the human session uses the
    interface. Only a human session grants a request or an approval.
 5. **Identity comes from your identity provider; authorization is local.**
-   Credentials are encrypted at rest with a key derived per connection from a
+   Credentials are encrypted at rest with a key derived per account from a
    master key kept outside the store, the audit log is append-only, and TLS
    is terminated by a proxy you run.
 
@@ -166,7 +166,7 @@ the reasoning behind the first line is the ADR
 [trust-model-clear-at-rest-idp-style](docs/decisions/trust-model-clear-at-rest-idp-style.md).
 How each of these is implemented is described in the handbooks under
 [`docs/handbook/`](docs/handbook/): [authentication](docs/handbook/authentication.md),
-[connections](docs/handbook/connections.md),
+[accounts](docs/handbook/accounts.md),
 [execution-door](docs/handbook/execution-door.md),
 [providers/vaubaan](docs/handbook/providers/vaubaan.md) and
 [audit](docs/handbook/audit.md). Who can attempt what on each surface, the

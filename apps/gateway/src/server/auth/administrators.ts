@@ -198,7 +198,7 @@ export interface WayInProvider {
 export interface AdministratorsDeps {
   readonly store: Pick<
     Store,
-    'administrators' | 'users' | 'groups' | 'config' | 'localAccounts' | 'auditWriter'
+    'administrators' | 'users' | 'groups' | 'config' | 'signInAccounts' | 'auditWriter'
   >;
   /** The providers configured now (`SignInProvidersService.views`). */
   readonly providers: () => Promise<readonly WayInProvider[]>;
@@ -403,7 +403,7 @@ export class AdministratorsService {
   /**
    * The administrators who have a way in: active users, administrators by a `user`
    * designation or a designated group's membership, whose provider (found by their
-   * issuer) is configured and enabled — and, for local accounts, whose account exists.
+   * issuer) is configured and enabled — and, for sign-in accounts, whose account exists.
    */
   async withAWayIn(change: LockoutChange = {}): Promise<UserRecord[]> {
     const providers = (await this.deps.providers()).filter(
@@ -447,7 +447,7 @@ export class AdministratorsService {
       const provider = providers.find((p) => issuerKey(p.issuer) === issuerKey(user.issuer ?? ''));
       if (!provider) continue;
       if (provider.kind === 'local') {
-        const account = await this.deps.store.localAccounts.getById(user.subject);
+        const account = await this.deps.store.signInAccounts.getById(user.subject);
         if (!account) continue;
       }
       out.push(user);

@@ -13,15 +13,11 @@ import {
   judgeEdit,
   missionRevision,
   type MissionSnapshot,
-  type MissionSnapshotConnection,
+  type MissionSnapshotAccount,
 } from './mission-edit';
-import type { DraftConnection, MissionDraft } from './model';
+import type { DraftAccount, MissionDraft } from './model';
 import { previewDraft } from './preview';
-import {
-  ACME_RESOURCES,
-  ACME_STALE,
-  acmeConnection,
-} from '../../../tests/support/missions/testing';
+import { ACME_RESOURCES, ACME_STALE, acmeAccount } from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
 
@@ -40,7 +36,7 @@ const line = (
 const SET = 'set-1';
 /** An account of the snapshot with one resource set. */
 function account(
-  c: Omit<MissionSnapshotConnection, 'resource_sets'> & {
+  c: Omit<MissionSnapshotAccount, 'resource_sets'> & {
     readonly resource_ids: readonly string[];
     readonly future?: boolean;
     readonly env?: string | null;
@@ -48,7 +44,7 @@ function account(
     readonly trust_levels?: Readonly<Record<string, string>>;
     readonly set?: string;
   },
-): MissionSnapshotConnection {
+): MissionSnapshotAccount {
   const { resource_ids, future = false, env = null, policy, trust_levels, set = SET, ...rest } = c;
   return {
     ...rest,
@@ -71,9 +67,9 @@ const BEFORE: MissionSnapshot = {
   name: 'Ship it',
   expires_at: null,
   period: { kind: 'recurring', length_seconds: 86_400 },
-  connections: [
+  accounts: [
     account({
-      connection_id: 'conn-acme',
+      account_id: 'conn-acme',
       provider: 'acme',
       display_name: 'Acme main',
       resource_ids: ['res-app-staging'],
@@ -84,14 +80,14 @@ const BEFORE: MissionSnapshot = {
 };
 
 function contextWith(resources = ACME_RESOURCES, status = 'active') {
-  return { connections: [acmeConnection({ resources: [...resources], status })], now: NOW };
+  return { accounts: [acmeAccount({ resources: [...resources], status })], now: NOW };
 }
 
-function edit(change: (c: DraftConnection) => DraftConnection, draft: Partial<MissionDraft> = {}) {
+function edit(change: (c: DraftAccount) => DraftAccount, draft: Partial<MissionDraft> = {}) {
   const base = draftOfSnapshot(BEFORE);
-  const [acme] = base.connections;
+  const [acme] = base.accounts;
   if (!acme) throw new Error('fixture');
-  return { ...base, ...draft, connections: [change(acme)] };
+  return { ...base, ...draft, accounts: [change(acme)] };
 }
 
 describe('judgeEdit', () => {
@@ -113,9 +109,7 @@ describe('judgeEdit', () => {
     expect(previewDraft(context, draft).issues.map((i) => i.code)).toContain('resource-stale');
     const judged = judgeEdit(context, BEFORE, draft);
     expect(judged.issues).toEqual([]);
-    expect(judged.after.connections[0]?.resource_sets[0]?.resource_ids).toEqual([
-      'res-app-staging',
-    ]);
+    expect(judged.after.accounts[0]?.resource_sets[0]?.resource_ids).toEqual(['res-app-staging']);
     expect(judged.changes.permissions_changed.map((c) => c.risk_id)).toEqual(['acme.read']);
   });
 
@@ -132,7 +126,7 @@ describe('judgeEdit', () => {
     );
   });
 
-  it('does not let a connection that needs reconnecting refuse a narrowing, but refuses a widening', () => {
+  it('does not let an account that needs reconnecting refuse a narrowing, but refuses a widening', () => {
     const context = contextWith(ACME_RESOURCES, 'needs-reconnect');
     const lower = edit((c) => ({
       ...c,
@@ -144,13 +138,13 @@ describe('judgeEdit', () => {
       policy: [line('acme.read', 20), line('acme[staging].write', 5)],
     }));
     expect(judgeEdit(context, BEFORE, raise).issues.map((i) => i.code)).toEqual([
-      'connection-unavailable',
+      'account-unavailable',
     ]);
   });
 
   it('judges an added permission like a creation: outside the authority is refused', () => {
     const context = {
-      connections: [acmeConnection({ authority: ['acme.read', 'acme[staging].write'] })],
+      accounts: [acmeAccount({ authority: ['acme.read', 'acme[staging].write'] })],
       now: NOW,
     };
     const draft = edit((c) => ({ ...c, policy: [...(c.policy ?? []), line('acme.admin')] }));
@@ -161,7 +155,7 @@ describe('judgeEdit', () => {
   });
 
   it('changes a gate alone without judging the line again', () => {
-    const context = { connections: [acmeConnection({ authority: [] })], now: NOW };
+    const context = { accounts: [acmeAccount({ authority: [] })], now: NOW };
     const draft = edit((c) => ({
       ...c,
       policy: [line('acme.read', 10, 'approval'), line('acme[staging].write', 5)],
@@ -169,7 +163,7 @@ describe('judgeEdit', () => {
     // The creator holds nothing any more: a gate is not what a share restricts.
     const judged = judgeEdit(context, BEFORE, draft);
     expect(judged.ok).toBe(true);
-    expect(judged.after.connections[0]?.resource_sets[0]?.policy[0]?.gate).toBe('approval');
+    expect(judged.after.accounts[0]?.resource_sets[0]?.policy[0]?.gate).toBe('approval');
   });
 
   it('refuses another period, and a past end date only when the end moves', () => {
@@ -201,10 +195,10 @@ describe('judgeEdit', () => {
       contextWith(),
       {
         ...BEFORE,
-        connections: [
-          ...BEFORE.connections,
+        accounts: [
+          ...BEFORE.accounts,
           account({
-            connection_id: 'conn-gone',
+            account_id: 'conn-gone',
             provider: 'other',
             display_name: 'Gone',
             resource_ids: [],
@@ -216,19 +210,19 @@ describe('judgeEdit', () => {
       draftOfSnapshot(BEFORE),
     );
     expect(judged.ok).toBe(true);
-    expect(judged.changes.connections_removed.map((c) => c.connection_id)).toEqual(['conn-gone']);
+    expect(judged.changes.accounts_removed.map((c) => c.account_id)).toEqual(['conn-gone']);
     expect(judged.changes.permissions_removed.map((p) => p.risk_id)).toEqual(['other.read']);
   });
 });
 
 describe('the revision and the words of an edit', () => {
   it('does not depend on the order of rows, and moves with any editable value', () => {
-    const [only] = BEFORE.connections[0]!.resource_sets;
+    const [only] = BEFORE.accounts[0]!.resource_sets;
     const reordered: MissionSnapshot = {
       ...BEFORE,
-      connections: [
+      accounts: [
         {
-          ...BEFORE.connections[0]!,
+          ...BEFORE.accounts[0]!,
           resource_sets: [{ ...only!, policy: [...only!.policy].reverse() }],
         },
       ],
@@ -240,9 +234,9 @@ describe('the revision and the words of an edit', () => {
   it('says an edit in one sentence', () => {
     const after: MissionSnapshot = {
       ...BEFORE,
-      connections: [
+      accounts: [
         account({
-          connection_id: 'conn-acme',
+          account_id: 'conn-acme',
           provider: 'acme',
           display_name: 'Acme main',
           resource_ids: ['res-app-staging', 'res-scratch'],
@@ -255,8 +249,8 @@ describe('the revision and the words of an edit', () => {
       describeMissionChange({
         name_changed: false,
         expiry_changed: false,
-        connections_added: 0,
-        connections_removed: 0,
+        accounts_added: 0,
+        accounts_removed: 0,
         resources_added: changes.resources.reduce((n, r) => n + r.added.length, 0),
         resources_removed: 0,
         scopes_changed: 0,

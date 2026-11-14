@@ -17,7 +17,7 @@ import type { Gate, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from '@/lib/missions/catalog-view';
 import { expandMacroAction, rowsOf, type TrustLevel } from '@/lib/missions/macro-actions';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '@/lib/missions/model';
+import type { CatalogRisk, IssuanceAccount, IssuanceResource } from '@/lib/missions/model';
 import { needsEnvLabel } from '@/lib/missions/preview';
 import type { RiskPlanes } from '@/lib/providers/planes';
 import {
@@ -86,15 +86,15 @@ export function resourcesLine(
  * that depend on an environment read from resource labels (`needsEnvLabel`). A
  * provider that reads it from the call itself, or has none, shows no badge.
  */
-export function showsEnv(connection: Pick<IssuanceConnection, 'risks' | 'derives_env'>): boolean {
-  return needsEnvLabel(connection);
+export function showsEnv(account: Pick<IssuanceAccount, 'risks' | 'derives_env'>): boolean {
+  return needsEnvLabel(account);
 }
 
 /** "Miro · Renaud Perso". */
 export function accountLabel(
-  connection: Pick<IssuanceConnection, 'provider_label' | 'display_name'>,
+  account: Pick<IssuanceAccount, 'provider_label' | 'display_name'>,
 ): string {
-  return `${connection.provider_label} · ${connection.display_name}`;
+  return `${account.provider_label} · ${account.display_name}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,13 +134,12 @@ function lineOf(card: Pick<CardState, 'entries'>) {
 
 /** Why a permission cannot be given on a card, or `null`. */
 export function unavailableOn(
-  connection: Pick<IssuanceConnection, 'authority' | 'derives_env'>,
+  account: Pick<IssuanceAccount, 'authority' | 'derives_env'>,
   risk: Pick<CatalogRisk, 'risk_id' | 'env'>,
   resources: readonly Pick<IssuanceResource, 'env'>[],
 ): string | null {
-  if (!connection.authority.includes(risk.risk_id)) return OUTSIDE_AUTHORITY;
-  if (!isResolvable(risk, connection, resources))
-    return `no ${risk.env ?? ''} resource on the card`;
+  if (!account.authority.includes(risk.risk_id)) return OUTSIDE_AUTHORITY;
+  if (!isResolvable(risk, account, resources)) return `no ${risk.env ?? ''} resource on the card`;
   return null;
 }
 
@@ -150,34 +149,33 @@ export function unavailableOn(
  * the plugin reads it from the call).
  */
 function rowsOnCard(
-  connection: Pick<IssuanceConnection, 'risks' | 'derives_env'>,
+  account: Pick<IssuanceAccount, 'risks' | 'derives_env'>,
   card: Pick<CardState, 'env'>,
   action: Parameters<typeof rowsOf>[1],
 ): CatalogRisk[] {
-  return rowsOf(connection, action).filter(
-    (risk) => risk.env === null || connection.derives_env || risk.env === card.env,
+  return rowsOf(account, action).filter(
+    (risk) => risk.env === null || account.derives_env || risk.env === card.env,
   );
 }
 
 /** One row per macro-action of the account, with what the card holds of it. */
-export function actionRows(connection: IssuanceConnection, card: CardState): ActionRow[] {
-  const resources = cardResources(connection, card);
-  return connection.macro_actions.map((action) => {
+export function actionRows(account: IssuanceAccount, card: CardState): ActionRow[] {
+  const resources = cardResources(account, card);
+  return account.macro_actions.map((action) => {
     const storedLevel = card.trustLevels[action.id] ?? null;
-    const own = actionEntries(connection, card, action.id);
-    const lines = rowsOf(connection, action).flatMap(lineOf(card));
+    const own = actionEntries(account, card, action.id);
+    const lines = rowsOf(account, action).flatMap(lineOf(card));
     const level: CardLevel | null =
-      storedLevel !== null &&
-      sameEntries(own, levelEntries(connection, card, action.id, storedLevel))
+      storedLevel !== null && sameEntries(own, levelEntries(account, card, action.id, storedLevel))
         ? storedLevel
         : lines.length > 0
           ? 'custom'
           : null;
     const free = lines.filter((line) => line.entry.gate === 'auto').length;
-    const leftOut = rowsOnCard(connection, card, action).filter(
+    const leftOut = rowsOnCard(account, card, action).filter(
       (risk) =>
         card.entries[risk.risk_id] === undefined &&
-        unavailableOn(connection, risk, resources) === null &&
+        unavailableOn(account, risk, resources) === null &&
         !risk.deprecated,
     );
     return {
@@ -192,7 +190,7 @@ export function actionRows(connection: IssuanceConnection, card: CardState): Act
       leftOut,
       empty:
         level === null &&
-        expandMacroAction(connection, action, 'autonomous', resources).lines.length === 0,
+        expandMacroAction(account, action, 'autonomous', resources).lines.length === 0,
     };
   });
 }
@@ -251,27 +249,27 @@ export interface CustomView {
 
 /** The content of the Custom modal (and of the (i) of a row) for one macro-action of a card. */
 export function customView(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: CardState,
   actionId: string,
   planes: RiskPlanes | null,
 ): CustomView {
-  const action = connection.macro_actions.find((a) => a.id === actionId);
+  const action = account.macro_actions.find((a) => a.id === actionId);
   if (!action) return { rows: [], never: [], planes: [] };
-  const resources = cardResources(connection, card);
+  const resources = cardResources(account, card);
   const planesOf = (baseId: RiskId): readonly string[] => planes?.by_risk[baseId] ?? [];
-  const rows = rowsOnCard(connection, card, action)
+  const rows = rowsOnCard(account, card, action)
     .filter((risk) => !risk.deprecated || card.entries[risk.risk_id] !== undefined)
     .map((risk) => ({
       risk,
       planes: planesOf(risk.base_id),
-      unavailable: unavailableOn(connection, risk, resources),
+      unavailable: unavailableOn(account, risk, resources),
     }));
   const env = card.env;
   const never: NeverRow[] = [];
-  if (env !== null && !connection.derives_env) {
+  if (env !== null && !account.derives_env) {
     const shown = new Set(rows.map((row) => row.risk.base_id));
-    const variants = rowsOf(connection, action);
+    const variants = rowsOf(account, action);
     for (const entry of action.entries) {
       if (shown.has(entry.risk_id)) continue;
       const first = variants.find((risk) => risk.base_id === entry.risk_id);
@@ -303,13 +301,13 @@ export function customDraftOf(
 
 /** "Start from" a level: the lines it writes on the card, every other row left out. */
 export function startFrom(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: CardState,
   actionId: string,
   view: CustomView,
   level: TrustLevel,
 ): Record<RiskId, EntryState | null> {
-  const written = levelEntries(connection, card, actionId, level);
+  const written = levelEntries(account, card, actionId, level);
   return Object.fromEntries(
     view.rows.map((row) => [row.risk.risk_id, written[row.risk.risk_id] ?? null]),
   );
@@ -317,7 +315,7 @@ export function startFrom(
 
 /** The level a modal's lines fall back on exactly, if any: Apply then lights it, not Custom. */
 export function levelMatching(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: CardState,
   actionId: string,
   lines: Readonly<Record<RiskId, EntryState | null>>,
@@ -327,8 +325,7 @@ export function levelMatching(
     Object.entries(lines).filter((pair): pair is [RiskId, EntryState] => pair[1] !== null),
   );
   return (
-    levels.find((level) => sameEntries(kept, levelEntries(connection, card, actionId, level))) ??
-    null
+    levels.find((level) => sameEntries(kept, levelEntries(account, card, actionId, level))) ?? null
   );
 }
 
@@ -367,18 +364,18 @@ export interface ResourceGroup {
  * ones are apart (`ResourceGroup.hidden`).
  */
 export function resourceGroups(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   state: Pick<FormState, 'cards'>,
   editingKey: string | null,
 ): ResourceGroup[] {
-  const others = cardsOf(state, connection.id).filter((card) => card.key !== editingKey);
+  const others = cardsOf(state, account.id).filter((card) => card.key !== editingKey);
   const held = new Set(others.flatMap((card) => card.resourceIds));
-  const listedResources = connection.resources.filter((r) => !r.stale && !r.self);
-  const labelled = needsEnvLabel(connection);
+  const listedResources = account.resources.filter((r) => !r.stale && !r.self);
+  const labelled = needsEnvLabel(account);
   const envs: (string | null)[] = [];
   for (const r of listedResources) if (r.env !== null && !envs.includes(r.env)) envs.push(r.env);
   if (labelled) {
-    for (const risk of connection.risks) {
+    for (const risk of account.risks) {
       if (risk.env !== null && !envs.includes(risk.env)) envs.push(risk.env);
     }
   }
@@ -400,10 +397,10 @@ export function resourceGroups(
 
 /** "2 of 4 boards free": what another card of an account may still take. */
 export function freeResources(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   state: Pick<FormState, 'cards'>,
 ): { readonly free: number; readonly total: number } {
-  const groups = resourceGroups(connection, state, null);
+  const groups = resourceGroups(account, state, null);
   const all = groups.flatMap((g) => g.resources);
   return { free: all.filter((r) => !r.elsewhere).length, total: all.length };
 }
@@ -423,8 +420,8 @@ export function defaultTicked(group: ResourceGroup | undefined): string[] {
 }
 
 /** The account reached as itself: it lists no resource, and a card of it ticks none. */
-export function reachesAccountItself(connection: IssuanceConnection, card: CardState): boolean {
-  return accountWithoutResources(connection) && card.resourceIds.length === 0 && !card.future;
+export function reachesAccountItself(account: IssuanceAccount, card: CardState): boolean {
+  return accountWithoutResources(account) && card.resourceIds.length === 0 && !card.future;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -467,11 +464,11 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
 }
 
 function levelsOf(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: CardState,
 ): ReadonlyMap<string, { readonly level: CardLevel | null; readonly lines: string }> {
   return new Map(
-    actionRows(connection, card).map((row) => [
+    actionRows(account, card).map((row) => [
       row.id,
       { level: row.level, lines: JSON.stringify(row.lines.map((l) => [l.risk.risk_id, l.entry])) },
     ]),
@@ -484,7 +481,7 @@ function levelsOf(
  * "Miro · Perso added". The confirmation lists every permission afterwards.
  */
 export function changeSummary(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   before: FormState,
   after: FormState,
   keptExpiry: { readonly before: string | null; readonly after: string | null },
@@ -494,32 +491,31 @@ export function changeSummary(
   if (keptExpiry.before !== keptExpiry.after) phrases.push('End date changed');
   const several = after.cards.length > 1 || before.cards.length > 1;
   const find = (id: string) => context.find((c) => c.id === id);
-  const prefix = (connection: IssuanceConnection) =>
-    several ? `${connection.provider_label} · ` : '';
+  const prefix = (account: IssuanceAccount) => (several ? `${account.provider_label} · ` : '');
   for (const card of before.cards) {
-    const connection = find(card.connectionId);
-    if (connection && !after.cards.some((c) => c.key === card.key)) {
-      phrases.push(`${accountLabel(connection)} removed`);
+    const account = find(card.accountId);
+    if (account && !after.cards.some((c) => c.key === card.key)) {
+      phrases.push(`${accountLabel(account)} removed`);
     }
   }
   for (const card of after.cards) {
-    const connection = find(card.connectionId);
-    if (!connection) continue;
+    const account = find(card.accountId);
+    if (!account) continue;
     const old = before.cards.find((c) => c.key === card.key);
     if (!old) {
-      phrases.push(`${accountLabel(connection)} added`);
+      phrases.push(`${accountLabel(account)} added`);
       continue;
     }
     if (!sameIds(old.resourceIds, card.resourceIds) || old.future !== card.future) {
-      phrases.push(`${prefix(connection)}${connection.resource_noun.other} changed`);
+      phrases.push(`${prefix(account)}${account.resource_noun.other} changed`);
     }
-    const was = levelsOf(connection, old);
-    const now = levelsOf(connection, card);
-    for (const action of connection.macro_actions) {
+    const was = levelsOf(account, old);
+    const now = levelsOf(account, card);
+    for (const action of account.macro_actions) {
       const a = was.get(action.id);
       const b = now.get(action.id);
       if (!a || !b) continue;
-      const name = `${prefix(connection)}${action.label}`;
+      const name = `${prefix(account)}${action.label}`;
       if (a.level === null && b.level !== null) phrases.push(`${name} added`);
       else if (a.level !== null && b.level === null) phrases.push(`${name} removed`);
       else if (a.level !== null && b.level !== null && a.level !== b.level) {

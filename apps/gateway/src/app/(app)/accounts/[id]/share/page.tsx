@@ -1,6 +1,6 @@
 /**
  * `/accounts/<id>/share` — "Give access" (the protocol's share: spec §4.2
- * "Connections", §7.3), as a dialog over the page of the account. Owner only:
+ * "Accounts", §7.3), as a dialog over the page of the account. Owner only:
  * anyone else reads "not found". With `?share=<id>` the dialog opens on the
  * access that person or team already holds; submitting replaces it.
  *
@@ -18,9 +18,9 @@ import {
   firstParam,
   takeNotice,
   type PageSearchParams,
-} from '@/lib/connections/session';
+} from '@/lib/accounts/session';
 import { holderWords } from '@/lib/vocabulary';
-import { connectionPath, isConnectError } from '@/server/connections';
+import { accountPath, isConnectError } from '@/server/accounts';
 import { providerPath } from '@/lib/providers/links';
 import { providerReference } from '@/lib/providers/reference';
 import {
@@ -110,8 +110,8 @@ export default async function GiveAccessPage({
   const query = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, query);
   const { context } = data;
-  const { connection } = context;
-  const base = connectionPath(connection.id);
+  const { account } = context;
+  const base = accountPath(account.id);
   const editingId = firstParam(query.share);
   const editing = context.shares.find((view) => view.share.id === editingId) ?? null;
   // An access posted from this session that waits for its confirmation, read again now:
@@ -120,11 +120,11 @@ export default async function GiveAccessPage({
     principal.sessionId,
     firstParam(query[SHARE_CONFIRM_PARAM]),
   );
-  const pending = stored?.connectionId === connection.id ? stored : null;
+  const pending = stored?.accountId === account.id ? stored : null;
   let forecast: ShareForecast | null = null;
   if (pending) {
     try {
-      forecast = await root.shares.service.forecast(actor, connection.id, pending.input);
+      forecast = await root.shares.service.forecast(actor, account.id, pending.input);
     } catch (err) {
       // What was asked is refused now (the person left, the account was disconnected):
       // the dialog opens as usual and the post says why.
@@ -135,7 +135,7 @@ export default async function GiveAccessPage({
   }
   // A macro-action names unqualified ids: it ticks every explicit id of them, retired ones aside.
   const macroActions: AccessMacroAction[] = (
-    providerReference(root.registry, connection.provider)?.macro_actions ?? []
+    providerReference(root.registry, account.provider)?.macro_actions ?? []
   ).map((action) => ({
     id: action.id,
     label: action.label,
@@ -163,11 +163,11 @@ export default async function GiveAccessPage({
           <GiveAccessDialog
             action={`${base}/shares`}
             closeHref={base}
-            account={connection.displayName}
+            account={account.displayName}
             service={{
-              id: connection.provider,
+              id: account.provider,
               label: context.providerLabel,
-              referenceHref: providerPath(connection.provider),
+              referenceHref: providerPath(account.provider),
             }}
             fields={SHARE_FIELDS}
             risks={context.risks}

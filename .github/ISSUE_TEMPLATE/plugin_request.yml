@@ -46,7 +46,7 @@ body:
     id: resources
     attributes:
       label: Resources and environments
-      description: What a connection reaches and a mission should be limited to (repositories, projects, zones, databases…), and whether the provider tells production from staging or test (separate projects, a mode, a branch, nothing).
+      description: What an account reaches and a mission should be limited to (repositories, projects, zones, databases…), and whether the provider tells production from staging or test (separate projects, a mode, a branch, nothing).
       placeholder: One resource per project. No notion of environment at the provider; the owner labels each project.
     validations:
       required: true

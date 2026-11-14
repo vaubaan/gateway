@@ -10,7 +10,7 @@ import type { RiskId } from '@vaubaan/shared';
 
 import { Input, RowChip } from '@/components/ui';
 import { CARD_WORDS, LIMIT_WORDS } from '@/lib/vocabulary';
-import type { IssuanceConnection } from '@/lib/missions/model';
+import type { IssuanceAccount } from '@/lib/missions/model';
 
 import { defaultEntryFor, type CardState, type EntryState } from '../new/form-state';
 import { ratePhrase } from '../new/policy-lines';
@@ -26,7 +26,7 @@ const BEHAVIOURS: readonly { readonly id: Behaviour; readonly label: string }[] 
 const SECONDS_PER_MINUTE = '60';
 
 export function CustomTable({
-  connection,
+  account,
   card,
   view,
   lines,
@@ -34,7 +34,7 @@ export function CustomTable({
   limitLabel,
   onLine,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   card: CardState;
   view: CustomView;
   /** The line of each row, `null` when left out. */
@@ -99,7 +99,7 @@ export function CustomTable({
                             if (b.id === 'out') onLine(risk.risk_id, null);
                             else
                               onLine(risk.risk_id, {
-                                ...(entry ?? defaultEntryFor(connection, card.trustLevels, risk)),
+                                ...(entry ?? defaultEntryFor(account, card.trustLevels, risk)),
                                 gate: gateOf(b.id),
                               });
                           }}

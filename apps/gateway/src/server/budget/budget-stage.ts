@@ -48,7 +48,7 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
       policy: ctx.policy,
       resource_sets: ctx.resource_sets.map((set) => ({
         id: set.id,
-        connection_id: set.connection_id,
+        account_id: set.account_id,
         position: set.position,
       })),
     };

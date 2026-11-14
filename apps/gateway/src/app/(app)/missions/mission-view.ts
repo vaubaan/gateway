@@ -176,15 +176,15 @@ export function yesOf(creator: string | null): string {
 
 /** The services and resources of a mission in a few words: "GitHub acme/app, acme/web". */
 export function reachOf(
-  connections: readonly {
+  accounts: readonly {
     readonly provider_label: string;
     readonly resources: readonly { readonly ref: string; readonly display_name?: string }[];
   }[],
 ): string[] {
-  return connections.map((connection) => {
-    const names = connection.resources.map((resource) => resource.display_name || resource.ref);
+  return accounts.map((account) => {
+    const names = account.resources.map((resource) => resource.display_name || resource.ref);
     return names.length === 0
-      ? connection.provider_label
-      : `${connection.provider_label} ${listed(names, 2)}`;
+      ? account.provider_label
+      : `${account.provider_label} ${listed(names, 2)}`;
   });
 }

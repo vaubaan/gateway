@@ -33,7 +33,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
-import { firstParam, type PageSearchParams } from '@/lib/connections/session';
+import { firstParam, type PageSearchParams } from '@/lib/accounts/session';
 import { DOC_PAGES, NOTIFICATION_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   ADDRESS_PROBLEMS,

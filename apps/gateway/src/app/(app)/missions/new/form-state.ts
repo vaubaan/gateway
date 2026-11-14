@@ -13,14 +13,14 @@
 import type { Gate, MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
 import type {
-  DraftConnection,
+  DraftAccount,
   DraftPeriod,
   DraftResourceSet,
-  IssuanceConnection,
+  IssuanceAccount,
   IssuanceResource,
   MissionDraft,
   PreviewIssue,
-  ResolvedDraftConnection,
+  ResolvedDraftAccount,
 } from '@/lib/missions/model';
 import {
   defaultLineOf,
@@ -50,7 +50,7 @@ export interface CardState {
   readonly key: string;
   /** The stored set an edit keeps (its counters and requests follow it). */
   readonly id?: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   /** The resources ticked, in the account's order. */
   readonly resourceIds: readonly string[];
   /** Resources that later appear in `env` join the card. */
@@ -147,16 +147,16 @@ export function sameEntry(a: EntryState, b: EntryState): boolean {
 
 /** The resources a card reaches now, in the account's order. */
 export function cardResources(
-  connection: Pick<IssuanceConnection, 'resources'>,
+  account: Pick<IssuanceAccount, 'resources'>,
   card: Pick<CardState, 'resourceIds'>,
 ): IssuanceResource[] {
   const ticked = new Set(card.resourceIds);
-  return connection.resources.filter((r) => ticked.has(r.id));
+  return account.resources.filter((r) => ticked.has(r.id));
 }
 
 /** The cards of one account, in screen order. */
-export function cardsOf(state: Pick<FormState, 'cards'>, connectionId: string): CardState[] {
-  return state.cards.filter((card) => card.connectionId === connectionId);
+export function cardsOf(state: Pick<FormState, 'cards'>, accountId: string): CardState[] {
+  return state.cards.filter((card) => card.accountId === accountId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,10 +171,10 @@ export interface CardResources {
 }
 
 /** A new card: its resources, nothing ticked yet. */
-export function newCard(connectionId: string, key: string, resources: CardResources): CardState {
+export function newCard(accountId: string, key: string, resources: CardResources): CardState {
   return {
     key,
-    connectionId,
+    accountId,
     resourceIds: [...resources.resourceIds],
     future: resources.future,
     env: resources.env,
@@ -197,30 +197,28 @@ export function replaceCard(state: FormState, card: CardState): FormState {
 
 /** The lines of one macro-action of a card, by risk. */
 export function actionEntries(
-  connection: Pick<IssuanceConnection, 'macro_actions' | 'risks'>,
+  account: Pick<IssuanceAccount, 'macro_actions' | 'risks'>,
   card: Pick<CardState, 'entries'>,
   actionId: string,
 ): Record<RiskId, EntryState> {
   return Object.fromEntries(
     Object.entries(card.entries).filter(([riskId]) => {
-      const risk = connection.risks.find((r) => r.risk_id === riskId);
-      return risk !== undefined && macroActionOfRisk(connection, risk)?.id === actionId;
+      const risk = account.risks.find((r) => r.risk_id === riskId);
+      return risk !== undefined && macroActionOfRisk(account, risk)?.id === actionId;
     }),
   );
 }
 
 /** What a trust level writes for one macro-action on a card's resources. */
 export function levelEntries(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: Pick<CardState, 'resourceIds'>,
   actionId: string,
   level: TrustLevel,
 ): Record<RiskId, EntryState> {
-  const action = connection.macro_actions.find((a) => a.id === actionId);
+  const action = account.macro_actions.find((a) => a.id === actionId);
   if (!action) return {};
-  return entriesOf(
-    expandMacroAction(connection, action, level, cardResources(connection, card)).lines,
-  );
+  return entriesOf(expandMacroAction(account, action, level, cardResources(account, card)).lines);
 }
 
 /** True when two line maps are the same lines, value for value. */
@@ -238,27 +236,23 @@ export function sameEntries(
 }
 
 /** True when the lines of a ticked macro-action are what its trust level writes. */
-export function atItsLevel(
-  connection: IssuanceConnection,
-  card: CardState,
-  actionId: string,
-): boolean {
+export function atItsLevel(account: IssuanceAccount, card: CardState, actionId: string): boolean {
   const level = card.trustLevels[actionId];
   if (!level) return false;
   return sameEntries(
-    actionEntries(connection, card, actionId),
-    levelEntries(connection, card, actionId, level),
+    actionEntries(account, card, actionId),
+    levelEntries(account, card, actionId, level),
   );
 }
 
 /** The card with the lines of one macro-action replaced; every other line kept. */
 function withActionEntries<C extends CardState>(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: C,
   actionId: string,
   lines: Readonly<Record<RiskId, EntryState>>,
 ): C {
-  const own = new Set(Object.keys(actionEntries(connection, card, actionId)));
+  const own = new Set(Object.keys(actionEntries(account, card, actionId)));
   const kept = Object.entries(card.entries).filter(([riskId]) => !own.has(riskId));
   return { ...card, entries: { ...Object.fromEntries(kept), ...lines } };
 }
@@ -269,7 +263,7 @@ function withActionEntries<C extends CardState>(
  * other line of the card is kept.
  */
 export function setActionLevel<C extends CardState>(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: C,
   actionId: string,
   level: TrustLevel | null,
@@ -277,8 +271,8 @@ export function setActionLevel<C extends CardState>(
   const trustLevels: Record<string, TrustLevel> = { ...card.trustLevels };
   if (level === null) delete trustLevels[actionId];
   else trustLevels[actionId] = level;
-  const lines = level === null ? {} : levelEntries(connection, card, actionId, level);
-  return { ...withActionEntries(connection, card, actionId, lines), trustLevels };
+  const lines = level === null ? {} : levelEntries(account, card, actionId, level);
+  return { ...withActionEntries(account, card, actionId, lines), trustLevels };
 }
 
 /**
@@ -287,7 +281,7 @@ export function setActionLevel<C extends CardState>(
  * macro-action is unticked.
  */
 export function applyCustom<C extends CardState>(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: C,
   actionId: string,
   lines: Readonly<Record<RiskId, EntryState | null>>,
@@ -299,7 +293,7 @@ export function applyCustom<C extends CardState>(
   const trustLevels: Record<string, TrustLevel> = { ...card.trustLevels };
   if (Object.keys(kept).length === 0) delete trustLevels[actionId];
   else trustLevels[actionId] = startFrom;
-  return { ...withActionEntries(connection, card, actionId, kept), trustLevels };
+  return { ...withActionEntries(account, card, actionId, kept), trustLevels };
 }
 
 /**
@@ -308,11 +302,11 @@ export function applyCustom<C extends CardState>(
  * them); a Custom one keeps its lines, and the preview flags any that no longer resolves.
  */
 export function setCardResources<C extends CardState>(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: C,
   resources: CardResources,
 ): C {
-  const atLevel = Object.keys(card.trustLevels).filter((id) => atItsLevel(connection, card, id));
+  const atLevel = Object.keys(card.trustLevels).filter((id) => atItsLevel(account, card, id));
   let next: C = {
     ...card,
     resourceIds: [...resources.resourceIds],
@@ -320,7 +314,7 @@ export function setCardResources<C extends CardState>(
     env: resources.env,
   };
   for (const actionId of atLevel) {
-    next = setActionLevel(connection, next, actionId, card.trustLevels[actionId] ?? null);
+    next = setActionLevel(account, next, actionId, card.trustLevels[actionId] ?? null);
   }
   return next;
 }
@@ -341,15 +335,15 @@ export interface RaisedCard<C extends CardState> {
  * of the macro-action that differ from what its old level wrote are `replaced`.
  */
 export function raiseMacroAction<C extends CardState>(
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
   card: C,
   actionId: string,
   to: TrustLevel,
 ): RaisedCard<C> {
-  if (!connection.macro_actions.some((a) => a.id === actionId)) return { card, replaced: [] };
+  if (!account.macro_actions.some((a) => a.id === actionId)) return { card, replaced: [] };
   const from = card.trustLevels[actionId];
-  const written = from ? levelEntries(connection, card, actionId, from) : {};
-  const own = actionEntries(connection, card, actionId);
+  const written = from ? levelEntries(account, card, actionId, from) : {};
+  const own = actionEntries(account, card, actionId);
   const changed = Object.entries(own)
     .filter(([riskId, entry]) => {
       const before = written[riskId];
@@ -358,7 +352,7 @@ export function raiseMacroAction<C extends CardState>(
     .map(([riskId]) => riskId);
   const removed = Object.keys(written).filter((riskId) => !(riskId in own));
   return {
-    card: setActionLevel(connection, card, actionId, to),
+    card: setActionLevel(account, card, actionId, to),
     replaced: [...changed, ...removed],
   };
 }
@@ -370,11 +364,11 @@ export function raiseMacroAction<C extends CardState>(
  * until the creator types one.
  */
 export function defaultEntryFor(
-  connection: Pick<IssuanceConnection, 'macro_actions'>,
+  account: Pick<IssuanceAccount, 'macro_actions'>,
   trustLevels: MacroActionTrustLevels,
   risk: Parameters<typeof defaultLineOf>[2],
 ): EntryState {
-  const line = defaultLineOf(connection, trustLevels, risk);
+  const line = defaultLineOf(account, trustLevels, risk);
   return line ? entryOf(line) : BLANK_ENTRY;
 }
 
@@ -391,20 +385,18 @@ function numberOf(text: string): number | undefined {
 }
 
 /** True when the account lists no resource a card could tick: it is then the account itself. */
-export function accountWithoutResources(
-  connection: Pick<IssuanceConnection, 'resources'>,
-): boolean {
-  return connection.resources.length === 0;
+export function accountWithoutResources(account: Pick<IssuanceAccount, 'resources'>): boolean {
+  return account.resources.length === 0;
 }
 
 /** One card as a draft writes it: its resources, its trust levels beside its lines, its lines. */
-function draftCard(connection: IssuanceConnection, card: CardState): DraftResourceSet {
+function draftCard(account: IssuanceAccount, card: CardState): DraftResourceSet {
   const bare = card.resourceIds.length === 0;
   return {
     ...(card.id !== undefined ? { id: card.id } : {}),
     // An account that lists no resource is reached as itself: "all" of nothing.
     resources:
-      bare && !card.future && accountWithoutResources(connection)
+      bare && !card.future && accountWithoutResources(account)
         ? { scope: 'all' }
         : { scope: 'selected', resource_ids: card.resourceIds },
     ...(card.future ? { future: true } : {}),
@@ -418,7 +410,7 @@ function draftCard(connection: IssuanceConnection, card: CardState): DraftResour
     ...(Object.keys(card.trustLevels).length > 0 && Object.keys(card.entries).length > 0
       ? { trust_levels: card.trustLevels }
       : {}),
-    policy: connection.risks
+    policy: account.risks
       .filter((risk) => card.entries[risk.risk_id] !== undefined)
       .map((risk) => {
         const entry = card.entries[risk.risk_id] ?? BLANK_ENTRY;
@@ -439,10 +431,10 @@ function draftCard(connection: IssuanceConnection, card: CardState): DraftResour
 
 /** The accounts of the cards, in the order their first card appears. */
 export function accountsOf(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: Pick<FormState, 'cards'>,
-): IssuanceConnection[] {
-  const ids = [...new Set(state.cards.map((card) => card.connectionId))];
+): IssuanceAccount[] {
+  const ids = [...new Set(state.cards.map((card) => card.accountId))];
   return ids.flatMap((id) => {
     const found = context.find((c) => c.id === id);
     return found ? [found] : [];
@@ -492,9 +484,9 @@ const ANYTHING_ELSE = 'anything-else';
  * and end. A draft the person sees in the creation form and may change before
  * creating it; nothing is issued from here.
  */
-export function platformMissionDraft(connection: IssuanceConnection): MissionDraft {
+export function platformMissionDraft(account: IssuanceAccount): MissionDraft {
   const trustLevels = Object.fromEntries(
-    connection.macro_actions
+    account.macro_actions
       .filter((action) => action.id !== ANYTHING_ELSE)
       .map((action) => [action.id, 'careful']),
   );
@@ -502,26 +494,24 @@ export function platformMissionDraft(connection: IssuanceConnection): MissionDra
     name: PLATFORM_MISSION_NAME,
     period: periodOf(DEFAULT_PERIOD),
     expires_at: null,
-    connections: [
-      { connection_id: connection.id, resources: { scope: 'all' }, trust_levels: trustLevels },
-    ],
+    accounts: [{ account_id: account.id, resources: { scope: 'all' }, trust_levels: trustLevels }],
   };
 }
 
 /**
- * The draft the screen stands for: one connection per account, its cards as
+ * The draft the screen stands for: one account per account, its cards as
  * `resource_sets` in screen order, explicit entries only.
  */
 export function draftOf(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: FormState,
   now: Date,
 ): MissionDraft {
   return {
     name: state.name,
-    connections: accountsOf(context, state).map((connection): DraftConnection => ({
-      connection_id: connection.id,
-      resource_sets: cardsOf(state, connection.id).map((card) => draftCard(connection, card)),
+    accounts: accountsOf(context, state).map((account): DraftAccount => ({
+      account_id: account.id,
+      resource_sets: cardsOf(state, account.id).map((card) => draftCard(account, card)),
     })),
     period: periodOf(state.period),
     expires_at: expiryOf(state, now),
@@ -545,25 +535,25 @@ function qualifiedEnvOf(riskId: RiskId): string | null {
  * keeps the stored set, and the split is recorded in `split` for the screen to say.
  */
 export function loadResolved(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: FormState,
-  resolved: readonly ResolvedDraftConnection[],
+  resolved: readonly ResolvedDraftAccount[],
 ): FormState {
   const cards: CardState[] = [];
   const split: string[] = [];
   for (const line of resolved) {
-    const connection = context.find((c) => c.id === line.connection_id);
-    if (!connection) continue;
+    const account = context.find((c) => c.id === line.account_id);
+    if (!account) continue;
     line.resource_sets.forEach((set, index) => {
-      const base = set.id ?? `${connection.id}:loaded-${index}`;
-      const trustLevels = knownTrustLevels(connection, set.trust_levels);
-      const resources = cardResources(connection, { resourceIds: set.resources.resource_ids });
+      const base = set.id ?? `${account.id}:loaded-${index}`;
+      const trustLevels = knownTrustLevels(account, set.trust_levels);
+      const resources = cardResources(account, { resourceIds: set.resources.resource_ids });
       const envs = [...new Set(resources.map((r) => r.env))];
       if (envs.length <= 1) {
         cards.push({
           key: base,
           ...(set.id !== undefined ? { id: set.id } : {}),
-          connectionId: connection.id,
+          accountId: account.id,
           resourceIds: resources.map((r) => r.id),
           future: set.future,
           env: envs[0] ?? set.env,
@@ -577,7 +567,7 @@ export function loadResolved(
         cards.push({
           key: i === 0 ? base : `${base}:${env ?? 'none'}`,
           ...(i === 0 && set.id !== undefined ? { id: set.id } : {}),
-          connectionId: connection.id,
+          accountId: account.id,
           resourceIds: resources.filter((r) => r.env === env).map((r) => r.id),
           future: set.future,
           env,
@@ -621,17 +611,17 @@ export const OUTSIDE_AUTHORITY = 'outside what you may allow';
  */
 export function issueSentence(
   issue: PreviewIssue,
-  context: readonly Pick<IssuanceConnection, 'id' | 'provider_label' | 'display_name'>[],
+  context: readonly Pick<IssuanceAccount, 'id' | 'provider_label' | 'display_name'>[],
 ): string {
-  const connection = context.find((c) => c.id === issue.connection_id);
-  const account = connection ? `${connection.provider_label} · ${connection.display_name}` : null;
+  const found = context.find((c) => c.id === issue.account_id);
+  const account = found ? `${found.provider_label} · ${found.display_name}` : null;
   const ids = quotedIds(issue.risk_ids);
   const refs = quotedIds(issue.resource_refs);
   const several = (issue.risk_ids?.length ?? 0) !== 1;
   switch (issue.code) {
     case 'name-missing':
       return 'Give the mission a name.';
-    case 'no-connection':
+    case 'no-account':
       return 'Add at least one account.';
     case 'duplicate-provider':
       return 'A mission takes one account per service.';
@@ -644,9 +634,9 @@ export function issueSentence(
   }
   if (!account) return issue.message;
   switch (issue.code) {
-    case 'connection-unavailable':
+    case 'account-unavailable':
       return `${account} cannot be used now: it needs reconnecting, or it was disconnected.`;
-    case 'duplicate-connection':
+    case 'duplicate-account':
       return `${account} is listed twice.`;
     case 'no-resource-selected':
       return `${account}: tick at least one resource, or future ones.`;

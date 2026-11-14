@@ -18,7 +18,7 @@
  * `_claim_names` naming the claim (OpenID Connect Core §5.6.2, distributed
  * claims), or `hasgroups: true` in the implicit flow. Reading that as "no
  * groups" would silently strip the user of every group they hold — ownership
- * of the connections their groups own, the shares made to them, the admin rule
+ * of the accounts their groups own, the shares made to them, the admin rule
  * — and orphan their missions. The instance does not follow the pointer (it
  * would need a Graph API permission of its own), so the sign-in is refused
  * with a message for the operator; nothing is written.
@@ -145,7 +145,7 @@ export function mapClaims(
   // The groups are not in the ID token, and the userinfo answer that may have carried
   // them never came: they are unknown, not empty. Syncing "no groups" would take the
   // user out of every IdP group for the length of the session — ownership of the
-  // connections those groups own, the shares made to them, the admin rule.
+  // accounts those groups own, the shares made to them, the admin rule.
   if (provenance.userinfoFailed && raw[mapping.groups] === undefined) {
     throw new LoginError(
       'groups-unavailable',

@@ -13,5 +13,5 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ provider: string }> },
 ): Promise<Response> {
-  return (await getRoot()).connections.handlers.callback(request, (await params).provider);
+  return (await getRoot()).accounts.handlers.callback(request, (await params).provider);
 }

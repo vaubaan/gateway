@@ -82,7 +82,7 @@ export {
   withoutArguments,
   type AuditAdminView,
   type AuditCallView,
-  type AuditConnectionRef,
+  type AuditAccountRef,
   type AuditEntryView,
   type AuditFilterOptions,
   holdersOf,

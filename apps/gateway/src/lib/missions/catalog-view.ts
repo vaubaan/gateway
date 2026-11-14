@@ -22,7 +22,7 @@ import { explicitRiskIdsOf } from '../authority/catalog-authority';
 import {
   RISK_KINDS,
   type CatalogRisk,
-  type IssuanceConnection,
+  type IssuanceAccount,
   type IssuanceResource,
   type RiskKind,
 } from './model';
@@ -79,7 +79,7 @@ export function enumerateCatalog(catalog: RiskCatalog): CatalogRisk[] {
 
 /**
  * The environment labels the catalog knows: the environments its env-scoped
- * risks are acceptable in, in catalog order. What a connection's owner may
+ * risks are acceptable in, in catalog order. What an account's owner may
  * choose as its default environment (ADR connect-driver-and-resource-curation);
  * empty for a catalog without env-scoped risks.
  */
@@ -97,11 +97,11 @@ export function catalogEnvsOf(catalog: RiskCatalog): string[] {
  */
 export function isResolvable(
   risk: Pick<CatalogRisk, 'env'>,
-  connection: Pick<IssuanceConnection, 'derives_env'>,
+  account: Pick<IssuanceAccount, 'derives_env'>,
   selected: readonly Pick<IssuanceResource, 'env'>[],
 ): boolean {
   if (risk.env === null) return true;
-  if (connection.derives_env) return true;
+  if (account.derives_env) return true;
   return selected.some((r) => r.env === risk.env);
 }
 

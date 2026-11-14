@@ -132,7 +132,7 @@ export function FirstRun({
             description={
               hasAccount ? (
                 view.totals.accounts > 0 ? (
-                  `You own ${count(view.totals.accounts, TERMS.connection)}.`
+                  `You own ${count(view.totals.accounts, TERMS.account)}.`
                 ) : shared ? (
                   <>
                     {shared.owner} gave you access to <b>{shared.service}</b> · {shared.name} (

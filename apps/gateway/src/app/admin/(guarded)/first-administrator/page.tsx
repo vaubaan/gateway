@@ -1,6 +1,6 @@
 /**
  * `/admin/first-administrator` — the setup creates the first administrator's
- * local account (ADR administrators-live-in-the-instance, §4): any address, a
+ * sign-in account (ADR administrators-live-in-the-instance, §4): any address, a
  * password twice. The account administers from its creation; its first sign-in
  * enrols the second factor and shows the recovery codes.
  */
@@ -38,9 +38,9 @@ export default async function FirstAdministratorPage() {
       />
       <Section first>
         {!local ? (
-          <Callout tone="neutral" title="No local accounts yet" testId="first-admin-no-provider">
-            Add local accounts under Sign-in first, or sign in through the provider you set up: an
-            administrator of that provider needs no local account.
+          <Callout tone="neutral" title="No sign-in accounts yet" testId="first-admin-no-provider">
+            Add sign-in accounts under Sign-in first, or sign in through the provider you set up: an
+            administrator of that provider needs no sign-in account.
           </Callout>
         ) : (
           <form

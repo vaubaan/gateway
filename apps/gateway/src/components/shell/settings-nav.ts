@@ -5,7 +5,7 @@
  *
  * Until the settings pages are redesigned the entries lead to the pages that
  * exist today (`/settings/**`, `/admin/**`), under the words of the redesign:
- * no label is used for two things (the audit found "Connections" twice).
+ * no label is used for two things (the audit found "Accounts" twice).
  * The accounts without owner are not an entry: they are the last region of
  * Accounts, for an administrator (docs/handbook/web-app.md).
  */

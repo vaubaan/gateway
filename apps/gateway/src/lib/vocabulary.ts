@@ -2,12 +2,15 @@
  * The words of the interface — one file, so that a person meets one word per
  * thing on every page (ADR interface-redesign-vocabulary-and-design-system).
  *
- * This is the vocabulary of what a person READS. Protocol and storage names do
- * not change and are never taken from here: MCP tool names, refusal codes, risk
+ * This is the vocabulary of what a person READS. Account, service and plugin are
+ * the same words in the code and the protocol (ADR
+ * one-word-per-thing-account-service-plugin). For the other words, protocol and
+ * storage names are never taken from here: MCP tool names, refusal codes, risk
  * ids, catalog YAML, database columns, API fields and configuration keys keep
- * the names the spec gives them (`connection`, `share`, `risk`, `gate`,
- * `quota`, `request`, `operator`…). A page prints an id as the
- * protocol spells it (in mono) and everything around it with these words.
+ * the names the spec gives them (`share`, `risk`, `gate`, `quota`, `request`,
+ * `operator`…). A page prints an id as the protocol spells it (in mono) and
+ * everything around it with these words. The retired word never appears here
+ * (`tests/unit/structural/one-word-per-thing.test.ts`).
  *
  * Pure and browser-safe, usable in server and client components. Its imports
  * are `lib/dates`, the one place a date becomes text, and the risk model's
@@ -110,7 +113,7 @@ export interface Term {
  * reads. `mission` and `macroAction` are kept as they are.
  */
 export const TERMS = {
-  connection: { one: 'account', many: 'accounts' },
+  account: { one: 'account', many: 'accounts' },
   disconnectedAccount: { one: 'disconnected account', many: 'disconnected accounts' },
   mission: { one: 'mission', many: 'missions' },
   risk: { one: 'permission', many: 'permissions' },
@@ -375,7 +378,7 @@ export const MISSION_STATES = {
   accountLost: { label: 'Lost an account', tone: 'warn' },
 } as const satisfies Record<string, StateWord>;
 
-/** Keyed by `ConnectionStatus`. */
+/** Keyed by `AccountStatus`. */
 export const ACCOUNT_STATES = {
   active: { label: 'connected', tone: null },
   expired: { label: 'Needs reconnecting', tone: 'bad' },
@@ -463,7 +466,7 @@ export const THEME_WORDS = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Accounts and access (the pages under `/accounts`). Protocol names: connection,
+// Accounts and access (the pages under `/accounts`). Protocol names: account,
 // resource, share, restriction, discovery, revoke, transfer.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -556,15 +559,15 @@ export function giveAccessLabel(n: number, editing: boolean): string {
 /** Why a mission stopped for want of an owner. Keyed by `OrphanCause`. */
 export const ORPHAN_WORDS = {
   'creator-removed': 'its creator was deactivated',
-  'connection-missing': 'an account it uses no longer exists',
-  'connection-revoked': 'an account it uses was disconnected',
+  'account-missing': 'an account it uses no longer exists',
+  'account-revoked': 'an account it uses was disconnected',
   'authority-lost': 'its creator no longer holds the permissions it uses',
 } as const;
 
 /** Why an account no longer serves a mission that still runs. Keyed by `PartLossCause`. */
 export const PART_LOSS_WORDS = {
-  'connection-revoked': 'no longer uses this account: it was disconnected',
-  'connection-missing': 'no longer uses this account: it no longer exists',
+  'account-revoked': 'no longer uses this account: it was disconnected',
+  'account-missing': 'no longer uses this account: it no longer exists',
   'access-withdrawn': 'no longer uses this account: its creator lost access to it',
 } as const;
 
@@ -701,23 +704,23 @@ export const REFUSAL_WORDS = {
   'approval-required': 'asked first',
   'resource-not-in-mission': 'resource not in this mission',
   'rate-limited': 'too fast: per-minute limit',
-  'connection-unavailable': 'account needs reconnecting',
-  'connection-revoked': 'account no longer in this mission',
+  'account-unavailable': 'account needs reconnecting',
+  'account-revoked': 'account no longer in this mission',
   'mission-inactive': 'mission not running',
   'wrong-credential-kind': 'wrong kind of key',
 } as const;
 
 /** What a person did, after their name. Keyed by the protocol's administrative act. */
 export const ACT_WORDS = {
-  'connection-created': 'connected an account',
-  'connection-reconnected': 'reconnected an account',
-  'connection-refused': 'was refused an account',
-  'connection-transferred': 'transferred an account to a team',
-  'connection-reassigned': 'named a new owner for an account',
-  'connection-revoked': 'disconnected an account',
+  'account-created': 'connected an account',
+  'account-reconnected': 'reconnected an account',
+  'account-refused': 'was refused an account',
+  'account-transferred': 'transferred an account to a team',
+  'account-reassigned': 'named a new owner for an account',
+  'account-revoked': 'disconnected an account',
   'resources-discovered': 'refreshed what an account reaches',
   'resource-edited': 'edited a resource',
-  'connection-default-env-set': 'changed the default environment of an account',
+  'account-default-env-set': 'changed the default environment of an account',
   'share-created': 'gave access',
   'share-revoked': 'removed an access',
   'mission-issued': 'created a mission',
@@ -730,8 +733,8 @@ export const ACT_WORDS = {
   'mission-closed': 'closed a mission',
   'mission-orphaned': 'left a mission without an owner',
   'mission-restored': 'brought a mission back',
-  'mission-connection-lost': 'took an account out of a mission',
-  'mission-connection-restored': 'gave an account back to a mission',
+  'mission-account-lost': 'took an account out of a mission',
+  'mission-account-restored': 'gave an account back to a mission',
   'budget-extended': 'raised a limit',
   'period-reset': 'reset the limits',
   'expiry-extended': 'extended a mission',
@@ -754,10 +757,10 @@ export const ACT_WORDS = {
   'invitation-added': 'invited an address',
   'invitation-removed': 'removed an invitation',
   'local-link-created': 'sent an account link',
-  'local-account-created': 'created a local account',
+  'sign-in-account-created': 'created a sign-in account',
   'local-password-changed': 'changed a password',
   'local-second-factor-changed': 'changed a second factor',
-  'local-account-removed': 'removed a local account',
+  'sign-in-account-removed': 'removed a sign-in account',
   'master-key-downloaded': 'downloaded the encryption key',
   'administrator-granted': 'named an administrator',
   'administrator-revoked': 'removed an administrator',
@@ -1039,7 +1042,7 @@ export const PLUGIN_WORDS = {
 export const CEILING_WORDS = {
   labels: {
     users: capitalize(TERMS.user.many),
-    connections: capitalize(TERMS.connection.many),
+    accounts: capitalize(TERMS.account.many),
     'active-missions': `Active ${TERMS.mission.many}`,
   },
   /** "3 of 10", "10 of 10 · full: nothing new is added", "3 (unlimited)". */
@@ -1188,7 +1191,7 @@ export const NOW = {
     return `${formatNumber(n)} refused in the last hour`;
   },
   accounts(n: number, toReconnect: number): string {
-    const base = count(n, TERMS.connection);
+    const base = count(n, TERMS.account);
     if (toReconnect === 0) return base;
     const verb = toReconnect === 1 ? 'needs' : 'need';
     return `${base}, ${formatNumber(toReconnect)} ${verb} reconnecting`;
@@ -1371,7 +1374,7 @@ export const RESOURCE_SET_WORDS = {
   heldBy: (position: number): string => `in resource set ${position}`,
   /** Why a set takes no "rest" scope: another set of the account does. */
   restTaken: 'another resource set of this account already takes the rest',
-  /** What `all` and `connection` mean once an account has several sets. */
+  /** What `all` and `account` mean once an account has several sets. */
   rest: 'every resource the other resource sets of this account do not pick',
   explanation:
     'Each resource set has its own trust levels and limits. A call is judged by the set of the resource it names; a call that names none, or resources of several sets, must be allowed in each.',
@@ -1407,7 +1410,7 @@ export const MISSION_WORDS = {
   kitWithoutKey: 'Three snippets and a check. The key itself was shown once.',
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
-  /** An account a mission was given whole (resource scope `connection`). */
+  /** An account a mission was given whole (resource scope `account`). */
   wholeAccount: 'the whole account, including resources found later',
   /** A set with future on (ADR resource-set-is-one-environment-with-optional-future-resources). */
   futureResources: 'resources found later in the same environment',

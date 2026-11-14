@@ -12,7 +12,7 @@
  */
 import { notFound } from 'next/navigation';
 
-import { credentialKindLabel } from '@/components/connections/parts';
+import { credentialKindLabel } from '@/components/accounts/parts';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import {
   Disclosure,

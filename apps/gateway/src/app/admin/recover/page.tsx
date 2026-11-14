@@ -60,11 +60,11 @@ export default async function RecoverPage({ searchParams }: Props) {
           ) : (
             <Callout tone="ok" title="An administrator was named" testId="recover-done">
               <Mono>{JSON.stringify(outcome.named)}</Mono>
-              {outcome.accountLink && (
+              {outcome.signInAccountLink && (
                 <>
                   {' '}
                   Hand this link to the person to create their account; it works once, for fifteen
-                  minutes, and is shown only now: <Mono>{outcome.accountLink}</Mono>
+                  minutes, and is shown only now: <Mono>{outcome.signInAccountLink}</Mono>
                 </>
               )}
             </Callout>

@@ -65,10 +65,10 @@ import {
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type {
   DraftPeriod,
-  IssuanceConnection,
+  IssuanceAccount,
   MissionPreview,
   PreviewIssue,
-  ResolvedDraftConnection,
+  ResolvedDraftAccount,
 } from '@/lib/missions/model';
 import { hasChanges, judgeEdit } from '@/lib/missions/mission-edit';
 import { previewDraft } from '@/lib/missions/preview';
@@ -113,7 +113,7 @@ import { editDraftOf, initialEditState, raisedEditState, type EditSource } from 
 export interface InitialDraft {
   readonly name: string;
   readonly period: DraftPeriod;
-  readonly resolved: readonly ResolvedDraftConnection[];
+  readonly resolved: readonly ResolvedDraftAccount[];
   /** What could not be carried over from the source (a permission no longer held, a vanished resource). */
   readonly issues: readonly PreviewIssue[];
   readonly sourceName: string;
@@ -140,10 +140,7 @@ function isChoice<T extends string>(choices: readonly { id: T }[], raw: string):
   return choices.some((c) => c.id === raw);
 }
 
-function startState(
-  context: readonly IssuanceConnection[],
-  initial: InitialDraft | null,
-): FormState {
+function startState(context: readonly IssuanceAccount[], initial: InitialDraft | null): FormState {
   const blank = initialFormState();
   if (!initial) return blank;
   return {
@@ -159,10 +156,10 @@ function issuesOfCard(
   state: FormState,
   card: CardState,
 ): PreviewIssue[] {
-  const index = cardsOf(state, card.connectionId).findIndex((c) => c.key === card.key);
+  const index = cardsOf(state, card.accountId).findIndex((c) => c.key === card.key);
   return issues.filter(
     (issue) =>
-      issue.connection_id === card.connectionId &&
+      issue.account_id === card.accountId &&
       (issue.resource_set_index === undefined ? index === 0 : issue.resource_set_index === index),
   );
 }
@@ -176,7 +173,7 @@ export function MissionForm({
   edit = null,
   openCustom = null,
 }: {
-  context: readonly IssuanceConnection[];
+  context: readonly IssuanceAccount[];
   /** Per service id: the planes of its data model, for the services that have several. */
   planes: Readonly<Record<string, RiskPlanes>>;
   /** Per service id: its mark (`serviceIconOf`), `null` for a plugin that declares none. */
@@ -213,7 +210,7 @@ export function MissionForm({
   const [proposalReport, setProposalReport] = useState<MissionPreview | null>(null);
 
   const preview = useMemo(
-    () => previewDraft({ connections: context, now }, draftOf(context, state, now)),
+    () => previewDraft({ accounts: context, now }, draftOf(context, state, now)),
     [context, state, now],
   );
   // An edit is judged on what it moves, against the mission as it stands.
@@ -221,7 +218,7 @@ export function MissionForm({
     () =>
       edit
         ? judgeEdit(
-            { connections: context, now },
+            { accounts: context, now },
             edit.snapshot,
             editDraftOf(context, state, edit.snapshot, now),
           )
@@ -235,7 +232,7 @@ export function MissionForm({
   const periodSeconds = period.kind === 'recurring' ? period.length_seconds : null;
   const expiresAt = expiryOf(state, now);
   const limitLabel = limitColumn(periodSeconds);
-  const connectionOf = (card: CardState) => context.find((c) => c.id === card.connectionId);
+  const accountOf = (card: CardState) => context.find((c) => c.id === card.accountId);
 
   function patch(next: Partial<FormState>) {
     setServerIssues([]);
@@ -245,10 +242,10 @@ export function MissionForm({
     setServerIssues([]);
     setState(change);
   }
-  function patchCard(card: CardState, change: (connection: IssuanceConnection) => CardState) {
-    const connection = connectionOf(card);
-    if (!connection) return;
-    update((s) => replaceCard(s, change(connection)));
+  function patchCard(card: CardState, change: (account: IssuanceAccount) => CardState) {
+    const account = accountOf(card);
+    if (!account) return;
+    update((s) => replaceCard(s, change(account)));
   }
 
   async function create() {
@@ -264,7 +261,7 @@ export function MissionForm({
         ...made,
         permissions: preview.policy.length,
         services: [
-          ...new Set(state.cards.flatMap((card) => connectionOf(card)?.provider_label ?? [])),
+          ...new Set(state.cards.flatMap((card) => accountOf(card)?.provider_label ?? [])),
         ],
       });
     } else if (answer.status === 422 && isRefusedBody(body)) {
@@ -300,14 +297,14 @@ export function MissionForm({
       return;
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      setError('The proposal must be a JSON object with a "connections" list.');
+      setError('The proposal must be a JSON object with a "accounts" list.');
       return;
     }
     const proposal = parsed as Record<string, unknown>;
-    // A proposal may be a whole draft or only its connections: the rest comes from the form.
+    // A proposal may be a whole draft or only its accounts: the rest comes from the form.
     const draft = {
       name: typeof proposal.name === 'string' ? proposal.name : state.name,
-      connections: proposal.connections ?? [],
+      accounts: proposal.accounts ?? [],
       period: proposal.period ?? periodOf(state.period),
       expires_at: proposal.expires_at ?? null,
     };
@@ -372,20 +369,18 @@ export function MissionForm({
     : [];
   const digest = state.cards.reduce(
     (sum, card) => {
-      const connection = connectionOf(card);
-      if (!connection) return sum;
-      const d = cardDigest(actionRows(connection, card));
+      const account = accountOf(card);
+      if (!account) return sum;
+      const d = cardDigest(actionRows(account, card));
       return { total: sum.total + d.total, free: sum.free + d.free, asks: sum.asks + d.asks };
     },
     { total: 0, free: 0, asks: 0 },
   );
-  const cardKeys = new Set(state.cards.map((c) => c.connectionId));
-  const loose = issues.filter(
-    (i) => i.connection_id === undefined || !cardKeys.has(i.connection_id),
-  );
+  const cardKeys = new Set(state.cards.map((c) => c.accountId));
+  const loose = issues.filter((i) => i.account_id === undefined || !cardKeys.has(i.account_id));
   const offered = offeredAccounts(context, state).filter(({ blocked }) => blocked === null);
   const customCard = custom ? state.cards.find((c) => c.key === custom.cardKey) : undefined;
-  const customConnection = customCard ? connectionOf(customCard) : undefined;
+  const customAccount = customCard ? accountOf(customCard) : undefined;
 
   return (
     <>
@@ -581,7 +576,7 @@ export function MissionForm({
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
                 aria-label="Agent proposal (JSON)"
-                placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                placeholder='{"accounts":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
                 spellCheck={false}
               />
             </Field>
@@ -598,7 +593,7 @@ export function MissionForm({
             {proposalReport && (
               <Callout
                 tone={proposalReport.ok ? 'ok' : 'warn'}
-                title={`Loaded ${count(proposalReport.policy.length, TERMS.risk)} on ${count(proposalReport.connections.length, TERMS.connection)}`}
+                title={`Loaded ${count(proposalReport.policy.length, TERMS.risk)} on ${count(proposalReport.accounts.length, TERMS.account)}`}
                 testId="proposal-report"
               >
                 {proposalReport.issues.length === 0 ? (
@@ -618,15 +613,15 @@ export function MissionForm({
         <div className={cardStyles.cards} data-testid="cards">
           {state.cards.length === 0 && <p className={styles.quiet}>{CARD_WORDS.nothingYet}</p>}
           {state.cards.map((card) => {
-            const connection = connectionOf(card);
-            if (!connection) return null;
+            const account = accountOf(card);
+            if (!account) return null;
             return (
               <MissionCard
                 key={card.key}
-                connection={connection}
+                account={account}
                 card={card}
-                icon={icons[connection.provider] ?? null}
-                planes={planes[connection.provider] ?? null}
+                icon={icons[account.provider] ?? null}
+                planes={planes[account.provider] ?? null}
                 limitLabel={limitLabel}
                 issues={issuesOfCard(issues, state, card).map((i) => issueSentence(i, context))}
                 onLevel={(actionId, level) =>
@@ -649,15 +644,13 @@ export function MissionForm({
               {CARD_WORDS.addAccount}
             </Button>
             <span className={cardStyles.marks} aria-hidden="true">
-              {[...new Map(offered.map(({ connection: c }) => [c.provider, c])).values()].map(
-                (c) => (
-                  <ServiceMark
-                    key={c.provider}
-                    name={c.provider_label}
-                    icon={icons[c.provider] ?? null}
-                  />
-                ),
-              )}
+              {[...new Map(offered.map(({ account: c }) => [c.provider, c])).values()].map((c) => (
+                <ServiceMark
+                  key={c.provider}
+                  name={c.provider_label}
+                  icon={icons[c.provider] ?? null}
+                />
+              ))}
             </span>
           </div>
         </div>
@@ -729,7 +722,7 @@ export function MissionForm({
           icons={icons}
           picking={picking}
           onCancel={() => setPicking(null)}
-          onDone={(connectionId, resources) => {
+          onDone={(accountId, resources) => {
             const editing = picking.kind === 'change' ? picking.card : null;
             setPicking(null);
             if (editing) {
@@ -738,24 +731,24 @@ export function MissionForm({
             }
             nextKey.current += 1;
             const key = `new-${nextKey.current}`;
-            update((s) => addCard(s, newCard(connectionId, key, resources)));
+            update((s) => addCard(s, newCard(accountId, key, resources)));
           }}
         />
       )}
 
-      {customCard && customConnection && custom && (
+      {customCard && customAccount && custom && (
         <CustomModal
-          connection={customConnection}
+          account={customAccount}
           card={customCard}
           actionId={custom.actionId}
-          planes={planes[customConnection.provider] ?? null}
+          planes={planes[customAccount.provider] ?? null}
           limitLabel={limitLabel}
           onCancel={() => setCustom(null)}
           onApply={(applied, from) => {
             setCustom(null);
             const kept = Object.values(applied).some((line) => line !== null);
             const level = kept
-              ? levelMatching(customConnection, customCard, custom.actionId, applied, TRUST_LEVELS)
+              ? levelMatching(customAccount, customCard, custom.actionId, applied, TRUST_LEVELS)
               : null;
             patchCard(customCard, (c) =>
               level

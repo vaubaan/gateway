@@ -258,7 +258,7 @@ function On({ entry }: { entry: AuditEntryView }) {
       </span>
     );
   }
-  const account = entry.connection ? (entry.connection.display_name ?? entry.connection.id) : null;
+  const account = entry.account ? (entry.account.display_name ?? entry.account.id) : null;
   if (!account && !entry.resource_ref) return <span className={styles.quiet}>—</span>;
   return (
     <span className={styles.onText}>
@@ -348,7 +348,7 @@ function Decision({
 }
 
 function CallDetail({ entry, explain }: { entry: AuditCallView; explain: Explain }) {
-  const account = entry.connection ? (entry.connection.display_name ?? entry.connection.id) : null;
+  const account = entry.account ? (entry.account.display_name ?? entry.account.id) : null;
   return (
     <KeyValue
       items={[
@@ -682,15 +682,15 @@ export default async function ActivityPage({ searchParams }: Props) {
           </Select>
           <Select
             size="sm"
-            name={AUDIT_PARAMS.connection}
-            defaultValue={raw.connection ?? ''}
+            name={AUDIT_PARAMS.account}
+            defaultValue={raw.account ?? ''}
             aria-label={ACCOUNT_WORDS.account}
             className={styles.select}
           >
             <option value="">All accounts</option>
             {withCurrent(
-              options.connections.map((c) => ({ id: c.id, name: c.label })),
-              raw.connection,
+              options.accounts.map((c) => ({ id: c.id, name: c.label })),
+              raw.account,
             ).map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}

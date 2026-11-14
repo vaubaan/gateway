@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/revoke` — revokes the connection (terminal).
+ * `POST /accounts/<id>/revoke` — revokes the account (terminal).
  * One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';
@@ -11,5 +11,5 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return (await getRoot()).connections.handlers.revoke(request, (await params).id);
+  return (await getRoot()).accounts.handlers.revoke(request, (await params).id);
 }

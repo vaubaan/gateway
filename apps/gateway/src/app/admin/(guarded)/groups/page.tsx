@@ -12,7 +12,7 @@
 import Link from 'next/link';
 
 import styles from '@/components/settings/settings.module.css';
-import { NoticeBanner } from '@/components/connections/parts';
+import { NoticeBanner } from '@/components/accounts/parts';
 import {
   Avatar,
   Button,
@@ -28,7 +28,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { firstParam, takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { firstParam, takeNotice, type PageSearchParams } from '@/lib/accounts/session';
 import {
   DOC_PAGES,
   count,
@@ -172,7 +172,7 @@ export default async function TeamsPage({ searchParams }: { searchParams: PageSe
       header: 'People',
       cell: (view) =>
         view.members.length === 0 ? (
-          view.ownedConnections > 0 ? (
+          view.ownedAccounts > 0 ? (
             <StatusMark tone="warn">Nobody left</StatusMark>
           ) : (
             <span className={styles.quiet}>nobody</span>
@@ -189,10 +189,10 @@ export default async function TeamsPage({ searchParams }: { searchParams: PageSe
       header: 'Owns',
       nowrap: true,
       cell: (view) =>
-        view.ownedConnections === 0 ? (
+        view.ownedAccounts === 0 ? (
           <span className={styles.quiet}>—</span>
         ) : (
-          count(view.ownedConnections, TERMS.connection)
+          count(view.ownedAccounts, TERMS.account)
         ),
     },
   ];

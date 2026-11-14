@@ -29,18 +29,18 @@ function issuesOf(env: Record<string, string>, files: Record<string, string> = {
 describe('limits.* — the ceilings', () => {
   it('are unlimited when absent: the default', () => {
     const { config } = loadInstanceConfig({ env: validEnv() });
-    expect(config.limits).toEqual({ users: null, connections: null, activeMissions: null });
+    expect(config.limits).toEqual({ users: null, accounts: null, activeMissions: null });
   });
 
   it('read the environment', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({
         VAUBAAN_LIMITS_USERS: '10',
-        VAUBAAN_LIMITS_CONNECTIONS: '25',
+        VAUBAAN_LIMITS_ACCOUNTS: '25',
         VAUBAAN_LIMITS_ACTIVE_MISSIONS: '3',
       }),
     });
-    expect(config.limits).toEqual({ users: 10, connections: 25, activeMissions: 3 });
+    expect(config.limits).toEqual({ users: 10, accounts: 25, activeMissions: 3 });
   });
 
   it('read the file, each one alone', () => {
@@ -49,12 +49,35 @@ describe('limits.* — the ceilings', () => {
       env: validEnv({ [CONFIG_FILE_ENV]: path }),
       readFile: fakeFiles({ [path]: 'limits:\n  active_missions: 1\n' }),
     });
-    expect(config.limits).toEqual({ users: null, connections: null, activeMissions: 1 });
+    expect(config.limits).toEqual({ users: null, accounts: null, activeMissions: 1 });
+  });
+
+  it('read the accounts ceiling under its old name, the new one winning, and say so (ADR one-word-per-thing-account-service-plugin)', () => {
+    const fromEnv = loadInstanceConfig({ env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7' }) });
+    expect(fromEnv.config.limits.accounts).toBe(7);
+    expect(fromEnv.config.deprecatedKeys).toEqual([
+      { old: 'VAUBAAN_LIMITS_CONNECTIONS', current: 'VAUBAAN_LIMITS_ACCOUNTS' },
+    ]);
+    const both = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7', VAUBAAN_LIMITS_ACCOUNTS: '9' }),
+    });
+    expect(both.config.limits.accounts).toBe(9);
+    const path = '/config/gateway.yaml';
+    const fromFile = loadInstanceConfig({
+      env: validEnv({ [CONFIG_FILE_ENV]: path }),
+      readFile: fakeFiles({ [path]: 'limits:\n  connections: 4\n' }),
+    });
+    expect(fromFile.config.limits.accounts).toBe(4);
+    expect(fromFile.config.deprecatedKeys).toEqual([
+      { old: 'limits.connections', current: 'limits.accounts' },
+    ]);
+    expect(loadInstanceConfig({ env: validEnv() }).config.deprecatedKeys).toEqual([]);
+    expect(issuesOf(validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '0' }))).toEqual(['limits.accounts']);
   });
 
   it.each([
     ['0', 'VAUBAAN_LIMITS_USERS', 'limits.users'],
-    ['-2', 'VAUBAAN_LIMITS_CONNECTIONS', 'limits.connections'],
+    ['-2', 'VAUBAAN_LIMITS_ACCOUNTS', 'limits.accounts'],
     ['1.5', 'VAUBAAN_LIMITS_ACTIVE_MISSIONS', 'limits.active_missions'],
     ['ten', 'VAUBAAN_LIMITS_USERS', 'limits.users'],
   ])('refuse %s (%s)', (value, variable, path) => {

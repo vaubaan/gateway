@@ -101,7 +101,7 @@ export const AUTH_LIMITS = {
   callbackPerInstance: { limit: 2000, windowMs: MINUTE_MS },
   bootstrapPerInstance: { limit: 10, windowMs: 10 * MINUTE_MS },
   /**
-   * The password form of the local accounts, the forms that take a link, and the codes of
+   * The password form of the sign-in accounts, the forms that take a link, and the codes of
    * the second factor. Each password post costs an argon2id hash (64 MiB, on libuv's
    * thread pool, four threads by default, shared with file and DNS work): 60 a minute
    * for the whole instance keeps anonymous posts to a small share of the pool (security

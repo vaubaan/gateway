@@ -5,7 +5,7 @@
  * declared fields for `api-key` (`TokenGuide`: how wide to grant and why, the
  * steps, the token page, the permissions to tick, the expiry, the service's
  * documentation), a button that leads to the service for
- * `oauth2`, the fields for `ssh-key`. `?connection=<id>` turns it into
+ * `oauth2`, the fields for `ssh-key`. `?account=<id>` turns it into
  * "reconnect" for an existing account.
  *
  * A service that signs people in (`oauth2`, Miro) needs nothing declared:
@@ -28,8 +28,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { CredentialFieldInputs, NoticeBanner } from '@/components/connections/parts';
-import { TokenGuide } from '@/components/connections/TokenGuide';
+import { CredentialFieldInputs, NoticeBanner } from '@/components/accounts/parts';
+import { TokenGuide } from '@/components/accounts/TokenGuide';
 import {
   Button,
   ButtonLink,
@@ -48,7 +48,7 @@ import {
   firstParam,
   takeNotice,
   type PageSearchParams,
-} from '@/lib/connections/session';
+} from '@/lib/accounts/session';
 import {
   serviceDoc,
   ACCOUNT_ACTIONS,
@@ -60,13 +60,13 @@ import {
 } from '@/lib/vocabulary';
 import {
   chooseAlternative,
-  connectionPath,
-  CONNECTIONS_PATH,
+  accountPath,
+  ACCOUNTS_PATH,
   isConnectError,
-  NEW_CONNECTION_PATH,
+  NEW_ACCOUNT_PATH,
   type ConnectableProvider,
-  type ConnectionDetail,
-} from '@/server/connections';
+  type AccountDetail,
+} from '@/server/accounts';
 import { providerPath } from '@/lib/providers/links';
 
 import styles from '../../accounts.module.css';
@@ -179,15 +179,15 @@ export default async function ConnectOneAccountPage({
   const { root, principal, actor } = session;
   const { provider: providerId } = await params;
   const query = await searchParams;
-  const service = root.connections.service;
+  const service = root.accounts.service;
   const provider = await service.provider(providerId);
   if (!provider) notFound();
   const notice = await takeNotice(root, principal.sessionId, query);
   // A refused form comes back as it was typed (never a secret), its field in error marked.
   const typed = notice?.form;
 
-  const reconnectId = firstParam(query.connection);
-  let reconnect: ConnectionDetail | null = null;
+  const reconnectId = firstParam(query.account);
+  let reconnect: AccountDetail | null = null;
   if (reconnectId) {
     try {
       reconnect = await service.get(actor, reconnectId);
@@ -195,16 +195,16 @@ export default async function ConnectOneAccountPage({
       if (isConnectError(err)) notFound();
       throw err;
     }
-    if (reconnect.connection.provider !== provider.id) notFound();
+    if (reconnect.account.provider !== provider.id) notFound();
   }
   const returnTo = firstParam(query.return_to);
   const redirectFlow = provider.redirects;
   // The form is the last step after the guide's one or two.
   const pasteStep = provider.guide && provider.guide.permissions.length > 0 ? 3 : 2;
-  // The server refuses to reconnect an account without owner (`connection-unowned`).
-  const unowned = reconnect?.connection.status === 'unowned';
+  // The server refuses to reconnect an account without owner (`account-unowned`).
+  const unowned = reconnect?.account.status === 'unowned';
   const name = provider.displayName;
-  const back = reconnect ? connectionPath(reconnect.connection.id) : ROUTES.accounts;
+  const back = reconnect ? accountPath(reconnect.account.id) : ROUTES.accounts;
   const values = { ...reconnect?.fields, ...typed?.values };
   // The alternative checked: the one the refused form was read with, or the
   // one the account's fields belong to; the first one otherwise.
@@ -219,19 +219,19 @@ export default async function ConnectOneAccountPage({
           reconnect
             ? [
                 { label: PAGES.accounts.title, href: ROUTES.accounts },
-                { label: reconnect.connection.displayName, href: back },
+                { label: reconnect.account.displayName, href: back },
                 { label: ACCOUNT_ACTIONS.reconnect },
               ]
             : [
                 { label: PAGES.accounts.title, href: ROUTES.accounts },
-                { label: ACCOUNT_PAGES.connect.title, href: NEW_CONNECTION_PATH },
+                { label: ACCOUNT_PAGES.connect.title, href: NEW_ACCOUNT_PATH },
                 { label: name },
               ]
         }
         mark={<ServiceMark name={name} icon={provider.icon} size="lg" />}
         title={
           reconnect
-            ? `Reconnect ${reconnect.connection.displayName}`
+            ? `Reconnect ${reconnect.account.displayName}`
             : `Connect ${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name} account`
         }
         lede={ledeOf(provider)}
@@ -265,24 +265,22 @@ export default async function ConnectOneAccountPage({
           <form
             id={CONNECT_FORM_ID}
             method="post"
-            action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
+            action={`${ACCOUNTS_PATH}/connect/${encodeURIComponent(provider.id)}`}
             className={styles.form}
           >
             {returnTo && <input type="hidden" name="return_to" value={returnTo} />}
-            {reconnect && (
-              <input type="hidden" name="connection_id" value={reconnect.connection.id} />
-            )}
+            {reconnect && <input type="hidden" name="account_id" value={reconnect.account.id} />}
             {/* A host account is the person's own place on the gateway: one, named after the service. */}
             {!reconnect && provider.kind !== 'host' && (
               <Field
                 label="Name"
                 shape="how it appears in missions"
                 optional
-                htmlFor="connection-name"
+                htmlFor="account-name"
                 hint={`Useful with two ${name} accounts.`}
               >
                 <Input
-                  id="connection-name"
+                  id="account-name"
                   name="name"
                   maxLength={MAX_NAME_LENGTH}
                   placeholder={name}

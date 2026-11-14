@@ -18,7 +18,7 @@ import { createRecoveryHandlers, type RecoveryHandlers } from './recovery-handle
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
-import { LocalAccountsService } from './local-accounts';
+import { SignInAccountsService } from './sign-in-accounts';
 import { createLocalAuthHandlers, type LinkMailer, type LocalAuthHandlers } from './local-handlers';
 import { createSignInFlows, type SignInFlows } from './sign-in-flows';
 import { SignInProvidersService } from './sign-in-providers';
@@ -53,7 +53,7 @@ export interface AuthModuleDeps {
   readonly membershipsChanging?: LoginDeps['membershipsChanging'];
   /** The limits of the sign-in start, the callbacks and the bootstrap endpoint. */
   readonly rateLimiter: RateLimiter;
-  /** Sends the mails of the local accounts' links; absent when the instance sends no mail. */
+  /** Sends the mails of the sign-in accounts' links; absent when the instance sends no mail. */
   readonly mailer?: LinkMailer;
   /** The `limits.users` ceiling (`root.limits`); absent, none. */
   readonly ceilings?: CeilingCheck;
@@ -73,12 +73,12 @@ export interface AuthModule {
   readonly bootstrap: BootstrapService;
   readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
-  /** The sign-in endpoints, the forms of the local accounts and the recovery page included. */
+  /** The sign-in endpoints, the forms of the sign-in accounts and the recovery page included. */
   readonly handlers: AuthHandlers & LocalAuthHandlers & RecoveryHandlers;
   /** Recovery by the master key, loudly (ADR administrators-live-in-the-instance §9). */
   readonly recovery: RecoveryService;
   /** The accounts of a sign-in provider of kind `local`, and their links. */
-  readonly accounts: LocalAccountsService;
+  readonly signInAccounts: SignInAccountsService;
   /** Whether the instance sends the mails of the links (a mailer was configured). */
   readonly sendsMail: boolean;
 }
@@ -127,11 +127,11 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     providers,
   );
   const clientIp = clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader);
-  const accounts = new LocalAccountsService({
+  const signInAccounts = new SignInAccountsService({
     store: deps.store,
     audit: deps.store.auditWriter,
     clock,
-    logger: logger.child({ component: 'local-accounts' }),
+    logger: logger.child({ component: 'sign-in-accounts' }),
     publicUrl: deps.config.publicUrl,
   });
   const secondFactors = new SecondFactorService({
@@ -147,7 +147,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     sessionStore: deps.sessions,
     authenticator,
     providers,
-    accounts,
+    signInAccounts,
     login: {
       store: deps.store,
       bootstrap,
@@ -206,7 +206,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     publicUrl: deps.config.publicUrl,
     recovery,
     providers,
-    accounts,
+    signInAccounts,
     sessions: deps.sessions,
     logger,
     rateLimiter: deps.rateLimiter,
@@ -223,7 +223,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     relyingParties,
     authenticator,
     handlers: { ...handlers, ...localHandlers, ...recoveryHandlers },
-    accounts,
+    signInAccounts,
     sendsMail: deps.mailer !== undefined,
   };
 }
@@ -385,13 +385,13 @@ export {
   LINK_TOKEN_PARAM,
   LOCAL_LINK_TTL_MS,
   LOCAL_LOCKOUT,
-  LocalAccountsService,
-  localAccountsObjectId,
+  SignInAccountsService,
+  signInAccountsObjectId,
   normalizeLocalEmail,
   RESET_PASSWORD_PAGE,
   type IssuedLink,
   type PasswordCheck,
-} from './local-accounts';
+} from './sign-in-accounts';
 export {
   ACCOUNT_ERROR_PARAM,
   createLocalAuthHandlers,
@@ -399,7 +399,7 @@ export {
   ENROL_PARAM,
   FORGOT_SENT_PARAM,
   FRESH_SIGN_IN_FOR_FACTOR_MS,
-  localAccountIdOf,
+  signInAccountIdOf,
   localIdentity,
   RESET_DONE_PARAM,
   SECOND_FACTOR_PAGE,
@@ -408,8 +408,8 @@ export {
   type LocalAuthHandlers,
 } from './local-handlers';
 export {
-  LOCAL_ACCOUNT_ERROR_CODES,
-  LOCAL_ACCOUNT_ERROR_MESSAGES,
-  LocalAccountError,
-  type LocalAccountErrorCode,
+  SIGN_IN_ACCOUNT_ERROR_CODES,
+  SIGN_IN_ACCOUNT_ERROR_MESSAGES,
+  SignInAccountError,
+  type SignInAccountErrorCode,
 } from './errors';

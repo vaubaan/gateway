@@ -11,7 +11,7 @@
 import type { RiskId } from '@vaubaan/shared';
 
 import { knownTrustLevels } from '@/lib/missions/macro-actions';
-import type { CatalogRisk, IssuanceConnection } from '@/lib/missions/model';
+import type { CatalogRisk, IssuanceAccount } from '@/lib/missions/model';
 import type { MacroAction } from '@vaubaan/shared';
 import type { MissionDetail } from '@/server/missions';
 
@@ -25,7 +25,7 @@ export interface CardCatalog {
 }
 
 export interface DetailCard {
-  readonly connection: IssuanceConnection;
+  readonly account: IssuanceAccount;
   readonly card: CardState;
   /** Calls used this period, per risk of the card. */
   readonly used: Readonly<Record<RiskId, number>>;
@@ -34,28 +34,27 @@ export interface DetailCard {
   readonly lastCheckedAt: string | null;
 }
 
-/** The connection a card is drawn with: the creator's own, else one built from the mission. */
-function connectionOf(
-  detailConnection: MissionDetail['connections'][number],
+/** The account a card is drawn with: the creator's own, else one built from the mission. */
+function accountOf(
+  detailAccount: MissionDetail['accounts'][number],
   detail: Pick<MissionDetail, 'policy'>,
-  own: IssuanceConnection | undefined,
+  own: IssuanceAccount | undefined,
   catalog: CardCatalog,
-): IssuanceConnection {
+): IssuanceAccount {
   if (own) return own;
-  const setIds = new Set(detailConnection.resource_sets.map((set) => set.id));
+  const setIds = new Set(detailAccount.resource_sets.map((set) => set.id));
   const resources = new Map(
-    [
-      ...detailConnection.resources,
-      ...detailConnection.resource_sets.flatMap((s) => s.resources),
-    ].map((r) => [r.id, r]),
+    [...detailAccount.resources, ...detailAccount.resource_sets.flatMap((s) => s.resources)].map(
+      (r) => [r.id, r],
+    ),
   );
   return {
-    id: detailConnection.id,
-    provider: detailConnection.provider,
-    provider_label: detailConnection.provider_label,
-    resource_noun: detailConnection.resource_noun,
-    display_name: detailConnection.display_name,
-    status: detailConnection.status,
+    id: detailAccount.id,
+    provider: detailAccount.provider,
+    provider_label: detailAccount.provider_label,
+    resource_noun: detailAccount.resource_noun,
+    display_name: detailAccount.display_name,
+    status: detailAccount.status,
     derives_env: catalog.derives_env,
     default_env: null,
     basis: 'share',
@@ -69,28 +68,28 @@ function connectionOf(
 }
 
 export function detailCards(
-  detail: Pick<MissionDetail, 'connections' | 'policy'>,
+  detail: Pick<MissionDetail, 'accounts' | 'policy'>,
   /** The creator's issuance context; empty for anyone else. */
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   catalogOf: (provider: string) => CardCatalog | null,
 ): DetailCard[] {
-  return detail.connections.flatMap((c) => {
+  return detail.accounts.flatMap((c) => {
     const catalog = catalogOf(c.provider);
     if (!catalog) return [];
     const own = context.find((x) => x.id === c.id);
-    const connection = connectionOf(c, detail, own, catalog);
+    const account = accountOf(c, detail, own, catalog);
     return c.resource_sets.map((set): DetailCard => {
       const lines = detail.policy.filter((entry) => entry.resource_set_id === set.id);
       return {
-        connection,
+        account,
         card: {
           key: set.id,
           id: set.id,
-          connectionId: c.id,
+          accountId: c.id,
           resourceIds: set.resources.map((r) => r.id),
           future: set.future,
           env: set.env,
-          trustLevels: knownTrustLevels(connection, set.trust_levels),
+          trustLevels: knownTrustLevels(account, set.trust_levels),
           entries: entriesOf(lines),
         },
         used: Object.fromEntries(

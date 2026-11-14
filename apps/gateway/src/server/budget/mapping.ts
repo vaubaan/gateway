@@ -3,19 +3,19 @@
  *
  * The store keeps camelCase persistence records (`MissionRecord`, its policy entries
  * with flat `rateLimit` / `rateWindowSeconds`, `SessionCounterRecord`,
- * `ConnectionResourceRecord`); missions, the budget and the pipeline speak
+ * `AccountResourceRecord`); missions, the budget and the pipeline speak
  * `@vaubaan/shared`'s vocabulary (`MissionPolicyEntry` with `rate_limit: { max,
  * window_seconds }`, `Period`, `SessionCounter`). This module is the only place that
  * translates between the two, in both directions, so neither side renames anything for
  * the other: the policy entry (`policyEntryOf` / `policyEntryRecordOf`), the period
  * (`periodOf`, `statedPeriodOf`, `budgetPeriodOf`), the counter (`sessionCounterOf`) and
- * the staleness of a resource (`isStale`). A connection's own shapes are translated by
- * `connections/mapping.ts`.
+ * the staleness of a resource (`isStale`). An account's own shapes are translated by
+ * `accounts/mapping.ts`.
  *
  * Naming: the store calls its camelCase policy entry `MissionPolicyEntry`, exactly
  * like the shared domain type; it is aliased here (`…Record`) rather than renamed.
- * Its selection is `MissionConnectionRecord`, apart from gateway-core's
- * `MissionConnection`.
+ * Its selection is `MissionAccountRecord`, apart from gateway-core's
+ * `MissionAccount`.
  */
 
 import type {
@@ -27,7 +27,7 @@ import type {
   SessionCounter,
 } from '@vaubaan/shared';
 import type {
-  ConnectionResourceRecord,
+  AccountResourceRecord,
   MissionPolicyEntry as MissionPolicyEntryRecord,
   MissionPolicyLineInput,
   MissionRecord,
@@ -44,7 +44,7 @@ export interface BudgetMission {
   /** Every line names its resource set (`resource_set_id`). */
   readonly policy: MissionPolicy;
   /**
-   * The resource sets of the mission, to name one in a refusal when its connection has
+   * The resource sets of the mission, to name one in a refusal when its account has
    * several (risk model §4.7). Absent: no set is named.
    */
   readonly resource_sets?: readonly BudgetResourceSet[];
@@ -53,19 +53,19 @@ export interface BudgetMission {
 /** What the budget knows of one resource set: where it is, to name it. */
 export interface BudgetResourceSet {
   readonly id: string;
-  readonly connection_id: string;
-  /** From 1, among the sets of its connection. */
+  readonly account_id: string;
+  /** From 1, among the sets of its account. */
   readonly position: number;
 }
 
-/** "resource set 2" when the set's connection has several sets; `null` otherwise. */
+/** "resource set 2" when the set's account has several sets; `null` otherwise. */
 export function resourceSetLabelOf(
   sets: readonly BudgetResourceSet[] | undefined,
   resourceSetId: string,
 ): string | null {
   const set = sets?.find((s) => s.id === resourceSetId);
   if (!set) return null;
-  const siblings = (sets ?? []).filter((s) => s.connection_id === set.connection_id);
+  const siblings = (sets ?? []).filter((s) => s.account_id === set.account_id);
   return siblings.length > 1 ? `resource set ${set.position}` : null;
 }
 
@@ -123,7 +123,7 @@ export function budgetPeriodOf(
 }
 
 /** True once the last discovery no longer returned the resource (spec §0 "Resource"). */
-export function isStale(record: Pick<ConnectionResourceRecord, 'staleSince'>): boolean {
+export function isStale(record: Pick<AccountResourceRecord, 'staleSince'>): boolean {
   return record.staleSince !== null;
 }
 
@@ -134,10 +134,10 @@ export function budgetMissionOf(record: MissionRecord): BudgetMission {
     expires_at: record.expiresAt,
     period: budgetPeriodOf(record),
     policy: record.policy.map(policyEntryOf),
-    resource_sets: record.connections.flatMap((c) =>
+    resource_sets: record.accounts.flatMap((c) =>
       c.resourceSets.map((set) => ({
         id: set.id,
-        connection_id: c.connectionId,
+        account_id: c.accountId,
         position: set.position,
       })),
     ),

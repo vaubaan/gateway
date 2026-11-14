@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DraftConnection, DraftPeriod } from './model';
+import type { DraftAccount, DraftPeriod } from './model';
 import { previewDraft } from './preview';
 import { expiryPhrase, periodPhrase, reloadPhrase, shortLabel } from './summary';
-import { acmeConnection } from '../../../tests/support/missions/testing';
+import { acmeAccount } from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 
 function summaryOf(
-  connections: readonly DraftConnection[],
+  accounts: readonly DraftAccount[],
   period: DraftPeriod = { kind: 'recurring', length_seconds: 86_400 },
   expiresAt: string | null = null,
 ) {
   return previewDraft(
-    { connections: [acmeConnection()], now: NOW },
-    { name: 'm', connections, period, expires_at: expiresAt },
+    { accounts: [acmeAccount()], now: NOW },
+    { name: 'm', accounts, period, expires_at: expiresAt },
   ).summary;
 }
 
 describe('summarize — the three lines of the creation screen', () => {
-  it('says what the mission can do, per connection, with the risk hardest to repair', () => {
+  it('says what the mission can do, per account, with the risk hardest to repair', () => {
     const s = summaryOf([
-      { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
+      { account_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
     ]);
     expect(s.can).toBe(
       // `all`: the labelled resources, one set per environment (`scratch` has no label).
@@ -32,7 +32,7 @@ describe('summarize — the three lines of the creation screen', () => {
   it('says what it cannot do: withheld risks by row, resources left out', () => {
     const s = summaryOf([
       {
-        connection_id: 'conn-acme',
+        account_id: 'conn-acme',
         trust_levels: { read: 'careful' },
         resources: { scope: 'selected', resource_refs: ['app-prod'] },
       },
@@ -44,7 +44,7 @@ describe('summarize — the three lines of the creation screen', () => {
 
   it('says in what quantities: widest quota, fastest rate, approvals, reload, expiry', () => {
     const s = summaryOf(
-      [{ connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } }],
+      [{ account_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } }],
       { kind: 'recurring', length_seconds: 86_400 },
       '2026-11-01T00:00:00.000Z',
     );
@@ -54,7 +54,7 @@ describe('summarize — the three lines of the creation screen', () => {
   });
 
   it('speaks of a total for a one-off mission that never expires', () => {
-    const s = summaryOf([{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }], {
+    const s = summaryOf([{ account_id: 'conn-acme', trust_levels: { read: 'careful' } }], {
       kind: 'one-off',
     });
     expect(s.quantities).toContain('At most 100 actions in total');
@@ -65,8 +65,8 @@ describe('summarize — the three lines of the creation screen', () => {
 
   it('stays readable before anything is picked', () => {
     const s = summaryOf([]);
-    expect(s.can).toBe('Nothing yet — include a connection and tick a macro-action.');
-    expect(s.cannot).toBe('Everything: no connection is included.');
+    expect(s.can).toBe('Nothing yet — include an account and tick a macro-action.');
+    expect(s.cannot).toBe('Everything: no account is included.');
     expect(s.quantities).toBe('No budget yet.');
   });
 });

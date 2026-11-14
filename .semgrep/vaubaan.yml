@@ -70,7 +70,7 @@ rules:
   - id: vaubaan-encryption-only-in-the-crypto-module
     message: >-
       Ciphers and key derivation are used only through the crypto module
-      (apps/gateway/src/server/crypto/: AEAD, per-connection key derivation,
+      (apps/gateway/src/server/crypto/: AEAD, per-account key derivation,
       key versions). Elsewhere, ask that module for an Encryptor. Hashing,
       random bytes, timingSafeEqual and key-pair generation stay available
       (ADR per-org-encryption-app-level, trust-model-clear-at-rest-idp-style).

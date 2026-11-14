@@ -1,5 +1,5 @@
 /**
- * The forms of the local accounts, outside the shell (ADR
+ * The forms of the sign-in accounts, outside the shell (ADR
  * local-accounts-sign-in-provider): the sign-in form of the sign-in page, and
  * the "choose a password" form of the create-account and reset pages. Plain
  * HTML forms; the server validates everything again.
@@ -11,17 +11,17 @@ import { Button, Field, Input } from '@/components/ui';
 import {
   FORGOT_PASSWORD_PAGE,
   LINK_TOKEN_PARAM,
-  LOCAL_ACCOUNT_ERROR_CODES,
-  LOCAL_ACCOUNT_ERROR_MESSAGES,
-  type LocalAccountErrorCode,
+  SIGN_IN_ACCOUNT_ERROR_CODES,
+  SIGN_IN_ACCOUNT_ERROR_MESSAGES,
+  type SignInAccountErrorCode,
 } from '@/server/auth';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 
 /** The sentence of a refused form: a closed code, or the one the handler adds for a mismatch. */
 export function accountErrorSentence(code: string): string | null {
   if (code === 'password-mismatch') return 'The two passwords differ. Type the same one twice.';
-  return (LOCAL_ACCOUNT_ERROR_CODES as readonly string[]).includes(code)
-    ? LOCAL_ACCOUNT_ERROR_MESSAGES[code as LocalAccountErrorCode]
+  return (SIGN_IN_ACCOUNT_ERROR_CODES as readonly string[]).includes(code)
+    ? SIGN_IN_ACCOUNT_ERROR_MESSAGES[code as SignInAccountErrorCode]
     : null;
 }
 
@@ -75,7 +75,7 @@ export function ChoosePasswordForm({
   email,
   submitLabel,
 }: {
-  /** `/api/account/create` or `/api/account/reset`. */
+  /** `/api/sign-in-account/create` or `/api/sign-in-account/reset`. */
   action: string;
   token: string;
   /** Shown, not editable: the address the link was made for. */

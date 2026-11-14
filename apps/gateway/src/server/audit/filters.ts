@@ -1,6 +1,6 @@
 /**
  * The Audit page's filters, parsed from the query string (spec §4.2 "Audit —
- * search by mission, user, connection, tool, decision, period"; §7.9 "the
+ * search by mission, user, account, tool, decision, period"; §7.9 "the
  * audit tells who did what": the agent label; §8 "the token used and its
  * holder": the token holder). Pure: no
  * store, no `next`. A value that cannot be read is dropped and reported in
@@ -14,7 +14,7 @@ import { MS_PER_DAY } from '@vaubaan/shared/time';
 export const AUDIT_PARAMS = {
   mission: 'mission',
   user: 'user',
-  connection: 'connection',
+  account: 'account',
   tool: 'tool',
   decision: 'decision',
   agent: 'agent',
@@ -34,7 +34,7 @@ export interface AuditFilters {
   readonly missionId: string | null;
   /** An email address or a user id, as typed. */
   readonly user: string | null;
-  readonly connectionId: string | null;
+  readonly accountId: string | null;
   /** Exact tool name. */
   readonly tool: string | null;
   readonly decision: AuditDecision | null;
@@ -160,7 +160,7 @@ export function parseAuditQuery(query: RawQuery): ParsedAuditQuery {
     filters: {
       missionId: read('mission'),
       user: read('user'),
-      connectionId: read('connection'),
+      accountId: read('account'),
       tool: read('tool'),
       decision,
       agentLabel: read('agent'),

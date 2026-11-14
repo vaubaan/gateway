@@ -12,7 +12,7 @@ import type { RiskId } from '@vaubaan/shared';
 import { Button, Dialog, EnvTag, FilterChips } from '@/components/ui';
 import { ACTIONS, CARD_WORDS, TRUST_LEVEL_LABELS } from '@/lib/vocabulary';
 import { DEFAULT_TRUST_LEVEL, TRUST_LEVELS, type TrustLevel } from '@/lib/missions/macro-actions';
-import type { IssuanceConnection } from '@/lib/missions/model';
+import type { IssuanceAccount } from '@/lib/missions/model';
 import type { RiskPlanes } from '@/lib/providers/planes';
 
 import type { CardState, EntryState } from '../new/form-state';
@@ -50,7 +50,7 @@ export function PlaneChips({
 }
 
 export function CustomModal({
-  connection,
+  account,
   card,
   actionId,
   planes,
@@ -58,7 +58,7 @@ export function CustomModal({
   onCancel,
   onApply,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   card: CardState;
   actionId: string;
   planes: RiskPlanes | null;
@@ -66,15 +66,15 @@ export function CustomModal({
   onCancel: () => void;
   onApply: (lines: Readonly<Record<RiskId, EntryState | null>>, startFrom: TrustLevel) => void;
 }) {
-  const action = connection.macro_actions.find((a) => a.id === actionId);
-  const view = customView(connection, card, actionId, planes);
+  const action = account.macro_actions.find((a) => a.id === actionId);
+  const view = customView(account, card, actionId, planes);
   const [lines, setLines] = useState(() => customDraftOf(card, view));
   const [start, setStart] = useState<TrustLevel>(
     () => card.trustLevels[actionId] ?? DEFAULT_TRUST_LEVEL,
   );
   const [plane, setPlane] = useState<string | null>(null);
   if (!action) return null;
-  const name = `${action.label} · ${accountLabel(connection)}`;
+  const name = `${action.label} · ${accountLabel(account)}`;
   return (
     <Dialog
       open
@@ -120,7 +120,7 @@ export function CustomModal({
                 checked={start === level}
                 onChange={() => {
                   setStart(level);
-                  setLines(startFrom(connection, card, actionId, view, level));
+                  setLines(startFrom(account, card, actionId, view, level));
                 }}
               />
               {TRUST_LEVEL_LABELS[level]}
@@ -133,7 +133,7 @@ export function CustomModal({
         <PlaneChips view={view} plane={plane} onPlane={setPlane} label={`Planes of ${name}`} />
       </div>
       <CustomTable
-        connection={connection}
+        account={account}
         card={card}
         view={view}
         lines={lines}

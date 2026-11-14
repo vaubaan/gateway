@@ -170,7 +170,7 @@ export function dataModelTrees(model: DataModel): PlaneTree[] {
 
 /**
  * Where the environment of a call comes from (risk model §6): the call itself
- * (the plugin derives it), the label the connection owner puts on the
+ * (the plugin derives it), the label the account owner puts on the
  * resource, or nowhere because no risk of the catalog depends on it.
  */
 export type EnvironmentSource = 'call' | 'resource-label' | 'none';

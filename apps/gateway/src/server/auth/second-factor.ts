@@ -10,7 +10,7 @@
  * (security audit 2026-10-31, M1): whoever holds the password cannot try codes without
  * end. A locked factor checks no code, not even the right one.
  *
- * The local accounts kept their factor per account (migration 0019); the boot moves it
+ * The sign-in accounts kept their factor per account (migration 0019); the boot moves it
  * to the account's user once (`adoptLocalFactors`).
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
@@ -64,7 +64,7 @@ export function waiverApplies(
 }
 
 export interface SecondFactorDeps {
-  readonly store: Pick<Store, 'secondFactors' | 'localAccounts' | 'users'>;
+  readonly store: Pick<Store, 'secondFactors' | 'signInAccounts' | 'users'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -183,7 +183,7 @@ export class SecondFactorService {
   }
 
   /**
-   * Moves the factors local accounts kept per account (migration 0019) to their user:
+   * Moves the factors sign-in accounts kept per account (migration 0019) to their user:
    * opened with the account's associated data, sealed with the user's, then deleted
    * from the account. Idempotent: an account without a factor is skipped. An account
    * with a factor and no user yet gets its user row first.
@@ -191,35 +191,38 @@ export class SecondFactorService {
   async adoptLocalFactors(localProviderIds: readonly string[]): Promise<number> {
     let moved = 0;
     for (const providerId of localProviderIds) {
-      for (const account of await this.deps.store.localAccounts.list(providerId)) {
-        if (account.totpConfirmedAt === null) continue;
-        const totp = await this.deps.store.localAccounts.readSecret(account.id, 'totp');
-        const recovery = await this.deps.store.localAccounts.readSecret(account.id, 'recovery');
+      for (const signInAccount of await this.deps.store.signInAccounts.list(providerId)) {
+        if (signInAccount.totpConfirmedAt === null) continue;
+        const totp = await this.deps.store.signInAccounts.readSecret(signInAccount.id, 'totp');
+        const recovery = await this.deps.store.signInAccounts.readSecret(
+          signInAccount.id,
+          'recovery',
+        );
         if (totp !== null) {
           const user = await this.deps.store.users.ensureIdentity({
             issuer: localIssuer(providerId).href,
-            subject: account.id,
-            email: account.email,
+            subject: signInAccount.id,
+            email: signInAccount.email,
           });
           await this.deps.store.secondFactors.set({
             userId: user.id,
             totp,
             recovery: recovery ?? '[]',
-            lastStep: account.totpLastStep,
-            confirmedAt: account.totpConfirmedAt,
+            lastStep: signInAccount.totpLastStep,
+            confirmedAt: signInAccount.totpConfirmedAt,
           });
           moved += 1;
         }
-        await this.deps.store.localAccounts.deleteSecret(account.id, 'totp');
-        await this.deps.store.localAccounts.deleteSecret(account.id, 'recovery');
-        await this.deps.store.localAccounts.setTotp(account.id, {
+        await this.deps.store.signInAccounts.deleteSecret(signInAccount.id, 'totp');
+        await this.deps.store.signInAccounts.deleteSecret(signInAccount.id, 'recovery');
+        await this.deps.store.signInAccounts.setTotp(signInAccount.id, {
           confirmedAt: null,
           lastStep: null,
         });
       }
     }
     if (moved > 0) {
-      this.deps.logger.info('second factors of local accounts moved to their people', { moved });
+      this.deps.logger.info('second factors of sign-in accounts moved to their people', { moved });
     }
     return moved;
   }
