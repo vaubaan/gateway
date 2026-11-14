@@ -59,6 +59,7 @@ import {
   count,
   DECISION_WORDS,
   formatNumber,
+  DOC_PAGES,
   PAGES,
   REFUSAL_WORDS,
   ROUTES,
@@ -628,6 +629,7 @@ export default async function ActivityPage({ searchParams }: Props) {
       <PageHeader
         title={PAGES.activity.title}
         lede={activityLede(root.config.retentionDays)}
+        doc={DOC_PAGES.activity}
         width="wide"
         secondary={[<DetailToggle key="details" />]}
       />

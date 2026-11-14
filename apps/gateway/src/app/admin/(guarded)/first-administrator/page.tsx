@@ -16,7 +16,7 @@ import {
   Section,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 import { ADMIN_SETUP_PAGE, USERS_PAGE } from '@/server/users';
 
@@ -30,6 +30,7 @@ export default async function FirstAdministratorPage() {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.firstAdministrator}
         title="Create the first administrator"
         lede="The address and the password the first administrator will sign in with. The second factor comes at the first sign-in."
         crumbs={[{ label: SETTINGS_PAGES.setup.title, href: ADMIN_SETUP_PAGE }]}

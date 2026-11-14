@@ -21,7 +21,7 @@ import {
 } from '@/components/ui';
 import { LocalDate } from '@/components/LocalDate';
 import { requireOperator } from '@/lib/auth/session';
-import { SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   IDP_PAGE,
   isLoginErrorCode,
@@ -61,6 +61,7 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.signIn}
         title={`Test of ${provider.name}`}
         lede="The provider ran its sign-in to the end in another window. Nothing was created here: no person, no session; your own session is untouched."
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}

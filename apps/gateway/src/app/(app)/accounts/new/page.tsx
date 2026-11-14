@@ -16,7 +16,7 @@ import {
   takeNotice,
   type PageSearchParams,
 } from '@/lib/connections/session';
-import { ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
+import { DOC_PAGES, ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
 import { PROVIDERS_PATH } from '@/lib/providers/links';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,7 @@ export default async function ConnectAccountPage({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.connect}
         crumbs={[
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: ACCOUNT_PAGES.connect.title },

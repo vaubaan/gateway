@@ -40,6 +40,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import {
+  DOC_PAGES,
   ACCOUNT_PAGES,
   ACCOUNT_STATES,
   ACCOUNT_WORDS,
@@ -258,6 +259,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.accounts}
         title={PAGES.accounts.title}
         lede={PAGES.accounts.lede}
         primary={

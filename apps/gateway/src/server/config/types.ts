@@ -307,6 +307,12 @@ export interface UpdatesConfig {
   readonly feedUrl: URL;
 }
 
+/** The user docs a page's (i) opens (`docs.*`). */
+export interface DocsConfig {
+  /** The docs root, no trailing slash; a service's page is `../plugins/<id>` beside it. */
+  readonly url: URL;
+}
+
 /** The operator's counters endpoint (`ops.*`, spec §4.3 bis). */
 export interface OpsConfig {
   /** The bearer of `GET /ops/stats`; `null`: the endpoint does not exist (404). */
@@ -386,6 +392,8 @@ export interface InstanceConfig {
   readonly plugins: PluginsConfig;
   /** The published versions feed the instance compares itself with. */
   readonly updates: UpdatesConfig;
+  /** Where the interface's doc links lead. */
+  readonly docs: DocsConfig;
   /** Authorization server of the management door: token lifetimes, who may register. */
   readonly oauth: OAuthConfig;
   /**

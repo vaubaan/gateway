@@ -40,6 +40,7 @@ import { LocalDate } from '@/components/LocalDate';
 import { TrustRaiseOffer } from '@/components/missions/TrustRaiseOffer';
 import { PushOffer } from '@/components/notifications/PushOffer';
 import {
+  DOC_PAGES,
   ACTIONS,
   ago,
   ANSWERS,
@@ -331,6 +332,7 @@ export function NowView({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.now}
         title={PAGES.now.title}
         lede={<Today at={view.at} />}
         primary={somethingWaits ? undefined : <NewMission primary />}

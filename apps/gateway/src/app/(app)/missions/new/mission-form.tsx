@@ -45,6 +45,7 @@ import {
   type ServiceMarkIcon,
 } from '@/components/ui';
 import {
+  DOC_PAGES,
   ACTIONS,
   CARD_WORDS,
   count,
@@ -343,11 +344,12 @@ export function MissionForm({
     ? `${MISSION_ACTIONS.editMission} “${edit.snapshot.name}”`
     : PAGES.newMission.title;
   const lede = edit ? MISSION_WORDS.editLede : PAGES.newMission.lede;
+  const doc = edit ? DOC_PAGES.editMission : DOC_PAGES.newMission;
 
   if (context.length === 0) {
     return (
       <>
-        <PageHeader crumbs={crumbs} title={title} lede={lede} />
+        <PageHeader crumbs={crumbs} title={title} lede={lede} doc={doc} />
         <Callout
           tone="info"
           title="Connect an account first"
@@ -385,7 +387,7 @@ export function MissionForm({
 
   return (
     <>
-      <PageHeader crumbs={crumbs} title={title} lede={lede} />
+      <PageHeader crumbs={crumbs} title={title} lede={lede} doc={doc} />
 
       {edit?.raise && (
         <div className={styles.block}>
@@ -772,6 +774,7 @@ function CreatedView({
     <div data-testid="created">
       <PageHeader
         width="narrow"
+        doc={DOC_PAGES.mission}
         crumbs={[{ label: 'Missions', href: ROUTES.missions }, { label: created.name }]}
         title={created.name}
         lede={`Created just now · ${count(created.permissions, TERMS.risk)} on ${listed([...created.services], 3)} · ${limitsResetEvery(period)} · ${expiresOn(expiresAt, now)}`}

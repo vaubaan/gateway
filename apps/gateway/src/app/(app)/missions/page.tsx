@@ -33,6 +33,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import {
+  DOC_PAGES,
   ACTIONS,
   capitalize,
   count,
@@ -210,7 +211,11 @@ export default async function MissionsPage({ searchParams }: Props) {
   if (listed.length === 0) {
     return (
       <>
-        <PageHeader title={PAGES.missions.title} lede={PAGES.missions.lede} />
+        <PageHeader
+          doc={DOC_PAGES.missions}
+          title={PAGES.missions.title}
+          lede={PAGES.missions.lede}
+        />
         <EmptyState title={MISSION_WORDS.noneYet} action={newMission} testId="missions-empty">
           Create one to give an agent a key: it says which accounts the agent may touch, what it may
           do there and how much.
@@ -221,7 +226,12 @@ export default async function MissionsPage({ searchParams }: Props) {
 
   return (
     <DetailScope id="missions:list">
-      <PageHeader title={PAGES.missions.title} lede={PAGES.missions.lede} primary={newMission} />
+      <PageHeader
+        doc={DOC_PAGES.missions}
+        title={PAGES.missions.title}
+        lede={PAGES.missions.lede}
+        primary={newMission}
+      />
       <div className={styles.listFilter} data-testid="missions-filter">
         {filter}
       </div>

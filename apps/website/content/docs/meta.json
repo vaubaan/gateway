@@ -8,7 +8,10 @@
     "install-with-your-coding-agent",
     "configuration",
     "providers",
+    "accounts",
     "missions",
+    "interface",
+    "administration",
     "operations",
     "known-limitations",
     "compare"

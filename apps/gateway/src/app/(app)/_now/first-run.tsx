@@ -21,7 +21,16 @@ import {
   StepMark,
 } from '@/components/ui';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
-import { ACTIONS, count, FIRST_RUN, PAGES, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
+import {
+  DOC_PAGES,
+  ACTIONS,
+  count,
+  FIRST_RUN,
+  PAGES,
+  ROUTES,
+  SECTIONS,
+  TERMS,
+} from '@/lib/vocabulary';
 import type { NowView, SetupView } from '@/server/now';
 
 import styles from './now.module.css';
@@ -95,6 +104,7 @@ export function FirstRun({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.now}
         title={FIRST_RUN.welcome(name)}
         lede={hasAccount ? FIRST_RUN.nothingYet : FIRST_RUN.nothingConnected}
       />

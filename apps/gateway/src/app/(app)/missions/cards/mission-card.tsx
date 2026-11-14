@@ -11,9 +11,9 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import { Button, ButtonLink, Checkbox, EnvTag, Meter, ServiceMark } from '@/components/ui';
+import { Button, ButtonLink, Checkbox, DocLink, EnvTag, Meter, ServiceMark } from '@/components/ui';
 import type { ServiceMarkIcon } from '@/components/ui';
-import { CARD_WORDS, formatNumber, TRUST_LEVEL_HINTS } from '@/lib/vocabulary';
+import { CARD_WORDS, DOC_PAGES, formatNumber, TRUST_LEVEL_HINTS } from '@/lib/vocabulary';
 import {
   DEFAULT_TRUST_LEVEL,
   TRUST_LEVEL_BUDGET_FACTOR,
@@ -156,7 +156,12 @@ export function MissionCard({
             <th scope="col" colSpan={2}>
               {CARD_WORDS.whatItCanDo}
             </th>
-            <th scope="col">{CARD_WORDS.trust}</th>
+            <th scope="col">
+              <span className={styles.headWithDoc}>
+                {CARD_WORDS.trust}
+                <DocLink to={DOC_PAGES.trustLevels} testId="doc-link-trust-levels" />
+              </span>
+            </th>
             {today && <th scope="col">{today.header}</th>}
           </tr>
         </thead>

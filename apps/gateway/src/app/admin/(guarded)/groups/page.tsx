@@ -29,7 +29,14 @@ import {
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { firstParam, takeNotice, type PageSearchParams } from '@/lib/connections/session';
-import { count, formatNumber, SETTINGS_ACTIONS, SETTINGS_PAGES, TERMS } from '@/lib/vocabulary';
+import {
+  DOC_PAGES,
+  count,
+  formatNumber,
+  SETTINGS_ACTIONS,
+  SETTINGS_PAGES,
+  TERMS,
+} from '@/lib/vocabulary';
 import { GROUP_NAME_MAX_LENGTH, GROUPS_PAGE, type GroupView } from '@/server/groups';
 
 export const dynamic = 'force-dynamic';
@@ -192,7 +199,11 @@ export default async function TeamsPage({ searchParams }: { searchParams: PageSe
 
   return (
     <>
-      <PageHeader title={SETTINGS_PAGES.teams.title} lede={SETTINGS_PAGES.teams.lede} />
+      <PageHeader
+        doc={DOC_PAGES.teams}
+        title={SETTINGS_PAGES.teams.title}
+        lede={SETTINGS_PAGES.teams.lede}
+      />
       <NoticeBanner notice={notice} />
       <Section first>
         <DataTable

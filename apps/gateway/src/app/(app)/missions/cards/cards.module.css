@@ -492,3 +492,9 @@
   gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
+/* A column head with its (i) to the docs. */
+.headWithDoc {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

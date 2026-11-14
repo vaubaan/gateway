@@ -15,6 +15,7 @@ export { RAILWAY_PROJECT_ENV, isSelfResource } from './self-resources';
 export { buildInfoFromEnv, type BuildInfo } from './build-info';
 export { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 export { DEFAULT_UPDATES_FEED_URL } from './updates-default';
+export { DEFAULT_DOCS_URL } from './docs-default';
 export {
   checkInstanceName,
   INSTANCE_NAME_MAX_LENGTH,

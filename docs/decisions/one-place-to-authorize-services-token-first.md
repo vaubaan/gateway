@@ -151,3 +151,42 @@ select repositories"); the other guides keep their wide grant until each is revi
 
 A token over every repository of an organisation is wider than any mission and frightens the
 person who creates it; the second visit it saves is rare next to the token it costs.
+
+## Amendment 2026-11-14: the narrowest key that fits the missions first
+
+### Context
+
+Where a service makes a key either wide or confined (Vercel: a team, or one project), the guide
+recommended the wide key first (amendment 2026-11-11). That ordering invites one giant key that
+every mission of every project points to: a leak or a mistake there reaches everything, and every
+mission depends on that one key.
+
+### Decision
+
+The owner (Renaud Pelissier) keeps both keys and forbids neither, but reverses the order: where a
+plugin declares alternatives, it lists **the narrowest key that fits the person's missions first**
+and the wide key after it, and the guide's reach says why in one sentence on the connect page: a key
+per project keeps a leak or a mistake inside that project; one key for everything makes every
+mission depend on it. Vercel applies it now ("One project", then "Team"). Nothing is enforced: the
+person chooses, and the first alternative is only the one checked when the page opens.
+
+### Consequences
+
+- The connect page and the site's plugin page show the alternatives in the plugin's order; the
+  first one is checked by default. Connections made before need nothing: the mode is still read
+  from the field the host kept.
+- A person with several projects connects several narrow accounts (one per project) or chooses
+  the wide key knowingly; a mission still takes one account per service.
+- The 2026-10-31 wide grant still holds where the service offers no such choice (the permissions of
+  one key); the 2026-11-13 rule still holds where the token picks its resources.
+
+### Rejected alternatives
+
+#### Forbid the wide key
+
+Blocks the owner who runs one team for one product, for whom the wide key is the narrowest that
+fits.
+
+#### Keep the wide key first
+
+The default a person accepts without reading becomes the key every mission depends on.

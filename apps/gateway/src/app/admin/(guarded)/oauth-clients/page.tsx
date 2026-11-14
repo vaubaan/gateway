@@ -30,6 +30,7 @@ import {
 import { requireOperator } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
 import {
+  DOC_PAGES,
   CONFIG_WORDS,
   REGISTERED_APP_STATES,
   SETTINGS_ACTIONS,
@@ -187,6 +188,7 @@ export default async function RegisteredAppsPage({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.registeredApps}
         title={SETTINGS_PAGES.registeredApps.title}
         lede={SETTINGS_PAGES.registeredApps.lede}
       />

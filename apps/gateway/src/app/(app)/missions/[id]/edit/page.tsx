@@ -9,7 +9,7 @@ import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { ButtonLink, Callout, PageHeader } from '@/components/ui';
-import { MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
+import { DOC_PAGES, MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
 import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 
@@ -47,6 +47,7 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
     return (
       <>
         <PageHeader
+          doc={DOC_PAGES.editMission}
           crumbs={[
             { label: 'Missions', href: ROUTES.missions },
             { label: view.mission.name, href: missionPath },

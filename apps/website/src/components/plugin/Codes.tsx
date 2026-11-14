@@ -8,13 +8,15 @@
  * - `RowGlyph` — the glyph of a row of the tree, beside its name.
  * - `Info` — an (i) that shows a declared text on hover or focus; the text is
  *   in the DOM, so a reader without the tooltip still reads it.
- * - `ServiceMark` — the plugin's brand icon in its colour, near-black in ink.
+ * - `ServiceMark` — the plugin's brand icon in its colour; a near-black brand
+ *   takes the ink in the dark theme (`serviceMarkColors`, the gateway's rule).
  *
  * Imports are relative: the unit tests render these without the `@/` alias.
  */
-import { Fragment } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 
 import type { GateWord, Row } from '@vaubaan/policy-engine';
+import { serviceMarkColors } from '@vaubaan/shared/service-mark';
 
 import { GATE_SHORT } from '../../content/plugin-page';
 
@@ -95,20 +97,34 @@ export function Info({ label, text, code }: { label: string; text: string; code?
   );
 }
 
-/** A colour whose luminance is near black: drawn in the page's ink, so dark mode keeps it visible. */
-function isNearBlack(hex: string): boolean {
-  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  if (!m) return false;
-  const [r, g, b] = [m[1]!, m[2]!, m[3]!].map((h) => parseInt(h, 16) / 255);
-  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! < 0.12;
-}
-
-export function ServiceMark({ path, color }: { path: string; color: string | null }) {
-  const fill = color && !isNearBlack(color) ? color : 'currentColor';
+/**
+ * The service's mark: the plugin's path in its brand colour, through
+ * `--mark-color` and `--mark-color-dark` (`globals.css` picks one by the
+ * reader's theme). `size="sm"` beside a name in a list, the default in a
+ * page's header.
+ */
+export function ServiceMark({
+  path,
+  color,
+  size = 'lg',
+}: {
+  path: string;
+  color: string | null;
+  size?: 'sm' | 'lg';
+}) {
+  const { light, dark } = serviceMarkColors(color);
+  const style = light
+    ? ({ '--mark-color': light, '--mark-color-dark': dark ?? 'var(--ink)' } as CSSProperties)
+    : undefined;
+  const px = size === 'sm' ? 16 : 32;
   return (
-    <span className="pp-svc" aria-hidden="true">
-      <svg width="32" height="32" viewBox="0 0 24 24" focusable="false">
-        <path fill={fill} d={path} />
+    <span
+      className={size === 'sm' ? 'pp-svc pp-svc-sm' : 'pp-svc'}
+      style={style}
+      aria-hidden="true"
+    >
+      <svg width={px} height={px} viewBox="0 0 24 24" focusable="false">
+        <path fill="currentColor" d={path} />
       </svg>
     </span>
   );

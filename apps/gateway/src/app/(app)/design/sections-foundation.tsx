@@ -29,7 +29,7 @@ import {
   SummaryLine,
   Tag,
 } from '@/components/ui';
-import { ACTIONS, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
+import { ACTIONS, DOC_PAGES, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
 
 import styles from './design.module.css';
 import { type GalleryIcons, GallerySection, Line, Pile, Specimen } from './specimen';
@@ -184,7 +184,7 @@ export function PageFrameSections({ icons }: { icons: GalleryIcons }) {
       <GallerySection
         id="page-header"
         title="Page header"
-        rule="Where one is, the title, one sentence of lede at most, one primary action and at most two secondary ones; the rest goes behind “···”."
+        rule="Where one is, the title and its (i) to the page of the docs, one sentence of lede at most, one primary action and at most two secondary ones; the rest goes behind “···”."
       >
         <Specimen name="Title and lede">
           {() => (
@@ -192,6 +192,7 @@ export function PageFrameSections({ icons }: { icons: GalleryIcons }) {
               level={2}
               title="Accounts"
               lede="A cloud account connected once; agents reach it only through a mission key."
+              doc={DOC_PAGES.accounts}
               primary={<Button variant="primary">{ACTIONS.connectAccount}</Button>}
             />
           )}

@@ -76,6 +76,7 @@ import {
   type LimitsConfig,
   type PluginsConfig,
   type UpdatesConfig,
+  type DocsConfig,
   type LogLevel,
   type OAuthBrokerConfig,
   type OAuthConfig,
@@ -455,6 +456,7 @@ function validate(
   const opsToken = readOpsToken(r);
   const plugins = readPlugins(r);
   const updates = readUpdates(r);
+  const docs = readDocs(r);
 
   const mail = readMail(r);
   const backup = readBackup(r);
@@ -481,7 +483,7 @@ function validate(
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
-  if (!publicUrl || !storePath || !encryption || !collectorUrl || !updates) return null;
+  if (!publicUrl || !storePath || !encryption || !collectorUrl || !updates || !docs) return null;
   // An absent key file the boot tolerates: the block is complete but for the key
   // itself, which the caller takes out again (`SetupOutcome`).
 
@@ -520,6 +522,7 @@ function validate(
     ops: { token: opsToken },
     plugins,
     updates,
+    docs,
     oauth,
     oauthBrokers,
     log: { level },
@@ -722,6 +725,15 @@ function readUpdates(r: Reader): UpdatesConfig | undefined {
   const feed = keySpec('updates.feed_url');
   const feedUrl = r.url(feed.path, { fallback: feed.default, https: feed.https });
   return feedUrl ? { check, feedUrl } : undefined;
+}
+
+/** `docs.url`: the https docs root the interface links to, trailing slash stripped. */
+function readDocs(r: Reader): DocsConfig | undefined {
+  const spec = keySpec('docs.url');
+  const url = r.url(spec.path, { fallback: spec.default, https: spec.https });
+  if (!url) return undefined;
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  return { url };
 }
 
 /** `ops.token`: optional; when set, long enough to resist guessing. */

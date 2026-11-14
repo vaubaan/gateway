@@ -27,10 +27,11 @@ export const generateMetadata = instanceMetadata;
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { root, decision, principal } = await adminDecision();
   const instance = await root.instance.name.identity();
+  const docsRoot = root.config.docs.url.href;
   if (!decision.ok) {
     if (decision.status === 401 || !principal) redirect(await adminSignInPage(root.auth));
     return (
-      <AppShell principal={principal} instance={instance}>
+      <AppShell principal={principal} instance={instance} docsRoot={docsRoot}>
         <PageHeader title="Administration" />
         <EmptyState
           testId="not-administrator"
@@ -58,7 +59,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     );
   }
   return (
-    <AdminShell principal={decision.principal} instance={instance}>
+    <AdminShell principal={decision.principal} instance={instance} docsRoot={docsRoot}>
       {children}
     </AdminShell>
   );

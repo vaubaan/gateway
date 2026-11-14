@@ -40,6 +40,7 @@ import {
 import { requireOperator } from '@/lib/auth/session';
 import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
+  DOC_PAGES,
   ago,
   NOTIFICATION_WORDS,
   qualifiers,
@@ -197,7 +198,11 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
 
   return (
     <>
-      <PageHeader title={SETTINGS_PAGES.people.title} lede={SETTINGS_PAGES.people.lede} />
+      <PageHeader
+        doc={DOC_PAGES.people}
+        title={SETTINGS_PAGES.people.title}
+        lede={SETTINGS_PAGES.people.lede}
+      />
       <NoticeBanner notice={notice} />
       <Section first>
         {users.length === 0 ? (

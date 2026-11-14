@@ -473,7 +473,7 @@ export const THEME_WORDS = {
 export const ACCOUNT_PAGES = {
   connect: {
     title: 'Connect an account',
-    lede: 'With a key you create once at the service, granted wide: each mission narrows it. A sign-in at the service only where it has no key. The credential never leaves this gateway.',
+    lede: 'With a key you create once at the service, reaching what your missions need: each mission narrows it further. A sign-in at the service only where it has no key. The credential never leaves this gateway.',
   },
   yours:
     'You own these, alone or with a team: all permissions, and you decide who else may use them.',
@@ -1599,7 +1599,8 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
 // ─────────────────────────────────────────────────────────────────────────────
 // Connecting with a token pasted by hand (ADR
 // one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide
-// once, narrowed by each mission). The steps and permissions themselves come
+// once, narrowed by each mission; amended 2026-11-14: where the key has
+// alternatives, the narrowest that fits the missions first). The steps and permissions themselves come
 // from the plugin; only the frame is written here.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1648,3 +1649,74 @@ export const TOKEN_CONNECT = {
 
 /** A token that expires within this many days is announced on its account page. */
 export const TOKEN_EXPIRY_NOTICE_DAYS = 14;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Doc links: the (i) of a page header, and a few inside a form, open the page
+// of the user docs that explains it (`docs.url`, default vaubaan.com/docs).
+// One table; `lib/docs-links.ts` builds the address, and
+// `tests/unit/app/doc-links.test.ts` fails when a path or an anchor has no page
+// in `apps/website/content/docs`. A path is relative to the docs root and may
+// end with `#<heading slug>`; a service's page is the sibling `../plugins/<id>`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DocTarget {
+  /** What the link is about, in the interface's words: "Documentation: <label>". */
+  readonly label: string;
+  /** Relative to the docs root: `missions#create-a-mission`, `../plugins/github`. */
+  readonly path: string;
+}
+
+export const DOC_PAGES = {
+  now: { label: PAGES.now.title, path: 'interface#now' },
+  waiting: { label: PAGES.waiting.title, path: 'interface#waiting-for-you' },
+  missions: { label: PAGES.missions.title, path: 'missions' },
+  newMission: { label: PAGES.newMission.title, path: 'missions#create-a-mission' },
+  mission: { label: 'A mission', path: 'missions#the-mission-page' },
+  editMission: { label: 'Edit mission', path: 'missions#edit-a-mission' },
+  missionActivity: {
+    label: 'The activity of a mission',
+    path: 'missions#the-activity-of-a-mission',
+  },
+  accounts: { label: PAGES.accounts.title, path: 'accounts' },
+  connect: { label: ACCOUNT_PAGES.connect.title, path: 'providers' },
+  account: { label: 'An account', path: 'accounts#an-account' },
+  giveAccess: { label: 'Give access', path: 'accounts#give-access' },
+  activity: { label: PAGES.activity.title, path: 'interface#activity' },
+  activityTimeline: { label: 'The timeline', path: 'interface#the-timeline' },
+  reference: { label: PAGES.reference.title, path: '../plugins' },
+  settings: { label: PAGES.settings.title, path: 'interface#settings' },
+  notifications: { label: SETTINGS_PAGES.notifications.title, path: 'missions/notifications' },
+  connectedApps: { label: SETTINGS_PAGES.connectedApps.title, path: 'missions/management-door' },
+  security: { label: 'Security', path: 'interface#security' },
+  setup: { label: SETTINGS_PAGES.setup.title, path: 'administration#setup' },
+  firstAdministrator: { label: 'The first administrator', path: 'install#first-sign-in' },
+  signIn: { label: SETTINGS_PAGES.signIn.title, path: 'administration#sign-in' },
+  people: { label: SETTINGS_PAGES.people.title, path: 'administration#people' },
+  teams: { label: SETTINGS_PAGES.teams.title, path: 'administration#teams' },
+  telemetry: { label: SETTINGS_PAGES.telemetry.title, path: 'operations/telemetry' },
+  registeredApps: {
+    label: SETTINGS_PAGES.registeredApps.title,
+    path: 'administration#registered-apps',
+  },
+  encryption: { label: SETTINGS_PAGES.encryption.title, path: 'administration#encryption' },
+  plugins: { label: SETTINGS_PAGES.plugins.title, path: 'administration#plugins' },
+  // Concepts that trip people, linked from inside a form (a few, no more).
+  trustLevels: { label: 'Trust levels', path: 'concepts#trust-level' },
+  futureResources: { label: 'Resources found later', path: 'missions#resources-found-later' },
+  environmentLabels: { label: 'Environment labels', path: 'accounts#environment-labels' },
+} as const satisfies Record<string, DocTarget>;
+
+export type DocPageId = keyof typeof DOC_PAGES;
+
+/** A service's page on the site, or its connect guide (`#connect`, spec website §2.3 item 9). */
+export function serviceDoc(id: string, name: string, part: 'page' | 'connect' = 'page'): DocTarget {
+  return {
+    label: name,
+    path: `../plugins/${encodeURIComponent(id)}${part === 'connect' ? '#connect' : ''}`,
+  };
+}
+
+/** The accessible name of a doc link. */
+export function docLinkLabel(target: DocTarget): string {
+  return `Documentation: ${target.label}`;
+}

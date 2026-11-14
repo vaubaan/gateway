@@ -25,7 +25,7 @@ import {
   SummaryLine,
 } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
-import { ENVIRONMENT_WORDS } from '@/lib/vocabulary';
+import { serviceDoc, ENVIRONMENT_WORDS } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
 import { providerCards, providerReference } from '@/lib/providers/reference';
 
@@ -53,6 +53,7 @@ export default async function ServiceReferencePage({ params }: Props) {
     <ReferenceFrame cards={providerCards(root.registry)}>
       <PageHeader
         level={2}
+        doc={serviceDoc(reference.id, reference.name)}
         mark={<ServiceMark name={reference.name} icon={reference.icon} size="lg" />}
         title={reference.name}
         lede={

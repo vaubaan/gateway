@@ -13,9 +13,18 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { Button, Checkbox, Dialog, EnvTag, Radio, SearchField, ServiceMark } from '@/components/ui';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DocLink,
+  EnvTag,
+  Radio,
+  SearchField,
+  ServiceMark,
+} from '@/components/ui';
 import type { ServiceMarkIcon } from '@/components/ui';
-import { ACTIONS, CARD_WORDS, ROUTES } from '@/lib/vocabulary';
+import { ACTIONS, CARD_WORDS, DOC_PAGES, ROUTES } from '@/lib/vocabulary';
 import type { IssuanceConnection } from '@/lib/missions/model';
 
 import { cardsOf, type CardResources, type CardState, type FormState } from '../new/form-state';
@@ -223,6 +232,8 @@ function ResourceStep({
   }
 
   const ready = env !== undefined && (ticked.length > 0 || future || (nothingListed && !labelled));
+  // One (i) for "resources found later", beside the first checkbox that offers them.
+  const firstFuture = groups.find((group) => group.selectable);
   return (
     <Dialog
       open
@@ -361,6 +372,9 @@ function ResourceStep({
                     <span className={styles.groupNote}> {CARD_WORDS.inAnotherCard}</span>
                   )}
                 </Checkbox>
+              )}
+              {group === firstFuture && (
+                <DocLink to={DOC_PAGES.futureResources} testId="doc-link-future-resources" />
               )}
             </div>
           </div>

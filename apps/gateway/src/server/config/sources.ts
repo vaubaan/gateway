@@ -29,6 +29,7 @@ import {
 } from './secret-refs';
 import { INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
+import { DEFAULT_DOCS_URL } from './docs-default';
 import { DEFAULT_UPDATES_FEED_URL } from './updates-default';
 import { CLIENT_REGISTRATION_POLICIES, LOG_LEVELS, MAIL_TLS_MODES } from './types';
 
@@ -393,6 +394,15 @@ const KEY_TABLE = [
     kind: 'string',
     format: 'url',
     default: DEFAULT_UPDATES_FEED_URL,
+    https: true,
+  },
+  // The user docs the (i) of each page opens in a new tab; never requested by the instance.
+  {
+    path: 'docs.url',
+    env: 'VAUBAAN_DOCS_URL',
+    kind: 'string',
+    format: 'url',
+    default: DEFAULT_DOCS_URL,
     https: true,
   },
   // The bearer of `GET /ops/stats` (spec §4.3 bis): absent, the endpoint does not exist.

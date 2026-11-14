@@ -26,7 +26,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { CONFIG_WORDS, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, CONFIG_WORDS, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   NEW_SIGN_IN_PROVIDER_PAGE,
   signInProviderPage,
@@ -168,6 +168,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.signIn}
         title={SETTINGS_PAGES.signIn.title}
         lede={SETTINGS_PAGES.signIn.lede}
         primary={

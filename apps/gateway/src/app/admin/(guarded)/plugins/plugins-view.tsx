@@ -26,7 +26,7 @@ import {
 } from '@/components/ui';
 import { providerPath } from '@/lib/providers/links';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
-import { PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
 import type { ValidationStatus } from '@/server/telemetry';
 import {
@@ -246,7 +246,11 @@ export function PluginsPage({ view }: { view: PluginsView }) {
   const notices = reportsSomething(view.report);
   return (
     <>
-      <PageHeader title={SETTINGS_PAGES.plugins.title} lede={SETTINGS_PAGES.plugins.lede} />
+      <PageHeader
+        doc={DOC_PAGES.plugins}
+        title={SETTINGS_PAGES.plugins.title}
+        lede={SETTINGS_PAGES.plugins.lede}
+      />
       {reportsSomething(view.report) && <FeedNotices report={view.report} lines={view.lines} />}
       <Section
         title={PLUGIN_WORDS.listTitle}

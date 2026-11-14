@@ -20,7 +20,7 @@ import {
 import styles from '@/components/settings/settings.module.css';
 import { Callout, CodeBlock, Hint, PageHeader, Section, Segmented } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { DEFAULT_CLAIM_MAPPING, IDP_PAGE, NEW_SIGN_IN_PROVIDER_PAGE } from '@/server/auth';
 import { DEFAULT_LOCAL_PROVIDER_ID } from '@/server/config';
 
@@ -66,6 +66,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.signIn}
         title={
           definition
             ? definition.title

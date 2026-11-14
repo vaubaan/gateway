@@ -25,6 +25,7 @@ import Link from 'next/link';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import {
   Button,
+  DocsProvider,
   StatusMark,
   SubNav,
   SubNavFrame,
@@ -88,6 +89,7 @@ export function RoleMark({ principal }: { principal: Principal }) {
 export async function AppShell({
   principal,
   instance,
+  docsRoot,
   children,
 }: {
   principal: Principal;
@@ -96,6 +98,8 @@ export async function AppShell({
    * address when it has none; the host stays in the tooltip.
    */
   instance: InstanceIdentity;
+  /** Where the (i) of each page leads: the instance's `docs.url`. */
+  docsRoot: string;
   children: React.ReactNode;
 }) {
   const theme = await currentTheme();
@@ -113,44 +117,46 @@ export async function AppShell({
 
   return (
     <ToastProvider>
-      <TrailProvider>
-        <div className={styles.app}>
-          <a href="#main" className={styles.skip}>
-            Skip to the page
-          </a>
-          <aside className={styles.side}>
-            <Link href={NAV.now.href} className={styles.brand} title={brandTooltip(instance)}>
-              <span className={styles.brandMark} aria-hidden="true">
-                {PRODUCT.mark}
-              </span>
-              <span className={styles.brandText}>
-                <span className={styles.brandName}>{PRODUCT.name}</span>
-                <span className={styles.brandInstance} data-testid="instance-name">
-                  {instance.label}
+      <DocsProvider root={docsRoot}>
+        <TrailProvider>
+          <div className={styles.app}>
+            <a href="#main" className={styles.skip}>
+              Skip to the page
+            </a>
+            <aside className={styles.side}>
+              <Link href={NAV.now.href} className={styles.brand} title={brandTooltip(instance)}>
+                <span className={styles.brandMark} aria-hidden="true">
+                  {PRODUCT.mark}
                 </span>
-              </span>
-            </Link>
-            <nav className={styles.nav} aria-label="Main">
-              <NavLinks items={items} />
-            </nav>
-          </aside>
-          <div className={styles.main}>
-            <PathBar instance={{ label: instance.label, host: instance.host }}>
-              <ThemeToggle initial={theme} />
-              <UserMenu name={person.name} detail={person.detail}>
-                <RoleMark principal={principal} />
-                <SignOutButton />
-              </UserMenu>
-            </PathBar>
-            <main id="main" className={styles.page} tabIndex={-1}>
-              <RecoveryBanner />
-              {children}
-            </main>
-            <ServiceWorkerRegistration />
-            <BuildFooter />
+                <span className={styles.brandText}>
+                  <span className={styles.brandName}>{PRODUCT.name}</span>
+                  <span className={styles.brandInstance} data-testid="instance-name">
+                    {instance.label}
+                  </span>
+                </span>
+              </Link>
+              <nav className={styles.nav} aria-label="Main">
+                <NavLinks items={items} />
+              </nav>
+            </aside>
+            <div className={styles.main}>
+              <PathBar instance={{ label: instance.label, host: instance.host }}>
+                <ThemeToggle initial={theme} />
+                <UserMenu name={person.name} detail={person.detail}>
+                  <RoleMark principal={principal} />
+                  <SignOutButton />
+                </UserMenu>
+              </PathBar>
+              <main id="main" className={styles.page} tabIndex={-1}>
+                <RecoveryBanner />
+                {children}
+              </main>
+              <ServiceWorkerRegistration />
+              <BuildFooter />
+            </div>
           </div>
-        </div>
-      </TrailProvider>
+        </TrailProvider>
+      </DocsProvider>
     </ToastProvider>
   );
 }
@@ -181,14 +187,16 @@ export function SettingsFrame({
 export function AdminShell({
   principal,
   instance,
+  docsRoot,
   children,
 }: {
   principal: Principal;
   instance: InstanceIdentity;
+  docsRoot: string;
   children: React.ReactNode;
 }) {
   return (
-    <AppShell principal={principal} instance={instance}>
+    <AppShell principal={principal} instance={instance} docsRoot={docsRoot}>
       <SettingsFrame principal={principal}>{children}</SettingsFrame>
     </AppShell>
   );

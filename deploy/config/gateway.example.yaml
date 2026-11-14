@@ -306,6 +306,11 @@
 #   check: true
 #   feed_url: https://vaubaan.com/versions.json
 
+# Where the (i) beside each page title leads: the user docs (a mirror serves the
+# plugin pages beside it, at ../plugins). A link only; never requested.
+# docs:
+#   url: https://vaubaan.com/docs
+
 # How long a request to the creator stays answerable, a claim (spec §3.4) and
 # an approval request (spec §3.5) alike. A duration is a whole number > 0 and
 # one unit: 30s, 10m, 24h, 7d.

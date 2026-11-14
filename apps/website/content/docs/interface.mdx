@@ -1,0 +1,49 @@
+---
+title: The interface
+description: The pages of an instance a person uses every day — Now, Waiting for you, Activity, Reference and Settings — and where each one is explained further.
+---
+
+Seven entries: Now, Waiting for you, Missions, Accounts, Activity, Reference, then Settings. Each page has a small (i) beside its title that opens its part of these docs. Missions and accounts have their own pages: [Missions and agents](/docs/missions), [Accounts](/docs/accounts). The words are those of [Concepts](/docs/concepts).
+
+## Now
+
+The home. What waits for you comes first, answerable where you see it; then what is running, one line per mission; then one line of counts that lead elsewhere. When nothing waits, the page says so in one sentence and what is running is one click away. Before your first mission, it gives the steps to the first account and the first mission instead.
+
+A yes is never given from the home: an approval leads to its request, where the exact call is shown. A refusal runs nothing and may be given at once.
+
+## Waiting for you
+
+What your missions ask of you, oldest first, with one request open beside the list:
+
+- **An approval**: a permission marked "ask me first" was used. The request shows the call — the tool, the resource, the arguments — and who made it. **Approve** lets the agent replay exactly that call; **Refuse** tells it no.
+- **A limit reached**: a permission used its limit for the period. Give more, reset it, or refuse.
+
+Only the mission's creator answers; a teammate sees whose answer it waits for. The agent never waits on a held call: it was refused with the request's address, and replays once you have answered ([when a call is refused](/docs/missions#when-a-call-is-refused)). A device can tell you when something waits: [notifications](/docs/missions/notifications).
+
+## Activity
+
+Two tabs: the Record and the Timeline.
+
+### The record
+
+The audit record: one line per call, allowed or refused, and per change a person made, newest first. Filter by period, mission, account, tool, decision, person, key holder, agent and kind; open a line for its key, the permissions it touched and what is left, the fingerprint of its arguments and what the agent was told. You read the missions you created, the ones shared with you and the accounts you own; an administrator reads everything. Arguments are never stored, only their fingerprint. How long lines are kept is the instance's [retention](/docs/operations#audit-retention).
+
+### The timeline
+
+What happened in each mission, newest first, in the words of the mission's own page: calls, requests and their answers, resets, limits, gates and keys. Filter by mission, key holder or agent label (or the calls without one); filters apply as soon as you choose them. You read the missions you created or are a teammate of; an administrator reads every one. Events are kept as long as the record.
+
+## Reference
+
+What an agent can do on each service, permission by permission, as the instance's plugins declare it. Read-only: nothing there changes anything. The same pages, with a connect guide for each service, are on this site under [Plugins](/plugins).
+
+## Settings
+
+Your own settings — the theme, **Security**, connected apps, notifications, signing out everywhere — then, for an administrator, the [Administration](/docs/administration) of the instance.
+
+- **Notifications**: [Notifications on your phone](/docs/missions/notifications).
+- **Connected apps**: the agents you allowed to prepare missions in your name, through the [management door](/docs/missions/management-door). They never execute a call or answer a request.
+- **Sign out everywhere** ends every session you have open; your keys, connected apps and missions are not touched.
+
+## Security
+
+When the instance keeps your account (local accounts), your password; and, whatever your sign-in provider, your second factor. A new second factor gives recovery codes once, on this page: keep them apart.

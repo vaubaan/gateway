@@ -288,9 +288,11 @@ export function connectFigureFiles(
 }
 
 /**
- * One shape of the key (`alternatives` of an `api-key` spec, Vercel: a team or one
- * project): what the toggle of the connect guide says, and the steps of that shape,
- * which come before the guide's shared steps.
+ * One shape of the key (`alternatives` of an `api-key` spec, Vercel: one project or
+ * the team): what the toggle of the connect guide says, and the steps of that shape,
+ * which come before the guide's shared steps. Kept in the plugin's order, the narrowest
+ * first, and the first is checked, as on the gateway's connect page (ADR
+ * one-place-to-authorize-services-token-first, amendment 2026-11-14).
  */
 export interface ConnectAlternativeInfo {
   readonly id: string;
@@ -646,7 +648,7 @@ function credentialInfo(plugin: ProviderPlugin): CredentialInfo {
     steps: guide
       ? guide.steps.map((step) => stepInfo(plugin.id, plugin.displayName, guide.screenshots, step))
       : [],
-    // A key in several shapes (Vercel: a team or one project): each with its own steps.
+    // A key in several shapes (Vercel: one project or the team), in the plugin's order: each with its own steps.
     alternatives:
       guide && spec.kind === 'api-key'
         ? (spec.alternatives ?? []).map((alt) => ({

@@ -42,15 +42,18 @@ const current = (token: Record<string, unknown>): MockRoute => ({
 });
 
 describe('vercel token — the guide', () => {
-  const [team, project] = vercelCredential.alternatives!;
+  const [project, team] = vercelCredential.alternatives!;
 
-  test('two alternatives: a team with All Projects, or one project', () => {
+  test('two alternatives, the narrowest first: one project, or the team with All Projects', () => {
     expect(vercelCredential.createUrl).toBe(VERCEL_TOKENS_URL);
     expect(vercelCredential.alternatives!.map((a) => [a.id, a.label, a.fields])).toEqual([
-      ['team', 'Team', ['team_id']],
       ['project', 'One project', ['project_id']],
+      ['team', 'Team', ['team_id']],
     ]);
-    expect(vercelCredential.guide.reach.grant).toBe('The team with All Projects, or one project');
+    expect(vercelCredential.guide.reach.grant).toBe('One project, or the team with All Projects');
+    expect(vercelCredential.guide.reach.why).toMatch(
+      /^A key per project keeps a leak or a mistake inside that project/,
+    );
     expect(vercelCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
   });
 
