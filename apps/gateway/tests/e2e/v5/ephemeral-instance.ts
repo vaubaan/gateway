@@ -18,7 +18,7 @@
  *     of every spec arrive over HTTP on `/mcp` and run through
  *     `root.execution` (the door, the pipeline, `root.budget`), exactly as an
  *     agent's do;
- *   - Ada's connections seeded straight through the repositories, her GitHub
+ *   - Ada's accounts seeded straight through the repositories, her GitHub
  *     one carrying a token of the mocked GitHub;
  *   - control endpoints under `/__e2e`, which exist only in this file and
  *     listen on a port of their own, the one after the app's (`controlPort`,
@@ -29,7 +29,7 @@
  *     with a two-action quota and its token), `developer-mission` (a mission
  *     composed from the GitHub plugin's macro-actions at their trust levels
  *     (`DEVELOPER_TRUST_LEVELS`), for a user of their own, and its token), `share-scenario` (an owner with a
- *     GitHub connection of their own, a beneficiary and the operator, for
+ *     GitHub account of their own, a beneficiary and the operator, for
  *     the share spec), `upstream` (what the mocked provider
  *     received) and `seed-day` — the one fixture written below the door: a
  *     day of calls recorded through `root.budget` and the audit writer, with
@@ -54,8 +54,8 @@ import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { serializeSecret } from '../../../src/server/connections';
-import { seedConnection } from '../../support/missions/testing';
+import { serializeSecret } from '../../../src/server/accounts';
+import { seedAccount } from '../../support/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
 import { FakeGithub, routeFetch } from '../../integration/auth/fake-github';
@@ -92,13 +92,13 @@ const STANDALONE_SERVER = resolve(STANDALONE_APP, 'server.js');
  * may last (`playwright.config.ts`, 120 s).
  *
  * The browser's requests are forwarded by Playwright's own HTTP client
- * (`route.fetch`), which keeps its connections alive and reuses them, and does
+ * (`route.fetch`), which keeps its accounts alive and reuses them, and does
  * not retry a reset unless asked to. A Node server closes an idle connection
  * after 5 s by default. A test that leaves the page alone for about that long —
  * a form being filled, a hand changing — can then send its next request on a
  * connection the server is closing at that instant: `route.fetch: socket hang
- * up`, once in a great many runs. With this, the server never closes a
- * connection a running test may still reuse.
+ * up`, once in a great many runs. With this, the server never closes an
+ * account a running test may still reuse.
  */
 const IDLE_SOCKET_MS = 180_000;
 const LOOPBACK = '127.0.0.1';
@@ -292,18 +292,18 @@ function mockedGithub(): MockFetch {
 const SMALL_RISK = 'github.read-code';
 const SMALL_QUOTA = 2;
 
-/** A mission of `creator` on their GitHub connection with a two-action quota, and its token. */
+/** A mission of `creator` on their GitHub account with a two-action quota, and its token. */
 async function issueSmallMission(
   root: GatewayRoot,
   creator: UserRecord,
-  githubConnectionId: string,
+  githubAccountId: string,
   name: string,
 ): Promise<{ mission_id: string; token: string }> {
   const issued = await root.missions.service.issue(creator, {
     name,
-    connections: [
+    accounts: [
       {
-        connection_id: githubConnectionId,
+        account_id: githubAccountId,
         policy: [
           {
             risk_id: SMALL_RISK,
@@ -340,9 +340,9 @@ const DEVELOPER_TRUST_LEVELS = {
 } as const;
 
 /**
- * A mission of the approver on a GitHub connection of their own, composed from
+ * A mission of the approver on a GitHub account of their own, composed from
  * the plugin's macro-actions as shipped at `DEVELOPER_TRUST_LEVELS`: its gated entries
- * are what the "approve an action" scenario is about. The connection holds a token of the
+ * are what the "approve an action" scenario is about. The account holds a token of the
  * mocked GitHub, so an approved call goes all the way to the provider.
  */
 async function issueDeveloperMission(
@@ -356,19 +356,19 @@ async function issueDeveloperMission(
     displayName: E2E_APPROVER_USER.name,
   });
   const [repository] = MOCK_GITHUB.repositories;
-  const seeded = await seedConnection(root.store, {
+  const seeded = await seedAccount(root.store, {
     provider: 'github',
     owner: { kind: 'user', id: user.id },
     displayName: 'hedy-org',
     resources: [{ ref: repository }],
   });
-  await root.store.connections.reconnect(
-    seeded.connection.id,
+  await root.store.accounts.reconnect(
+    seeded.account.id,
     serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
   );
   const issued = await root.missions.service.issue(user, {
     name,
-    connections: [{ connection_id: seeded.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
+    accounts: [{ account_id: seeded.account.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   });
@@ -391,19 +391,19 @@ async function issueGitMission(
     email: E2E_APPROVER_USER.email,
     displayName: E2E_APPROVER_USER.name,
   });
-  const seeded = await seedConnection(root.store, {
+  const seeded = await seedAccount(root.store, {
     provider: 'github',
     owner: { kind: 'user', id: user.id },
     displayName: 'acme-git',
     resources: [{ ref: E2E_GIT.repository }],
   });
-  await root.store.connections.reconnect(
-    seeded.connection.id,
+  await root.store.accounts.reconnect(
+    seeded.account.id,
     serializeSecret({ kind: 'api-key', fields: { token: E2E_GIT.token }, metadata: {} }),
   );
   const issued = await root.missions.service.issue(user, {
     name,
-    connections: [{ connection_id: seeded.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
+    accounts: [{ account_id: seeded.account.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   });
@@ -466,7 +466,7 @@ async function main(): Promise<void> {
           return new Response(null, { status: status ? Number(status) : 200 });
         },
         notificationResolve: async () => [{ address: '93.184.215.14', family: 4 }],
-        // Mail is a channel of notifications here, while the local accounts keep handing
+        // Mail is a channel of notifications here, while the sign-in accounts keep handing
         // their links to the administrator (no `mail.*` configured): a notice goes nowhere.
         notificationMailer: {
           sendLink: async () => {
@@ -490,10 +490,10 @@ async function main(): Promise<void> {
   await root.auth.providers.setWaiver('idp', 'always');
   // Seeded under the issuer their ID tokens will carry: the same people sign in below.
   const seeded = await seedInstance(root, idp.iss);
-  // Ada's GitHub connection holds a token of the mocked GitHub, so her
+  // Ada's GitHub account holds a token of the mocked GitHub, so her
   // missions' calls go all the way through the door to the mocked provider.
-  await root.store.connections.reconnect(
-    seeded.github.connection.id,
+  await root.store.accounts.reconnect(
+    seeded.github.account.id,
     serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
   );
 
@@ -543,7 +543,7 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/local/setup` && req.method === 'POST') {
-        // The local-accounts spec's second scenario starts with the provider in place.
+        // The sign-in-accounts spec's second scenario starts with the provider in place.
         if (!(await root.auth.providers.view('local'))) {
           await root.auth.providers.save(
             {
@@ -597,10 +597,10 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/local/cleanup` && req.method === 'POST') {
-        // What the local-accounts spec leaves behind: the provider, its accounts and
+        // What the sign-in-accounts spec leaves behind: the provider, its accounts and
         // their people (keyed by the provider's urn issuer), the invitations.
-        for (const account of await root.store.localAccounts.list('local')) {
-          await root.store.localAccounts.remove(account.id);
+        for (const account of await root.store.signInAccounts.list('local')) {
+          await root.store.signInAccounts.remove(account.id);
         }
         root.store.db.prepare("DELETE FROM users WHERE issuer = 'urn:vaubaan:local:local'").run();
         if (await root.auth.providers.view('local')) await root.auth.providers.remove('local');
@@ -631,14 +631,14 @@ async function main(): Promise<void> {
       }
       if (url.pathname === `${CONTROL_PREFIX}/upstream`) {
         // What the mocked provider received, and whether each request carried
-        // the token of Ada's connection. The token itself is handed over so a
+        // the token of Ada's account. The token itself is handed over so a
         // spec can check it never reached the executor.
         sendJson(res, 200, {
-          connection_token: MOCK_GITHUB.token,
+          account_token: MOCK_GITHUB.token,
           calls: mocked.calls.map((call) => ({
             method: call.method,
             url: call.url,
-            with_connection_token:
+            with_account_token:
               githubTokenOf(call.headers.authorization ?? null) === MOCK_GITHUB.token,
           })),
         });
@@ -649,7 +649,7 @@ async function main(): Promise<void> {
         sendJson(
           res,
           200,
-          await issueSmallMission(root, seeded.ada, seeded.github.connection.id, name),
+          await issueSmallMission(root, seeded.ada, seeded.github.account.id, name),
         );
         return;
       }
@@ -670,7 +670,7 @@ async function main(): Promise<void> {
       }
       if (url.pathname === `${CONTROL_PREFIX}/share-scenario` && req.method === 'POST') {
         // The cast of the share spec, known to the instance as after a first sign-in,
-        // and a GitHub connection the owner holds in their own name.
+        // and a GitHub account the owner holds in their own name.
         const { name } = JSON.parse(await readBody(req)) as { name: string };
         const [owner] = await Promise.all(
           [E2E_SHARE_OWNER, E2E_SHARE_TARGET, E2E_OPERATOR].map((user) =>
@@ -683,17 +683,17 @@ async function main(): Promise<void> {
           ),
         );
         if (!owner) throw new Error('the share owner was not created');
-        const { connection } = await seedConnection(root.store, {
+        const { account } = await seedAccount(root.store, {
           provider: 'github',
           owner: { kind: 'user', id: owner.id },
           displayName: name,
           resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
         });
-        await root.store.connections.reconnect(
-          connection.id,
+        await root.store.accounts.reconnect(
+          account.id,
           serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
         );
-        sendJson(res, 200, { connection_id: connection.id });
+        sendJson(res, 200, { account_id: account.id });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/partial-loss-scenario` && req.method === 'POST') {
@@ -707,17 +707,17 @@ async function main(): Promise<void> {
           email: E2E_SHARE_OWNER.email,
           displayName: E2E_SHARE_OWNER.name,
         });
-        const { connection: github } = await seedConnection(root.store, {
+        const { account: github } = await seedAccount(root.store, {
           provider: 'github',
           owner: { kind: 'user', id: owner.id },
           displayName: name,
           resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
         });
-        await root.store.connections.reconnect(
+        await root.store.accounts.reconnect(
           github.id,
           serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
         );
-        const { connection: supabase } = await seedConnection(root.store, {
+        const { account: supabase } = await seedAccount(root.store, {
           provider: 'supabase',
           owner: { kind: 'user', id: owner.id },
           displayName: `${name} Supabase`,
@@ -725,10 +725,10 @@ async function main(): Promise<void> {
         });
         const issued = await root.missions.service.issue(owner, {
           name: `Both accounts of ${name}`,
-          connections: [
-            { connection_id: github.id, trust_levels: { read: 'careful' } },
+          accounts: [
+            { account_id: github.id, trust_levels: { read: 'careful' } },
             {
-              connection_id: supabase.id,
+              account_id: supabase.id,
               resources: { scope: 'all' },
               policy: [
                 {
@@ -745,7 +745,7 @@ async function main(): Promise<void> {
         });
         if (!issued.ok) throw new Error(`partial-loss mission refused: ${JSON.stringify(issued)}`);
         sendJson(res, 200, {
-          connection_id: github.id,
+          account_id: github.id,
           mission_id: issued.mission.id,
           mission_name: issued.mission.name,
           token: issued.token.secret,
@@ -763,7 +763,7 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/seed-day` && req.method === 'POST') {
-        // A user of their own, with their own GitHub connection: the open
+        // A user of their own, with their own GitHub account: the open
         // requests this leaves behind are in nobody else's inbox.
         const user = await root.store.users.upsertFromIdp({
           issuer: IDP_ISSUER,
@@ -771,7 +771,7 @@ async function main(): Promise<void> {
           email: E2E_AUDIT_USER.email,
           displayName: E2E_AUDIT_USER.name,
         });
-        const connection = await seedConnection(root.store, {
+        const account = await seedAccount(root.store, {
           provider: 'github',
           owner: { kind: 'user', id: user.id },
           displayName: 'grace-org',
@@ -781,7 +781,7 @@ async function main(): Promise<void> {
         // holds gated and refused calls no mocked provider could answer.
         const rig: AuditRig = {
           root,
-          seeded: { ...seeded, ada: user, github: connection },
+          seeded: { ...seeded, ada: user, github: account },
           budget: root.budget,
         };
         sendJson(res, 200, await seedDayOfWork(rig));

@@ -8,13 +8,13 @@ import type { AdministratorsService } from '../auth/administrators';
 import type { Authenticator } from '../auth/authenticator';
 import type { BootstrapService } from '../auth/bootstrap';
 import type { SecondFactorService } from '../auth/second-factor';
-import type { LocalAccountsService } from '../auth/local-accounts';
+import type { SignInAccountsService } from '../auth/sign-in-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
 import type { SessionService } from '../auth/session-service';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
 import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
-import type { ConnectionsModule } from '../connections';
+import type { AccountsModule } from '../accounts';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { MissionTeamService } from '../missions';
@@ -37,12 +37,12 @@ export interface UsersModuleDeps {
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
-  readonly connections: Pick<ConnectionsModule, 'notices'>;
+  readonly accounts: Pick<AccountsModule, 'notices'>;
   readonly authenticator: Authenticator;
   /** The web sessions: "sign out everywhere" clears the cookie of the browser it comes from. */
   readonly sessions: Pick<SessionService, 'destroy'>;
-  /** The local accounts and their links: an invitation also creates the account's link. */
-  readonly accounts: LocalAccountsService;
+  /** The sign-in accounts and their links: an invitation also creates the account's link. */
+  readonly signInAccounts: SignInAccountsService;
   readonly providers: Pick<SignInProvidersService, 'views'>;
   /** Sends the mails of the links; absent when the instance sends no mail. */
   readonly mailer?: LinkMailer;
@@ -83,7 +83,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     sessions: deps.sessions,
     users: service,
     invitations,
-    accounts: deps.accounts,
+    signInAccounts: deps.signInAccounts,
     providers: deps.providers,
     administrators: deps.administrators,
     bootstrap: deps.bootstrap,
@@ -92,7 +92,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     mailer: deps.mailer,
-    notices: deps.connections.notices,
+    notices: deps.accounts.notices,
     logger,
   });
   return { service, invitations, handlers };

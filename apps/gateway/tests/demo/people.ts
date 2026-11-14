@@ -49,7 +49,7 @@ export const CAROL: DemoPerson = {
 
 export const DEMO_PEOPLE: readonly DemoPerson[] = [ALICE, BOB, CAROL];
 
-/** The local group (a team, in the interface) that owns one of the seeded connections. */
+/** The local group (a team, in the interface) that owns one of the seeded accounts. */
 export const GITHUB_ADMINS_GROUP = 'GitHub admins';
 /** A second local group, so Administration → Teams lists more than one. */
 export const CONTRACTORS_GROUP = 'Contractors';

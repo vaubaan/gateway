@@ -1,31 +1,31 @@
 /**
- * Upstream stage — decrypt the connection's credential in memory, forward the
+ * Upstream stage — decrypt the account's credential in memory, forward the
  * call through the plugin, release (spec §2.4 "the executor never sees a
  * provider credential").
  *
- * The credential comes from the connections' `CredentialBroker` only
- * (handbook connections, Start here): `resolve()` decrypts
+ * The credential comes from the accounts' `CredentialBroker` only
+ * (handbook accounts, Start here): `resolve()` decrypts
  * and refreshes an OAuth token about to expire; `refresh()` forces a refresh
- * and marks the connection `expired` when the provider rejects it. This
+ * and marks the account `expired` when the provider rejects it. This
  * module never reads a sealed blob.
  *
  * When the provider answers that the credential is not valid (HTTP 401,
  * surfaced by the plugin as `UpstreamAuthError`):
  *
- *   1. the derived credentials cached for the connection are dropped; if
+ *   1. the derived credentials cached for the account are dropped; if
  *      there were any, the call is retried once with the same stored
  *      credential (the rejected one may have been a cached installation
- *      token, not the connection's credential);
+ *      token, not the account's credential);
  *   2. otherwise, or if that retry is rejected too, the broker refreshes and
  *      the call is retried once;
- *   3. a rejected refresh (the broker has then marked the connection
- *      `expired`), or a connection that is no longer `active`, ends as the
- *      `connection-unavailable` refusal, thrown as `UpstreamRefusalError`.
+ *   3. a rejected refresh (the broker has then marked the account
+ *      `expired`), or an account that is no longer `active`, ends as the
+ *      `account-unavailable` refusal, thrown as `UpstreamRefusalError`.
  *
  * A 403 is NOT treated as a dead credential: the provider recognised the
  * credential and refused that action (a permission the company's app lacks, a
- * secondary rate limit). Expiring the connection on it would stop every
- * mission of that connection for a call that was merely not permitted; it is
+ * secondary rate limit). Expiring the account on it would stop every
+ * mission of that account for a call that was merely not permitted; it is
  * reported as an ordinary upstream failure, naming the provider's answer.
  *
  * Every failure that is not that refusal leaves as `UpstreamFailureError`.
@@ -68,8 +68,8 @@
 import {
   type CallRequest,
   type CallTarget,
-  type ConnectionStatus,
-  isUnavailableConnectionStatus,
+  type AccountStatus,
+  isUnavailableAccountStatus,
   isUpstreamFailureError,
   isUpstreamRefusalError,
   type MissionContext,
@@ -83,12 +83,12 @@ import type { ExecuteContext, McpToolResult, ToolResultPartSink } from '@vaubaan
 import { isUpstreamAuthError, type UpstreamAuthError } from '@vaubaan/shared';
 
 import {
-  ConnectionUnavailableError,
+  AccountUnavailableError,
   type CredentialBroker,
   type ResolvedCredential,
-} from '../connections';
+} from '../accounts';
 import type { Logger } from '../logging';
-import type { ConnectionCredentialCache } from './credential-cache';
+import type { AccountCredentialCache } from './credential-cache';
 import { NOOP_TELEMETRY_SINK, type PluginOutcome, type TelemetrySink } from './telemetry-sink';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -125,7 +125,7 @@ export interface UpstreamStageDeps {
    */
   readonly hostExecutes?: ReadonlyMap<string, HostComposedExecute>;
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'refresh' | 'contextOf'>;
-  readonly credentialCache: ConnectionCredentialCache;
+  readonly credentialCache: AccountCredentialCache;
   readonly logger: Logger;
   /** Receives each `plugin.execute` outcome; default: a sink that does nothing. */
   readonly telemetry?: TelemetrySink;
@@ -333,9 +333,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     reached.set(call, { plugin: resolved.plugin, startedAt });
     const context: ExecuteContext = {
       ...deps.credentials.contextOf(resolved, limits.signal),
-      resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
+      resources: ctx.resources.filter((r) => r.account_id === target.account.id),
       agentLabel: call.agent_label,
-      credentialCache: deps.credentialCache.scopeFor(resolved.connection),
+      credentialCache: deps.credentialCache.scopeFor(resolved.account),
       emitPart: relay.emit,
     };
     const hostExecute = deps.hostExecutes?.get(resolved.plugin.id);
@@ -359,20 +359,20 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
 
   /** Maps a broker failure to the refusal the agent reads, or returns the error untouched. */
   async function asUnavailable(err: unknown, target: CallTarget): Promise<unknown> {
-    const { connection } = target;
-    let status: ConnectionStatus | 'missing' | null = null;
-    if (err instanceof ConnectionUnavailableError) status = err.connectionStatus;
-    // A rejected refresh: the broker marked the connection `expired` before throwing.
+    const { account } = target;
+    let status: AccountStatus | 'missing' | null = null;
+    if (err instanceof AccountUnavailableError) status = err.accountStatus;
+    // A rejected refresh: the broker marked the account `expired` before throwing.
     else if (isUpstreamAuthError(err)) status = 'expired';
-    if (status === null || status === 'missing' || !isUnavailableConnectionStatus(status)) {
+    if (status === null || status === 'missing' || !isUnavailableAccountStatus(status)) {
       return err;
     }
-    await deps.credentialCache.drop(connection.id);
+    await deps.credentialCache.drop(account.id);
     return new UpstreamRefusalError(
-      refuse.connectionUnavailable({
-        connection: { id: connection.id, name: connection.display_name },
+      refuse.accountUnavailable({
+        account: { id: account.id, name: account.display_name },
         status,
-        owner: connection.owner,
+        owner: account.owner,
       }),
       err instanceof Error ? err.message : undefined,
     );
@@ -386,10 +386,10 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     relay: PartRelay,
     limits: CallLimits,
   ): Promise<unknown> {
-    const connectionId = target.connection.id;
+    const accountId = target.account.id;
     let resolved: ResolvedCredential;
     try {
-      resolved = await deps.credentials.resolve(connectionId);
+      resolved = await deps.credentials.resolve(accountId);
     } catch (err) {
       throw await asUnavailable(err, target);
     }
@@ -404,13 +404,13 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     } catch (err) {
       if (!retriable(err)) throw err;
       deps.logger.warn('upstream rejected the credential', {
-        connection_id: connectionId,
-        provider: target.connection.provider,
+        account_id: accountId,
+        provider: target.account.provider,
         tool: call.tool,
       });
     }
 
-    if ((await deps.credentialCache.drop(connectionId)) > 0) {
+    if ((await deps.credentialCache.drop(accountId)) > 0) {
       try {
         return await forward(resolved, ctx, call, target, relay, limits);
       } catch (err) {
@@ -420,12 +420,12 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
 
     let refreshed: ResolvedCredential;
     try {
-      refreshed = await deps.credentials.refresh(connectionId);
+      refreshed = await deps.credentials.refresh(accountId);
     } catch (err) {
       throw await asUnavailable(err, target);
     }
     // A second rejection right after a successful refresh is final for this call;
-    // the next call starts over and the broker decides the connection's fate.
+    // the next call starts over and the broker decides the account's fate.
     return forward(refreshed, ctx, call, target, relay, limits);
   }
 
@@ -447,7 +447,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         const err = limits.signal.aborted ? stopReason(limits) : thrown;
         // The caller left: not an outcome of the plugin, nothing to report (spec §9).
         if (!(err instanceof CallerGoneError)) report(call, { ok: false, error: err });
-        throw asUpstreamFailure(err, target.connection.provider, relay.count);
+        throw asUpstreamFailure(err, target.account.provider, relay.count);
       }
     },
   };

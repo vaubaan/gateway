@@ -24,12 +24,12 @@ const LINE_OF: { readonly [C in Refusal['code']]: (r: Extract<Refusal, { code: C
   'approval-required': (r) => `approval required — ${r.approval_url}`,
   'resource-not-in-mission': (r) => `repository ${r.cited_ref} is not in this mission`,
   'rate-limited': (r) => `too many actions on ${r.risk_id}; retry in ${r.retry_after_seconds} s`,
-  'connection-unavailable': (r) =>
-    `the account ${r.connection.name} is ${r.status}; ask ${r.owner.display} to reconnect it`,
-  'connection-revoked': (r) =>
+  'account-unavailable': (r) =>
+    `the account ${r.account.name} is ${r.status}; ask ${r.owner.display} to reconnect it`,
+  'account-revoked': (r) =>
     r.final
-      ? `the account ${r.connection.name} was removed and no longer serves this mission; ask the mission creator for a mission on the account that replaces it`
-      : `the mission's creator no longer has access to the account ${r.connection.name}; it serves again if the access is given back`,
+      ? `the account ${r.account.name} was removed and no longer serves this mission; ask the mission creator for a mission on the account that replaces it`
+      : `the mission's creator no longer has access to the account ${r.account.name}; it serves again if the access is given back`,
   'mission-inactive': (r) => `the mission is ${r.status}: ${r.reason}`,
   'wrong-credential-kind': (r) =>
     `this is not a mission key; the ${r.door} door expects a ${r.expected}`,

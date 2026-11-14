@@ -33,7 +33,7 @@ const daysAgo = (days: number, extraMs = 0): string =>
 describe('retention of the session history', () => {
   let t: TestStore;
   let userId: string;
-  let connectionId: string;
+  let accountId: string;
 
   beforeEach(async () => {
     t = openTestStore();
@@ -45,8 +45,8 @@ describe('retention of the session history', () => {
         email: 'u@example.com',
       })
     ).id;
-    connectionId = (
-      await t.store.connections.create({
+    accountId = (
+      await t.store.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: userId },
         displayName: 'gh',
@@ -67,14 +67,14 @@ describe('retention of the session history', () => {
       creatorUserId: userId,
       periodSeconds,
       expiresAt: null,
-      connections: [{ connectionId, resourceIds: [] }],
+      accounts: [{ accountId, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: MERGE, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'approval' },
       ],
     });
     const session = await t.store.sessions.getOrCreate(record.id);
-    setOf.set(session.id, record.connections[0]?.resourceSets[0]?.id ?? '');
+    setOf.set(session.id, record.accounts[0]?.resourceSets[0]?.id ?? '');
     return { record, sessionId: session.id };
   }
 
@@ -262,7 +262,7 @@ describe('retention of the session history', () => {
     });
     const count = (table: string): number =>
       t.store.db.prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ?? 0;
-    const tables = ['users', 'connections', 'missions', 'mission_policy', 'sessions', 'requests'];
+    const tables = ['users', 'accounts', 'missions', 'mission_policy', 'sessions', 'requests'];
     const before = tables.map(count);
 
     expect(await purge(30)).toEqual({ events: 1, counters: 1 });
@@ -360,7 +360,7 @@ describe('the retention sweeper purges the session history with the audit', () =
         subject: 'u',
         email: 'u@example.com',
       });
-      const connection = await root.store.connections.create({
+      const account = await root.store.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: user.id },
         displayName: 'gh',
@@ -371,7 +371,7 @@ describe('the retention sweeper purges the session history with the audit', () =
         creatorUserId: user.id,
         periodSeconds: null,
         expiresAt: null,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [
           { riskId: SHIPPED_RISK, quota: 5, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
         ],

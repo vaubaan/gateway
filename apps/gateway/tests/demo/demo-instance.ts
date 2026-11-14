@@ -100,7 +100,7 @@ function listen(server: Server, port: number): Promise<number> {
 /**
  * The shipped plugins, with one difference that keeps this process on the
  * machine: the SSH plugin is left out, because its calls do not go through
- * `fetch` but open connections to whatever host the user names, which nothing
+ * `fetch` but open accounts to whatever host the user names, which nothing
  * here simulates. Everything else of every plugin — tools, catalog,
  * classifier, the check of a pasted token — is the shipped code.
  */

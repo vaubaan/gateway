@@ -15,7 +15,7 @@
  *               answered "not supported"
  *   provider    the plugin the `<provider>` segment names, if it declares a
  *               git remote (`PluginRegistry.gitRemoteOf`); else 404. Whether
- *               the mission holds a connection on it is the resource stage's
+ *               the mission holds an account on it is the resource stage's
  *               call, decided and audited like any call
  *   key         HTTP Basic, the mission key as the password (the user name is
  *               ignored); none → 401 with a Basic challenge, so git asks its

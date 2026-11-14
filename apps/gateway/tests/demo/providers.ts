@@ -742,7 +742,7 @@ function vercelRoutes(): MockRoute[] {
     {
       method: 'GET',
       url: new RegExp(`^${api}/v2/teams/[^/?]+$`),
-      // Whatever team id the connection carries: the demo has one team.
+      // Whatever team id the account carries: the demo has one team.
       respond: (call) => ({
         id: decodeURIComponent(new URL(call.url).pathname.split('/').pop() ?? ''),
         ...DEMO_VERCEL_TEAM,

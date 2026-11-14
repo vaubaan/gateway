@@ -18,7 +18,7 @@ import type { APIRequestContext, BrowserContext, Page, Route } from '@playwright
 import { controlUrl, GITHUB_SIGN_IN_BASE, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Headers that describe the browser's connection, not the request. */
-const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'accept-encoding']);
+const HOP_HEADERS = new Set(['host', 'account', 'content-length', 'accept-encoding']);
 
 async function forwardedHeaders(route: Route): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
@@ -204,7 +204,7 @@ export interface SmallMission {
 }
 
 /**
- * Issues a mission of Ada on her GitHub connection with a two-action quota on
+ * Issues a mission of Ada on her GitHub account with a two-action quota on
  * `github.read-code` and hands back its token. The calls are the spec's to
  * make, over HTTP on `/mcp` (`agent.ts`).
  */
@@ -221,7 +221,7 @@ export async function issueSmallMission(
 
 /**
  * Issues a mission of the approver (`E2E_APPROVER_USER`) from the GitHub plugin's
- * macro-actions at the developer trust levels, on a connection of their own, and hands
+ * macro-actions at the developer trust levels, on an account of their own, and hands
  * back its token. Some of its risks are gated `approval`.
  */
 export async function issueDeveloperMission(
@@ -236,28 +236,28 @@ export async function issueDeveloperMission(
 }
 
 /**
- * A GitHub connection owned by the share spec's owner (a token of the mocked GitHub,
+ * A GitHub account owned by the share spec's owner (a token of the mocked GitHub,
  * so calls go through), with the owner, the beneficiary and the operator known
  * to the instance as if each had signed in once.
  */
 export async function seedShareScenario(
   request: APIRequestContext,
-  connectionName: string,
-): Promise<{ connection_id: string }> {
+  accountName: string,
+): Promise<{ account_id: string }> {
   const response = await request.post(controlUrl('/share-scenario'), {
-    data: { name: connectionName },
+    data: { name: accountName },
   });
   if (!response.ok()) throw new Error(`share-scenario answered ${response.status()}`);
-  return (await response.json()) as { connection_id: string };
+  return (await response.json()) as { account_id: string };
 }
 
 export interface UpstreamLog {
-  /** The token of Ada's GitHub connection, as pasted: never to reach a browser or an executor. */
-  readonly connection_token: string;
+  /** The token of Ada's GitHub account, as pasted: never to reach a browser or an executor. */
+  readonly account_token: string;
   readonly calls: readonly {
     readonly method: string;
     readonly url: string;
-    readonly with_connection_token: boolean;
+    readonly with_account_token: boolean;
   }[];
 }
 

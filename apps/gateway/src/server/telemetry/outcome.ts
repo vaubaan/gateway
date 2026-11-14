@@ -26,7 +26,7 @@
  *                         plugin-sdk, The contract)
  *   upstream-error        the provider, or the way to it, failed
  *                         → `http_<status>`, `network`, `timeout`,
- *                           `credential_rejected` (the connection's credential
+ *                           `credential_rejected` (the account's credential
  *                           was refused and could not be refreshed),
  *                           `unspecified` (an error with no status)
  *
@@ -125,7 +125,7 @@ function statusClass(thrown: object): ErrorClass | null {
 
 function classifyThrown(thrown: unknown): Classified {
   if (typeof thrown !== 'object' || thrown === null) return execution('non_error_throw');
-  // The connection's credential was refused for good (or the connection was
+  // The account's credential was refused for good (or the account was
   // revoked meanwhile): the plugin ran, the provider said no.
   if (isUpstreamRefusalError(thrown)) return upstream('credential_rejected');
   const status = statusClass(thrown);

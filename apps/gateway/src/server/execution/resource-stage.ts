@@ -1,12 +1,12 @@
 /**
- * Resource stage — which connection and which resource a call targets, and the
+ * Resource stage — which account and which resource a call targets, and the
  * `resource-not-in-mission` refusal (spec §3.1 "Resource selection": "a call
  * whose arguments cite a resource outside the mission's selection is refused
  * with `resource-not-in-mission`, before any risk is evaluated").
  *
- * The connection: a tool belongs to one plugin (`registry.providerForTool`)
- * and a mission holds at most one connection per provider (handbook missions,
- * "One connection per provider"), so `(mission, provider)` names it.
+ * The account: a tool belongs to one plugin (`registry.providerForTool`)
+ * and a mission holds at most one account per provider (handbook missions,
+ * "One account per provider"), so `(mission, provider)` names it.
  *
  * The resource: the host does not know which argument of which tool carries a
  * ref — the plugin's classifier does, and it writes the ref into the slices it
@@ -14,46 +14,46 @@
  * refs off the slices, the same convention `resourceEnvResolver` uses for
  * environments, and never guesses from argument names:
  *
- *   1. classify with the resources the mission may touch on the connection
+ *   1. classify with the resources the mission may touch on the account
  *      (the selection, minus stale resources). Slices → the cited refs must
  *      all be allowed; the first allowed one is the target resource.
  *   2. when the classifier refuses with that narrow view, classify again with
- *      every resource the connection knows. If the call now resolves to a ref
+ *      every resource the account knows. If the call now resolves to a ref
  *      the mission does not hold — a resource never selected, added after
  *      issuance, or selected but stale since — it is `resource-not-in-mission`
  *      naming that ref.
  *   3. otherwise the stage passes with no resource: the risk stage classifies
  *      again and reports the classifier's own reason (missing argument,
- *      retired tool, a ref the connection has never seen).
+ *      retired tool, a ref the account has never seen).
  *
- * Limit, by construction: a ref the connection has never discovered cannot be
+ * Limit, by construction: a ref the account has never discovered cannot be
  * told apart from a malformed argument, so it gets the classifier's reason
  * (step 3), not the typed refusal. Either way nothing is evaluated or executed.
  */
 import {
   refuse,
   type CallRequest,
-  type MissionConnection,
+  type MissionAccount,
   type MissionContext,
   type MissionResource,
   type ResourceResolution,
   type ResourceStage,
 } from '@vaubaan/gateway-core';
 import {
-  type ClassifyConnection,
+  type ClassifyAccount,
   type ClassifyOutcome,
   type PluginRegistry,
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
 import type { Slice } from '@vaubaan/shared';
 
-import { isRetiredWay, retiredWayReason } from '../connections/mapping';
-import type { ConnectionsRepo } from '../store';
+import { isRetiredWay, retiredWayReason } from '../accounts/mapping';
+import type { AccountsRepo } from '../store';
 import { missionResourceOf } from './mission-context';
 
 export interface ResourceStageDeps {
   readonly registry: PluginRegistry;
-  readonly connections: Pick<ConnectionsRepo, 'listResources'>;
+  readonly accounts: Pick<AccountsRepo, 'listResources'>;
 }
 
 /** The refs of `known` that appear as identifiers in the slices, in slice order. */
@@ -71,21 +71,19 @@ export function citedRefs(slices: readonly Slice[], known: ReadonlySet<string>):
   return cited;
 }
 
-/** What the classifier is shown of a connection: its public form fields, nothing else. */
-export function classifyConnectionOf(
-  connection: Pick<MissionConnection, 'public_fields'>,
-): ClassifyConnection {
-  return { fields: connection.public_fields ?? {} };
+/** What the classifier is shown of an account: its public form fields, nothing else. */
+export function classifyAccountOf(account: Pick<MissionAccount, 'public_fields'>): ClassifyAccount {
+  return { fields: account.public_fields ?? {} };
 }
 
 function classifySafely(
   plugin: ProviderPlugin,
   call: CallRequest,
   resources: readonly MissionResource[],
-  connection: MissionConnection,
+  account: MissionAccount,
 ): ClassifyOutcome {
   try {
-    return plugin.classify(call.tool, call.args, resources, classifyConnectionOf(connection));
+    return plugin.classify(call.tool, call.args, resources, classifyAccountOf(account));
   } catch (err) {
     // A classifier is pure and total by contract; one that throws is refused, not trusted.
     return { denied: `the classifier failed: ${err instanceof Error ? err.message : String(err)}` };
@@ -93,40 +91,40 @@ function classifySafely(
 }
 
 /**
- * Why this connection cannot run the tool, or `null`: the plugin's
- * `unavailableTools` for the way the connection was made (ADR
+ * Why this account cannot run the tool, or `null`: the plugin's
+ * `unavailableTools` for the way the account was made (ADR
  * one-place-to-authorize-services-token-first). The sentence names the tool
  * and the account, then the plugin's reason ("needs the GitHub App: …").
  */
 export function toolUnavailableOn(
   plugin: ProviderPlugin,
-  connection: Pick<MissionConnection, 'display_name' | 'credential_kind' | 'hosts_instance'>,
+  account: Pick<MissionAccount, 'display_name' | 'credential_kind' | 'hosts_instance'>,
   tool: string,
 ): string | null {
-  const reason = unavailableReason(plugin, connection, tool);
+  const reason = unavailableReason(plugin, account, tool);
   return reason === null
     ? null
-    : `tool '${tool}' is not available on the ${plugin.displayName} account '${connection.display_name}': ${reason}`;
+    : `tool '${tool}' is not available on the ${plugin.displayName} account '${account.display_name}': ${reason}`;
 }
 
 /**
- * Why the tool cannot run on this connection, or `null`: the way the connection
- * was made (`unavailableTools`), or a connection that reaches a resource hosting
+ * Why the tool cannot run on this account, or `null`: the way the account
+ * was made (`unavailableTools`), or an account that reaches a resource hosting
  * this gateway and a tool that cannot be bound to one resource (`unboundTools`,
  * SEC 2026-10-15 re-check M-1). One rule for the resource stage and `tools/list`.
  */
 export function unavailableReason(
   plugin: ProviderPlugin,
-  connection: Pick<MissionConnection, 'credential_kind' | 'hosts_instance'> | undefined,
+  account: Pick<MissionAccount, 'credential_kind' | 'hosts_instance'> | undefined,
   tool: string,
 ): string | null {
-  const kind = connection?.credential_kind ?? plugin.credential.kind;
+  const kind = account?.credential_kind ?? plugin.credential.kind;
   // An account connected a way the plugin no longer declares (the GitHub App
   // of catalog v8, an OAuth app of Supabase or Railway) runs nothing until it
   // is reconnected the way the service now offers.
   if (isRetiredWay(kind, plugin.credential.kind)) return retiredWayReason(plugin.displayName, kind);
   const unbound = plugin.unboundTools?.[tool];
-  if (connection?.hosts_instance === true && unbound !== undefined) {
+  if (account?.hosts_instance === true && unbound !== undefined) {
     return `this account can reach the resource that hosts this gateway. ${unbound}`;
   }
   return null;
@@ -155,15 +153,15 @@ export function doorMismatch(plugin: ProviderPlugin, call: CallRequest): string 
 export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
   function notInMission(
     citedRef: string,
-    connection: MissionConnection,
+    account: MissionAccount,
     allowed: readonly MissionResource[],
   ): ResourceResolution {
     return {
       ok: false,
       refusal: refuse.resourceNotInMission({
         cited_ref: citedRef,
-        connection: { id: connection.id, name: connection.display_name },
-        ...(connection.takes_future_resources === true ? { takes_future_resources: true } : {}),
+        account: { id: account.id, name: account.display_name },
+        ...(account.takes_future_resources === true ? { takes_future_resources: true } : {}),
         allowed_resources: allowed.map((r) => ({
           ref: r.ref,
           env: r.env ?? null,
@@ -185,44 +183,44 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
       const { plugin } = registered;
       const wrongDoor = doorMismatch(plugin, call);
       if (wrongDoor) return { ok: false, reason: wrongDoor };
-      const connection = ctx.connections.find((c) => c.provider === plugin.id);
-      if (!connection) {
+      const account = ctx.accounts.find((c) => c.provider === plugin.id);
+      if (!account) {
         return {
           ok: false,
-          reason: `tool '${call.tool}' belongs to ${plugin.displayName}, and this mission holds no ${plugin.displayName} connection.`,
+          reason: `tool '${call.tool}' belongs to ${plugin.displayName}, and this mission holds no ${plugin.displayName} account.`,
         };
       }
 
-      // A tool the connection's way of connecting cannot run (a token where the
+      // A tool the account's way of connecting cannot run (a token where the
       // tool needs the company's app) is refused here, before any budget is touched.
-      const unavailable = toolUnavailableOn(plugin, connection, call.tool);
+      const unavailable = toolUnavailableOn(plugin, account, call.tool);
       if (unavailable) return { ok: false, reason: unavailable };
 
-      const allowed = ctx.resources.filter((r) => r.connection_id === connection.id);
+      const allowed = ctx.resources.filter((r) => r.account_id === account.id);
       const allowedRefs = new Set(allowed.map((r) => r.ref));
-      const known = (await deps.connections.listResources(connection.id)).map((record) =>
-        missionResourceOf(connection, record),
+      const known = (await deps.accounts.listResources(account.id)).map((record) =>
+        missionResourceOf(account, record),
       );
       const knownRefs = new Set(known.map((r) => r.ref));
 
-      const narrow = classifySafely(plugin, call, allowed, connection);
+      const narrow = classifySafely(plugin, call, allowed, account);
       if ('slices' in narrow) {
         const cited = citedRefs(narrow.slices, knownRefs);
         const foreign = cited.find((ref) => !allowedRefs.has(ref));
-        if (foreign !== undefined) return notInMission(foreign, connection, allowed);
+        if (foreign !== undefined) return notInMission(foreign, account, allowed);
         const resource =
           allowed.find((r) => cited.includes(r.ref)) ?? (allowed.length === 1 ? allowed[0] : null);
-        return { ok: true, target: { connection, resource: resource ?? null } };
+        return { ok: true, target: { account, resource: resource ?? null } };
       }
 
       if (known.some((r) => !allowedRefs.has(r.ref))) {
-        const wide = classifySafely(plugin, call, known, connection);
+        const wide = classifySafely(plugin, call, known, account);
         if ('slices' in wide) {
           const foreign = citedRefs(wide.slices, knownRefs).find((ref) => !allowedRefs.has(ref));
-          if (foreign !== undefined) return notInMission(foreign, connection, allowed);
+          if (foreign !== undefined) return notInMission(foreign, account, allowed);
         }
       }
-      return { ok: true, target: { connection, resource: null } };
+      return { ok: true, target: { account, resource: null } };
     },
   };
 }

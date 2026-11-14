@@ -1,7 +1,7 @@
 /**
  * Mail delivery (spec §4.3 "mail delivery"; ADR local-accounts-sign-in-provider,
  * D6): the instance sends its own mail through the SMTP relay of `mail.*` —
- * today the two links of the local accounts, an invitation to create one and a
+ * today the two links of the sign-in accounts, an invitation to create one and a
  * password reset. Nothing else of the gateway sends mail.
  *
  * `nodemailer` speaks SMTP (STARTTLS on a submission port, TLS from the first

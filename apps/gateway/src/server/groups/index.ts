@@ -8,7 +8,7 @@ import type { Authenticator } from '../auth/authenticator';
 import type { MembershipSettler } from '../authority';
 import { reservedGroupNames } from '../config/sign-in';
 import type { InstanceConfig } from '../config/types';
-import type { ConnectionsModule } from '../connections';
+import type { AccountsModule } from '../accounts';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -19,7 +19,7 @@ export interface GroupsModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl'>;
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
-  readonly connections: Pick<ConnectionsModule, 'notices'>;
+  readonly accounts: Pick<AccountsModule, 'notices'>;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
   readonly clock?: Clock;
@@ -49,7 +49,7 @@ export function createGroupsModule(deps: GroupsModuleDeps): GroupsModule {
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     groups: service,
-    notices: deps.connections.notices,
+    notices: deps.accounts.notices,
     logger,
   });
   return { service, handlers };

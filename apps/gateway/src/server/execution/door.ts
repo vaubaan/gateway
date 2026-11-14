@@ -82,7 +82,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { JsonRpcError } from '@vaubaan/shared';
 
 import type { BuildInfo } from '../compose/root';
-import type { AnsweredCall } from '../connections/discovery-after-call';
+import type { AnsweredCall } from '../accounts/discovery-after-call';
 import { budgetMissionOf, type SessionService } from '../budget';
 import type { Logger } from '../logging';
 import { maskedToken } from '../missions';
@@ -117,8 +117,8 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   /**
    * Told of every allowed call once the door has its answer, before the answer
    * leaves, and awaited: a call that created a resource records it on the
-   * connection and in the mission — local writes only — (ADR
-   * created-resources-join-the-mission), then schedules the connection's
+   * account and in the mission — local writes only — (ADR
+   * created-resources-join-the-mission), then schedules the account's
    * discovery off the request path (ADR created-resources-join-the-mission).
    * Must never wait on a provider. Absent: nothing follows a call.
    */
@@ -369,7 +369,7 @@ export class ExecutionDoor {
         case 'allowed':
           await this.followCall(ctx, {
             tool: name,
-            connectionId: outcome.audit.connection_id,
+            accountId: outcome.audit.account_id,
             resourceSetIds: outcome.audit.resource_set_ids ?? [],
             result: outcome.result,
             args: args ?? {},
@@ -411,7 +411,7 @@ export class ExecutionDoor {
       this.deps.logger.warn('after-call hook failed', {
         mission_id: ctx.mission.id,
         tool: call.tool,
-        connection_id: call.connectionId,
+        account_id: call.accountId,
         error_class: error instanceof Error ? error.name : typeof error,
       });
     }

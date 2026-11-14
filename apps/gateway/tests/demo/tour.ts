@@ -138,7 +138,7 @@ Things to try
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:
      ${approvalReplayCommand(origin, seeded)}
-  9. Give access to Bob: Accounts -> "${seeded.sharedConnection.name}" -> Give access. Bob
+  9. Give access to Bob: Accounts -> "${seeded.sharedAccount.name}" -> Give access. Bob
      already holds one ("Who has access"); sign out, sign in as Bob: Accounts ->
      "Shared with you", and his mission.
  10. As Alice, remove that access ("Who has access" -> Remove); as Bob, his

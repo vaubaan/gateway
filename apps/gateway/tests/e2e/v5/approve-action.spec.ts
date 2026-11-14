@@ -236,7 +236,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   const afterReplay = await workflowWrites();
   expect(afterReplay).toHaveLength(writesBefore + 1);
   expect(afterReplay.at(-1)?.url).toContain(`/repos/${OWNER}/${REPO}/contents/`);
-  expect(afterReplay.at(-1)?.with_connection_token).toBe(true);
+  expect(afterReplay.at(-1)?.with_account_token).toBe(true);
 
   await hedy.reload();
   await expect(hedy.getByTestId('approval-outcome')).toContainText('The agent ran it on');

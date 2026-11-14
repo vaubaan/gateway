@@ -13,7 +13,7 @@ import {
 import { SHARE_STATUSES } from './enums.ts';
 
 export interface CreateShareInput {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly target: Principal;
   /** Explicit enumeration; every id must exist in the loaded catalog. Empty authorizes nothing. */
   readonly restriction: readonly RiskId[];
@@ -21,48 +21,48 @@ export interface CreateShareInput {
 }
 
 /**
- * One share, named by its connection and its id together: no repository method reads
- * or changes a share by its id alone, so a caller that forgot the connection reaches
- * nothing (security audit 2026-10-31, L8). A share of another connection reads as
+ * One share, named by its account and its id together: no repository method reads
+ * or changes a share by its id alone, so a caller that forgot the account reaches
+ * nothing (security audit 2026-10-31, L8). A share of another account reads as
  * missing.
  */
 export interface ShareKey {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly shareId: string;
 }
 
 export interface SharesRepo {
   create(input: CreateShareInput): Promise<ShareRecord>;
-  /** The share, if it is one of that connection's; `null` otherwise. */
+  /** The share, if it is one of that account's; `null` otherwise. */
   get(key: ShareKey): Promise<ShareRecord | null>;
-  listForConnection(connectionId: string): Promise<ShareRecord[]>;
+  listForAccount(accountId: string): Promise<ShareRecord[]>;
   /**
    * Active shares whose target is any of the principals (a user and their groups),
-   * on one connection when `connectionId` is given.
+   * on one account when `accountId` is given.
    */
   listActiveForTargets(
     principals: readonly Principal[],
-    connectionId?: string,
+    accountId?: string,
   ): Promise<ShareRecord[]>;
   /**
-   * The share of a connection to a target, replaced: the active share of the same
-   * `(connection, target)`, if any, is revoked and the new one created, in one
-   * transaction, so a target never holds two active shares of one connection and never
+   * The share of an account to a target, replaced: the active share of the same
+   * `(account, target)`, if any, is revoked and the new one created, in one
+   * transaction, so a target never holds two active shares of one account and never
    * holds none in between.
    */
   replaceForTarget(
     input: CreateShareInput,
   ): Promise<{ created: ShareRecord; replaced: ShareRecord | null }>;
   /**
-   * Revokes an active share of that connection. `NotFoundError` for an unknown share or
-   * another connection's; `InvariantError` when it is already revoked.
+   * Revokes an active share of that account. `NotFoundError` for an unknown share or
+   * another account's; `InvariantError` when it is already revoked.
    */
   revoke(key: ShareKey): Promise<ShareRecord>;
 }
 
 interface ShareRow {
   id: string;
-  connection_id: string;
+  account_id: string;
   target_kind: string;
   target_user_id: string | null;
   target_group_id: string | null;
@@ -72,7 +72,7 @@ interface ShareRow {
   revoked_at: string | null;
 }
 
-const COLUMNS = `id, connection_id, target_kind, target_user_id, target_group_id, status,
+const COLUMNS = `id, account_id, target_kind, target_user_id, target_group_id, status,
   created_by_user_id, created_at, revoked_at`;
 /** Distinct compiled shapes of `listActiveForTargets` kept at once. */
 const MAX_ACTIVE_STATEMENTS = 64;
@@ -81,13 +81,13 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const { db } = ctx;
   const byId = db.prepare<[string], ShareRow>(`SELECT ${COLUMNS} FROM shares WHERE id = ?`);
   const byKey = db.prepare<[string, string], ShareRow>(
-    `SELECT ${COLUMNS} FROM shares WHERE connection_id = ? AND id = ?`,
+    `SELECT ${COLUMNS} FROM shares WHERE account_id = ? AND id = ?`,
   );
-  const byConnection = db.prepare<[string], ShareRow>(
-    `SELECT ${COLUMNS} FROM shares WHERE connection_id = ? ORDER BY created_at`,
+  const byAccount = db.prepare<[string], ShareRow>(
+    `SELECT ${COLUMNS} FROM shares WHERE account_id = ? ORDER BY created_at`,
   );
   const insert = db.prepare<[string, string, string, string | null, string | null, string, string]>(
-    `INSERT INTO shares (id, connection_id, target_kind, target_user_id, target_group_id, status,
+    `INSERT INTO shares (id, account_id, target_kind, target_user_id, target_group_id, status,
        created_by_user_id, created_at)
      VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
   );
@@ -100,9 +100,9 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const revokeActive = db.prepare<[string, string]>(
     `UPDATE shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
   );
-  const revokeActiveOfConnection = db.prepare<[string, string, string]>(
+  const revokeActiveOfAccount = db.prepare<[string, string, string]>(
     `UPDATE shares SET status = 'revoked', revoked_at = ?
-     WHERE connection_id = ? AND id = ? AND status = 'active'`,
+     WHERE account_id = ? AND id = ? AND status = 'active'`,
   );
 
   // The execution door asks `listActiveForTargets` on every call of a mission grounded
@@ -125,7 +125,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   function toRecord(row: ShareRow): ShareRecord {
     return {
       id: row.id,
-      connectionId: row.connection_id,
+      accountId: row.account_id,
       target: principalFromColumns(row.target_kind, row.target_user_id, row.target_group_id),
       restriction: risksOf.all(row.id).map((r) => r.risk_id),
       status: parseEnum(SHARE_STATUSES, row.status, 'shares.status'),
@@ -146,7 +146,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
     const target = principalColumns(input.target);
     insert.run(
       id,
-      input.connectionId,
+      input.accountId,
       target.kind,
       target.userId,
       target.groupId,
@@ -175,9 +175,9 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
         const previous = db
           .prepare<string[], ShareRow>(
             `SELECT ${COLUMNS} FROM shares
-             WHERE status = 'active' AND connection_id = ? AND ${pred.sql} ORDER BY created_at`,
+             WHERE status = 'active' AND account_id = ? AND ${pred.sql} ORDER BY created_at`,
           )
-          .all(input.connectionId, ...pred.params)
+          .all(input.accountId, ...pred.params)
           .map(toRecord);
         for (const share of previous) revokeActive.run(now, share.id);
         insertShare(id, input, unique, now);
@@ -185,27 +185,27 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
       });
       return { created: requireShare(id), replaced: replaced.at(-1) ?? null };
     },
-    async get({ connectionId, shareId }) {
-      const row = byKey.get(connectionId, shareId);
+    async get({ accountId, shareId }) {
+      const row = byKey.get(accountId, shareId);
       return row ? toRecord(row) : null;
     },
-    async listForConnection(connectionId) {
-      return byConnection.all(connectionId).map(toRecord);
+    async listForAccount(accountId) {
+      return byAccount.all(accountId).map(toRecord);
     },
-    async listActiveForTargets(principals, connectionId) {
+    async listActiveForTargets(principals, accountId) {
       const pred = principalPredicate(principals, 'target_user_id', 'target_group_id');
-      const onConnection = connectionId === undefined ? '' : ' AND connection_id = ?';
+      const onAccount = accountId === undefined ? '' : ' AND account_id = ?';
       return activeForTargets(
         `SELECT ${COLUMNS} FROM shares
-         WHERE status = 'active' AND ${pred.sql}${onConnection} ORDER BY created_at`,
+         WHERE status = 'active' AND ${pred.sql}${onAccount} ORDER BY created_at`,
       )
-        .all(...pred.params, ...(connectionId === undefined ? [] : [connectionId]))
+        .all(...pred.params, ...(accountId === undefined ? [] : [accountId]))
         .map(toRecord);
     },
-    async revoke({ connectionId, shareId }) {
+    async revoke({ accountId, shareId }) {
       // The conditional UPDATE is the check; the re-read only picks the error.
-      const changed = revokeActiveOfConnection.run(nowIso(ctx), connectionId, shareId).changes;
-      const row = byKey.get(connectionId, shareId);
+      const changed = revokeActiveOfAccount.run(nowIso(ctx), accountId, shareId).changes;
+      const row = byKey.get(accountId, shareId);
       if (!row) throw new NotFoundError('share', shareId);
       if (changed === 0) throw new InvariantError(`share ${shareId} is already revoked`);
       return toRecord(row);

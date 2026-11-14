@@ -89,7 +89,7 @@ export interface GithubSignInProvider extends SignInProviderBase {
 }
 
 /**
- * Local accounts (spec §0 "Local account"; ADR local-accounts-sign-in-provider):
+ * Sign-in accounts (spec §0 "Sign-in account"; ADR local-accounts-sign-in-provider):
  * an e-mail and a password kept by the instance itself, with a second factor. No
  * client, no secret, no issuer to register at: the provider is an id and a name.
  * Always "invited only" — an account exists only for an invited address or one the

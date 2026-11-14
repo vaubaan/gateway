@@ -13,13 +13,10 @@ import {
   providerOfV4Risk,
   translateRisks,
   unbindingRateLimit,
-  type TranslatableConnection,
+  type TranslatableAccount,
 } from './risk-translation';
 
-function connectionOf(
-  plugin: ProviderPlugin,
-  authority?: readonly string[],
-): TranslatableConnection {
+function accountOf(plugin: ProviderPlugin, authority?: readonly string[]): TranslatableAccount {
   const risks = enumerateCatalog(plugin.catalog);
   return {
     risks,
@@ -31,7 +28,7 @@ function connectionOf(
 
 describe('v4 risk ids translated to the v5 catalog', () => {
   it('keeps an id the v5 catalog has, its macro-action base budget at Trusting as the line', () => {
-    const github = connectionOf(githubPlugin);
+    const github = accountOf(githubPlugin);
     const propose = github.macro_actions.find((a) => a.id === 'propose');
     const base = propose?.entries.find((e) => e.risk_id === 'github.create-pr');
     const risk = github.risks.find((r) => r.risk_id === 'github.create-pr');
@@ -49,7 +46,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('keeps the fallback in "Anything else", at its default base budget', () => {
-    const t = translateRisks(['github.uncategorized-write'], connectionOf(githubPlugin), []);
+    const t = translateRisks(['github.uncategorized-write'], accountOf(githubPlugin), []);
     expect(t.dropped).toEqual([]);
     expect(t.entries).toMatchObject([
       { risk_id: 'github.uncategorized-write', quota: 150, macroActionId: 'anything-else' },
@@ -57,7 +54,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('drops a risk in no macro-action: no budget is invented', () => {
-    const bare = { ...connectionOf(githubPlugin), macro_actions: [] };
+    const bare = { ...accountOf(githubPlugin), macro_actions: [] };
     const t = translateRisks(['github.create-pr'], bare, []);
     expect(t.entries).toEqual([]);
     expect(t.dropped).toEqual([
@@ -66,7 +63,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('drops an id the v5 catalog does not know', () => {
-    const t = translateRisks(['github.teleport'], connectionOf(githubPlugin), []);
+    const t = translateRisks(['github.teleport'], accountOf(githubPlugin), []);
     expect(t.dropped).toEqual([
       { v4RiskId: 'github.teleport', reason: 'unknown-in-v5', v5RiskIds: [] },
     ]);
@@ -76,7 +73,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
     // v4 accepted `workflow-write-via-file` on feature branches only; v5 has one unscoped entry.
     const t = translateRisks(
       ['github[feature].workflow-write-via-file'],
-      connectionOf(githubPlugin),
+      accountOf(githubPlugin),
       [],
     );
     expect(t.entries).toEqual([]);
@@ -91,7 +88,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
 
   it('writes out an account-scoped v4 id per environment of the selected resources', () => {
     // v4: `supabase.migration-write` on every project; v5: env-scoped.
-    const supabase = connectionOf(supabasePlugin);
+    const supabase = accountOf(supabasePlugin);
     const t = translateRisks(['supabase.migration-write'], supabase, [
       { env: 'staging' },
       { env: 'prod' },
@@ -110,7 +107,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('drops an env-scoped risk no selected resource is labelled for', () => {
-    const t = translateRisks(['supabase.migration-write'], connectionOf(supabasePlugin), [
+    const t = translateRisks(['supabase.migration-write'], accountOf(supabasePlugin), [
       { env: null },
     ]);
     expect(t.entries).toEqual([]);
@@ -121,29 +118,27 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('keeps an exact env-qualified id that a selected resource resolves', () => {
-    const t = translateRisks(['supabase[staging].migration-write'], connectionOf(supabasePlugin), [
+    const t = translateRisks(['supabase[staging].migration-write'], accountOf(supabasePlugin), [
       { env: 'staging' },
     ]);
     expect(t.entries.map((e) => e.risk_id)).toEqual(['supabase[staging].migration-write']);
-    const none = translateRisks(
-      ['supabase[staging].migration-write'],
-      connectionOf(supabasePlugin),
-      [{ env: 'prod' }],
-    );
+    const none = translateRisks(['supabase[staging].migration-write'], accountOf(supabasePlugin), [
+      { env: 'prod' },
+    ]);
     expect(none.dropped[0]!.reason).toBe('env-unresolvable');
   });
 
   it('resolves the environments of a plugin that derives them from the call', () => {
     // Vercel reads the environment from the call: no labelled resource is needed.
-    const vercel = connectionOf(vercelPlugin);
+    const vercel = accountOf(vercelPlugin);
     const scoped = vercel.risks.find((r) => r.env !== null);
     expect(scoped).toBeDefined();
     const t = translateRisks([scoped!.risk_id], vercel, [{ env: null }]);
     expect(t.dropped.filter((d) => d.reason === 'env-unresolvable')).toEqual([]);
   });
 
-  it('drops what lies outside the authority on the connection', () => {
-    const github = connectionOf(githubPlugin, ['github.read-code']);
+  it('drops what lies outside the authority on the account', () => {
+    const github = accountOf(githubPlugin, ['github.read-code']);
     const t = translateRisks(['github.read-code', 'github.create-pr'], github, []);
     expect(t.entries.map((e) => e.risk_id)).toEqual(['github.read-code']);
     expect(t.dropped).toEqual([
@@ -158,7 +153,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   it('drops what v4 denied, even when it was also accepted', () => {
     const t = translateRisks(
       ['github.read-code', 'github.create-pr'],
-      connectionOf(githubPlugin),
+      accountOf(githubPlugin),
       [],
       ['github.create-pr'],
     );
@@ -169,7 +164,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('drops the written-out environment a v4 denial names, by id or by base id', () => {
-    const supabase = connectionOf(supabasePlugin);
+    const supabase = accountOf(supabasePlugin);
     const both = [{ env: 'staging' }, { env: 'prod' }];
     const byEnv = translateRisks(['supabase.migration-write'], supabase, both, [
       'supabase[prod].migration-write',
@@ -190,16 +185,12 @@ describe('v4 risk ids translated to the v5 catalog', () => {
   });
 
   it('counts a duplicated v4 id once', () => {
-    const t = translateRisks(
-      ['github.read-code', 'github.read-code'],
-      connectionOf(githubPlugin),
-      [],
-    );
+    const t = translateRisks(['github.read-code', 'github.read-code'], accountOf(githubPlugin), []);
     expect(t.entries).toHaveLength(1);
   });
 
   it('every kept entry is explicit: an id of the catalog with a numeric quota', () => {
-    const supabase = connectionOf(supabasePlugin);
+    const supabase = accountOf(supabasePlugin);
     const all = (supabasePlugin.catalog.risks ?? []).map((r) => r.id);
     const t = translateRisks(all, supabase, [
       { env: 'staging' },
@@ -227,7 +218,7 @@ describe('--carry-unbudgeted: risks no macro-action budgets, kept under approval
   const carry = { quota: 5 };
 
   it('keeps the risk with the given quota, the approval gate and no binding rate', () => {
-    const github = { ...connectionOf(githubPlugin), macro_actions: [] };
+    const github = { ...accountOf(githubPlugin), macro_actions: [] };
     const t = translateRisks(['github.uncategorized-write'], github, [], [], carry);
     expect(t.dropped).toEqual([]);
     expect(t.carried).toEqual([
@@ -247,7 +238,7 @@ describe('--carry-unbudgeted: risks no macro-action budgets, kept under approval
   });
 
   it('carries an env-qualified risk with an exact v5 counterpart', () => {
-    const supabase = { ...connectionOf(supabasePlugin), macro_actions: [] };
+    const supabase = { ...accountOf(supabasePlugin), macro_actions: [] };
     const prod = supabase.risks.find((r) => r.env === 'prod' && !r.deprecated);
     expect(prod).toBeDefined();
     const t = translateRisks([prod!.risk_id], supabase, [{ env: 'prod' }], [], carry);
@@ -256,13 +247,13 @@ describe('--carry-unbudgeted: risks no macro-action budgets, kept under approval
   });
 
   it('leaves a budgeted risk on its macro-action line, gate included', () => {
-    const t = translateRisks(['github.create-pr'], connectionOf(githubPlugin), [], [], carry);
+    const t = translateRisks(['github.create-pr'], accountOf(githubPlugin), [], [], carry);
     expect(t.carried).toEqual([]);
     expect(t.entries[0]!.macroActionId).toBe('propose');
   });
 
   it('lifts no other reason: authority, denial, unknown and widening still drop', () => {
-    const github = connectionOf(githubPlugin, ['github.read-code']);
+    const github = accountOf(githubPlugin, ['github.read-code']);
     const t = translateRisks(
       [
         'github.uncategorized-write',

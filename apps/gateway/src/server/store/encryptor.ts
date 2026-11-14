@@ -7,9 +7,9 @@
  * `keyVersion` for rotation. The store depends on the type only; the composition root
  * injects the instance.
  *
- * The crypto module names its first argument `connectionId` because connections were
+ * The crypto module names its first argument `accountId` because accounts were
  * its first use; the store passes the identifier of whatever row owns the blob —
- * the connection id, `request:<id>` for approval arguments, `instance_config:<key>`
+ * the account id, `request:<id>` for approval arguments, `instance_config:<key>`
  * for configuration secrets — so a blob cannot be moved from one row to another.
  *
  * The port is asynchronous and better-sqlite3 transactions are synchronous: every

@@ -8,7 +8,7 @@ import { isVersionsFeed, type VersionsFeed } from '@vaubaan/shared';
 
 /** The `User-Agent` of the request: the product, never its version or the instance. */
 export const FEED_USER_AGENT = 'vaubaan-gateway';
-/** How long the read may take, connection and body together. */
+/** How long the read may take, account and body together. */
 export const FEED_TIMEOUT_MS = 10_000;
 /** The largest feed read; the published one is a few kilobytes. */
 export const FEED_MAX_BYTES = 512 * 1024;

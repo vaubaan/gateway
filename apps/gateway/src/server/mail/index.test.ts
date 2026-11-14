@@ -20,9 +20,9 @@ function logger(lines: string[]) {
   });
 }
 
-describe('the mails of the local accounts', () => {
+describe('the mails of the sign-in accounts', () => {
   it('writes the two mails around the link, in plain text', () => {
-    const url = new URL('https://gateway.example.com/account/create?token=abc');
+    const url = new URL('https://gateway.example.com/sign-in-account/create?token=abc');
     const invite = linkMail({
       kind: 'invite',
       instanceLabel: 'Acme',
@@ -49,7 +49,9 @@ describe('the mails of the local accounts', () => {
       async sendMail(message) {
         sent.push(message);
         if (message.to === 'down@example.com')
-          throw new Error('relay refused https://gateway.example.com/account/create?token=abc');
+          throw new Error(
+            'relay refused https://gateway.example.com/sign-in-account/create?token=abc',
+          );
       },
     };
     const mailer = createLinkMailer({
@@ -61,7 +63,7 @@ describe('the mails of the local accounts', () => {
     await mailer.sendLink({
       kind: 'invite',
       to: 'ada@example.com',
-      url: new URL('https://gateway.example.com/account/create?token=abc'),
+      url: new URL('https://gateway.example.com/sign-in-account/create?token=abc'),
       expiresAt: '2026-10-19T10:15:00Z',
     });
     expect(sent).toHaveLength(1);
@@ -70,7 +72,7 @@ describe('the mails of the local accounts', () => {
       mailer.sendLink({
         kind: 'reset',
         to: 'down@example.com',
-        url: new URL('https://gateway.example.com/account/reset?token=xyz'),
+        url: new URL('https://gateway.example.com/sign-in-account/reset?token=xyz'),
         expiresAt: '2026-10-19T10:15:00Z',
       }),
     ).rejects.toThrow('mail delivery failed');

@@ -1,7 +1,7 @@
 /**
  * The ceilings of the instance against its counts (spec §4.3 bis). Built once by the
  * composition root as `root.limits` and handed to every place an item is added: the
- * sign-in and the people administration (users), the connect flows (connections),
+ * sign-in and the people administration (users), the connect flows (accounts),
  * issuance and the revival of an ended mission (active missions).
  *
  * The check reads the count, then the caller writes: two additions racing each other
@@ -70,8 +70,8 @@ export class InstanceLimits implements CeilingCheck {
     switch (ceiling) {
       case 'users':
         return this.deps.counts.users();
-      case 'connections':
-        return (await this.deps.counts.connections()).total;
+      case 'accounts':
+        return (await this.deps.counts.accounts()).total;
       case 'active-missions':
         return this.deps.counts.activeMissions(this.clock.now());
     }

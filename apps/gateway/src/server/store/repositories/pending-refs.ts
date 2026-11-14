@@ -17,7 +17,7 @@ export interface PendingRefRecord {
   readonly ref: string;
   /** The branch or tag the push asked for (`refs/heads/feature/x`). */
   readonly targetRef: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   /** `owner/repo`. */
   readonly repository: string;
   readonly missionId: string;
@@ -46,7 +46,7 @@ export interface PendingRefsRepo {
 interface PendingRefRow {
   ref: string;
   target_ref: string;
-  connection_id: string;
+  account_id: string;
   repository: string;
   mission_id: string;
   object_id: string;
@@ -55,13 +55,13 @@ interface PendingRefRow {
 }
 
 const COLUMNS =
-  'ref, target_ref, connection_id, repository, mission_id, object_id, expires_at, created_at';
+  'ref, target_ref, account_id, repository, mission_id, object_id, expires_at, created_at';
 
 function toRecord(row: PendingRefRow): PendingRefRecord {
   return {
     ref: row.ref,
     targetRef: row.target_ref,
-    connectionId: row.connection_id,
+    accountId: row.account_id,
     repository: row.repository,
     missionId: row.mission_id,
     objectId: row.object_id,
@@ -95,7 +95,7 @@ export function createPendingRefsRepo(ctx: RepoContext): PendingRefsRepo {
       insert.run(
         r.ref,
         r.targetRef,
-        r.connectionId,
+        r.accountId,
         r.repository,
         r.missionId,
         r.objectId,

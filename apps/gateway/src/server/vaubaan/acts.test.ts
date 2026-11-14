@@ -18,18 +18,14 @@ import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } fro
 import { explainOrphan } from '../missions/orphan-reason';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
 import { previewDraft } from '../../lib/missions/preview';
-import {
-  ACME_CATALOG,
-  ACME_RESOURCES,
-  acmeConnection,
-} from '../../../tests/support/missions/testing';
+import { ACME_CATALOG, ACME_RESOURCES, acmeAccount } from '../../../tests/support/missions/testing';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { toolResultOf, vaubaanTools, type VaubaanCaller } from '@vaubaan/plugin-vaubaan';
 import { VAUBAAN_REFUSAL_CODES, VaubaanActs } from './acts';
 import { createVaubaanPorts } from './index';
 import { toolSchemasDocument, VAUBAAN_INPUTS } from './inputs';
 import type { VaubaanCatalog, VaubaanMissions } from './ports';
-import { catalogView, connectionView, missionView, previewView, uncoveredOfPreview } from './views';
+import { catalogView, accountView, missionView, previewView, uncoveredOfPreview } from './views';
 
 /** The calling mission, Ada's, called with her own key. */
 const ACTOR: VaubaanCaller = {
@@ -42,9 +38,9 @@ const SHARED: RiskId[] = ['acme.read', 'acme[staging].write'];
 
 const DRAFT: MissionDraft = {
   name: 'Tidy the staging space',
-  connections: [
+  accounts: [
     {
-      connection_id: 'conn-acme',
+      account_id: 'conn-acme',
       policy: [
         { risk_id: 'acme.read', quota: 10, rate_limit: { max: 5, window_seconds: 60 } },
         { risk_id: 'acme.admin', quota: 1, rate_limit: { max: 1, window_seconds: 60 } },
@@ -66,22 +62,20 @@ function rig(
     /** Replaces methods of the recorded mission port. */
     missions?: Partial<VaubaanMissions>;
     /** The accounts the user holds besides Acme (a Vaubaan account, say). */
-    extra?: readonly ReturnType<typeof acmeConnection>[];
+    extra?: readonly ReturnType<typeof acmeAccount>[];
   } = {},
 ) {
   const calls: Call[] = [];
-  const connection = acmeConnection(
-    options.shared ? { basis: 'share', authority: SHARED } : undefined,
-  );
+  const account = acmeAccount(options.shared ? { basis: 'share', authority: SHARED } : undefined);
   const preview = (draft: MissionDraft): MissionPreview =>
-    previewDraft({ connections: [connection], now: NOW }, draft);
+    previewDraft({ accounts: [account], now: NOW }, draft);
   const record = <T>(method: string, args: readonly unknown[], value: T): Promise<T> => {
     calls.push({ method, args });
     return Promise.resolve(value);
   };
   const missions: VaubaanMissions = {
     issuanceContext: (user) =>
-      record('issuanceContext', [user], [connection, ...(options.extra ?? [])]),
+      record('issuanceContext', [user], [account, ...(options.extra ?? [])]),
     preview: (user, draft) => record('preview', [user, draft], preview(draft)),
     issue: (user, draft, issueOptions) =>
       record('issue', [user, draft, issueOptions], {
@@ -112,14 +106,14 @@ function rig(
   };
   const tools = new VaubaanActs({ missions, catalog, logger: silentLogger });
   const ports = createVaubaanPorts({ missions, catalog, logger: silentLogger });
-  return { tools, ports, calls, connection };
+  return { tools, ports, calls, account };
 }
 
 describe('VaubaanActs — every act is the calling mission’s creator’s', () => {
   it('each act calls the mission service with the calling mission’s creator, never another', async () => {
     const { tools, calls } = rig();
-    await tools.listMyConnections(ACTOR);
-    await tools.getCatalog(ACTOR, { provider: 'acme', connection_id: 'conn-acme' });
+    await tools.listMyAccounts(ACTOR);
+    await tools.getCatalog(ACTOR, { provider: 'acme', account_id: 'conn-acme' });
     await tools.listMyMissions(ACTOR);
     await tools.listMyMissions(ACTOR, { mission_id: 'm1' });
     await tools.previewPolicy(ACTOR, DRAFT);
@@ -136,7 +130,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     const { tools, calls } = rig();
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
+      accounts: [{ account_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     await tools.issueMission(ACTOR, within);
     const issue = calls.find((call) => call.method === 'issue');
@@ -150,7 +144,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     if (outcome.ok) return;
     expect(outcome.refusal).toMatchObject({
       code: 'draft-refused',
-      uncovered: [{ connection_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] }],
+      uncovered: [{ account_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] }],
     });
     expect(outcome.refusal.message).toContain('outside the user’s authority');
     expect(calls.some((call) => call.method === 'issue')).toBe(false);
@@ -158,7 +152,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
 
   it('a draft refused for another reason says so, without an uncovered list', async () => {
     const { tools } = rig();
-    const outcome = await tools.issueMission(ACTOR, { ...DRAFT, connections: [] });
+    const outcome = await tools.issueMission(ACTOR, { ...DRAFT, accounts: [] });
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.refusal).toMatchObject({ code: 'draft-refused', uncovered: [] });
@@ -187,7 +181,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
         mission: {
           id,
           name: 'M',
-          connections: [],
+          accounts: [],
           policy: [],
           periodSeconds: null,
           issuedByMissionId: issuer,
@@ -203,7 +197,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
           issuer === null
             ? null
             : { mission_id: issuer, mission_name: 'Caller', client_name: null },
-        connections: [],
+        accounts: [],
         policy: [],
       }) as unknown as MissionDetail;
 
@@ -306,7 +300,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
         mission: {
           id: ACTOR.missionId,
           name: 'Platform management',
-          connections: [],
+          accounts: [],
           policy: [],
           periodSeconds: null,
           // Even a mission that issued itself (it cannot) would not act on itself.
@@ -320,7 +314,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
         lost: [],
         token: null,
         issued_via: null,
-        connections: [],
+        accounts: [],
         policy: [],
       }) as unknown as MissionDetail;
 
@@ -343,14 +337,14 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     });
 
     it('a draft carrying a Vaubaan account is refused before any preview, by id or by provider', async () => {
-      const vaubaan = { ...acmeConnection(), id: 'conn-vaubaan', provider: 'vaubaan' };
+      const vaubaan = { ...acmeAccount(), id: 'conn-vaubaan', provider: 'vaubaan' };
       const { tools, calls } = rig({ extra: [vaubaan] });
-      for (const connection of [{ connection_id: 'conn-vaubaan' }, { provider: 'vaubaan' }]) {
+      for (const account of [{ account_id: 'conn-vaubaan' }, { provider: 'vaubaan' }]) {
         const outcome = await tools.issueMission(ACTOR, {
           ...DRAFT,
-          connections: [
-            { connection_id: 'conn-acme', trust_levels: { read: 'careful' } },
-            { ...connection, trust_levels: { read: 'careful' } },
+          accounts: [
+            { account_id: 'conn-acme', trust_levels: { read: 'careful' } },
+            { ...account, trust_levels: { read: 'careful' } },
           ],
         });
         expect(outcome).toMatchObject({
@@ -363,14 +357,14 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
 
     it('a teammate’s key is refused at the port; the creator’s own key and a machine key pass', async () => {
       const { ports, calls } = rig();
-      const teammate = await ports.listMyConnections({ ...ACTOR, holderUserId: 'user-grace' }, {});
+      const teammate = await ports.listMyAccounts({ ...ACTOR, holderUserId: 'user-grace' }, {});
       expect(teammate).toMatchObject({
         ok: false,
         refusal: { code: 'teammate-key-not-allowed' },
       });
       expect(calls).toEqual([]);
-      expect(await ports.listMyConnections(ACTOR, {})).toMatchObject({ ok: true });
-      expect(await ports.listMyConnections({ ...ACTOR, holderUserId: null }, {})).toMatchObject({
+      expect(await ports.listMyAccounts(ACTOR, {})).toMatchObject({ ok: true });
+      expect(await ports.listMyAccounts({ ...ACTOR, holderUserId: null }, {})).toMatchObject({
         ok: true,
       });
     });
@@ -386,14 +380,14 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
+      accounts: [{ account_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
       mission: {
         id: 'm1',
         name: 'M',
-        connections: [],
+        accounts: [],
         policy: [],
         periodSeconds: null,
         issuedByMissionId: ACTOR.missionId,
@@ -405,7 +399,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
       orphan: null,
       token: null,
       issued_via: { mission_id: ACTOR.missionId, mission_name: 'Caller', client_name: null },
-      connections: [],
+      accounts: [],
       policy: [],
     } as unknown as MissionDetail;
 
@@ -511,16 +505,16 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
       ok: false,
       refusal: { code: 'unknown-provider', providers: ['acme'] },
     });
-    expect(await tools.getCatalog(ACTOR, { provider: 'acme', connection_id: 'x' })).toMatchObject({
+    expect(await tools.getCatalog(ACTOR, { provider: 'acme', account_id: 'x' })).toMatchObject({
       ok: false,
-      refusal: { code: 'unknown-connection' },
+      refusal: { code: 'unknown-account' },
     });
   });
 });
 
 describe('views', () => {
-  it('a connection shows its exact restriction and which env-qualified ids are usable', () => {
-    const owner = connectionView(acmeConnection());
+  it('an account shows its exact restriction and which env-qualified ids are usable', () => {
+    const owner = accountView(acmeAccount());
     expect(owner.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
     expect(owner.env_qualified_risks).toEqual({
       derives_env: false,
@@ -532,7 +526,7 @@ describe('views', () => {
     });
     expect(owner.macro_actions.every((action) => action.unavailable.length === 0)).toBe(true);
 
-    const shared = connectionView(acmeConnection({ basis: 'share', authority: SHARED }));
+    const shared = accountView(acmeAccount({ basis: 'share', authority: SHARED }));
     expect(shared.authority).toEqual({ basis: 'share', risk_ids: SHARED, whole_catalog: false });
     const actions = Object.fromEntries(shared.macro_actions.map((action) => [action.id, action]));
     expect(actions.read?.unavailable).toEqual([]);
@@ -541,7 +535,7 @@ describe('views', () => {
   });
 
   it('a macro-action says what each trust level writes, with the mission module’s own expansion', () => {
-    const owner = connectionView(acmeConnection());
+    const owner = accountView(acmeAccount());
     const change = owner.macro_actions.find((action) => action.id === 'change');
     // Writes are costly (row 3), bulk deletes irreversible (row 4).
     expect(change?.at_trust_level).toEqual({
@@ -558,7 +552,7 @@ describe('views', () => {
   });
 
   it('env usability is `isResolvable` on the resources a mission can select: a stale label does not count', () => {
-    const onlyStaleProd = acmeConnection({
+    const onlyStaleProd = acmeAccount({
       resources: [
         {
           id: 'r1',
@@ -580,7 +574,7 @@ describe('views', () => {
         },
       ],
     });
-    const view = connectionView(onlyStaleProd).env_qualified_risks;
+    const view = accountView(onlyStaleProd).env_qualified_risks;
     expect(view.labelled_envs).toEqual(['staging']);
     expect(view.usable_risk_ids).toEqual(['acme[staging].write', 'acme[staging].bulk-delete']);
     expect(view.unusable_risk_ids).toEqual(['acme[prod].write']);
@@ -595,26 +589,26 @@ describe('views', () => {
           periodSeconds: null,
           expiresAt: null,
           createdAt: NOW.toISOString(),
-          connections: [],
+          accounts: [],
           policy: [],
         },
         role: 'creator',
         creator: { id: 'user-ada', email: 'ada@example.com' },
         state: { kind: 'orphaned' },
-        orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
+        orphan: { cause, account_id: 'conn-acme', uncovered: ['acme.read'] },
         lost: [],
         token: null,
         issued_via: null,
       }) as unknown as MissionOverview;
     const causes = [
       'creator-removed',
-      'connection-missing',
-      'connection-revoked',
+      'account-missing',
+      'account-revoked',
       'authority-lost',
     ] as const;
     const answers = causes.map((cause) => {
       const view = missionView(overview(cause), ACTOR, (prefix) => prefix);
-      const orphan = { cause, connection_id: 'conn-acme', uncovered: ['acme.read' as RiskId] };
+      const orphan = { cause, account_id: 'conn-acme', uncovered: ['acme.read' as RiskId] };
       expect(view.orphan?.can_come_back, cause).toBe(explainOrphan(orphan, []).reversible);
       return view.orphan?.can_come_back;
     });
@@ -622,7 +616,7 @@ describe('views', () => {
   });
 
   it('with no labelled resource, env-qualified ids are unusable unless the provider derives the environment', () => {
-    const unlabelled = acmeConnection({
+    const unlabelled = acmeAccount({
       resources: [
         {
           id: 'r',
@@ -635,20 +629,20 @@ describe('views', () => {
         },
       ],
     });
-    const view = connectionView(unlabelled).env_qualified_risks;
+    const view = accountView(unlabelled).env_qualified_risks;
     expect(view.usable_risk_ids).toEqual([]);
     expect(view.unusable_risk_ids).toEqual([
       'acme[staging].write',
       'acme[prod].write',
       'acme[staging].bulk-delete',
     ]);
-    const derived = connectionView({ ...unlabelled, derives_env: true }).env_qualified_risks;
+    const derived = accountView({ ...unlabelled, derives_env: true }).env_qualified_risks;
     expect(derived.unusable_risk_ids).toEqual([]);
   });
 
   it('stale resources are not offered; hidden ones are, flagged', () => {
-    const view = connectionView(
-      acmeConnection({
+    const view = accountView(
+      acmeAccount({
         resources: [
           {
             id: 'a',
@@ -678,8 +672,8 @@ describe('views', () => {
   });
 
   it("the instance's own resource is never offered, nor does its label count", () => {
-    const view = connectionView(
-      acmeConnection({
+    const view = accountView(
+      acmeAccount({
         resources: [
           {
             id: 'h',
@@ -697,8 +691,8 @@ describe('views', () => {
     expect(view.env_qualified_risks.labelled_envs).toEqual([]);
   });
 
-  it('the catalog is explicit ids; a connection flags each one', () => {
-    const { tools: _tools, connection } = rig({ shared: true });
+  it('the catalog is explicit ids; an account flags each one', () => {
+    const { tools: _tools, account } = rig({ shared: true });
     const catalog = {
       provider: 'acme',
       provider_label: 'Acme',
@@ -709,7 +703,7 @@ describe('views', () => {
     const plain = catalogView(catalog, null);
     expect(plain.risks.map((risk) => risk.risk_id)).toContain('acme[prod].write');
     expect(plain.risks.every((risk) => !('in_my_authority' in risk))).toBe(true);
-    const flagged = catalogView(catalog, connection);
+    const flagged = catalogView(catalog, account);
     expect(
       flagged.risks.filter((risk) => risk.in_my_authority).map((risk) => risk.risk_id),
     ).toEqual(SHARED);
@@ -729,13 +723,13 @@ describe('views', () => {
   });
 
   it('the built-in `everything-i-hold` is listed last, within the authority, counted on the resources known now', () => {
-    const shared = acmeConnection({ basis: 'share', authority: SHARED });
-    expect(connectionView(shared).everything_i_hold).toMatchObject({
+    const shared = acmeAccount({ basis: 'share', authority: SHARED });
+    expect(accountView(shared).everything_i_hold).toMatchObject({
       label: 'Everything I hold on this account',
       risks: 2,
     });
     // An owner holds the whole catalog: every non-deprecated id, the fallback included.
-    expect(connectionView(acmeConnection()).everything_i_hold.risks).toBe(6);
+    expect(accountView(acmeAccount()).everything_i_hold.risks).toBe(6);
 
     const catalog = {
       provider: 'acme',
@@ -744,7 +738,7 @@ describe('views', () => {
       risks: enumerateCatalog(ACME_CATALOG),
       macro_actions: macroActionsOf(ACME_CATALOG),
     };
-    // Without a connection there is nothing to write out: it is not listed.
+    // Without an account there is nothing to write out: it is not listed.
     expect(catalogView(catalog, null).everything_i_hold).toBeUndefined();
     const written = catalogView(catalog, shared).everything_i_hold;
     expect(written?.entries.map((e) => e.risk_id)).toEqual(SHARED);
@@ -753,13 +747,13 @@ describe('views', () => {
   it('preview and issue accept `everything-i-hold`: the policy is the explicit list', () => {
     const draft: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', everything_i_hold: true }],
+      accounts: [{ account_id: 'conn-acme', everything_i_hold: true }],
     };
     // One environment: the staging resources (a set holds one, risk model §4.7).
     const staging = ACME_RESOURCES.filter((r) => r.env === 'staging');
     const preview = previewDraft(
       {
-        connections: [acmeConnection({ basis: 'share', authority: SHARED, resources: staging })],
+        accounts: [acmeAccount({ basis: 'share', authority: SHARED, resources: staging })],
         now: NOW,
       },
       draft,
@@ -767,17 +761,17 @@ describe('views', () => {
     const view = previewView(preview);
     expect(view.ok).toBe(true);
     expect(view.policy.map((line) => line.risk_id)).toEqual(SHARED);
-    expect(view.connections[0]?.everything_i_hold).toBe(true);
+    expect(view.accounts[0]?.everything_i_hold).toBe(true);
     expect(view.notices.map((n) => n.code)).toContain('everything-i-hold-expanded');
   });
 
-  it('a preview carries the uncovered list per connection', () => {
+  it('a preview carries the uncovered list per account', () => {
     const preview = previewDraft(
-      { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },
+      { accounts: [acmeAccount({ basis: 'share', authority: SHARED })], now: NOW },
       DRAFT,
     );
     expect(uncoveredOfPreview(preview)).toEqual([
-      { connection_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] },
+      { account_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] },
     ]);
     expect(previewView(preview)).toMatchObject({ ok: false, name: DRAFT.name });
   });
@@ -797,9 +791,9 @@ describe('views', () => {
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
         closedAt: null,
-        connections: [
+        accounts: [
           {
-            connectionId: 'conn-acme',
+            accountId: 'conn-acme',
             resourceSets: [
               {
                 id: 'set-1',
@@ -826,8 +820,8 @@ describe('views', () => {
       role: 'creator',
       creator: { id: 'user-ada', email: 'ada@example.com' },
       state: { kind: 'orphaned' },
-      orphan: { cause: 'connection-revoked', connection_id: 'conn-acme', uncovered: [] },
-      lost: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
+      orphan: { cause: 'account-revoked', account_id: 'conn-acme', uncovered: [] },
+      lost: [{ account_id: 'conn-acme', cause: 'account-revoked', final: true }],
       token: { prefix: 'AbCd1234', created_at: NOW.toISOString() },
       issued_via: { mission_id: 'mission-other', mission_name: 'Other', client_name: null },
     } as MissionOverview;
@@ -835,8 +829,8 @@ describe('views', () => {
     expect(view).toMatchObject({
       mission_id: 'm1',
       state: 'orphaned',
-      orphan: { cause: 'connection-revoked', can_come_back: false },
-      lost_connections: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
+      orphan: { cause: 'account-revoked', can_come_back: false },
+      lost_accounts: [{ account_id: 'conn-acme', cause: 'account-revoked', final: true }],
       period: { kind: 'recurring', length_seconds: 3600 },
       session: null,
       issued_via: {
@@ -865,22 +859,22 @@ describe('tool definitions and results', () => {
     const text = Object.fromEntries(
       vaubaanTools.map((tool) => [tool.name.replace('vaubaan__', ''), tool.description]),
     );
-    expect(text.list_my_connections).toContain('exact list of RiskIds');
-    expect(text.list_my_connections).toContain('unlabelled resources refuse it');
+    expect(text.list_my_accounts).toContain('exact list of RiskIds');
+    expect(text.list_my_accounts).toContain('unlabelled resources refuse it');
     expect(text.get_catalog).toContain('explicit RiskIds');
     expect(text.get_catalog).toContain('macro_actions');
     expect(text.preview_policy).toContain('explicit RiskIds only');
-    expect(text.preview_policy).toContain('one connection per provider');
+    expect(text.preview_policy).toContain('one account per provider');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');
     expect(text.preview_policy).toContain('labelled with that environment');
     // `all` and future resources are told apart where a draft is composed.
-    expect(text.preview_policy).toContain("`{ scope: 'connection' }` — `all` with `future: true`");
+    expect(text.preview_policy).toContain("`{ scope: 'account' }` — `all` with `future: true`");
     expect(text.preview_policy).toContain('a resource discovered later is not reached');
     expect(text.preview_policy).toContain('`resource-set-mixed-env`');
-    expect(text.issue_mission).toContain("`resources: { scope: 'connection' }`");
+    expect(text.issue_mission).toContain("`resources: { scope: 'account' }`");
     expect(text.list_my_missions).toContain('`resource_selections`');
     expect(text.preview_policy).toContain('A set holds one environment');
-    expect(text.list_my_connections).toContain('Order of the calls');
+    expect(text.list_my_accounts).toContain('Order of the calls');
     expect(text.issue_mission).toContain('`vaubaan-account-not-allowed`');
     expect(text.rotate_mission_token).toContain('`self-not-allowed`');
     expect(text.issue_mission).toContain('The creator is the user, not you');
@@ -900,11 +894,11 @@ describe('tool definitions and results', () => {
     expect(preview.inputSchema.safeParse({ name: 'x' }).success).toBe(false);
     const whole = (resources: unknown) => ({
       ...DRAFT,
-      connections: [{ ...DRAFT.connections[0], resources }],
+      accounts: [{ ...DRAFT.accounts[0], resources }],
     });
-    expect(preview.inputSchema.safeParse(whole({ scope: 'connection' })).success).toBe(true);
+    expect(preview.inputSchema.safeParse(whole({ scope: 'account' })).success).toBe(true);
     expect(
-      preview.inputSchema.safeParse(whole({ scope: 'connection', resource_ids: ['r1'] })).success,
+      preview.inputSchema.safeParse(whole({ scope: 'account', resource_ids: ['r1'] })).success,
     ).toBe(false);
     expect(preview.inputSchema.safeParse(whole({ scope: 'everything' })).success).toBe(false);
     const revoke = { inputSchema: VAUBAAN_INPUTS.revokeMission };
@@ -921,10 +915,10 @@ describe('tool definitions and results', () => {
   });
 
   it('an answer is structured content, also serialized as text; a refusal is a tool error with its code', () => {
-    const ok = toolResultOf({ ok: true, data: { connections: [] } });
+    const ok = toolResultOf({ ok: true, data: { accounts: [] } });
     expect(ok).toEqual({
-      content: [{ type: 'text', text: JSON.stringify({ connections: [] }, null, 2) }],
-      structuredContent: { connections: [] },
+      content: [{ type: 'text', text: JSON.stringify({ accounts: [] }, null, 2) }],
+      structuredContent: { accounts: [] },
     });
     const refusal = {
       code: 'mission-not-found',

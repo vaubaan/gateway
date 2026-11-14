@@ -11,7 +11,7 @@ import type { InstanceCounts } from './counts';
 export interface OpsStats {
   readonly generated_at: string;
   readonly users: number;
-  readonly connections: {
+  readonly accounts: {
     readonly total: number;
     readonly by_provider: Readonly<Record<string, number>>;
   };
@@ -30,7 +30,7 @@ export interface OpsStats {
   };
   readonly limits: {
     readonly users: number | null;
-    readonly connections: number | null;
+    readonly accounts: number | null;
     readonly active_missions: number | null;
   };
 }
@@ -53,9 +53,9 @@ export function utcMidnight(now: Date): Date {
 
 export async function collectOpsStats(sources: OpsStatsSources): Promise<OpsStats> {
   const since = utcMidnight(sources.now).toISOString();
-  const [users, connections, activeMissions, calls, sealed] = await Promise.all([
+  const [users, accounts, activeMissions, calls, sealed] = await Promise.all([
     sources.counts.users(),
-    sources.counts.connections(),
+    sources.counts.accounts(),
     sources.counts.activeMissions(sources.now),
     sources.calls.countCallsSince(since),
     sources.sealed.versions(),
@@ -68,14 +68,14 @@ export async function collectOpsStats(sources: OpsStatsSources): Promise<OpsStat
   return {
     generated_at: sources.now.toISOString(),
     users,
-    connections: { total: connections.total, by_provider: { ...connections.byProvider } },
+    accounts: { total: accounts.total, by_provider: { ...accounts.byProvider } },
     active_missions: activeMissions,
     calls_today: { since, allowed: calls.allowed, refused: calls.refused },
     store: { kind: sources.store.kind, bytes: sources.store.sizeOnDisk() },
     keys: { current_version: sources.currentKeyVersion, sealed_by_version: sealedByVersion },
     limits: {
       users: sources.limits.users,
-      connections: sources.limits.connections,
+      accounts: sources.limits.accounts,
       active_missions: sources.limits.activeMissions,
     },
   };

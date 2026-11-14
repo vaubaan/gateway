@@ -6,7 +6,7 @@
  * only, and the CLI blanks the bundle's secrets out of it once more.
  */
 import type {
-  ConnectionStatus,
+  AccountStatus,
   ImportReport,
   LabelStatus,
   MissionOutcome,
@@ -16,7 +16,7 @@ import { shortId } from '../missions/short-id';
 import { withoutControlCharacters } from './control-characters';
 import type { DropReason } from './risk-translation';
 
-const CONNECTION_WORDS: Record<ConnectionStatus, string> = {
+const ACCOUNT_WORDS: Record<AccountStatus, string> = {
   'to-create': 'to create (checked at the service at --apply)',
   created: 'created',
   'already-imported': 'already imported by an earlier run',
@@ -41,7 +41,7 @@ const MISSION_WORDS: Record<MissionStatus, string> = {
   'would-issue': 'would be issued',
   issued: 'issued',
   exists: 'already exists (its key was printed by the run that issued it)',
-  'after-connections': 'issued at --apply once the connections above are created',
+  'after-accounts': 'issued at --apply once the accounts above are created',
   deferred: 'deferred: run the import again once this is done',
   'nothing-to-issue': 'not issued: no v4 permission carries over',
   refused: 'refused by the issuance check',
@@ -64,11 +64,11 @@ export function renderReport(report: ImportReport): string {
   lines.push(`Import of v4 organization '${report.org}' for ${report.owner} — ${mode}`, '');
 
   lines.push('Accounts imported from v4:');
-  if (report.connections.length === 0) lines.push('  (none)');
-  for (const c of report.connections) {
-    const id = c.connectionId ? ` [${c.connectionId}]` : '';
+  if (report.accounts.length === 0) lines.push('  (none)');
+  for (const c of report.accounts) {
+    const id = c.accountId ? ` [${c.accountId}]` : '';
     const detail = c.detail ? ` — ${c.detail}` : '';
-    lines.push(`  - ${c.provider} "${c.displayName}": ${CONNECTION_WORDS[c.status]}${id}${detail}`);
+    lines.push(`  - ${c.provider} "${c.displayName}": ${ACCOUNT_WORDS[c.status]}${id}${detail}`);
   }
   lines.push('');
 
@@ -142,9 +142,9 @@ function missionLines(m: MissionOutcome): string[] {
     `  - "${m.name}" (v4 token ${m.tokenName}): ${MISSION_WORDS[m.status]}${m.missionId ? ` ${missionRef(m.missionId)}` : ''}`,
   ];
   if (m.previous) lines.push(`      ! ${previousLine(m.previous)}`);
-  for (const c of m.connections) {
+  for (const c of m.accounts) {
     lines.push(
-      `      ${c.provider} [${c.connectionId}] on ${c.refs.join(', ')}: ${c.riskIds.length} risk(s)`,
+      `      ${c.provider} [${c.accountId}] on ${c.refs.join(', ')}: ${c.riskIds.length} risk(s)`,
     );
   }
   for (const reason of m.reasons) lines.push(`      ! ${reason}`);

@@ -1,7 +1,7 @@
 /**
  * SEC 2026-10-15 re-check M-1: a tool a plugin declares unbound (Railway's agent,
- * a free-text request acting with the whole credential) is unavailable on a
- * connection that reaches a resource hosting this gateway — refused by the
+ * a free-text request acting with the whole credential) is unavailable on an
+ * account that reaches a resource hosting this gateway — refused by the
  * resource stage, left out of `tools/list` — and only there.
  */
 import railwayPlugin from '@vaubaan/plugin-railway';
@@ -19,7 +19,7 @@ const account = (hostsInstance: boolean) => ({
   hosts_instance: hostsInstance,
 });
 
-describe('unbound tools on a connection that hosts the instance', () => {
+describe('unbound tools on an account that hosts the instance', () => {
   it('Railway declares its agent unbound', () => {
     expect(Object.keys(railwayPlugin.unboundTools ?? {})).toEqual([AGENT]);
   });

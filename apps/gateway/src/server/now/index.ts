@@ -14,7 +14,7 @@ export function nowDepsOf(root: GatewayRoot): NowDeps {
     registry: root.registry,
     missions: root.missions.service,
     requests: root.requests.service,
-    connections: root.connections.service,
+    accounts: root.accounts.service,
     shares: root.shares.service,
     clock: systemClock,
   };

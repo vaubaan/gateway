@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { NO_TIMELINE_FILTER, type AuditViewer } from '../../../src/server/audit';
 import type { MissionRecord } from '../../../src/server/store/types';
-import { seedConnection } from '../../support/missions/testing';
+import { seedAccount } from '../../support/missions/testing';
 import {
   ARGUMENT_MARKER,
   issueMission,
@@ -82,18 +82,18 @@ describe('the Activity’s Timeline', () => {
   });
 
   it('the owner of an account reads the calls through it in the Record, not the session of the mission', async () => {
-    const bobs = await seedConnection(rig.root.store, {
+    const bobs = await seedAccount(rig.root.store, {
       provider: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
       resources: [],
     });
-    await seedCall(rig, mission, { connectionId: bobs.connection.id, resourceRef: 'bob/app' });
+    await seedCall(rig, mission, { accountId: bobs.account.id, resourceRef: 'bob/app' });
     expect(await events(userViewer(rig.seeded.bob))).toEqual([]);
     const record = await rig.root.audit.query.search(userViewer(rig.seeded.bob), {
       missionId: null,
       user: null,
-      connectionId: null,
+      accountId: null,
       tool: null,
       decision: null,
       agentLabel: null,

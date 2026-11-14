@@ -23,7 +23,7 @@
  *     echo the call's arguments. Reducing it to a closed vocabulary is the
  *     implementation's job (`server/telemetry/outcome.ts`).
  *
- * The event deliberately carries no mission, no connection, no resource and
+ * The event deliberately carries no mission, no account, no resource and
  * no argument: the stage does not hand over what a report may never contain.
  */
 import type { AuditEntry, AuditWriter } from '@vaubaan/gateway-core';

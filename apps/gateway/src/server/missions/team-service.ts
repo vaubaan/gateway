@@ -29,7 +29,7 @@
  *
  * Every token of a mission shares its resources, its policy and its ONE
  * budget (spec §3.2): nothing here touches a counter. A member works under
- * the creator's authority and needs no share of the mission's connections
+ * the creator's authority and needs no share of the mission's accounts
  * (spec §11.2 "Members and authority"): the derived `orphaned` rule keeps
  * looking at the creator alone, and adding a member checks no authority.
  *

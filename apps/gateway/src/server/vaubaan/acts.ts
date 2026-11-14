@@ -3,7 +3,7 @@
  * thin, typed projection of the mission service with the **calling mission's
  * creator as the actor**:
  *
- *   read      `listMyConnections`, `getCatalog`, `listMyMissions`
+ *   read      `listMyAccounts`, `getCatalog`, `listMyMissions`
  *   preview   `previewPolicy` — writes nothing
  *   mutate    `issueMission`, `rotateMissionToken`, `revokeMission`
  *
@@ -35,19 +35,19 @@ import {
   MISSION_TOKEN_ENV,
   maskedToken,
   type BootstrapKit,
-  type IssuanceConnection,
+  type IssuanceAccount,
   type LimitReachedResult,
   type MissionDraft,
 } from '../missions';
 import type { VaubaanCatalog, VaubaanMissions } from './ports';
 import {
   catalogView,
-  connectionView,
+  accountView,
   missionDetailView,
   missionView,
   previewView,
   type CatalogView,
-  type ConnectionView,
+  type AccountView,
   type MissionDetailView,
   type MissionStateName,
   type MissionView,
@@ -72,7 +72,7 @@ export const VAUBAAN_REFUSAL_CODES = [
   'mission-inactive',
   'mission-not-issued-here',
   'unknown-provider',
-  'unknown-connection',
+  'unknown-account',
   'instance-limit-reached',
 ] as const;
 export type VaubaanRefusalCode = (typeof VAUBAAN_REFUSAL_CODES)[number];
@@ -91,8 +91,8 @@ export type ActOutcome<T> =
 const done = <T>(data: T): ActOutcome<T> => ({ ok: true, data });
 const refused = (refusal: ActRefusal): ActOutcome<never> => ({ ok: false, refusal });
 
-export interface ConnectionsAnswer {
-  readonly connections: readonly ConnectionView[];
+export interface AccountsAnswer {
+  readonly accounts: readonly AccountView[];
 }
 
 export interface MissionsAnswer {
@@ -194,7 +194,7 @@ function draftRefusal(preview: PreviewView): ActRefusal {
       ? 'The draft accepts risks outside the user’s authority. Nothing was issued.'
       : 'The draft cannot be issued as written. Nothing was issued.',
     hint: beyond
-      ? 'Remove the ids listed in `uncovered` (or ask the user to obtain a wider share from the connection’s owner in the interface), fix the other `issues` if any, then call `vaubaan__preview_policy` until it answers `ok: true`.'
+      ? 'Remove the ids listed in `uncovered` (or ask the user to obtain a wider share from the account’s owner in the interface), fix the other `issues` if any, then call `vaubaan__preview_policy` until it answers `ok: true`.'
       : 'Fix every entry of `issues`, then call `vaubaan__preview_policy` until it answers `ok: true`.',
     uncovered,
     issues: preview.issues,
@@ -203,12 +203,12 @@ function draftRefusal(preview: PreviewView): ActRefusal {
 }
 
 /** A draft naming a Vaubaan account: refused whole, whatever else it says. */
-function vaubaanAccountRefusal(connectionIds: readonly string[]): ActRefusal {
+function vaubaanAccountRefusal(accountIds: readonly string[]): ActRefusal {
   return {
     code: 'vaubaan-account-not-allowed',
     message: 'A mission issued by a mission never carries a Vaubaan account. Nothing was issued.',
     hint: 'Remove the Vaubaan account from the draft: the mission you prepare works on the services, not on missions. Only the user gives a mission a Vaubaan account, in the web interface.',
-    connection_ids: connectionIds,
+    account_ids: accountIds,
   };
 }
 
@@ -246,15 +246,14 @@ function notIssuedHere(missionId: string): ActRefusal {
 /** The Vaubaan accounts a draft names, by id or by provider. */
 function vaubaanAccountsOf(
   draft: MissionDraft,
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
 ): readonly string[] {
   const vaubaan = new Set(context.filter((c) => c.provider === VAUBAAN_PROVIDER).map((c) => c.id));
   const named: string[] = [];
-  for (const connection of draft.connections) {
-    if (connection.provider === VAUBAAN_PROVIDER)
-      named.push(connection.connection_id ?? VAUBAAN_PROVIDER);
-    else if (connection.connection_id !== undefined && vaubaan.has(connection.connection_id)) {
-      named.push(connection.connection_id);
+  for (const account of draft.accounts) {
+    if (account.provider === VAUBAAN_PROVIDER) named.push(account.account_id ?? VAUBAAN_PROVIDER);
+    else if (account.account_id !== undefined && vaubaan.has(account.account_id)) {
+      named.push(account.account_id);
     }
   }
   return named;
@@ -268,52 +267,52 @@ export class VaubaanActs {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * The connections the user may build a mission from — the ones they own and
+   * The accounts the user may build a mission from — the ones they own and
    * the ones shared with them, directly or through a group — each with its
    * exact restriction, its resources and its macro-actions.
    */
-  async listMyConnections(caller: VaubaanCaller): Promise<ActOutcome<ConnectionsAnswer>> {
+  async listMyAccounts(caller: VaubaanCaller): Promise<ActOutcome<AccountsAnswer>> {
     const context = await this.deps.missions.issuanceContext({ id: caller.userId });
-    return done({ connections: context.map(connectionView) });
+    return done({ accounts: context.map(accountView) });
   }
 
   /**
-   * One provider's risk catalog as explicit ids, with its macro-actions. With a
-   * connection of the user, each id says whether their authority covers it.
+   * One provider's risk catalog as explicit ids, with its macro-actions. With an
+   * account of the user, each id says whether their authority covers it.
    */
   async getCatalog(
     caller: VaubaanCaller,
-    input: { readonly provider: string; readonly connection_id?: string | undefined },
+    input: { readonly provider: string; readonly account_id?: string | undefined },
   ): Promise<ActOutcome<CatalogView>> {
     const catalog = this.deps.catalog.get(input.provider);
     if (!catalog) {
       return refused({
         code: 'unknown-provider',
         message: `This instance has no provider "${input.provider}".`,
-        hint: 'Use a provider id of `vaubaan__list_my_connections`, or one of `providers`.',
+        hint: 'Use a provider id of `vaubaan__list_my_accounts`, or one of `providers`.',
         providers: this.deps.catalog.providers(),
       });
     }
-    if (input.connection_id === undefined) return done(catalogView(catalog, null));
+    if (input.account_id === undefined) return done(catalogView(catalog, null));
     const context = await this.deps.missions.issuanceContext({ id: caller.userId });
-    const connection = context.find(
-      (c) => c.id === input.connection_id && c.provider === catalog.provider,
+    const account = context.find(
+      (c) => c.id === input.account_id && c.provider === catalog.provider,
     );
-    if (!connection) {
+    if (!account) {
       return refused({
-        code: 'unknown-connection',
-        message: `The user holds no ${catalog.provider} connection "${input.connection_id}".`,
-        hint: 'Use a `connection_id` of `vaubaan__list_my_connections`, or leave it out to read the catalog alone.',
-        connection_id: input.connection_id,
+        code: 'unknown-account',
+        message: `The user holds no ${catalog.provider} account "${input.account_id}".`,
+        hint: 'Use a `account_id` of `vaubaan__list_my_accounts`, or leave it out to read the catalog alone.',
+        account_id: input.account_id,
       });
     }
-    return done(catalogView(catalog, connection));
+    return done(catalogView(catalog, account));
   }
 
   /**
    * The user's missions, newest first: policy, state, session period and what
    * is left of each budget. With `mission_id`, that mission with its
-   * connections and resources. The missions the user created and the ones
+   * accounts and resources. The missions the user created and the ones
    * shared with them as a member, each marked with its `role`.
    */
   async listMyMissions(
@@ -531,7 +530,7 @@ function inactive(
     message: `Mission "${missionId}" ${why[state]}; its token is not rotated.`,
     hint:
       state === 'orphaned'
-        ? 'The mission serves calls again, with the same token, when the authority returns (the connection’s owner shares it again, in the interface): you cannot restore it here. To close it for good use `vaubaan__revoke_mission`; to work now, issue a new mission within what `vaubaan__list_my_connections` shows.'
+        ? 'The mission serves calls again, with the same token, when the authority returns (the account’s owner shares it again, in the interface): you cannot restore it here. To close it for good use `vaubaan__revoke_mission`; to work now, issue a new mission within what `vaubaan__list_my_accounts` shows.'
         : 'Issue a new mission with `vaubaan__issue_mission`.',
     mission_id: missionId,
     state,

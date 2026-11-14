@@ -1,8 +1,8 @@
 /**
- * Local accounts (spec §0 "Local account"; migration 0019; ADR
+ * Sign-in accounts (spec §0 "Sign-in account"; migration 0019; ADR
  * local-accounts-sign-in-provider): the accounts of a sign-in provider of kind
  * `local`, their sealed secrets and the single-use links. Who decides is the
- * authentication module (`auth/local-accounts.ts`); these are the tables.
+ * authentication module (`auth/sign-in-accounts.ts`); these are the tables.
  *
  * Secrets: one row of `local_secrets` per (account, kind), the blob sealed with
  * `local-secret:<account id>:<kind>` as associated data, so that a blob moved to
@@ -25,7 +25,7 @@ export type LocalSecretKind = (typeof LOCAL_SECRET_KINDS)[number];
 export const LOCAL_LINK_KINDS = ['invite', 'reset'] as const;
 export type LocalLinkKind = (typeof LOCAL_LINK_KINDS)[number];
 
-export interface LocalAccountRecord {
+export interface SignInAccountRecord {
   readonly id: string;
   readonly provider: string;
   /** Lower-cased. */
@@ -90,24 +90,24 @@ export function nextLockout(
   };
 }
 
-export interface LocalAccountsRepo {
+export interface SignInAccountsRepo {
   /** `null` when the provider already has an account for this address. */
-  create(input: { provider: string; email: string }): Promise<LocalAccountRecord | null>;
-  getById(id: string): Promise<LocalAccountRecord | null>;
-  getByEmail(provider: string, email: string): Promise<LocalAccountRecord | null>;
+  create(input: { provider: string; email: string }): Promise<SignInAccountRecord | null>;
+  getById(id: string): Promise<SignInAccountRecord | null>;
+  getByEmail(provider: string, email: string): Promise<SignInAccountRecord | null>;
   /** Of one provider, oldest first. */
-  list(provider: string): Promise<LocalAccountRecord[]>;
+  list(provider: string): Promise<SignInAccountRecord[]>;
   /** The account and its secrets. */
   remove(id: string): Promise<boolean>;
   /** The clear text of a secret, or `null` when the account has none of that kind. */
-  readSecret(accountId: string, kind: LocalSecretKind): Promise<string | null>;
-  writeSecret(accountId: string, kind: LocalSecretKind, plain: string): Promise<void>;
-  deleteSecret(accountId: string, kind: LocalSecretKind): Promise<boolean>;
+  readSecret(signInAccountId: string, kind: LocalSecretKind): Promise<string | null>;
+  writeSecret(signInAccountId: string, kind: LocalSecretKind, plain: string): Promise<void>;
+  deleteSecret(signInAccountId: string, kind: LocalSecretKind): Promise<boolean>;
   /**
    * One more wrong password: the counter restarts when the window has passed, and
    * the account is locked for `lockMs` at `maxAttempts`. Returns the account after.
    */
-  recordFailure(id: string, rule: LockoutRule): Promise<LocalAccountRecord | null>;
+  recordFailure(id: string, rule: LockoutRule): Promise<SignInAccountRecord | null>;
   /** A correct password: the counters are cleared. */
   clearFailures(id: string): Promise<void>;
   setTotp(id: string, state: { confirmedAt: Iso | null; lastStep: number | null }): Promise<void>;
@@ -159,7 +159,7 @@ const ACCOUNT_COLUMNS =
   'id, provider, email, totp_confirmed_at, totp_last_step, failed_attempts, first_failure_at, locked_until, password_changed_at, created_at, updated_at';
 const LINK_COLUMNS = 'id, kind, provider, email, created_by, created_at, expires_at, used_at';
 
-function toAccount(row: AccountRow): LocalAccountRecord {
+function toAccount(row: AccountRow): SignInAccountRecord {
   return {
     id: row.id,
     provider: row.provider,
@@ -193,55 +193,57 @@ export function localSecretAd(id: string): string {
   return `local-secret:${id}`;
 }
 
-function secretId(accountId: string, kind: LocalSecretKind): string {
-  return `${accountId}:${kind}`;
+function secretId(signInAccountId: string, kind: LocalSecretKind): string {
+  return `${signInAccountId}:${kind}`;
 }
 
-export function createLocalAccountsRepo(ctx: RepoContext): LocalAccountsRepo {
+export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
   const { db, encryptor } = ctx;
   const normalize = (email: string): string => email.trim().toLowerCase();
 
   const insertAccount = db.prepare<[string, string, string, string, string]>(
-    `INSERT INTO local_accounts (id, provider, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO sign_in_accounts (id, provider, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (provider, email) DO NOTHING`,
   );
   const accountById = db.prepare<[string], AccountRow>(
-    `SELECT ${ACCOUNT_COLUMNS} FROM local_accounts WHERE id = ?`,
+    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE id = ?`,
   );
   const accountByEmail = db.prepare<[string, string], AccountRow>(
-    `SELECT ${ACCOUNT_COLUMNS} FROM local_accounts WHERE provider = ? AND email = ?`,
+    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE provider = ? AND email = ?`,
   );
   const accountsOf = db.prepare<[string], AccountRow>(
-    `SELECT ${ACCOUNT_COLUMNS} FROM local_accounts WHERE provider = ? ORDER BY created_at, email`,
+    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE provider = ? ORDER BY created_at, email`,
   );
-  const deleteAccount = db.prepare<[string]>('DELETE FROM local_accounts WHERE id = ?');
-  const deleteSecretsOf = db.prepare<[string]>('DELETE FROM local_secrets WHERE account_id = ?');
+  const deleteAccount = db.prepare<[string]>('DELETE FROM sign_in_accounts WHERE id = ?');
+  const deleteSecretsOf = db.prepare<[string]>(
+    'DELETE FROM local_secrets WHERE sign_in_account_id = ?',
+  );
   const secretById = db.prepare<[string], { blob: Buffer; key_version: number }>(
     'SELECT blob, key_version FROM local_secrets WHERE id = ?',
   );
   const upsertSecret = db.prepare<[string, string, string, Buffer, number, string]>(
-    `INSERT INTO local_secrets (id, account_id, kind, blob, key_version, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO local_secrets (id, sign_in_account_id, kind, blob, key_version, updated_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET blob = excluded.blob, key_version = excluded.key_version,
        updated_at = excluded.updated_at`,
   );
   const deleteSecret = db.prepare<[string]>('DELETE FROM local_secrets WHERE id = ?');
   const updateFailure = db.prepare<[number, string | null, string | null, string, string]>(
-    `UPDATE local_accounts SET failed_attempts = ?, first_failure_at = ?, locked_until = ?, updated_at = ?
+    `UPDATE sign_in_accounts SET failed_attempts = ?, first_failure_at = ?, locked_until = ?, updated_at = ?
      WHERE id = ?`,
   );
   const clearFailure = db.prepare<[string, string]>(
-    `UPDATE local_accounts SET failed_attempts = 0, first_failure_at = NULL, locked_until = NULL, updated_at = ?
+    `UPDATE sign_in_accounts SET failed_attempts = 0, first_failure_at = NULL, locked_until = NULL, updated_at = ?
      WHERE id = ?`,
   );
   const updateTotp = db.prepare<[string | null, number | null, string, string]>(
-    'UPDATE local_accounts SET totp_confirmed_at = ?, totp_last_step = ?, updated_at = ? WHERE id = ?',
+    'UPDATE sign_in_accounts SET totp_confirmed_at = ?, totp_last_step = ?, updated_at = ? WHERE id = ?',
   );
   const advanceStep = db.prepare<[number, string, string, number]>(
-    `UPDATE local_accounts SET totp_last_step = ?, updated_at = ?
+    `UPDATE sign_in_accounts SET totp_last_step = ?, updated_at = ?
      WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)`,
   );
   const passwordChanged = db.prepare<[string, string, string]>(
-    'UPDATE local_accounts SET password_changed_at = ?, updated_at = ? WHERE id = ?',
+    'UPDATE sign_in_accounts SET password_changed_at = ?, updated_at = ? WHERE id = ?',
   );
   const retireLinks = db.prepare<[string, string, string, string]>(
     `UPDATE local_links SET used_at = ? WHERE kind = ? AND provider = ? AND email = ? AND used_at IS NULL`,
@@ -291,19 +293,19 @@ export function createLocalAccountsRepo(ctx: RepoContext): LocalAccountsRepo {
         return deleteAccount.run(id).changes > 0;
       });
     },
-    async readSecret(accountId, kind) {
-      const id = secretId(accountId, kind);
+    async readSecret(signInAccountId, kind) {
+      const id = secretId(signInAccountId, kind);
       const row = secretById.get(id);
       if (!row) return null;
       return openSealedColumn(encryptor, localSecretAd(id), row.blob, row.key_version);
     },
-    async writeSecret(accountId, kind, plain) {
-      const id = secretId(accountId, kind);
+    async writeSecret(signInAccountId, kind, plain) {
+      const id = secretId(signInAccountId, kind);
       const sealed = await sealText(encryptor, localSecretAd(id), plain);
-      upsertSecret.run(id, accountId, kind, sealed.blob, sealed.keyVersion, nowIso(ctx));
+      upsertSecret.run(id, signInAccountId, kind, sealed.blob, sealed.keyVersion, nowIso(ctx));
     },
-    async deleteSecret(accountId, kind) {
-      return deleteSecret.run(secretId(accountId, kind)).changes > 0;
+    async deleteSecret(signInAccountId, kind) {
+      return deleteSecret.run(secretId(signInAccountId, kind)).changes > 0;
     },
     async recordFailure(id, rule) {
       return withImmediateTransaction(db, () => {

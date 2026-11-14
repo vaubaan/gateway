@@ -171,7 +171,7 @@ export class FetchSide {
       if (answer.status === HTTP_UNAUTHORIZED && request.body === null) {
         // A cached token the provider no longer takes: drop it and mint once more.
         await answer.body?.cancel();
-        await this.deps.credentialCache.drop(target.connection.id);
+        await this.deps.credentialCache.drop(target.account.id);
         answer = await attempt();
       }
       if (!answer.ok) {

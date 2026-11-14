@@ -2,7 +2,7 @@
  * Sliding-window rate limiter — in memory, single process.
  *
  * Spec §3.2 ("rate limit: number of actions per short sliding window"), §6 ("surface
- * rate limits on the MCP endpoint per mission, on connection flows per user, on the
+ * rate limits on the MCP endpoint per mission, on connect flows per user, on the
  * request page per IP"). ADR atomic-budget-accounting: windows live in memory; a
  * restart forgives a few seconds of rate, never a quota (pivot ADR D1).
  *

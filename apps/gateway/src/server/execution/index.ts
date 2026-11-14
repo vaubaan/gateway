@@ -22,12 +22,12 @@ import { createBudgetStage, type SessionService } from '../budget';
 import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
-import type { ConnectionsModule } from '../connections';
+import type { AccountsModule } from '../accounts';
 import { stackFramesOf, type Logger } from '../logging';
 import type { MissionsModule } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
-import { ConnectionCredentialCache } from './credential-cache';
+import { AccountCredentialCache } from './credential-cache';
 import { CreatedResources } from './created-resources';
 import { ExecutionDoor } from './door';
 import { createResourceStage } from './resource-stage';
@@ -51,11 +51,8 @@ export interface ExecutionModuleDeps {
   readonly registry: PluginRegistry;
   readonly auth: Pick<AuthModule, 'sessions'>;
   readonly missions: Pick<MissionsModule, 'service'>;
-  /** `discoveryAfterCall`: the connection's discovery after a call that created a resource. */
-  readonly connections: Pick<
-    ConnectionsModule,
-    'credentials' | 'discoveryAfterCall' | 'futureResources'
-  >;
+  /** `discoveryAfterCall`: the account's discovery after a call that created a resource. */
+  readonly accounts: Pick<AccountsModule, 'credentials' | 'discoveryAfterCall' | 'futureResources'>;
   /** Re-checks the creator's authority on every request (handbook authority, Start here). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
@@ -86,7 +83,7 @@ export type ExecutionStages = CallPipelineDeps;
 export interface ExecutionModule {
   readonly pipeline: CallPipeline;
   readonly stages: ExecutionStages;
-  readonly credentialCache: ConnectionCredentialCache;
+  readonly credentialCache: AccountCredentialCache;
   /** The verifier of mission tokens: the management door identifies one with it, to refuse it by kind. */
   readonly tokens: TokenVerifier;
   readonly door: ExecutionDoor;
@@ -96,7 +93,7 @@ export interface ExecutionModule {
 export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'execution-door' });
-  const credentialCache = new ConnectionCredentialCache(deps.cache);
+  const credentialCache = new AccountCredentialCache(deps.cache);
 
   const stages: ExecutionStages = {
     permissionRefusal: (ctx, call, missing, lines) =>
@@ -114,13 +111,13 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       }),
     resources: createResourceStage({
       registry: deps.registry,
-      connections: deps.store.connections,
+      accounts: deps.store.accounts,
     }),
     risks: createRiskStage({ registry: deps.registry }),
     budget: createBudgetStage({ service: deps.budget, missions: deps.store.missions }),
     upstream: createUpstreamStage({
       hostExecutes: deps.hostExecutes,
-      credentials: deps.connections.credentials,
+      credentials: deps.accounts.credentials,
       credentialCache,
       logger,
       telemetry: deps.telemetry,
@@ -153,7 +150,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     selfResources: deps.config.selfResources,
     logger,
     clock,
-    futureResources: deps.connections.futureResources,
+    futureResources: deps.accounts.futureResources,
   });
 
   const tokens = new TokenVerifier({ missions: deps.missions.service });
@@ -172,11 +169,11 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     budget: deps.budget,
     pipeline,
     // What a creating call made joins the mission on the request path (local writes),
-    // then the connection's discovery runs off it (ADRs created-resources-join-the-mission,
+    // then the account's discovery runs off it (ADRs created-resources-join-the-mission,
     // created-resources-join-the-mission).
     afterCall: async (ctx, call) => {
       const created = await createdResources.record(ctx, call);
-      deps.connections.discoveryAfterCall.afterCall(ctx, call, created);
+      deps.accounts.discoveryAfterCall.afterCall(ctx, call, created);
     },
     rateLimiter: deps.rateLimiter,
     logger,
@@ -200,7 +197,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   };
 }
 
-export { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
+export { AccountCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
 export {
   CREATED_BY_THE_MISSION,
   CreatedResources,
@@ -248,7 +245,7 @@ export {
   callableTools,
   type GitRemoteView,
   type CatalogBudgetLine,
-  type CatalogConnection,
+  type CatalogAccount,
   type CatalogResource,
   type CatalogToken,
   type CatalogTool,

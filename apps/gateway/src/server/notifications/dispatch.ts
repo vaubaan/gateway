@@ -15,7 +15,7 @@
  */
 import type { Logger } from '../logging';
 import { requestPath } from '../requests/url';
-import type { ConnectionRecord, MissionRecord, Principal, UserRecord } from '../store/types';
+import type { AccountRecord, MissionRecord, Principal, UserRecord } from '../store/types';
 import type { BackgroundRunner } from './background';
 import type { NotificationEvents } from './events';
 import type { Notification, NotificationBody } from './notification';
@@ -33,7 +33,7 @@ export interface DispatchDeps {
   readonly notifier: Notifier;
   readonly runner: BackgroundRunner;
   readonly missions: { getById(id: string): Promise<MissionRecord | null> };
-  readonly connections: { getById(id: string): Promise<ConnectionRecord | null> };
+  readonly accounts: { getById(id: string): Promise<AccountRecord | null> };
   readonly users: { getById(id: string): Promise<UserRecord | null> };
   readonly groups: { listMembers(groupId: string): Promise<UserRecord[]> };
   /** Every administrator's user id. */
@@ -113,16 +113,16 @@ export function createNotificationDispatch(deps: DispatchDeps): NotificationEven
         };
       });
     },
-    accountNeedsReconnecting(connectionId) {
+    accountNeedsReconnecting(accountId) {
       send('account-needs-reconnecting', async () => {
-        const connection = await deps.connections.getById(connectionId);
-        if (!connection) return null;
+        const account = await deps.accounts.getById(accountId);
+        if (!account) return null;
         return {
-          to: await membersOf(connection.owner),
+          to: await membersOf(account.owner),
           draft: {
             kind: 'account-needs-reconnecting',
-            account: connection.displayName,
-            path: NOTIFICATION_PATHS.account(connection.id),
+            account: account.displayName,
+            path: NOTIFICATION_PATHS.account(account.id),
           },
         };
       });

@@ -29,7 +29,7 @@ function call(ts: string, missionId: string): CallAuditEntry {
     token_kind: null,
     token_holder: null,
     session_id: null,
-    connection_id: null,
+    account_id: null,
     resource_ref: null,
     tool: 'github__get_file',
     arguments_hash: '0123456789abcdef',
@@ -96,7 +96,7 @@ describe('audit retention sweeper', () => {
         email: 'u@example.com',
       })
     ).id;
-    const connection = await t.store.connections.create({
+    const account = await t.store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: userId },
       displayName: 'gh',
@@ -108,7 +108,7 @@ describe('audit retention sweeper', () => {
         creatorUserId: userId,
         periodSeconds: 86_400,
         expiresAt: null,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [{ riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' }],
       })
     ).id;
@@ -166,7 +166,7 @@ describe('audit retention sweeper', () => {
     await t.store.audit.append(call(daysAgo(400), missionId));
     const tables = [
       'users',
-      'connections',
+      'accounts',
       'missions',
       'mission_policy',
       'sessions',

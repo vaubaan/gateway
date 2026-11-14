@@ -47,6 +47,7 @@ import { parseRestoreSource, parseSha256 } from './restore-source';
 import { readSelfResources } from './self-resources';
 import {
   type RawTree,
+  applyDeprecatedAliases,
   envNamesFor,
   getPath,
   isKeyRequired,
@@ -190,9 +191,11 @@ export function loadInstanceConfigOrSetup(options: LoadOptions = {}): ConfigLoad
 
   const fromEnv = readEnvSource(env, issues, readFile, envTrace);
   const fromFile = readFileSource(env, issues, readFile, fileTrace);
+  const deprecatedKeys = applyDeprecatedAliases(fromEnv, fromFile?.tree ?? null, env, issues);
   const raw = fromFile ? mergeTrees(fromEnv, fromFile.tree) : fromEnv;
   const masterKey = masterKeySource(raw, fromFile?.tree ?? null, envTrace, fileTrace, issues);
-  const config = validate(raw, issues, env, masterKey);
+  const validated = validate(raw, issues, env, masterKey);
+  const config = validated ? { ...validated, deprecatedKeys } : null;
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
   const secretEnvNames = [
@@ -496,6 +499,7 @@ function validate(
     admin,
     retiredKeys: retiredConfigKeys(raw, env),
     retiredManagementKeys: retiredManagementKeys(raw, env),
+    deprecatedKeys: [],
     bootstrapToken,
     telemetry: {
       enabled: telemetryEnabled,
@@ -689,7 +693,7 @@ function readBootstrapToken(r: Reader, hasSignInProvider: boolean): string | nul
 function readLimits(r: Reader): LimitsConfig {
   return {
     users: r.optionalInt(keySpec('limits.users')),
-    connections: r.optionalInt(keySpec('limits.connections')),
+    accounts: r.optionalInt(keySpec('limits.accounts')),
     activeMissions: r.optionalInt(keySpec('limits.active_missions')),
   };
 }
@@ -1147,7 +1151,7 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     );
   }
   if (kind === 'local') {
-    // Local accounts: an id and a name. Nothing to register anywhere, nothing to admit by.
+    // Sign-in accounts: an id and a name. Nothing to register anywhere, nothing to admit by.
     for (const field of [
       'issuer',
       'client_id',
@@ -1258,7 +1262,7 @@ function checkSignInProviders(r: Reader, signIn: readonly SignInProvider[]): Sig
   if (locals.length > 1) {
     r.issues.add(
       `sign_in.${locals[1]?.id ?? ''}.kind`,
-      `providers '${locals.map((p) => p.id).join("', '")}' are all local accounts: one local provider per instance`,
+      `providers '${locals.map((p) => p.id).join("', '")}' are all sign-in accounts: one local provider per instance`,
     );
   }
   for (const provider of all) {

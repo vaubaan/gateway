@@ -21,7 +21,7 @@
  * of the ports built by the real root.
  *
  * Nothing under `server/vaubaan/` imports the modules of the forbidden families
- * (`requests`, `budget`, `execution`, `connections`, `shares`, `groups`,
+ * (`requests`, `budget`, `execution`, `accounts`, `shares`, `groups`,
  * `authority`, `store`); the same test reads the imports.
  */
 import type { MacroAction } from '@vaubaan/shared';

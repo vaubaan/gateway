@@ -1,12 +1,12 @@
-import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
+import { isUnavailableAccountStatus } from '@vaubaan/gateway-core';
 
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
 import type {
-  ConnectionRecord,
-  ConnectionResourceRecord,
-  ConnectionStatus,
+  AccountRecord,
+  AccountResourceRecord,
+  AccountStatus,
   DiscoveredResource,
   Iso,
   Principal,
@@ -36,20 +36,20 @@ import {
  */
 export const FRESH_RESOURCE_STALE_GRACE_MS = 15 * 60 * 1000;
 
-export interface CreateConnectionInput {
+export interface CreateAccountInput {
   readonly provider: string;
   readonly owner: Principal;
   readonly displayName: string;
   /** Clear credential payload (the plugin's serialized credential); sealed by the store
-   *  with the connection id as associated data. */
+   *  with the account id as associated data. */
   readonly credential: string | null;
   readonly credentialExpiresAt?: Iso | null;
   readonly metadata?: Record<string, unknown> | null;
 }
 
-export interface ConnectionFilter {
+export interface AccountFilter {
   readonly provider?: string;
-  readonly status?: ConnectionStatus;
+  readonly status?: AccountStatus;
 }
 
 /**
@@ -59,90 +59,90 @@ export interface ConnectionFilter {
 export type AssignOwnerlessResult =
   | {
       readonly outcome: 'assigned';
-      /** The connection as it was read inside the transaction, before the write. */
-      readonly previous: ConnectionRecord;
-      readonly connection: ConnectionRecord;
+      /** The account as it was read inside the transaction, before the write. */
+      readonly previous: AccountRecord;
+      readonly account: AccountRecord;
     }
   | { readonly outcome: 'not-ownerless' | 'owner-group-empty' };
 
-export interface ConnectionsRepo {
-  create(input: CreateConnectionInput): Promise<ConnectionRecord>;
-  getById(id: string): Promise<ConnectionRecord | null>;
-  list(filter?: ConnectionFilter): Promise<ConnectionRecord[]>;
+export interface AccountsRepo {
+  create(input: CreateAccountInput): Promise<AccountRecord>;
+  getById(id: string): Promise<AccountRecord | null>;
+  list(filter?: AccountFilter): Promise<AccountRecord[]>;
   /**
-   * Connections not revoked, every owner together, by provider (an expired or
-   * ownerless one included): the count of the `limits.connections` ceiling and of
+   * Accounts not revoked, every owner together, by provider (an expired or
+   * ownerless one included): the count of the `limits.accounts` ceiling and of
    * the counters (spec §4.3 bis). A provider with none is absent.
    */
   countByProvider(): Promise<Record<string, number>>;
-  /** Connections owned by any of the principals (a user and the groups they belong to). */
-  listOwnedBy(principals: readonly Principal[]): Promise<ConnectionRecord[]>;
+  /** Accounts owned by any of the principals (a user and the groups they belong to). */
+  listOwnedBy(principals: readonly Principal[]): Promise<AccountRecord[]>;
   /** Decrypts the credential in memory; the caller releases it after the upstream call. */
   getCredential(id: string): Promise<string | null>;
-  transferOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
+  transferOwner(id: string, owner: Principal): Promise<AccountRecord>;
   /**
    * The operator's reassignment (spec §2.3), with its rule inside the write: in one
-   * transaction, the connection must be ownerless at that instant (`unowned`, or not
+   * transaction, the account must be ownerless at that instant (`unowned`, or not
    * revoked with an owner group that has no member — the predicate of `listOwnerless`)
    * and a new owner group must have a member; then the owner is written and an
-   * `unowned` connection is `active` again (an `expired` one stays `expired`).
-   * `NotFoundError` when the connection does not exist.
+   * `unowned` account is `active` again (an `expired` one stays `expired`).
+   * `NotFoundError` when the account does not exist.
    */
   assignOwnerlessTo(id: string, owner: Principal): Promise<AssignOwnerlessResult>;
   /**
-   * `active` → `unowned` for every connection nobody owns any more (spec §2.3): its
+   * `active` → `unowned` for every account nobody owns any more (spec §2.3): its
    * owner group has no member left, or its owner user was deactivated. Returns the
-   * connections that changed. Called after every membership removal and every
-   * deactivation; a connection that is `expired` stays so.
+   * accounts that changed. Called after every membership removal and every
+   * deactivation; an account that is `expired` stays so.
    */
-  markOwnerlessUnowned(): Promise<ConnectionRecord[]>;
+  markOwnerlessUnowned(): Promise<AccountRecord[]>;
   /**
-   * The connections nobody owns any more: `unowned`, or not revoked with an owner group
+   * The accounts nobody owns any more: `unowned`, or not revoked with an owner group
    * that has no member or an owner user who is not active (an `expired` one cannot be
    * `unowned` at the same time). What the operator may reassign.
    */
-  listOwnerless(): Promise<ConnectionRecord[]>;
-  setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
+  listOwnerless(): Promise<AccountRecord[]>;
+  setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<AccountRecord>;
   /**
-   * The owner's default environment label for the connection's unlabelled resources;
+   * The owner's default environment label for the account's unlabelled resources;
    * `null` removes it. The caller validates the label against the catalog.
    */
-  setDefaultEnv(id: string, env: string | null): Promise<ConnectionRecord>;
+  setDefaultEnv(id: string, env: string | null): Promise<AccountRecord>;
   /** Every resource, each with its effective label (`effectiveResourceEnv`). */
-  listResources(connectionId: string): Promise<ConnectionResourceRecord[]>;
-  getResource(id: string): Promise<ConnectionResourceRecord | null>;
-  setResourceEnv(resourceId: string, env: string | null): Promise<ConnectionResourceRecord>;
+  listResources(accountId: string): Promise<AccountResourceRecord[]>;
+  getResource(id: string): Promise<AccountResourceRecord | null>;
+  setResourceEnv(resourceId: string, env: string | null): Promise<AccountResourceRecord>;
 
   /**
    * Reconnection by an owner: new credential, status `active`. Only an `active` or an
-   * `expired` connection is reconnected: revocation is terminal, and nobody reconnects an
-   * `unowned` connection until an owner is reassigned (spec §2.3). Returns false when
+   * `expired` account is reconnected: revocation is terminal, and nobody reconnects an
+   * `unowned` account until an owner is reassigned (spec §2.3). Returns false when
    * nothing was written.
    */
   reconnect(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
-   * Token refresh: seals the new credential only while the connection still serves calls
-   * (`active` or `unowned`, see `isUnavailableConnectionStatus`) and leaves the status
-   * alone, so a refresh racing a revocation never resurrects the connection. Returns
+   * Token refresh: seals the new credential only while the account still serves calls
+   * (`active` or `unowned`, see `isUnavailableAccountStatus`) and leaves the status
+   * alone, so a refresh racing a revocation never resurrects the account. Returns
    * false when nothing was written.
    */
   refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
-   * The provider rejected the credential and the refresh failed: a serving connection
+   * The provider rejected the credential and the refresh failed: a serving account
    * (`active` or `unowned`) → `expired`. Conditional, so it never downgrades a `revoked`
-   * connection. An `unowned` connection that expires stays ownerless (`listOwnerless`):
-   * the operator reassigns an owner, who reconnects. Returns false when the connection
+   * account. An `unowned` account that expires stays ownerless (`listOwnerless`):
+   * the operator reassigns an owner, who reconnects. Returns false when the account
    * was not serving.
    */
   markExpired(id: string): Promise<boolean>;
   /** Terminal revocation: status `revoked`, `revoked_at` set, the credential blob erased. */
-  revoke(id: string): Promise<ConnectionRecord>;
+  revoke(id: string): Promise<AccountRecord>;
   /**
-   * Records what became of the provider-side grant of a connection that is
+   * Records what became of the provider-side grant of an account that is
    * already revoked. Written once: a row that is not revoked, or that already
    * holds an outcome, is left alone and `null` is returned.
    */
-  recordProviderGrant(id: string, outcome: ProviderGrantOutcome): Promise<ConnectionRecord | null>;
+  recordProviderGrant(id: string, outcome: ProviderGrantOutcome): Promise<AccountRecord | null>;
   /**
    * Discovery merge (spec §0 "Resource"): provider facts are refreshed, owner edits are
    * kept, nothing is deleted.
@@ -156,36 +156,36 @@ export interface ConnectionsRepo {
    *    comes back is cleared (and counts as first seen again).
    */
   syncDiscoveredResources(
-    connectionId: string,
+    accountId: string,
     resources: readonly DiscoveredResource[],
-  ): Promise<ConnectionResourceRecord[]>;
+  ): Promise<AccountResourceRecord[]>;
   /**
    * The resources a creating call made, read from its answer (ADR
    * created-resources-join-the-mission): each ref is inserted, or — known already — has its
    * stale flag cleared and its provider facts merged over the ones it had (the next
    * discovery replaces them whole). Owner edits are kept as by `syncDiscoveredResources`;
    * no other row is touched, nothing is marked stale. A new row carries no label of its
-   * own unless the plugin set one, so it reads the connection's default environment.
+   * own unless the plugin set one, so it reads the account's default environment.
    * Returns the rows of the given refs, in the given order.
    */
   upsertDiscoveredResources(
-    connectionId: string,
+    accountId: string,
     resources: readonly DiscoveredResource[],
-  ): Promise<ConnectionResourceRecord[]>;
+  ): Promise<AccountResourceRecord[]>;
   /** Owner rename; `null` hands the name back to discovery (the current name stays until then). */
   setResourceDisplayName(
     resourceId: string,
     displayName: string | null,
-  ): Promise<ConnectionResourceRecord>;
-  setResourceHidden(resourceId: string, hidden: boolean): Promise<ConnectionResourceRecord>;
+  ): Promise<AccountResourceRecord>;
+  setResourceHidden(resourceId: string, hidden: boolean): Promise<AccountResourceRecord>;
   /** Owner edits over the discovered metadata; `null` clears them. */
   setResourceOwnerMetadata(
     resourceId: string,
     metadata: Record<string, unknown> | null,
-  ): Promise<ConnectionResourceRecord>;
+  ): Promise<AccountResourceRecord>;
 }
 
-interface ConnectionRow {
+interface AccountRow {
   id: string;
   provider: string;
   owner_kind: string;
@@ -203,14 +203,14 @@ interface ConnectionRow {
   default_env: string | null;
 }
 
-/** A resource read with its connection's default label (`RESOURCE_READ`). */
+/** A resource read with its account's default label (`RESOURCE_READ`). */
 interface ResourceReadRow extends ResourceRow {
   default_env: string | null;
 }
 
 interface ResourceRow {
   id: string;
-  connection_id: string;
+  account_id: string;
   ref: string;
   env: string | null;
   display_name: string;
@@ -226,78 +226,78 @@ interface ResourceRow {
 }
 
 /** A `host` account (the Vaubaan account): the kind its connect stored. */
-function isHostRecord(record: Pick<ConnectionRecord, 'metadata'>): boolean {
+function isHostRecord(record: Pick<AccountRecord, 'metadata'>): boolean {
   return record.metadata?.credential_kind === 'host';
 }
 
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
   provider_grant, default_env`;
-const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
+const RESOURCE_COLUMNS = `id, account_id, ref, env, display_name, discovered_at, metadata_json,
   owner_metadata_json, env_source, display_name_edited, hidden, hidden_edited, stale_since,
   first_seen_at`;
 /**
- * Every read that becomes a `ConnectionResourceRecord` goes through this join, so the
- * effective label (own label, else the connection's default) is computed in one place.
+ * Every read that becomes a `AccountResourceRecord` goes through this join, so the
+ * effective label (own label, else the account's default) is computed in one place.
  */
-const RESOURCE_READ = `SELECT r.id, r.connection_id, r.ref, r.env, r.display_name, r.discovered_at,
+const RESOURCE_READ = `SELECT r.id, r.account_id, r.ref, r.env, r.display_name, r.discovered_at,
   r.metadata_json, r.owner_metadata_json, r.env_source, r.display_name_edited, r.hidden,
   r.hidden_edited, r.stale_since, r.first_seen_at, c.default_env
-  FROM connection_resources r JOIN connections c ON c.id = r.connection_id`;
+  FROM account_resources r JOIN accounts c ON c.id = r.account_id`;
 
 /** Every status of the schema's `CHECK`; a status added to the union fails to compile here. */
-const CONNECTION_STATUSES = Object.keys({
+const ACCOUNT_STATUSES = Object.keys({
   active: true,
   expired: true,
   revoked: true,
   unowned: true,
-} satisfies Record<ConnectionStatus, true>) as ConnectionStatus[];
+} satisfies Record<AccountStatus, true>) as AccountStatus[];
 
 /** The statuses whose credential is still used for calls: gateway-core decides, not this file. */
-const SERVING_STATUSES: readonly ConnectionStatus[] = CONNECTION_STATUSES.filter(
-  (status) => !isUnavailableConnectionStatus(status),
+const SERVING_STATUSES: readonly AccountStatus[] = ACCOUNT_STATUSES.filter(
+  (status) => !isUnavailableAccountStatus(status),
 );
 
 /** The statuses an owner may reconnect from (spec §2.3): neither `revoked` nor `unowned`. */
-const RECONNECTABLE_STATUSES: readonly ConnectionStatus[] = ['active', 'expired'];
+const RECONNECTABLE_STATUSES: readonly AccountStatus[] = ['active', 'expired'];
 
-function toRecord(row: ConnectionRow): ConnectionRecord {
+function toRecord(row: AccountRow): AccountRecord {
   return {
     id: row.id,
     provider: row.provider,
     owner: principalFromColumns(row.owner_kind, row.owner_user_id, row.owner_group_id),
     displayName: row.display_name,
-    status: parseEnum(CONNECTION_STATUSES, row.status, 'connections.status'),
+    status: parseEnum(ACCOUNT_STATUSES, row.status, 'accounts.status'),
     keyVersion: row.key_version,
     credentialExpiresAt: row.credential_expires_at,
-    metadata: parseJsonObject(row.metadata_json, 'connections.metadata_json'),
+    metadata: parseJsonObject(row.metadata_json, 'accounts.metadata_json'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
     providerGrant:
       row.provider_grant === null
         ? null
-        : parseEnum(PROVIDER_GRANT_OUTCOMES, row.provider_grant, 'connections.provider_grant'),
+        : parseEnum(PROVIDER_GRANT_OUTCOMES, row.provider_grant, 'accounts.provider_grant'),
     defaultEnv: row.default_env,
   };
 }
 
-function resourceToRecord(row: ResourceReadRow): ConnectionResourceRecord {
-  const discovered = parseJsonObject(row.metadata_json, 'connection_resources.metadata_json');
+function resourceToRecord(row: ResourceReadRow): AccountResourceRecord {
+  const discovered = parseJsonObject(row.metadata_json, 'account_resources.metadata_json');
   const ownerMetadata = parseJsonObject(
     row.owner_metadata_json,
-    'connection_resources.owner_metadata_json',
+    'account_resources.owner_metadata_json',
   );
   const { env, envSource } = effectiveResourceEnv(
     {
       env: row.env,
-      envSource: parseEnum(RESOURCE_ENV_SOURCES, row.env_source, 'connection_resources.env_source'),
+      envSource: parseEnum(RESOURCE_ENV_SOURCES, row.env_source, 'account_resources.env_source'),
     },
     row.default_env,
   );
   return {
     id: row.id,
-    connectionId: row.connection_id,
+    accountId: row.account_id,
     ref: row.ref,
     env,
     displayName: row.display_name,
@@ -312,11 +312,9 @@ function resourceToRecord(row: ResourceReadRow): ConnectionResourceRecord {
   };
 }
 
-export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
+export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
   const { db, encryptor } = ctx;
-  const byId = db.prepare<[string], ConnectionRow>(
-    `SELECT ${COLUMNS} FROM connections WHERE id = ?`,
-  );
+  const byId = db.prepare<[string], AccountRow>(`SELECT ${COLUMNS} FROM accounts WHERE id = ?`);
   const insert = db.prepare<
     [
       string,
@@ -334,105 +332,105 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       string,
     ]
   >(
-    `INSERT INTO connections (id, provider, owner_kind, owner_user_id, owner_group_id, display_name,
+    `INSERT INTO accounts (id, provider, owner_kind, owner_user_id, owner_group_id, display_name,
        status, credential_blob, key_version, credential_expires_at, metadata_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const countByProviderStmt = db.prepare<[], { readonly provider: string; readonly n: number }>(
-    `SELECT provider, COUNT(*) AS n FROM connections WHERE status <> 'revoked'
+    `SELECT provider, COUNT(*) AS n FROM accounts WHERE status <> 'revoked'
      GROUP BY provider ORDER BY provider`,
   );
   const credentialStmt = db.prepare<
     [string],
     { credential_blob: Buffer | null; key_version: number | null }
-  >('SELECT credential_blob, key_version FROM connections WHERE id = ?');
+  >('SELECT credential_blob, key_version FROM accounts WHERE id = ?');
   const setOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
-    `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?, updated_at = ? WHERE id = ?`,
+    `UPDATE accounts SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?, updated_at = ? WHERE id = ?`,
   );
   const setMetadataStmt = db.prepare<[string | null, string, string]>(
-    'UPDATE connections SET metadata_json = ?, updated_at = ? WHERE id = ?',
+    'UPDATE accounts SET metadata_json = ?, updated_at = ? WHERE id = ?',
   );
   const resourcesOf = db.prepare<[string], ResourceReadRow>(
-    `${RESOURCE_READ} WHERE r.connection_id = ? ORDER BY r.ref`,
+    `${RESOURCE_READ} WHERE r.account_id = ? ORDER BY r.ref`,
   );
   const resourceById = db.prepare<[string], ResourceReadRow>(`${RESOURCE_READ} WHERE r.id = ?`);
   const setDefaultEnvStmt = db.prepare<[string | null, string, string]>(
-    'UPDATE connections SET default_env = ?, updated_at = ? WHERE id = ?',
+    'UPDATE accounts SET default_env = ?, updated_at = ? WHERE id = ?',
   );
   const setEnv = db.prepare<[string | null, string]>(
-    "UPDATE connection_resources SET env = ?, env_source = 'owner' WHERE id = ?",
+    "UPDATE account_resources SET env = ?, env_source = 'owner' WHERE id = ?",
   );
   const reconnectStmt = db.prepare<[Buffer, number, string | null, string, string, ...string[]]>(
-    `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
+    `UPDATE accounts SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
        status = 'active', updated_at = ?
      WHERE id = ? AND status IN (${placeholders(RECONNECTABLE_STATUSES.length)})`,
   );
   const refreshCredentialStmt = db.prepare<
     [Buffer, number, string | null, string, string, ...string[]]
   >(
-    `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
+    `UPDATE accounts SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
        updated_at = ? WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
   );
   const markExpiredStmt = db.prepare<[string, string, ...string[]]>(
-    `UPDATE connections SET status = 'expired', updated_at = ?
+    `UPDATE accounts SET status = 'expired', updated_at = ?
      WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
   );
   const assignOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
-    `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?,
+    `UPDATE accounts SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?,
        status = CASE WHEN status = 'unowned' THEN 'active' ELSE status END, updated_at = ?
      WHERE id = ?`,
   );
   // Nobody owns it: its owner group has no member, or its owner user is not active
   // (deactivated by an operator: they hold nothing, so they cannot share or reconnect).
   const NO_MEMBER = `((owner_kind = 'group' AND NOT EXISTS (
-       SELECT 1 FROM group_members gm WHERE gm.group_id = connections.owner_group_id))
+       SELECT 1 FROM group_members gm WHERE gm.group_id = accounts.owner_group_id))
      OR (owner_kind = 'user' AND NOT EXISTS (
-       SELECT 1 FROM users u WHERE u.id = connections.owner_user_id AND u.status = 'active')))`;
-  const ownerlessActive = db.prepare<[], ConnectionRow>(
-    `SELECT ${COLUMNS} FROM connections WHERE status = 'active' AND ${NO_MEMBER} ORDER BY created_at`,
+       SELECT 1 FROM users u WHERE u.id = accounts.owner_user_id AND u.status = 'active')))`;
+  const ownerlessActive = db.prepare<[], AccountRow>(
+    `SELECT ${COLUMNS} FROM accounts WHERE status = 'active' AND ${NO_MEMBER} ORDER BY created_at`,
   );
   const markUnownedStmt = db.prepare<[string, string]>(
-    "UPDATE connections SET status = 'unowned', updated_at = ? WHERE id = ? AND status = 'active'",
+    "UPDATE accounts SET status = 'unowned', updated_at = ? WHERE id = ? AND status = 'active'",
   );
-  const ownerless = db.prepare<[], ConnectionRow>(
-    `SELECT ${COLUMNS} FROM connections
+  const ownerless = db.prepare<[], AccountRow>(
+    `SELECT ${COLUMNS} FROM accounts
      WHERE status = 'unowned' OR (status <> 'revoked' AND ${NO_MEMBER}) ORDER BY created_at`,
   );
   const isOwnerless = db.prepare<[string], { found: number }>(
-    `SELECT 1 AS found FROM connections
+    `SELECT 1 AS found FROM accounts
      WHERE id = ? AND (status = 'unowned' OR (status <> 'revoked' AND ${NO_MEMBER}))`,
   );
   const groupHasMember = db.prepare<[string], { found: number }>(
     'SELECT 1 AS found FROM group_members WHERE group_id = ? LIMIT 1',
   );
   const revokeStmt = db.prepare<[string, string, string]>(
-    `UPDATE connections SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
+    `UPDATE accounts SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
        credential_blob = NULL, key_version = NULL, credential_expires_at = NULL, updated_at = ?
      WHERE id = ?`,
   );
   const providerGrantStmt = db.prepare<[string, string]>(
-    `UPDATE connections SET provider_grant = ?
+    `UPDATE accounts SET provider_grant = ?
      WHERE id = ? AND status = 'revoked' AND provider_grant IS NULL`,
   );
   const resourceByRef = db.prepare<[string, string], ResourceRow>(
-    `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? AND ref = ?`,
+    `SELECT ${RESOURCE_COLUMNS} FROM account_resources WHERE account_id = ? AND ref = ?`,
   );
   const insertDiscovered = db.prepare<
     [string, string, string, string | null, string, string, string | null, string, string, number]
   >(
-    `INSERT INTO connection_resources (id, connection_id, ref, env, display_name, discovered_at,
+    `INSERT INTO account_resources (id, account_id, ref, env, display_name, discovered_at,
        metadata_json, env_source, first_seen_at, hidden)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   // The plugin's hidden hint, on a row whose owner never hid nor showed it (migration 0034).
   const hintHidden = db.prepare<[number, string]>(
-    'UPDATE connection_resources SET hidden = ? WHERE id = ? AND hidden_edited = 0',
+    'UPDATE account_resources SET hidden = ? WHERE id = ? AND hidden_edited = 0',
   );
   // A stale row that comes back counts as first seen again: the grace protects it anew.
   const updateDiscovered = db.prepare<
     [string | null, string, string, string, string | null, string, string]
   >(
-    `UPDATE connection_resources SET env = ?, env_source = ?, display_name = ?, discovered_at = ?,
+    `UPDATE account_resources SET env = ?, env_source = ?, display_name = ?, discovered_at = ?,
        metadata_json = ?,
        first_seen_at = CASE WHEN stale_since IS NULL THEN first_seen_at ELSE ? END,
        stale_since = NULL
@@ -440,45 +438,45 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
   );
   // A row first seen after the cut-off is within its grace: left as it is.
   const markStale = db.prepare<[string, string, string]>(
-    `UPDATE connection_resources SET stale_since = COALESCE(stale_since, ?)
+    `UPDATE account_resources SET stale_since = COALESCE(stale_since, ?)
      WHERE id = ? AND (first_seen_at IS NULL OR first_seen_at <= ?)`,
   );
   const setDisplayNameStmt = db.prepare<[string, number, string]>(
-    'UPDATE connection_resources SET display_name = ?, display_name_edited = ? WHERE id = ?',
+    'UPDATE account_resources SET display_name = ?, display_name_edited = ? WHERE id = ?',
   );
   // The owner's choice: discovery no longer changes it (`hidden_edited`).
   const setHiddenStmt = db.prepare<[number, string]>(
-    'UPDATE connection_resources SET hidden = ?, hidden_edited = 1 WHERE id = ?',
+    'UPDATE account_resources SET hidden = ?, hidden_edited = 1 WHERE id = ?',
   );
   const setOwnerMetadataStmt = db.prepare<[string | null, string]>(
-    'UPDATE connection_resources SET owner_metadata_json = ? WHERE id = ?',
+    'UPDATE account_resources SET owner_metadata_json = ? WHERE id = ?',
   );
 
-  function requireConnection(id: string): ConnectionRecord {
+  function requireAccount(id: string): AccountRecord {
     const row = byId.get(id);
-    if (!row) throw new NotFoundError('connection', id);
+    if (!row) throw new NotFoundError('account', id);
     return toRecord(row);
   }
 
   /**
-   * One discovered ref merged into the connection's rows (`syncDiscoveredResources`,
+   * One discovered ref merged into the account's rows (`syncDiscoveredResources`,
    * `upsertDiscoveredResources`): inserted, or refreshed with the owner's edits kept.
    * `keepMetadata` merges the new provider facts over the ones the row has instead of
    * replacing them (a creating call knows fewer facts than a discovery). Inside the
    * caller's transaction.
    */
   function mergeDiscovered(
-    connectionId: string,
+    accountId: string,
     r: DiscoveredResource,
     now: Iso,
     keepMetadata: boolean,
   ): void {
     const pluginEnv = r.env ?? null;
-    const existing = resourceByRef.get(connectionId, r.ref);
+    const existing = resourceByRef.get(accountId, r.ref);
     if (!existing) {
       insertDiscovered.run(
         ctx.newId(),
-        connectionId,
+        accountId,
         r.ref,
         pluginEnv,
         r.displayName,
@@ -491,7 +489,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       return;
     }
     const known = keepMetadata
-      ? parseJsonObject(existing.metadata_json, 'connection_resources.metadata_json')
+      ? parseJsonObject(existing.metadata_json, 'account_resources.metadata_json')
       : null;
     const metadata = known ? { ...known, ...(r.metadata ?? {}) } : (r.metadata ?? null);
     updateDiscovered.run(
@@ -509,9 +507,9 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     if (!keepMetadata) hintHidden.run(r.hidden === true ? 1 : 0, existing.id);
   }
 
-  function requireResource(id: string): ConnectionResourceRecord {
+  function requireResource(id: string): AccountResourceRecord {
     const row = resourceById.get(id);
-    if (!row) throw new NotFoundError('connection_resource', id);
+    if (!row) throw new NotFoundError('account_resource', id);
     return resourceToRecord(row);
   }
 
@@ -537,7 +535,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         now,
         now,
       );
-      return requireConnection(id);
+      return requireAccount(id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -559,24 +557,24 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         where.push('status = ?');
         params.push(filter.status);
       }
-      const sql = `SELECT ${COLUMNS} FROM connections ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at`;
+      const sql = `SELECT ${COLUMNS} FROM accounts ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at`;
       return db
-        .prepare<string[], ConnectionRow>(sql)
+        .prepare<string[], AccountRow>(sql)
         .all(...params)
         .map(toRecord);
     },
     async listOwnedBy(principals) {
       const pred = principalPredicate(principals, 'owner_user_id', 'owner_group_id');
       return db
-        .prepare<string[], ConnectionRow>(
-          `SELECT ${COLUMNS} FROM connections WHERE ${pred.sql} ORDER BY created_at`,
+        .prepare<string[], AccountRow>(
+          `SELECT ${COLUMNS} FROM accounts WHERE ${pred.sql} ORDER BY created_at`,
         )
         .all(...pred.params)
         .map(toRecord);
     },
     async getCredential(id) {
       const row = credentialStmt.get(id);
-      if (!row) throw new NotFoundError('connection', id);
+      if (!row) throw new NotFoundError('account', id);
       return openSealedColumn(encryptor, id, row.credential_blob, row.key_version);
     },
     async transferOwner(id, owner) {
@@ -584,26 +582,26 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       const now = nowIso(ctx);
       // Check and write in one transaction: a revocation between the two is impossible.
       return withImmediateTransaction(db, () => {
-        const current = requireConnection(id);
+        const current = requireAccount(id);
         if (current.status === 'revoked') {
-          throw new InvariantError('a revoked connection cannot change owner');
+          throw new InvariantError('a revoked account cannot change owner');
         }
         setOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
-        return requireConnection(id);
+        return requireAccount(id);
       });
     },
     async setMetadata(id, metadata) {
       const result = setMetadataStmt.run(toJson(metadata), nowIso(ctx), id);
-      if (result.changes === 0) throw new NotFoundError('connection', id);
-      return requireConnection(id);
+      if (result.changes === 0) throw new NotFoundError('account', id);
+      return requireAccount(id);
     },
     async setDefaultEnv(id, env) {
       const result = setDefaultEnvStmt.run(env, nowIso(ctx), id);
-      if (result.changes === 0) throw new NotFoundError('connection', id);
-      return requireConnection(id);
+      if (result.changes === 0) throw new NotFoundError('account', id);
+      return requireAccount(id);
     },
-    async listResources(connectionId) {
-      return resourcesOf.all(connectionId).map(resourceToRecord);
+    async listResources(accountId) {
+      return resourcesOf.all(accountId).map(resourceToRecord);
     },
     async getResource(id) {
       const row = resourceById.get(id);
@@ -611,7 +609,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async setResourceEnv(resourceId, env) {
       const result = setEnv.run(env, resourceId);
-      if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
+      if (result.changes === 0) throw new NotFoundError('account_resource', resourceId);
       return requireResource(resourceId);
     },
     async reconnect(id, plain, expiresAt = null) {
@@ -647,25 +645,25 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       // The rule and the write in one transaction: no member can join the owner group,
       // and none can leave the new one, between the check and the write.
       return withImmediateTransaction(db, (): AssignOwnerlessResult => {
-        const previous = requireConnection(id);
+        const previous = requireAccount(id);
         if (!isOwnerless.get(id)) return { outcome: 'not-ownerless' };
         if (owner.kind === 'group' && !groupHasMember.get(owner.id)) {
           return { outcome: 'owner-group-empty' };
         }
         assignOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
-        return { outcome: 'assigned', previous, connection: requireConnection(id) };
+        return { outcome: 'assigned', previous, account: requireAccount(id) };
       });
     },
     async markOwnerlessUnowned() {
       const now = nowIso(ctx);
       // Read and write in one transaction: a member joining between the two is impossible.
       return withImmediateTransaction(db, () => {
-        const changed: ConnectionRecord[] = [];
+        const changed: AccountRecord[] = [];
         for (const row of ownerlessActive.all()) {
           // A host account follows its person: never handed to anyone else (ADR
           // platform-management-is-a-plugin-on-the-execution-door).
           if (isHostRecord(toRecord(row))) continue;
-          if (markUnownedStmt.run(now, row.id).changes > 0) changed.push(requireConnection(row.id));
+          if (markUnownedStmt.run(now, row.id).changes > 0) changed.push(requireAccount(row.id));
         }
         return changed;
       });
@@ -679,17 +677,17 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     async revoke(id) {
       const now = nowIso(ctx);
       const result = revokeStmt.run(now, now, id);
-      if (result.changes === 0) throw new NotFoundError('connection', id);
-      return requireConnection(id);
+      if (result.changes === 0) throw new NotFoundError('account', id);
+      return requireAccount(id);
     },
     async recordProviderGrant(id, outcome) {
       if (!PROVIDER_GRANT_OUTCOMES.includes(outcome)) {
         throw new InvariantError(`unknown provider grant outcome '${String(outcome)}'`);
       }
-      return providerGrantStmt.run(outcome, id).changes === 1 ? requireConnection(id) : null;
+      return providerGrantStmt.run(outcome, id).changes === 1 ? requireAccount(id) : null;
     },
-    async syncDiscoveredResources(connectionId, resources) {
-      requireConnection(connectionId);
+    async syncDiscoveredResources(accountId, resources) {
+      requireAccount(accountId);
       const now = nowIso(ctx);
       const graceCutoff = toIso(new Date(Date.parse(now) - FRESH_RESOURCE_STALE_GRACE_MS));
       withImmediateTransaction(db, () => {
@@ -697,27 +695,27 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         for (const r of resources) {
           if (seen.has(r.ref)) continue; // a plugin listing a ref twice: the first one wins
           seen.add(r.ref);
-          mergeDiscovered(connectionId, r, now, false);
+          mergeDiscovered(accountId, r, now, false);
         }
-        for (const row of resourcesOf.all(connectionId)) {
+        for (const row of resourcesOf.all(accountId)) {
           if (!seen.has(row.ref)) markStale.run(now, row.id, graceCutoff);
         }
       });
-      return resourcesOf.all(connectionId).map(resourceToRecord);
+      return resourcesOf.all(accountId).map(resourceToRecord);
     },
-    async upsertDiscoveredResources(connectionId, resources) {
-      requireConnection(connectionId);
+    async upsertDiscoveredResources(accountId, resources) {
+      requireAccount(accountId);
       const now = nowIso(ctx);
       const refs: string[] = [];
       withImmediateTransaction(db, () => {
         for (const r of resources) {
           if (refs.includes(r.ref)) continue; // the first one wins, as in a discovery
           refs.push(r.ref);
-          mergeDiscovered(connectionId, r, now, true);
+          mergeDiscovered(accountId, r, now, true);
         }
       });
       return refs.flatMap((ref) => {
-        const row = resourceByRef.get(connectionId, ref);
+        const row = resourceByRef.get(accountId, ref);
         return row ? [requireResource(row.id)] : [];
       });
     },
@@ -732,12 +730,12 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async setResourceHidden(resourceId, hidden) {
       const result = setHiddenStmt.run(hidden ? 1 : 0, resourceId);
-      if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
+      if (result.changes === 0) throw new NotFoundError('account_resource', resourceId);
       return requireResource(resourceId);
     },
     async setResourceOwnerMetadata(resourceId, metadata) {
       const result = setOwnerMetadataStmt.run(toJson(metadata), resourceId);
-      if (result.changes === 0) throw new NotFoundError('connection_resource', resourceId);
+      if (result.changes === 0) throw new NotFoundError('account_resource', resourceId);
       return requireResource(resourceId);
     },
   };

@@ -5,9 +5,9 @@
  */
 export const SHARE_ERROR_CODES = [
   'not-found',
-  'connection-revoked',
-  'connection-unowned',
-  'connection-personal',
+  'account-revoked',
+  'account-unowned',
+  'account-personal',
   'provider-unknown',
   'target-unknown',
   'target-ambiguous',
@@ -20,10 +20,10 @@ export type ShareErrorCode = (typeof SHARE_ERROR_CODES)[number];
 
 export const SHARE_ERROR_MESSAGES: Readonly<Record<ShareErrorCode, string>> = {
   'not-found': 'This account or this access does not exist, or the account is not yours.',
-  'connection-revoked': 'This account is disconnected; nobody can be given access to it.',
-  'connection-unowned':
+  'account-revoked': 'This account is disconnected; nobody can be given access to it.',
+  'account-unowned':
     'This account has no owner any more: nobody can give access to it until an administrator names a new owner.',
-  'connection-personal':
+  'account-personal':
     'This account is its owner’s own place on the gateway: nobody else can be given access to it.',
   'provider-unknown': 'The service of this account is not available on this gateway.',
   'target-unknown':
@@ -38,9 +38,9 @@ export const SHARE_ERROR_MESSAGES: Readonly<Record<ShareErrorCode, string>> = {
 
 const STATUS_BY_CODE: Readonly<Record<ShareErrorCode, number>> = {
   'not-found': 404,
-  'connection-revoked': 409,
-  'connection-unowned': 409,
-  'connection-personal': 409,
+  'account-revoked': 409,
+  'account-unowned': 409,
+  'account-personal': 409,
   'provider-unknown': 409,
   'target-unknown': 400,
   'target-ambiguous': 409,

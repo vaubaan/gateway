@@ -24,26 +24,26 @@ export interface MissionGitView {
 
 /**
  * One view per provider of the mission whose plugin declares a git remote and
- * on which the mission has repositories, in the order of the connections.
+ * on which the mission has repositories, in the order of the accounts.
  */
 export function missionGitViews(input: {
   readonly registry: PluginRegistry;
   readonly publicUrl: URL;
-  readonly connections: readonly {
+  readonly accounts: readonly {
     readonly provider: string;
     readonly resources: readonly { readonly ref: string }[];
   }[];
   readonly policy: readonly Pick<MissionPolicyEntry, 'risk_id' | 'gate'>[];
 }): readonly MissionGitView[] {
   const gateOf = new Map(input.policy.map((entry) => [entry.risk_id, entry.gate]));
-  const providers = [...new Set(input.connections.map((c) => c.provider))];
+  const providers = [...new Set(input.accounts.map((c) => c.provider))];
   return providers.flatMap((providerId) => {
     const registered = input.registry.gitRemoteOf(providerId);
     const remote = registered?.plugin.gitRemote;
     if (!registered || !remote) return [];
     const refs = [
       ...new Set(
-        input.connections
+        input.accounts
           .filter((c) => c.provider === providerId)
           .flatMap((c) => c.resources.map((r) => r.ref)),
       ),

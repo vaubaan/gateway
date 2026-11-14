@@ -13,7 +13,7 @@ const rows = [
 ];
 const isSelf = (r: { ref: string }): boolean => r.ref === 'instance';
 const ids = (list: readonly { id: string }[]): string[] => list.map((r) => r.id);
-/** One resource set of a connection. */
+/** One resource set of an account. */
 const set = (id: string, resourceIds: readonly string[], future = false) => ({
   id,
   position: 1,
@@ -23,7 +23,7 @@ const set = (id: string, resourceIds: readonly string[], future = false) => ({
   mixedEnv: false,
 });
 
-describe('reachedResources — what a mission reaches on one connection', () => {
+describe('reachedResources — what a mission reaches on one account', () => {
   it('a list: the stored ids, minus stale and self; a hidden one in the list stays', () => {
     const selection = { resourceSets: [set('s1', ['a', 'b', 'c', 'self'])] };
     expect(ids(reachedResources(selection, rows, isSelf))).toEqual(['a', 'b']);
@@ -35,7 +35,7 @@ describe('reachedResources — what a mission reaches on one connection', () => 
     expect(reachedResources(selection, rows, isSelf)).toEqual([]);
   });
 
-  it('a set with future on reaches its list only: nothing is resolved from the connection', () => {
+  it('a set with future on reaches its list only: nothing is resolved from the account', () => {
     const selection = { resourceSets: [set('s1', ['a'], true)] };
     expect(ids(reachedResources(selection, rows, isSelf))).toEqual(['a']);
     expect(takesFutureResources(selection)).toBe(true);
@@ -49,7 +49,7 @@ describe('reachedResources — what a mission reaches on one connection', () => 
     ).toEqual([]);
   });
 
-  it('each set reaches its own list; the connection reaches the union, in its own order', () => {
+  it('each set reaches its own list; the account reaches the union, in its own order', () => {
     const selection = { resourceSets: [set('s1', ['later']), set('s2', ['b', 'a'], true)] };
     const bySet = reachedResourcesBySet(selection, rows, isSelf);
     expect(ids(bySet.get('s1') ?? [])).toEqual(['later']);

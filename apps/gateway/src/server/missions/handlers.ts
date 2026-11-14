@@ -8,7 +8,7 @@
  *   POST /api/missions/:id/rotate     new token, same mission
  *   POST /api/missions/:id/revoke     the mission refuses everything from now on (the
  *                                     creator; or, while it is orphaned, an owner of one
- *                                     of its connections)
+ *                                     of its accounts)
  *   POST /api/missions/:id/gate       `{ risk_id, resource_set_id?, gate }`: the gate of one accepted risk
  *   POST /api/missions/:id/limits     `{ limits: [{ risk_id, quota, rate_limit: { max } }] }`:
  *                                     the limits of accepted risks (creator only)

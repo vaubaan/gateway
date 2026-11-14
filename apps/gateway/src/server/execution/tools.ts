@@ -2,30 +2,30 @@
  * Tool discovery and the catalog document (spec §4.1 "Discovery", "Catalog").
  *
  * `tools/list` shows the tools a mission can potentially call: every tool of
- * a plugin for which the mission holds a connection AND accepts at
+ * a plugin for which the mission holds an account AND accepts at
  * least one risk. The filter is per provider, not per tool: a plugin does not
  * declare which risks a tool can touch (that depends on the arguments —
  * the branch, the path, the environment), so a finer static filter would
  * either hide callable tools or need a contract the plugins do not have. A
  * listed tool can therefore still be refused `risk-not-accepted` at call time.
- * Every registered plugin lists its tools (docs/handbook/plugin-sdk.md). A
- * connection whose part of the mission is lost (`MissionConnection.lost`) lists
- * nothing either: every call through it is refused `connection-revoked`.
+ * Every registered plugin lists its tools (docs/handbook/plugin-sdk.md). An
+ * account whose part of the mission is lost (`MissionAccount.lost`) lists
+ * nothing either: every call through it is refused `account-revoked`.
  *
  * `GET /mcp/catalog` is the agent's source of discovery for upstream refs: the
- * whole tool surface of the instance with a `callable` flag, the connections
+ * whole tool surface of the instance with a `callable` flag, the accounts
  * and resources the mission may touch with their environment labels, what
  * is left of the budget per accepted risk in the current period, and whose
  * token the caller is using (`token`): an agent can then say "I am using
  * Xavier's token on mission X" (spec §0 "Mission token": the holder is
  * authenticated).
  */
-import { tokenHolderLabel, type ConnectionLoss, type MissionContext } from '@vaubaan/gateway-core';
+import { tokenHolderLabel, type AccountLoss, type MissionContext } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { unavailableReason } from './resource-stage';
 import type {
-  ConnectionStatus,
+  AccountStatus,
   Gate,
   McpToolDeclaration,
   MissionTokenKind,
@@ -38,7 +38,7 @@ import type { CurrentPeriod, MissionState } from '../budget';
 import { gitRemoteUrl } from '../git/paths';
 
 /**
- * Providers for which the mission holds a connection that still serves it (not lost:
+ * Providers for which the mission holds an account that still serves it (not lost:
  * revoked, or the creator's access withdrawn) and accepts at least one risk.
  */
 export function callableProviders(ctx: MissionContext): Set<string> {
@@ -48,7 +48,7 @@ export function callableProviders(ctx: MissionContext): Set<string> {
     if (parsed) accepted.add(parsed.provider);
   }
   return new Set(
-    ctx.connections
+    ctx.accounts
       .filter((c) => !c.lost)
       .map((c) => c.provider)
       .filter((p) => accepted.has(p)),
@@ -61,12 +61,10 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
   const tools: McpToolDeclaration[] = [];
   for (const { plugin } of registry.all()) {
     if (!providers.has(plugin.id)) continue;
-    // A mission holds one connection per provider; a tool its way of
+    // A mission holds one account per provider; a tool its way of
     // connecting cannot run is not listed (the resource stage refuses it too).
-    const connection = ctx.connections.find((c) => c.provider === plugin.id);
-    tools.push(
-      ...plugin.tools.filter((t) => unavailableReason(plugin, connection, t.name) === null),
-    );
+    const account = ctx.accounts.find((c) => c.provider === plugin.id);
+    tools.push(...plugin.tools.filter((t) => unavailableReason(plugin, account, t.name) === null));
   }
   return tools;
 }
@@ -90,8 +88,8 @@ export interface CatalogResource {
    */
   readonly git_remote?: string;
   /**
-   * "resource set 2": the set of the connection the resource is in, when the mission
-   * gives the connection several (risk model §4.7). Absent with one set.
+   * "resource set 2": the set of the account the resource is in, when the mission
+   * gives the account several (risk model §4.7). Absent with one set.
    */
   readonly resource_set?: string;
 }
@@ -104,23 +102,23 @@ export interface GitRemoteView {
   readonly publicUrl: URL;
 }
 
-export interface CatalogConnection {
+export interface CatalogAccount {
   readonly id: string;
   readonly provider: string;
   readonly name: string;
-  readonly status: ConnectionStatus;
+  readonly status: AccountStatus;
   /**
-   * Set when the connection no longer serves this mission: `connection-revoked` (for
+   * Set when the account no longer serves this mission: `account-revoked` (for
    * good) or `access-withdrawn` (the creator's access; it may come back). Its tools
    * are not callable. Absent: it serves.
    */
-  readonly lost?: ConnectionLoss;
+  readonly lost?: AccountLoss;
   readonly resources: readonly CatalogResource[];
 }
 
 export interface CatalogBudgetLine {
   readonly risk_id: RiskId;
-  /** The set of the line, when its connection has several (as `CatalogResource`). */
+  /** The set of the line, when its account has several (as `CatalogResource`). */
   readonly resource_set?: string;
   readonly quota: number;
   readonly consumed: number;
@@ -155,7 +153,7 @@ export interface MissionCatalog {
   readonly token: CatalogToken;
   readonly tools: readonly CatalogTool[];
   readonly callable_tools: readonly string[];
-  readonly connections: readonly CatalogConnection[];
+  readonly accounts: readonly CatalogAccount[];
   readonly budget: readonly CatalogBudgetLine[];
 }
 
@@ -197,20 +195,20 @@ export function buildCatalog(
     },
     tools,
     callable_tools: [...callable],
-    connections: ctx.connections.map((connection) => ({
-      id: connection.id,
-      provider: connection.provider,
-      name: connection.display_name,
-      status: connection.status,
-      ...(connection.lost ? { lost: connection.lost } : {}),
+    accounts: ctx.accounts.map((account) => ({
+      id: account.id,
+      provider: account.provider,
+      name: account.display_name,
+      status: account.status,
+      ...(account.lost ? { lost: account.lost } : {}),
       resources: ctx.resources
-        .filter((r) => r.connection_id === connection.id)
+        .filter((r) => r.account_id === account.id)
         .map((r) => ({
           ref: r.ref,
           env: r.env ?? null,
           display_name: r.displayName,
-          ...(gitRemote && registry.gitRemoteOf(connection.provider)
-            ? { git_remote: gitRemoteUrl(gitRemote.publicUrl, connection.provider, r.ref) }
+          ...(gitRemote && registry.gitRemoteOf(account.provider)
+            ? { git_remote: gitRemoteUrl(gitRemote.publicUrl, account.provider, r.ref) }
             : {}),
           ...setLabelOfResource(ctx, r.id),
         })),
@@ -231,14 +229,14 @@ export function buildCatalog(
   };
 }
 
-/** `{ resource_set: "resource set 2" }` when the set's connection has several sets. */
+/** `{ resource_set: "resource set 2" }` when the set's account has several sets. */
 export function setLabelOf(
   ctx: Pick<MissionContext, 'resource_sets'>,
   resourceSetId: string | undefined,
 ): { readonly resource_set?: string } {
   const set = ctx.resource_sets.find((s) => s.id === resourceSetId);
   if (!set) return {};
-  const several = ctx.resource_sets.filter((s) => s.connection_id === set.connection_id).length > 1;
+  const several = ctx.resource_sets.filter((s) => s.account_id === set.account_id).length > 1;
   return several ? { resource_set: `resource set ${set.position}` } : {};
 }
 

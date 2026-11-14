@@ -6,12 +6,12 @@
  * Nothing is written to the store directly, so every state shown is one the
  * application itself can reach:
  *
- *   Alice (operator)  five connections — a GitHub organisation, a second one
+ *   Alice (operator)  five accounts — a GitHub organisation, a second one
  *                     transferred to the local group "GitHub admins", Upstash
  *                     Redis (databases labelled prod / staging), Resend (the
  *                     production domain left without a label, which the
  *                     mission form warns about), Cloudflare DNS; a share of
- *                     the first GitHub connection to Bob; missions in every
+ *                     the first GitHub account to Bob; missions in every
  *                     state: active with a session of calls under two agent
  *                     labels, quota spent with an open claim, an open approval
  *                     request, expired, revoked, prepared by her platform agent
@@ -30,9 +30,9 @@ import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
 import { LOGIN_COOKIE, SESSION_COOKIE } from '../../src/server/auth';
 import type { GatewayRoot } from '../../src/server/compose/root';
-import type { Actor } from '../../src/server/connections';
+import type { Actor } from '../../src/server/accounts';
 import type { MissionDraft } from '../../src/server/missions';
-import type { ConnectionRecord, UserRecord } from '../../src/server/store/types';
+import type { AccountRecord, UserRecord } from '../../src/server/store/types';
 import type { DemoIdp } from './demo-idp';
 import {
   ALICE,
@@ -88,8 +88,8 @@ export interface SeedSummary {
     readonly tool: string;
     readonly arguments: Record<string, unknown>;
   };
-  /** The GitHub connection Alice shares to Bob, for the share steps of the tour. */
-  readonly sharedConnection: { readonly id: string; readonly name: string };
+  /** The GitHub account Alice shares to Bob, for the share steps of the tour. */
+  readonly sharedAccount: { readonly id: string; readonly name: string };
   /**
    * The team on the active mission (spec §7.9 bis): Bob is a member and has
    * generated his own token; "CI runner" is a named token Alice created. Both
@@ -101,7 +101,7 @@ export interface SeedSummary {
     /** The named token, shown once to Alice when she created it. */
     readonly named: { readonly name: string; readonly token: string };
   };
-  readonly counts: { readonly connections: number; readonly missions: number };
+  readonly counts: { readonly accounts: number; readonly missions: number };
 }
 
 interface SignedIn {
@@ -180,24 +180,24 @@ class Seeder {
     provider: string,
     name: string,
     fields: Record<string, string>,
-  ): Promise<ConnectionRecord> {
+  ): Promise<AccountRecord> {
     const actor = await this.actor(user);
-    const result = await this.ctx.root.connections.service.start(actor, provider, {
+    const result = await this.ctx.root.accounts.service.start(actor, provider, {
       displayName: name,
       fields,
     });
     if (result.kind !== 'connected') fail(`${provider} connect did not complete`, result.kind);
-    return result.connection;
+    return result.account;
   }
 
-  /** Labels resources of a connection, by ref. */
-  async label(user: UserRecord, connection: ConnectionRecord, envByRef: Record<string, string>) {
+  /** Labels resources of an account, by ref. */
+  async label(user: UserRecord, account: AccountRecord, envByRef: Record<string, string>) {
     const actor = await this.actor(user);
-    const { service } = this.ctx.root.connections;
-    const detail = await service.get(actor, connection.id);
+    const { service } = this.ctx.root.accounts;
+    const detail = await service.get(actor, account.id);
     for (const resource of detail.resources) {
       const env = envByRef[resource.ref];
-      if (env) await service.updateResource(actor, connection.id, resource.id, { env });
+      if (env) await service.updateResource(actor, account.id, resource.id, { env });
     }
   }
 
@@ -275,13 +275,13 @@ class Seeder {
    */
   async issueThroughPlatform(human: SignedIn, draft: MissionDraft) {
     const actor = await this.actor(human.user);
-    const started = await this.ctx.root.connections.service.start(actor, 'vaubaan');
+    const started = await this.ctx.root.accounts.service.start(actor, 'vaubaan');
     if (started.kind !== 'connected') fail('the Vaubaan account', started);
     const platform = await this.issue(human.user, {
       name: 'Platform management',
-      connections: [
+      accounts: [
         {
-          connection_id: started.connection.id,
+          account_id: started.account.id,
           trust_levels: {
             read: 'trusting',
             prepare: 'trusting',
@@ -327,7 +327,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   const contractors = await root.groups.service.create(alice.user.id, CONTRACTORS_GROUP);
   await root.groups.service.addMember(alice.user.id, contractors.id, bob.user.email);
 
-  // ── Alice's connections ────────────────────────────────────────────────────
+  // ── Alice's accounts ────────────────────────────────────────────────────
   const [product, platform] = DEMO_GITHUB_TOKENS;
   if (!product || !platform) fail('the simulated GitHub has fewer than two tokens', 0);
   const github = await seeder.connectGithub(alice.user, product, 'Acme product repositories');
@@ -336,7 +336,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     platform,
     'Acme platform repositories',
   );
-  await root.connections.service.transfer(
+  await root.accounts.service.transfer(
     await seeder.actor(alice.user),
     platformGithub.id,
     admins.id,
@@ -399,8 +399,8 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   const expiresAt = new Date(Date.now() + 2_000);
   await seeder.issue(alice.user, {
     name: 'Migration dry-run (finished)',
-    connections: [
-      { connection_id: github.id, resources: { scope: 'all' }, trust_levels: { read: 'careful' } },
+    accounts: [
+      { account_id: github.id, resources: { scope: 'all' }, trust_levels: { read: 'careful' } },
     ],
     period: { kind: 'one-off' },
     expires_at: expiresAt.toISOString(),
@@ -408,9 +408,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   const active = await seeder.issue(alice.user, {
     name: 'Ship the billing page',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: onRepos(product.repositories.slice(0, 2)),
         policy: [
           line('github.read-code', 500),
@@ -421,7 +421,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
         ],
       },
       {
-        connection_id: redis.id,
+        account_id: redis.id,
         resources: onRepos([stagingCache.database_id]),
         policy: [
           line('upstash-redis.read-database-metadata', 50),
@@ -436,9 +436,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   const exhausted = await seeder.issue(alice.user, {
     name: 'Nightly dependency audit',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: { scope: 'all' },
         policy: [line('github.read-code', SMALL_QUOTA), line('github.read-meta', 50)],
       },
@@ -449,9 +449,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   const gated = await seeder.issue(alice.user, {
     name: 'Release 2.4 hotfix',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: onRepos([product.repositories[0] ?? '']),
         // Ship at Trusting: merges, tags and releases ask first; reads run freely.
         trust_levels: { read: 'trusting', propose: 'careful', ship: 'trusting' },
@@ -463,9 +463,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   const revoked = await seeder.issue(alice.user, {
     name: 'Spike: move the status page DNS',
-    connections: [
+    accounts: [
       {
-        connection_id: cloudflare.id,
+        account_id: cloudflare.id,
         resources: { scope: 'all' },
         trust_levels: { 'look-up': 'trusting', point: 'trusting' },
       },
@@ -477,9 +477,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   const quota = await seeder.issue(alice.user, {
     name: 'Tour: a small limit to reach',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: onRepos([product.repositories[0] ?? '']),
         policy: [line('github.read-code', SMALL_QUOTA), line('github.read-meta', 50)],
       },
@@ -579,9 +579,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   // ── A mission prepared by Alice's platform agent, through her Vaubaan account ─
   await seeder.issueThroughPlatform(alice, {
     name: 'Fix the flaky checkout test',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: onRepos([product.repositories[0] ?? '']),
         policy: [
           line('github.read-code', 300),
@@ -598,9 +598,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   // ── Bob: a mission within the share he received ───────────────────────────
   const bobMission = await seeder.issue(bob.user, {
     name: 'Review the docs pull requests',
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         resources: onRepos([product.repositories[3] ?? product.repositories[0] ?? '']),
         policy: [
           line('github.read-code', 200),
@@ -632,14 +632,14 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     openClaimUrl: claim.claim_url,
     openApprovalUrl: approval.approval_url,
     approval: { mission: gated, ...merge },
-    sharedConnection: { id: github.id, name: github.displayName },
+    sharedAccount: { id: github.id, name: github.displayName },
     team: {
       mission: { id: active.id, name: active.name },
       member: { email: bob.user.email },
       named: { name: CI_TOKEN_NAME, token: ci.token.secret },
     },
     counts: {
-      connections: (await root.connections.service.listFor(aliceActor)).length,
+      accounts: (await root.accounts.service.listFor(aliceActor)).length,
       missions: (await root.missions.service.list(alice.user)).length,
     },
   };

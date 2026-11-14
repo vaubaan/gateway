@@ -43,7 +43,7 @@ export const UNEXPECTED_FAILURE =
 
 export const USAGE = `Usage: node apps/gateway/reseal.mjs [--apply]
 
-Seals every stored secret (connection credentials, configuration secrets,
+Seals every stored secret (account credentials, configuration secrets,
 approval arguments) again under the current master key, opening each with the
 key of the version that sealed it (VAUBAAN_MASTER_KEY_PREVIOUS).
 

@@ -69,7 +69,7 @@ export const USAGE = `Usage: node apps/gateway/import-v4.mjs --owner <email> [--
 Imports the bundle written by scripts/export-v4.mjs (read on stdin) into this
 instance, under <email>, an active user who has signed in once.
 
-  --owner <email>  the user every connection and mission is created for
+  --owner <email>  the user every account and mission is created for
   --apply          write; without it, print the plan and write nothing
   --allow-stale    accept a bundle exported more than an hour ago
   --carry-unbudgeted <quota>
@@ -216,7 +216,7 @@ async function readAll(
 
 /**
  * The audit side of an import. `wrap` marks every administrative entry the
- * services write during the run (connection created, resource edited,
+ * services write during the run (account created, resource edited,
  * mission issued) with `marker` and `v4_org`, and — inside `during` — with
  * `v4_source`, the v4 token a mission comes from. `issued` reads those
  * `mission-issued` entries back: that is how a later run recognises a mission
@@ -406,7 +406,7 @@ async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<n
     const report = await new Importer({
       registry: root.registry,
       store: root.store,
-      connections: root.connections.service,
+      accounts: root.accounts.service,
       missions: root.missions.service,
       provenance: marker.provenance(root.store),
     }).run(bundle.bundle, parsed.args);

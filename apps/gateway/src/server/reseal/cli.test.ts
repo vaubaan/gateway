@@ -58,7 +58,7 @@ async function seededDeps(loaded: LoadedConfig): Promise<{ deps: ResealDeps; sto
     email: 's@example.com',
   });
   for (const credential of ['one', 'two']) {
-    await store.connections.create({
+    await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: credential,
@@ -141,7 +141,7 @@ describe('reseal command', () => {
     const run = capture();
     expect(await runResealCli([], run.io, deps)).toBe(EXIT_OK);
     expect(run.out()).toContain('dry run');
-    expect(run.out()).toMatch(/connections\s+0\s+0\s+2\s+0\s+0/);
+    expect(run.out()).toMatch(/accounts\s+0\s+0\s+2\s+0\s+0/);
     expect((await store.sealedBlobs.versions()).map((v) => v.keyVersion)).toEqual([1]);
   });
 
@@ -150,7 +150,7 @@ describe('reseal command', () => {
     const { deps, store } = await seededDeps(loaded);
     const run = capture();
     expect(await runResealCli(['--apply'], run.io, deps)).toBe(EXIT_OK);
-    expect(run.out()).toMatch(/connections\s+0\s+0\s+2\s+0\s+0/);
+    expect(run.out()).toMatch(/accounts\s+0\s+0\s+2\s+0\s+0/);
     expect(run.out()).toContain('VAUBAAN_MASTER_KEY_PREVIOUS can now be removed');
     expect(run.out() + run.err()).not.toContain(OLD_KEY);
     expect(run.out() + run.err()).not.toContain(NEW_KEY);
@@ -158,7 +158,7 @@ describe('reseal command', () => {
 
     const again = capture();
     expect(await runResealCli(['--apply'], again.io, deps)).toBe(EXIT_OK);
-    expect(again.out()).toMatch(/connections\s+2\s+0\s+0\s+0\s+0/);
+    expect(again.out()).toMatch(/accounts\s+2\s+0\s+0\s+0\s+0/);
   });
 
   it('exits 1 and keeps the previous key when a blob does not open', async () => {
@@ -187,7 +187,7 @@ describe('reseal command', () => {
     const { deps } = await seededDeps(loaded);
     const run = capture();
     expect(await runResealCli([], run.io, deps)).toBe(EXIT_INCOMPLETE);
-    expect(run.out()).toMatch(/connections\s+2\s+2\s+0\s+0\s+0/);
+    expect(run.out()).toMatch(/accounts\s+2\s+2\s+0\s+0\s+0/);
     expect(run.out()).toContain('do not open: the current key');
     expect(run.out()).not.toContain('can now be removed');
   });

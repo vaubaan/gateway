@@ -5,17 +5,17 @@
  * ones the retired management door published, but for `issued_via`, which now
  * names the issuing mission.
  *
- * **The exact restriction** of a connection is the `authority` list of its
+ * **The exact restriction** of an account is the `authority` list of its
  * issuance context — the full catalog for an owner, the union of the shares
  * otherwise — together with whether its env-qualified ids can be touched at
- * all with the resources the connection has.
+ * all with the resources the account has.
  *
  * A mission's state is the mission service's: `orphaned` is derived there
  * from the creator's current authority at every read (spec §2.3), with the
  * reason in `MissionOverview.orphan`. Nothing here reads a stored status.
  *
  * **No mission rule is restated here.** What a macro-action yields at a trust level
- * on a connection is `expandMacroAction`, what the built-in `everything-i-hold`
+ * on an account is `expandMacroAction`, what the built-in `everything-i-hold`
  * writes out is `everythingIHold`, whether an env-qualified id can be reached is
  * `isResolvable`, whether an orphaned mission can serve again is
  * `explainOrphan` — the functions the interface and the preview use, so the
@@ -40,7 +40,7 @@ import {
   macroActionOfRisk,
   TRUST_LEVELS,
   type DraftPeriod,
-  type IssuanceConnection,
+  type IssuanceAccount,
   type MissionDetail,
   type MissionIssuer,
   type MissionOverview,
@@ -53,7 +53,7 @@ import {
 import type { ProviderCatalog } from './ports';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connections
+// Accounts
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ResourceView {
@@ -61,7 +61,7 @@ export interface ResourceView {
   readonly display_name: string;
   /**
    * Its environment label: its own (the owner's or the plugin's), else the
-   * connection's `default_env`; `null` when it has neither.
+   * account's `default_env`; `null` when it has neither.
    */
   readonly env: string | null;
   /** Hidden by the owner: left out of `{ scope: 'all' }`, still selectable by ref. */
@@ -72,11 +72,11 @@ export interface EnvUsabilityView {
   /** The provider reads the environment from the call itself: no label is needed. */
   readonly derives_env: boolean;
   /**
-   * The label the connection's owner gave every resource without one of its own;
+   * The label the account's owner gave every resource without one of its own;
    * `null` when none. Already counted in `labelled_envs` and the resources' `env`.
    */
   readonly default_env: string | null;
-  /** Environments at least one resource of the connection is labelled with. */
+  /** Environments at least one resource of the account is labelled with. */
   readonly labelled_envs: readonly string[];
   /** Resources with no label: an env-qualified risk is refused on them at call time. */
   readonly unlabelled_resources: readonly string[];
@@ -86,7 +86,7 @@ export interface EnvUsabilityView {
   readonly unusable_risk_ids: readonly RiskId[];
 }
 
-/** What one macro-action at one trust level writes on this connection, with the resources known now. */
+/** What one macro-action at one trust level writes on this account, with the resources known now. */
 export interface TrustLevelYieldView {
   /** Lines that run freely. */
   readonly auto: number;
@@ -110,7 +110,7 @@ export interface MacroActionSummaryView {
   readonly unavailable: readonly RiskId[];
 }
 
-/** The gateway's own `everything-i-hold` on this connection, over the resources known now. */
+/** The gateway's own `everything-i-hold` on this account, over the resources known now. */
 export interface EverythingSummaryView {
   readonly label: string;
   readonly description: string;
@@ -118,15 +118,15 @@ export interface EverythingSummaryView {
   readonly risks: number;
 }
 
-export interface ConnectionView {
-  readonly connection_id: string;
+export interface AccountView {
+  readonly account_id: string;
   readonly provider: string;
   readonly provider_label: string;
   readonly display_name: string;
   /** `active`, or `expired`: missions on it fail until an owner reconnects it. */
   readonly status: string;
   readonly authority: {
-    /** `owner`: the user's own connection or their group's. `share`: what they were shared. */
+    /** `owner`: the user's own account or their group's. `share`: what they were shared. */
     readonly basis: 'owner' | 'share';
     /** The exact restriction: every RiskId a mission of this user may accept here. Nothing else passes. */
     readonly risk_ids: readonly RiskId[];
@@ -142,21 +142,21 @@ export interface ConnectionView {
 
 /** The resources a new mission can select: the ones discovery still returns. */
 /** What a mission may select: still returned by discovery, and not one of the instance's own. */
-function selectable(connection: IssuanceConnection): IssuanceConnection['resources'] {
-  return connection.resources.filter((r) => !r.stale && !r.self);
+function selectable(account: IssuanceAccount): IssuanceAccount['resources'] {
+  return account.resources.filter((r) => !r.stale && !r.self);
 }
 
 function macroActionSummary(
-  connection: IssuanceConnection,
-  action: IssuanceConnection['macro_actions'][number],
+  account: IssuanceAccount,
+  action: IssuanceAccount['macro_actions'][number],
 ): MacroActionSummaryView {
-  const resources = defaultResources(connection);
+  const resources = defaultResources(account);
   const at = (trustLevel: TrustLevel): TrustLevelYieldView => {
-    const { lines, left_out } = expandMacroAction(connection, action, trustLevel, resources);
+    const { lines, left_out } = expandMacroAction(account, action, trustLevel, resources);
     const approval = lines.filter((line) => line.gate === 'approval').length;
     return { auto: lines.length - approval, approval, left_out: left_out.length };
   };
-  const { unavailable } = expandMacroAction(connection, action, 'careful', resources);
+  const { unavailable } = expandMacroAction(account, action, 'careful', resources);
   return {
     id: action.id,
     label: action.label,
@@ -171,24 +171,24 @@ function macroActionSummary(
 }
 
 /**
- * The built-in `everything-i-hold` on this connection, written out over every
+ * The built-in `everything-i-hold` on this account, written out over every
  * resource known now (`defaultResources`, the draft's default `all`): inside
  * the authority by construction.
  */
-function everythingOf(connection: IssuanceConnection) {
-  return everythingIHold(connection, defaultResources(connection));
+function everythingOf(account: IssuanceAccount) {
+  return everythingIHold(account, defaultResources(account));
 }
 
-function envUsability(connection: IssuanceConnection): EnvUsabilityView {
-  const resources = selectable(connection);
+function envUsability(account: IssuanceAccount): EnvUsabilityView {
+  const resources = selectable(account);
   const labelled = [...new Set(resources.flatMap((r) => (r.env === null ? [] : [r.env])))];
-  const held = new Set(connection.authority);
-  const envQualified = connection.risks.filter((r) => r.env !== null && held.has(r.risk_id));
+  const held = new Set(account.authority);
+  const envQualified = account.risks.filter((r) => r.env !== null && held.has(r.risk_id));
   const reachable = (risk: (typeof envQualified)[number]): boolean =>
-    isResolvable(risk, connection, resources);
+    isResolvable(risk, account, resources);
   return {
-    derives_env: connection.derives_env,
-    default_env: connection.default_env,
+    derives_env: account.derives_env,
+    default_env: account.default_env,
     labelled_envs: labelled,
     unlabelled_resources: resources.filter((r) => r.env === null).map((r) => r.ref),
     usable_risk_ids: envQualified.filter(reachable).map((r) => r.risk_id),
@@ -196,28 +196,28 @@ function envUsability(connection: IssuanceConnection): EnvUsabilityView {
   };
 }
 
-export function connectionView(connection: IssuanceConnection): ConnectionView {
+export function accountView(account: IssuanceAccount): AccountView {
   return {
-    connection_id: connection.id,
-    provider: connection.provider,
-    provider_label: connection.provider_label,
-    display_name: connection.display_name,
-    status: connection.status,
+    account_id: account.id,
+    provider: account.provider,
+    provider_label: account.provider_label,
+    display_name: account.display_name,
+    status: account.status,
     authority: {
-      basis: connection.basis,
-      risk_ids: connection.authority,
-      whole_catalog: connection.authority.length === connection.risks.length,
+      basis: account.basis,
+      risk_ids: account.authority,
+      whole_catalog: account.authority.length === account.risks.length,
     },
-    resources: selectable(connection).map((r) => ({
+    resources: selectable(account).map((r) => ({
       ref: r.ref,
       display_name: r.display_name,
       env: r.env,
       hidden: r.hidden,
     })),
-    env_qualified_risks: envUsability(connection),
-    macro_actions: connection.macro_actions.map((action) => macroActionSummary(connection, action)),
+    env_qualified_risks: envUsability(account),
+    macro_actions: account.macro_actions.map((action) => macroActionSummary(account, action)),
     everything_i_hold: (() => {
-      const everything = everythingOf(connection);
+      const everything = everythingOf(account);
       return {
         label: everything.label,
         description: everything.description,
@@ -251,7 +251,7 @@ export interface CatalogRiskView {
   readonly deprecated: boolean;
   /** Hard ceiling of the rate limit, per minute, when the catalog sets one. */
   readonly rate_ceiling_per_minute: number | null;
-  /** Present when a connection was named: is this id inside the user's authority on it? */
+  /** Present when an account was named: is this id inside the user's authority on it? */
   readonly in_my_authority?: boolean;
 }
 
@@ -259,14 +259,14 @@ export interface CatalogView {
   readonly provider: string;
   readonly provider_label: string;
   readonly derives_env: boolean;
-  /** The connection the `in_my_authority` flags are about; `null` when none was named. */
-  readonly connection_id: string | null;
+  /** The account the `in_my_authority` flags are about; `null` when none was named. */
+  readonly account_id: string | null;
   readonly risks: readonly CatalogRiskView[];
   /** The macro-actions, each risk with its base budget (unqualified ids: one line per environment reached). */
   readonly macro_actions: readonly CatalogMacroActionView[];
   /** Per trust level: the gate of each row (`null`: not accepted) and the factor on the base budget. */
   readonly trust_levels: Readonly<Record<TrustLevel, TrustLevelRuleView>>;
-  /** With a connection: the built-in `everything-i-hold` written out for it, entry by entry. */
+  /** With an account: the built-in `everything-i-hold` written out for it, entry by entry. */
   readonly everything_i_hold?: {
     readonly label: string;
     readonly description: string;
@@ -303,14 +303,14 @@ function trustLevelRules(): Record<TrustLevel, TrustLevelRuleView> {
 
 export function catalogView(
   catalog: ProviderCatalog,
-  connection: IssuanceConnection | null,
+  account: IssuanceAccount | null,
 ): CatalogView {
-  const held = connection ? new Set(connection.authority) : null;
+  const held = account ? new Set(account.authority) : null;
   return {
     provider: catalog.provider,
     provider_label: catalog.provider_label,
     derives_env: catalog.derives_env,
-    connection_id: connection?.id ?? null,
+    account_id: account?.id ?? null,
     risks: catalog.risks.map((risk) => ({
       risk_id: risk.risk_id,
       env: risk.env,
@@ -335,9 +335,9 @@ export function catalogView(
       })),
     })),
     trust_levels: trustLevelRules(),
-    ...(connection
+    ...(account
       ? (() => {
-          const everything = everythingOf(connection);
+          const everything = everythingOf(account);
           return {
             everything_i_hold: {
               label: everything.label,
@@ -358,16 +358,16 @@ export type MissionStateName = MissionOverview['state']['kind'];
 
 /** Why a mission is orphaned right now, and whether the authority can come back. */
 export interface OrphanView {
-  /** `creator-removed`, `connection-missing`, `connection-revoked` or `authority-lost`. */
+  /** `creator-removed`, `account-missing`, `account-revoked` or `authority-lost`. */
   readonly cause: NonNullable<MissionOverview['orphan']>['cause'];
-  /** The connection the cause was met on; `null` when the user themselves is gone. */
-  readonly connection_id: string | null;
+  /** The account the cause was met on; `null` when the user themselves is gone. */
+  readonly account_id: string | null;
   /** The accepted risks the user's current authority no longer covers. */
   readonly uncovered: readonly RiskId[];
   /**
    * True when the mission serves calls again as soon as the authority returns
    * (the share is made again, the user is back in the owner group), with its
-   * session and counters intact. A revoked or deleted connection never comes back.
+   * session and counters intact. A revoked or deleted account never comes back.
    */
   readonly can_come_back: boolean;
 }
@@ -375,22 +375,22 @@ export interface OrphanView {
 function orphanView(orphan: NonNullable<MissionOverview['orphan']>): OrphanView {
   return {
     cause: orphan.cause,
-    connection_id: orphan.connection_id,
+    account_id: orphan.account_id,
     uncovered: orphan.uncovered,
     // The mission module's answer (`explainOrphan`), not a second list of causes.
     can_come_back: explainOrphan(orphan, []).reversible,
   };
 }
 
-export interface LostConnectionView {
-  readonly connection_id: string;
+export interface LostAccountView {
+  readonly account_id: string;
   readonly cause: MissionOverview['lost'][number]['cause'];
   readonly final: boolean;
 }
 
 export interface MissionPolicyView {
   readonly risk_id: RiskId;
-  /** The resource set of its connection the line belongs to (risk model §4.7). */
+  /** The resource set of its account the line belongs to (risk model §4.7). */
   readonly resource_set_id: string;
   readonly quota: number;
   readonly rate_limit: { readonly max: number; readonly window_seconds: number };
@@ -433,14 +433,14 @@ export interface MissionView {
   /** Set while the mission is orphaned: every call is refused until the authority returns. */
   readonly orphan: OrphanView | null;
   /**
-   * The connections that no longer serve this mission, while it may serve through its
-   * others: `cause` `connection-revoked` (removed by its owner) or `connection-missing`
+   * The accounts that no longer serve this mission, while it may serve through its
+   * others: `cause` `account-revoked` (removed by its owner) or `account-missing`
    * never come back (`final: true`); `access-withdrawn` (the user's access to it was
    * withdrawn) serves again if the access returns. Calls through them are refused
-   * `connection-revoked`. Nothing is added in their place: to reach the account that
-   * replaced one, issue a new mission. Empty when every connection serves.
+   * `account-revoked`. Nothing is added in their place: to reach the account that
+   * replaced one, issue a new mission. Empty when every account serves.
    */
-  readonly lost_connections: readonly LostConnectionView[];
+  readonly lost_accounts: readonly LostAccountView[];
   readonly created_at: string;
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
@@ -454,9 +454,9 @@ export interface MissionView {
    * never shown again.
    */
   readonly token_prefix: string | null;
-  readonly connection_ids: readonly string[];
+  readonly account_ids: readonly string[];
   /**
-   * Per connection, its resource sets: each an explicit list of one environment,
+   * Per account, its resource sets: each an explicit list of one environment,
    * `future` when the resources that later appear in that environment join it.
    */
   readonly resource_selections: readonly ResourceSelectionView[];
@@ -476,11 +476,11 @@ function issuedViaView(issuer: MissionIssuer | null, viewer: MissionViewer): Iss
 }
 
 export interface ResourceSelectionView {
-  readonly connection_id: string;
-  /** A set of the connection takes future resources. */
+  readonly account_id: string;
+  /** A set of the account takes future resources. */
   readonly future: boolean;
   /**
-   * The resource sets of the connection, in order (risk model §4.7): each with its
+   * The resource sets of the account, in order (risk model §4.7): each with its
    * environment and `future`; a policy line names its set by `resource_set_id`.
    */
   readonly resource_sets: readonly {
@@ -505,8 +505,8 @@ export function missionView(
     creator_email: overview.creator.email,
     state: state.kind,
     orphan: overview.orphan ? orphanView(overview.orphan) : null,
-    lost_connections: overview.lost.map((part) => ({
-      connection_id: part.connection_id,
+    lost_accounts: overview.lost.map((part) => ({
+      account_id: part.account_id,
       cause: part.cause,
       final: part.final,
     })),
@@ -521,9 +521,9 @@ export function missionView(
       : null,
     issued_via: issuedViaView(overview.issued_via, viewer),
     token_prefix: overview.token ? maskToken(overview.token.prefix) : null,
-    connection_ids: mission.connections.map((c) => c.connectionId),
-    resource_selections: mission.connections.map((c) => ({
-      connection_id: c.connectionId,
+    account_ids: mission.accounts.map((c) => c.accountId),
+    resource_selections: mission.accounts.map((c) => ({
+      account_id: c.accountId,
       future: takesFutureResources(c),
       resource_sets: c.resourceSets.map((set) => ({
         resource_set_id: set.id,
@@ -556,18 +556,18 @@ export function missionView(
 }
 
 export interface MissionDetailView extends MissionView {
-  readonly connections: readonly {
-    readonly connection_id: string;
+  readonly accounts: readonly {
+    readonly account_id: string;
     readonly provider: string;
     readonly display_name: string;
     readonly status: string;
     /** A set takes the resources that later appear in its environment. */
     readonly future: boolean;
-    /** When discovery last ran on the connection; `null` when never. */
+    /** When discovery last ran on the account; `null` when never. */
     readonly last_checked_at: string | null;
     /** The resources the mission reaches now: its lists, less what discovery no longer finds. */
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
-    /** Present when the connection has several resource sets (risk model §4.7). */
+    /** Present when the account has several resource sets (risk model §4.7). */
     readonly resource_sets?: readonly {
       readonly resource_set_id: string;
       readonly position: number;
@@ -592,8 +592,8 @@ export function missionDetailView(
 ): MissionDetailView {
   return {
     ...missionView(detail, viewer, maskToken),
-    connections: detail.connections.map((c) => ({
-      connection_id: c.id,
+    accounts: detail.accounts.map((c) => ({
+      account_id: c.id,
       provider: c.provider,
       display_name: c.display_name,
       status: c.status,
@@ -625,17 +625,17 @@ export function missionDetailView(
 // Preview
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The uncovered list of spec §3.1: accepted risks outside the user's authority, per connection. */
+/** The uncovered list of spec §3.1: accepted risks outside the user's authority, per account. */
 export interface UncoveredView {
-  readonly connection_id: string;
+  readonly account_id: string;
   readonly provider: string;
   readonly risk_ids: readonly RiskId[];
 }
 
 export function uncoveredOfPreview(preview: MissionPreview): UncoveredView[] {
-  return preview.connections
+  return preview.accounts
     .filter((c) => c.exceeds.length > 0)
-    .map((c) => ({ connection_id: c.connection_id, provider: c.provider, risk_ids: c.exceeds }));
+    .map((c) => ({ account_id: c.account_id, provider: c.provider, risk_ids: c.exceeds }));
 }
 
 export interface PreviewView {
@@ -650,26 +650,26 @@ export interface PreviewView {
   readonly name: string;
   /** What the mission could call, exactly as it would be persisted. */
   readonly policy: MissionPreview['policy'];
-  readonly connections: readonly {
-    readonly connection_id: string;
+  readonly accounts: readonly {
+    readonly account_id: string;
     readonly provider: string;
     readonly display_name: string;
     /** A set takes the resources that later appear in its environment. */
     readonly future: boolean;
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
-    /** The built-in everything-i-hold wrote this connection's lines. */
+    /** The built-in everything-i-hold wrote this account's lines. */
     readonly everything_i_hold: boolean;
     readonly passes: MissionPreview['policy'];
     readonly exceeds: readonly RiskId[];
     readonly unknown: readonly RiskId[];
-    readonly unresolvable: MissionPreview['connections'][number]['unresolvable'];
+    readonly unresolvable: MissionPreview['accounts'][number]['unresolvable'];
     readonly missing_budget: readonly RiskId[];
-    readonly left_out: MissionPreview['connections'][number]['left_out'];
-    /** The trust levels kept with the mission: the ones naming a macro-action of the connection. */
-    readonly trust_levels: MissionPreview['connections'][number]['trust_levels'];
+    readonly left_out: MissionPreview['accounts'][number]['left_out'];
+    /** The trust levels kept with the mission: the ones naming a macro-action of the account. */
+    readonly trust_levels: MissionPreview['accounts'][number]['trust_levels'];
     /**
-     * Present when the draft gives the connection several resource sets (risk model
-     * §4.7): what each set yields, in order. The connection's own fields are then the
+     * Present when the draft gives the account several resource sets (risk model
+     * §4.7): what each set yields, in order. The account's own fields are then the
      * sets' together.
      */
     readonly resource_sets?: readonly PreviewSetView[];
@@ -680,7 +680,7 @@ export interface PreviewView {
   readonly summary: MissionPreview['summary'];
 }
 
-/** What one resource set of a draft connection yields, as the door answers it. */
+/** What one resource set of a draft account yields, as the door answers it. */
 export interface PreviewSetView {
   readonly index: number;
   readonly future: boolean;
@@ -689,8 +689,8 @@ export interface PreviewSetView {
   readonly everything_i_hold: boolean;
   readonly passes: MissionPreview['policy'];
   readonly exceeds: readonly RiskId[];
-  readonly left_out: MissionPreview['connections'][number]['left_out'];
-  readonly trust_levels: MissionPreview['connections'][number]['trust_levels'];
+  readonly left_out: MissionPreview['accounts'][number]['left_out'];
+  readonly trust_levels: MissionPreview['accounts'][number]['trust_levels'];
 }
 
 export function previewView(preview: MissionPreview): PreviewView {
@@ -701,8 +701,8 @@ export function previewView(preview: MissionPreview): PreviewView {
     uncovered: uncoveredOfPreview(preview),
     name: preview.name,
     policy: preview.policy,
-    connections: preview.connections.map((c) => ({
-      connection_id: c.connection_id,
+    accounts: preview.accounts.map((c) => ({
+      account_id: c.account_id,
       provider: c.provider,
       display_name: c.display_name,
       future: c.future,

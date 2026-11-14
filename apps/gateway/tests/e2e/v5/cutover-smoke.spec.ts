@@ -25,7 +25,7 @@ import {
   openCustom,
 } from './mission-pages';
 
-const CONNECTION = 'Cutover org';
+const ACCOUNT = 'Cutover org';
 const MISSION = 'Cutover — acme/app';
 const READ_CODE = 'github.read-code';
 /** The quota the creator leaves on `github.read-code`, so the smoke can spend it. */
@@ -81,12 +81,12 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // The guide the plugin declares: where to create the token, the permissions to tick.
   await expect(page.getByTestId('token-guide')).toContainText('Create the token at GitHub');
   await expect(page.getByTestId('token-permissions')).toContainText('Contents');
-  await page.getByLabel(/^Name/).fill(CONNECTION);
+  await page.getByLabel(/^Name/).fill(ACCOUNT);
   // The token is checked at the mocked GitHub, then stored; it is never shown again.
   await page.getByLabel(/Fine-grained personal access token/).fill(MOCK_GITHUB.token);
   await page.getByRole('button', { name: 'Check and connect' }).click();
   await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
-  await expect(page.getByRole('heading', { name: CONNECTION, level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: ACCOUNT, level: 1 })).toBeVisible();
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
   // The normal state is not labelled; the header says whose it is.
   await expect(page.getByText('you own it').first()).toBeVisible();
@@ -99,7 +99,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // No mission uses it yet, and nobody else holds it.
   await expect(page.getByTestId('account-missions')).toContainText('No mission uses this account');
   await expect(page.getByTestId('who-has-access').getByRole('row')).toHaveCount(2);
-  await snap(page, 'cutover-connection');
+  await snap(page, 'cutover-account');
   const connected = await upstreamLog(request);
   expect(connected.calls.some((call) => call.url.endsWith('/user'))).toBe(true);
   expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(true);
@@ -111,16 +111,16 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // One code project, one repository: the other one is left out of the mission.
   await includeWithTrustLevels(
     page,
-    `GitHub · ${CONNECTION}`,
+    `GitHub · ${ACCOUNT}`,
     { Read: 'Trusting', Propose: 'Careful' },
     { resources: [REPOSITORY] },
   );
-  await expect(cardOf(page, `GitHub · ${CONNECTION}`).getByTestId('card-resources')).toContainText(
+  await expect(cardOf(page, `GitHub · ${ACCOUNT}`).getByTestId('card-resources')).toContainText(
     '1 repository',
   );
   await expect(page.getByTestId('summary')).toContainText(/^1 card · \d+ permissions/);
   // The one adjustment: a limit small enough to be reached in this test, in Read's Custom.
-  const custom = await openCustom(page, `GitHub · ${CONNECTION}`, 'Read');
+  const custom = await openCustom(page, `GitHub · ${ACCOUNT}`, 'Read');
   await custom.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
   await custom.getByRole('button', { name: 'Apply' }).click();
 
@@ -164,8 +164,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
     call.url.includes(`/repos/${REPOSITORY}/branches`),
   );
   expect(branchCalls).toHaveLength(1);
-  expect(branchCalls[0]?.with_connection_token).toBe(true);
-  expect(first.text).not.toContain(upstream.connection_token);
+  expect(branchCalls[0]?.with_account_token).toBe(true);
+  expect(first.text).not.toContain(upstream.account_token);
 
   // The two refusals a day of work may meet without anything being wrong:
   // a resource outside the mission, a risk the creator did not accept.
@@ -253,13 +253,13 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // Neither the mission token nor the provider's credential is on the page.
   const auditHtml = await page.content();
   expect(auditHtml).not.toContain(token);
-  expect(auditHtml).not.toContain(upstream.connection_token);
+  expect(auditHtml).not.toContain(upstream.account_token);
   await snap(page, 'cutover-audit');
 
   // ── 9. …and in the timeline of the mission ────────────────────────────────
   await page.goto(`/missions/${missionId}`);
   // The mission says its limit is reached on the gauge of Read (its title says the claim waits).
-  await expect(cardOf(page, `GitHub · ${CONNECTION}`).getByTestId('gauge-read')).toContainText(
+  await expect(cardOf(page, `GitHub · ${ACCOUNT}`).getByTestId('gauge-read')).toContainText(
     'Limit reached',
   );
   await page.getByRole('link', { name: 'Everything this mission did' }).click();

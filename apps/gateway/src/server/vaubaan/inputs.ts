@@ -22,15 +22,15 @@ const missionId = z
   .describe('Id of one of the user’s missions, as `list_my_missions` returns it.');
 
 export const VAUBAAN_INPUTS = {
-  listMyConnections: z
+  listMyAccounts: z
     .object({
       // Retired with the experimental state (docs/handbook/plugin-sdk.md): every
-      // connection is listed. Still accepted, and ignored, so that a client written
+      // account is listed. Still accepted, and ignored, so that a client written
       // against an earlier build is not refused by the strict input.
       include_experimental: z
         .boolean()
         .optional()
-        .describe('Deprecated and ignored: every connection is listed.'),
+        .describe('Deprecated and ignored: every account is listed.'),
     })
     .strict(),
   getCatalog: z
@@ -39,13 +39,13 @@ export const VAUBAAN_INPUTS = {
         .string()
         .min(1)
         .max(100)
-        .describe('Provider id, as `list_my_connections` shows it, e.g. `github`.'),
-      connection_id: z
+        .describe('Provider id, as `list_my_accounts` shows it, e.g. `github`.'),
+      account_id: z
         .string()
         .min(1)
         .max(300)
         .optional()
-        .describe('One of the user’s connections of that provider.'),
+        .describe('One of the user’s accounts of that provider.'),
     })
     .strict(),
   listMyMissions: z

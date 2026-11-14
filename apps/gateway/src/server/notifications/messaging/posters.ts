@@ -8,7 +8,7 @@
  *   publicOnlyPoster   `node:https` whose socket only reaches the addresses a single
  *                      resolution found public, the peer checked again once connected: the
  *                      free hosts (ntfy, generic) cannot be re-pointed inside the network
- *                      between the check and the connection (DNS rebinding)
+ *                      between the check and the account (DNS rebinding)
  */
 import { request } from 'node:https';
 

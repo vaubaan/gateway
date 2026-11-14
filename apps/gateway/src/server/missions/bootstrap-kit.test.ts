@@ -24,7 +24,7 @@ const INPUT: BootstrapKitInput = {
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   },
-  connections: [
+  accounts: [
     {
       provider_label: 'GitHub',
       display_name: 'acme-org',
@@ -80,7 +80,7 @@ describe('buildBootstrapKit', () => {
   it('3 — says when an account takes future resources: the ones known now, and later ones join', () => {
     const whole = buildBootstrapKit({
       ...INPUT,
-      connections: [
+      accounts: [
         {
           provider_label: 'Fly.io',
           display_name: 'acme-org',
@@ -102,7 +102,7 @@ describe('buildBootstrapKit', () => {
     expect(whole).not.toContain('tools of the account itself only');
   });
 
-  it('3 — tells the agent its connections, resource refs, accepted risks and budget', () => {
+  it('3 — tells the agent its accounts, resource refs, accepted risks and budget', () => {
     const text = kit.agent_instructions;
     expect(text).toContain('## Vaubaan mission "Ship the billing page"');
     expect(text).toContain('- GitHub "acme-org" — `acme/app` (prod), `acme/web`');
@@ -299,7 +299,7 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain('## 7. Preparing missions: the Vaubaan account');
     expect(page).not.toContain('/mcp/manage');
     for (const tool of [
-      'list_my_connections',
+      'list_my_accounts',
       'get_catalog',
       'list_my_missions',
       'preview_policy',

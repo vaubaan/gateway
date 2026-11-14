@@ -15,7 +15,7 @@
  * actor.
  *
  * A membership edit is an authorization change. Removing a member: the
- * connections the group owned become `unowned` when it empties, and the
+ * accounts the group owned become `unowned` when it empties, and the
  * missions the membership grounded read `orphaned`. Adding one: the orphaned
  * missions of that user the membership grounds serve again. Both are watched
  * across the edit and audited (`MembershipSettler`).
@@ -40,14 +40,14 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 export interface GroupView {
   readonly group: GroupRecord;
   readonly members: readonly UserRecord[];
-  /** Connections this group owns (any status but `revoked`). */
-  readonly ownedConnections: number;
+  /** Accounts this group owns (any status but `revoked`). */
+  readonly ownedAccounts: number;
 }
 
 export interface MemberRemoval {
   readonly group: GroupRecord;
   readonly user: UserRecord;
-  /** Connections that lost their last owner with this removal. */
+  /** Accounts that lost their last owner with this removal. */
   readonly unowned: number;
   /** Missions of the removed member that lost their grounds. */
   readonly orphaned: number;
@@ -61,7 +61,7 @@ export interface MemberAddition {
 }
 
 export interface GroupServiceDeps {
-  readonly store: Pick<Store, 'groups' | 'users' | 'connections'>;
+  readonly store: Pick<Store, 'groups' | 'users' | 'accounts'>;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   /**
    * The administrators' groups as designated and their bare names
@@ -80,13 +80,11 @@ export class GroupService {
   async list(): Promise<GroupView[]> {
     const views: GroupView[] = [];
     for (const group of await this.deps.store.groups.list()) {
-      const owned = await this.deps.store.connections.listOwnedBy([
-        { kind: 'group', id: group.id },
-      ]);
+      const owned = await this.deps.store.accounts.listOwnedBy([{ kind: 'group', id: group.id }]);
       views.push({
         group,
         members: await this.deps.store.groups.listMembers(group.id),
-        ownedConnections: owned.filter((c) => c.status !== 'revoked').length,
+        ownedAccounts: owned.filter((c) => c.status !== 'revoked').length,
       });
     }
     return views;
@@ -150,7 +148,7 @@ export class GroupService {
 
   /**
    * Removes a member from a local group, then settles what the membership
-   * held: connections left without owner, missions left without grounds.
+   * held: accounts left without owner, missions left without grounds.
    */
   async removeMember(actorId: string, groupId: string, userId: string): Promise<MemberRemoval> {
     const group = await this.requireLocal(groupId);
@@ -180,7 +178,7 @@ export class GroupService {
     this.deps.logger.info('local group member removed', {
       group_id: group.id,
       user_id: user.id,
-      connections_unowned: settlement.unowned.length,
+      accounts_unowned: settlement.unowned.length,
       missions_orphaned: settlement.orphaned.length,
     });
     return {

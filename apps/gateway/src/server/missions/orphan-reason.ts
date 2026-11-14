@@ -14,12 +14,12 @@ import type { OrphanCause, PartLossCause } from '../authority/mission-grounds';
 
 export interface OrphanExplanationInput {
   readonly cause: OrphanCause;
-  readonly connection_id: string | null;
+  readonly account_id: string | null;
   readonly uncovered: readonly RiskId[];
 }
 
 export interface OrphanExplanation {
-  /** False when nothing can bring the authority back (a revoked connection). */
+  /** False when nothing can bring the authority back (a revoked account). */
   readonly reversible: boolean;
   readonly title: string;
   readonly lines: readonly string[];
@@ -27,8 +27,8 @@ export interface OrphanExplanation {
 
 const KEPT = 'Its keys, its activity and what it counted are kept as they are.';
 
-export interface LostConnectionInput {
-  readonly connection_id: string;
+export interface LostAccountInput {
+  readonly account_id: string;
   readonly cause: PartLossCause;
   readonly final: boolean;
 }
@@ -47,22 +47,22 @@ export interface LostExplanation {
  * replaced it is reached by a new mission. `null` when every account serves.
  */
 export function explainLost(
-  lost: readonly LostConnectionInput[],
-  connections: readonly { readonly id: string; readonly display_name: string }[],
+  lost: readonly LostAccountInput[],
+  accounts: readonly { readonly id: string; readonly display_name: string }[],
 ): LostExplanation | null {
   if (lost.length === 0) return null;
   const nameOf = (id: string): string => {
-    const named = connections.find((c) => c.id === id);
+    const named = accounts.find((c) => c.id === id);
     return named ? `“${named.display_name}”` : 'an account that no longer exists';
   };
   const lines = lost.map((part) => {
     switch (part.cause) {
-      case 'connection-revoked':
-        return `${nameOf(part.connection_id)} was disconnected by its owner. It never comes back to this mission: calls through it are refused.`;
-      case 'connection-missing':
+      case 'account-revoked':
+        return `${nameOf(part.account_id)} was disconnected by its owner. It never comes back to this mission: calls through it are refused.`;
+      case 'account-missing':
         return `An account of this mission no longer exists. Calls through it are refused.`;
       case 'access-withdrawn':
-        return `${nameOf(part.connection_id)}: you no longer have access to it (its owner withdrew it, or you left the team that held it). Calls through it are refused until the access is given back, with this same mission.`;
+        return `${nameOf(part.account_id)}: you no longer have access to it (its owner withdrew it, or you left the team that held it). Calls through it are refused until the access is given back, with this same mission.`;
     }
   });
   const final = lost.every((part) => part.final);
@@ -92,22 +92,22 @@ function quoted(ids: readonly RiskId[]): string {
 
 export function explainOrphan(
   orphan: OrphanExplanationInput,
-  connections: readonly { readonly id: string; readonly display_name: string }[],
+  accounts: readonly { readonly id: string; readonly display_name: string }[],
 ): OrphanExplanation {
-  const named = connections.find((c) => c.id === orphan.connection_id);
-  const connection = named ? `the account “${named.display_name}”` : 'one of its accounts';
-  const Connection = `${connection.charAt(0).toUpperCase()}${connection.slice(1)}`;
+  const named = accounts.find((c) => c.id === orphan.account_id);
+  const account = named ? `the account “${named.display_name}”` : 'one of its accounts';
+  const Account = `${account.charAt(0).toUpperCase()}${account.slice(1)}`;
   switch (orphan.cause) {
-    case 'connection-revoked':
+    case 'account-revoked':
       return {
         reversible: false,
         title: 'Needs an owner: an account of this mission was disconnected',
         lines: [
-          `${Connection} was disconnected by its owner, and a disconnected account never comes back. Every call is refused.`,
+          `${Account} was disconnected by its owner, and a disconnected account never comes back. Every call is refused.`,
           REVOKE_AND_REISSUE,
         ],
       };
-    case 'connection-missing':
+    case 'account-missing':
       return {
         reversible: false,
         title: 'Needs an owner: an account of this mission no longer exists',
@@ -127,7 +127,7 @@ export function explainOrphan(
         reversible: true,
         title: 'Needs an owner: you may no longer allow what this mission allows',
         lines: [
-          `On ${connection} you may no longer allow ${orphan.uncovered.length === 1 ? 'this permission' : 'these permissions'}: ${quoted(orphan.uncovered)}. Every call is refused while it is so.`,
+          `On ${account} you may no longer allow ${orphan.uncovered.length === 1 ? 'this permission' : 'these permissions'}: ${quoted(orphan.uncovered)}. Every call is refused while it is so.`,
           'The mission serves calls again as soon as you may allow them again: the owner gives you access to the account again, or your next sign-in carries the team that held it.',
           KEPT,
         ],

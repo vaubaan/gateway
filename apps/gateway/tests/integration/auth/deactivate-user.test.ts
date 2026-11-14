@@ -5,13 +5,13 @@
  * simulated IdP, the instance's HTTP surface) with a user who holds one of
  * everything: a web session, a platform management mission on their Vaubaan
  * account with an agent holding its key, a mission that agent issued, a member
- * key on a colleague's mission, a local-group membership, a connection of their
+ * key on a colleague's mission, a local-group membership, an account of their
  * own.
  *
  * What must hold afterwards, each read where the product reads it:
  * the session is nobody, the sign-in is refused, both missions — the platform
  * one included — are refused at the execution door without a word written on
- * them, the member key is revoked, the connection is the operator's to
+ * them, the member key is revoked, the account is the operator's to
  * reassign — and every one of these has its entry.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -47,7 +47,7 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
   let agent: Agent;
   let missionId: string;
   let missionToken: string;
-  let ownConnectionId: string;
+  let ownAccountId: string;
   /** Ada's mission Bob is a teammate of, and the key he generated there. */
   let teamMissionId: string;
   let memberTokenPrefix: string;
@@ -57,10 +57,10 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     rig = await openVaubaanRig();
     ops = await rig.browser().signIn(OPS);
     bob = rig.seeded.bob;
-    // Ada shares her GitHub connection with Bob: the authority his mission rests on.
+    // Ada shares her GitHub account with Bob: the authority his mission rests on.
     await rig.root.shares.service.share(
       await rig.actor(rig.seeded.ada),
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
       { target: { kind: 'user', email: bob.email }, riskIds: SHARED },
     );
     // A web session, a platform mission with its agent, a mission that agent issued.
@@ -70,24 +70,24 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     const issued = await agent.call<{
       mission: { mission_id: string };
       token: { secret: string };
-    }>('issue_mission', draftOn(rig.seeded.github.connection.id, ['github.read-code']));
+    }>('issue_mission', draftOn(rig.seeded.github.account.id, ['github.read-code']));
     if (issued.isError) throw new Error(`issue refused: ${issued.text}`);
     missionId = issued.data.mission.mission_id;
     missionToken = issued.data.token.secret;
-    // A local group, and a connection Bob owns in his own name.
+    // A local group, and an account Bob owns in his own name.
     const team = await rig.root.groups.service.create(ops.id, 'reviewers');
     await rig.root.groups.service.addMember(ops.id, team.id, bob.email);
-    const own = await rig.root.store.connections.create({
+    const own = await rig.root.store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: bob.id },
       displayName: 'Bob’s GitHub',
       credential: null,
     });
-    ownConnectionId = own.id;
+    ownAccountId = own.id;
     // A mission of Ada with Bob as a teammate holding his own key.
     const adas = await rig.root.missions.service.issue(
       rig.seeded.ada,
-      draftOn(rig.seeded.github.connection.id, ['github.read-meta']) as never,
+      draftOn(rig.seeded.github.account.id, ['github.read-meta']) as never,
     );
     if (!adas.ok) throw new Error('Ada’s issuance was refused');
     teamMissionId = adas.mission.id;
@@ -152,18 +152,17 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
 
     // ── Groups and ownership ──
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
-    expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
-    expect(
-      (await rig.root.connections.service.listOwnerless()).map((v) => v.connection.id),
-    ).toEqual([ownConnectionId]);
+    expect((await rig.root.store.accounts.getById(ownAccountId))?.status).toBe('unowned');
+    expect((await rig.root.accounts.service.listOwnerless()).map((v) => v.account.id)).toEqual([
+      ownAccountId,
+    ]);
 
     // ── Nobody shares to them any more ──
     await expect(
-      rig.root.shares.service.share(
-        await rig.actor(rig.seeded.ada),
-        rig.seeded.github.connection.id,
-        { target: { kind: 'user', email: bob.email }, riskIds: ['github.read-meta'] },
-      ),
+      rig.root.shares.service.share(await rig.actor(rig.seeded.ada), rig.seeded.github.account.id, {
+        target: { kind: 'user', email: bob.email },
+        riskIds: ['github.read-meta'],
+      }),
     ).rejects.toMatchObject({ code: 'target-unknown' });
 
     // ── Every effect has its entry, in the operator's name ──
@@ -222,21 +221,21 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     expect(await sessionOf(bobBrowser)).toBeNull();
     // …the member key stays revoked…
     expect(await memberTokenStatus()).not.toBe('active');
-    // …the local group and the connection he owned do not come back by themselves.
+    // …the local group and the account he owned do not come back by themselves.
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
-    expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
+    expect((await rig.root.store.accounts.getById(ownAccountId))?.status).toBe('unowned');
 
-    // Reactivated, he is the owner of his connection again as far as authority goes
-    // (a mission on it would be grounded), but the connection is ownerless: no owner
+    // Reactivated, he is the owner of his account again as far as authority goes
+    // (a mission on it would be grounded), but the account is ownerless: no owner
     // act passes until the operator reassigns it.
-    const own = (await rig.root.store.connections.getById(ownConnectionId))!;
+    const own = (await rig.root.store.accounts.getById(ownAccountId))!;
     expect((await rig.root.missions.authority.authorityOf(bob, own)).basis).toBe('owner');
     await expect(
-      rig.root.shares.service.share(await rig.actor(bob), ownConnectionId, {
+      rig.root.shares.service.share(await rig.actor(bob), ownAccountId, {
         target: { kind: 'user', email: ADA.email },
         riskIds: ['github.read-code'],
       }),
-    ).rejects.toMatchObject({ code: 'connection-unowned' });
+    ).rejects.toMatchObject({ code: 'account-unowned' });
 
     // A new sign-in is a new session.
     await nextMillisecond();
@@ -245,9 +244,9 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     expect((await sessionOf(browser))?.kind).toBe('user');
   });
 
-  it('a deactivated owner’s connection is the operator’s to reassign', async () => {
+  it('a deactivated owner’s account is the operator’s to reassign', async () => {
     await rig.root.users.service.deactivate(operator(), bob.id);
-    const reassigned = await rig.root.connections.service.reassign(ops.id, ownConnectionId, {
+    const reassigned = await rig.root.accounts.service.reassign(ops.id, ownAccountId, {
       kind: 'user',
       email: ADA.email,
     });
@@ -295,7 +294,7 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     // The user is deactivated and everything else was closed.
     expect((await rig.root.store.users.getById(bob.id))?.status).toBe('removed');
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
-    expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
+    expect((await rig.root.store.accounts.getById(ownAccountId))?.status).toBe('unowned');
     expect(await rig.adminEntries('user-deactivated')).toMatchObject([
       { after: { status: 'removed', groups_left: ['reviewers'], member_tokens_revoked: 0 } },
     ]);

@@ -64,9 +64,9 @@ export function controlUrl(path: string): string {
  * names the user it needs in its own `beforeEach` (`signInAs`) and none relies
  * on what another one left behind.
  *
- * Ada owns the seeded connections (GitHub, Supabase, Vercel, Gmail).
+ * Ada owns the seeded accounts (GitHub, Supabase, Vercel, Gmail).
  */
-/** The one project the mocked Vercel token is scoped to (`token-connections.spec`). */
+/** The one project the mocked Vercel token is scoped to (`token-accounts.spec`). */
 export const MOCK_VERCEL_PROJECT = 'prj_e2esite';
 
 export const E2E_USER = { sub: 'idp|ada', email: 'ada@example.com', name: 'Ada' } as const;
@@ -84,7 +84,7 @@ export const E2E_APPROVER_USER = {
   email: 'hedy@example.com',
   name: 'Hedy',
 } as const;
-/** Who the cutover smoke signs in as: they start with no connection and no mission. */
+/** Who the cutover smoke signs in as: they start with no account and no mission. */
 export const E2E_CUTOVER_USER = {
   sub: 'idp|margaret',
   email: 'margaret@example.com',
@@ -92,7 +92,7 @@ export const E2E_CUTOVER_USER = {
 } as const;
 
 /**
- * The share spec's cast: Ines owns a GitHub connection of her own, Joan receives a share
+ * The share spec's cast: Ines owns a GitHub account of her own, Joan receives a share
  * of it, and the operator (the instance's admin rule names their email) keeps the local
  * groups. None of them appears in another spec.
  */

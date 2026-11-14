@@ -5,7 +5,7 @@ import stripePlugin from '@vaubaan/plugin-stripe';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
-import { readCredentialForm } from '../connections/input';
+import { readCredentialForm } from '../accounts/input';
 import { parseBundle, secretsOf } from './bundle';
 import type { Store } from '../store';
 import { createImportMarker, parseArgs } from './cli';
@@ -146,7 +146,7 @@ describe('bindings', () => {
     expect(bindings.find((b) => b.provider === 'ssh')?.label).toBe('vps-ops.example.com');
   });
 
-  it('recognises a hand-made connection by its non-secret values only', () => {
+  it('recognises a hand-made account by its non-secret values only', () => {
     expect(sameVisibleFields({ team_id: 'team_a' }, { team_id: 'team_a' })).toBe(true);
     expect(sameVisibleFields({ team_id: 'team_a' }, { team_id: 'team_b' })).toBe(false);
     expect(sameVisibleFields({}, {})).toBe(false);
@@ -207,8 +207,8 @@ describe('command line', () => {
       kind: 'admin' as const,
       ts: '2026-10-15T08:00:00.000Z',
       user_id: 'u1',
-      act: 'connection-created' as const,
-      object: { type: 'connection' as const, id: 'c1' },
+      act: 'account-created' as const,
+      object: { type: 'account' as const, id: 'c1' },
       before: null,
     };
     await marked.auditWriter.write({ ...admin, after: { provider: 'vercel' } });

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { EncryptionKeys } from '../config/types';
-import { BLOB_FORMAT_V1, CryptoError, deriveConnectionKey, NONCE_BYTES, sodiumReady } from './aead';
+import { BLOB_FORMAT_V1, CryptoError, deriveAccountKey, NONCE_BYTES, sodiumReady } from './aead';
 import { createEncryptor, type Encryptor } from './encryptor';
 
 const KEY_V1 = new Uint8Array(randomBytes(32));
@@ -14,7 +14,7 @@ function config(partial: Partial<EncryptionKeys> = {}): EncryptionKeys {
   return { masterKey: KEY_V1, keyVersion: 1, previousKeys: new Map(), ...partial };
 }
 
-describe('Encryptor (XChaCha20-Poly1305, per-connection key)', () => {
+describe('Encryptor (XChaCha20-Poly1305, per-account key)', () => {
   let enc: Encryptor;
   beforeAll(async () => {
     enc = await createEncryptor(config());
@@ -34,7 +34,7 @@ describe('Encryptor (XChaCha20-Poly1305, per-connection key)', () => {
     expect(Buffer.compare(Buffer.from(a.blob), Buffer.from(b.blob))).not.toBe(0);
   });
 
-  it('refuses to open a blob under another connection id (key and AD differ)', async () => {
+  it('refuses to open a blob under another account id (key and AD differ)', async () => {
     const sealed = await enc.encrypt(CONN_A, 'secret');
     await expect(enc.decrypt(CONN_B, sealed)).rejects.toBeInstanceOf(CryptoError);
   });
@@ -62,8 +62,8 @@ describe('Encryptor (XChaCha20-Poly1305, per-connection key)', () => {
     await expect(enc.decrypt(CONN_A, await enc.encrypt(CONN_A, text))).resolves.toBe(text);
   });
 
-  it('refuses an empty connection id', async () => {
-    await expect(enc.encrypt('', 'x')).rejects.toThrow('connection id');
+  it('refuses an empty account id', async () => {
+    await expect(enc.encrypt('', 'x')).rejects.toThrow('account id');
   });
 });
 
@@ -98,14 +98,14 @@ describe('Encryptor — key_version', () => {
   });
 });
 
-describe('deriveConnectionKey', () => {
+describe('deriveAccountKey', () => {
   beforeAll(sodiumReady);
 
-  it('is deterministic per (master key, connection id) and distinct otherwise', () => {
-    const a1 = deriveConnectionKey(KEY_V1, CONN_A);
-    const a2 = deriveConnectionKey(KEY_V1, CONN_A);
-    const b = deriveConnectionKey(KEY_V1, CONN_B);
-    const other = deriveConnectionKey(KEY_V2, CONN_A);
+  it('is deterministic per (master key, account id) and distinct otherwise', () => {
+    const a1 = deriveAccountKey(KEY_V1, CONN_A);
+    const a2 = deriveAccountKey(KEY_V1, CONN_A);
+    const b = deriveAccountKey(KEY_V1, CONN_B);
+    const other = deriveAccountKey(KEY_V2, CONN_A);
     expect(Buffer.from(a1).equals(Buffer.from(a2))).toBe(true);
     expect(Buffer.from(a1).equals(Buffer.from(b))).toBe(false);
     expect(Buffer.from(a1).equals(Buffer.from(other))).toBe(false);
@@ -113,6 +113,6 @@ describe('deriveConnectionKey', () => {
   });
 
   it('rejects a master key of the wrong length', () => {
-    expect(() => deriveConnectionKey(new Uint8Array(16), CONN_A)).toThrow('32 bytes');
+    expect(() => deriveAccountKey(new Uint8Array(16), CONN_A)).toThrow('32 bytes');
   });
 });

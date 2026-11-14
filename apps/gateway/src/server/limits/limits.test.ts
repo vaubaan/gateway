@@ -15,11 +15,11 @@ import {
 
 const NOW = new Date('2026-10-31T15:30:00.000Z');
 
-function counts(users: number, connections: number, activeMissions: number): InstanceCounts {
-  const byProvider: Record<string, number> = connections > 0 ? { github: connections } : {};
+function counts(users: number, accounts: number, activeMissions: number): InstanceCounts {
+  const byProvider: Record<string, number> = accounts > 0 ? { github: accounts } : {};
   return {
     users: async () => users,
-    connections: async () => ({ total: connections, byProvider }),
+    accounts: async () => ({ total: accounts, byProvider }),
     activeMissions: async () => activeMissions,
   };
 }
@@ -30,7 +30,7 @@ describe('the refusal sentence', () => {
       'This gateway holds 3 active missions; its ceiling is 3.',
     );
     expect(ceilingSentence('users', 1, 1)).toBe('This gateway holds 1 person; its ceiling is 1.');
-    expect(ceilingSentence('connections', 12, 10)).toBe(
+    expect(ceilingSentence('accounts', 12, 10)).toBe(
       'This gateway holds 12 connected accounts; its ceiling is 10.',
     );
   });
@@ -51,16 +51,16 @@ describe('limitReached', () => {
 describe('InstanceLimits', () => {
   it('asks each count against its own ceiling', async () => {
     const limits = new InstanceLimits({
-      limits: { users: 2, connections: 5, activeMissions: null },
+      limits: { users: 2, accounts: 5, activeMissions: null },
       counts: counts(2, 4, 99),
       clock: new ManualClock(NOW),
     });
     expect(await limits.refusal('users')).toMatchObject({ ceiling: 'users', count: 2, limit: 2 });
-    expect(await limits.refusal('connections')).toBeNull();
+    expect(await limits.refusal('accounts')).toBeNull();
     expect(await limits.refusal('active-missions')).toBeNull();
     expect(await limits.usage()).toEqual([
       { ceiling: 'users', count: 2, limit: 2 },
-      { ceiling: 'connections', count: 4, limit: 5 },
+      { ceiling: 'accounts', count: 4, limit: 5 },
       { ceiling: 'active-missions', count: 99, limit: null },
     ]);
   });
@@ -71,10 +71,10 @@ describe('InstanceLimits', () => {
     };
     const limits = new InstanceLimits({
       limits: UNLIMITED,
-      counts: { users: never, connections: never, activeMissions: never },
+      counts: { users: never, accounts: never, activeMissions: never },
     });
     expect(await limits.refusal('users')).toBeNull();
-    expect(await limits.refusal('connections')).toBeNull();
+    expect(await limits.refusal('accounts')).toBeNull();
     expect(await limits.refusal('active-missions')).toBeNull();
   });
 });
@@ -107,10 +107,10 @@ describe('collectOpsStats', () => {
     const stats = await collectOpsStats({
       counts: {
         users: async () => 3,
-        connections: async () => ({ total: 4, byProvider: { github: 3, vercel: 1 } }),
+        accounts: async () => ({ total: 4, byProvider: { github: 3, vercel: 1 } }),
         activeMissions: async () => 2,
       },
-      limits: { users: 10, connections: null, activeMissions: 5 },
+      limits: { users: 10, accounts: null, activeMissions: 5 },
       calls: {
         countCallsSince: async (from) => {
           since = from;
@@ -120,8 +120,8 @@ describe('collectOpsStats', () => {
       store: { kind: 'sqlite', sizeOnDisk: () => 81_920 },
       sealed: {
         versions: async () => [
-          { table: 'connections', keyVersion: 1, count: 2 },
-          { table: 'connections', keyVersion: 2, count: 2 },
+          { table: 'accounts', keyVersion: 1, count: 2 },
+          { table: 'accounts', keyVersion: 2, count: 2 },
           { table: 'local_secrets', keyVersion: 2, count: 3 },
         ],
       },
@@ -132,12 +132,12 @@ describe('collectOpsStats', () => {
     expect(stats).toEqual({
       generated_at: '2026-10-31T15:30:00.000Z',
       users: 3,
-      connections: { total: 4, by_provider: { github: 3, vercel: 1 } },
+      accounts: { total: 4, by_provider: { github: 3, vercel: 1 } },
       active_missions: 2,
       calls_today: { since: '2026-10-31T00:00:00.000Z', allowed: 41, refused: 7 },
       store: { kind: 'sqlite', bytes: 81_920 },
       keys: { current_version: 2, sealed_by_version: { '1': 2, '2': 5 } },
-      limits: { users: 10, connections: null, active_missions: 5 },
+      limits: { users: 10, accounts: null, active_missions: 5 },
     });
   });
 

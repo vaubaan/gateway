@@ -1,7 +1,7 @@
 /**
- * Local accounts in a browser (spec §0 "Local account", §4.2 Settings → Sign-in,
+ * Sign-in accounts in a browser (spec §0 "Sign-in account", §4.2 Settings → Sign-in,
  * People and Security, §6, §7.1; ADR local-accounts-sign-in-provider): the
- * administrator adds local accounts from Settings → Sign-in, invites an address
+ * administrator adds sign-in accounts from Settings → Sign-in, invites an address
  * from People and copies the link (the ephemeral instance sends no mail), the
  * invited person creates their account on it, signs in with the password, enrols
  * a second factor from Settings → Security (the spec reads the secret from the
@@ -10,7 +10,7 @@
  * created from the setup page and their first sign-in enrols the factor before
  * the session exists. Every page is also checked for the security headers.
  *
- * Local accounts stay a provider only for the length of this spec: the others
+ * Sign-in accounts stay a provider only for the length of this spec: the others
  * start a sign-in with `/auth/login`, which goes straight to the one provider.
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
@@ -22,7 +22,7 @@ import { controlUrl, E2E_OPERATOR, PUBLIC_URL } from './instance';
 const GUEST_EMAIL = 'lin@guest.example.org';
 const GUEST_PASSWORD = 'a sentence lin remembers';
 const OPS_PASSWORD = 'the operator sentence';
-const LINK = /https:\/\/gateway\.e2e\.test\/account\/create\?token=[A-Za-z0-9_-]+/;
+const LINK = /https:\/\/gateway\.e2e\.test\/sign-in-account\/create\?token=[A-Za-z0-9_-]+/;
 const RECOVERY_CODE = /^[a-z2-7]{5}-[a-z2-7]{5}$/;
 
 /** Keeps screenshots of a page when `E2E_V5_SCREENSHOT_DIR` names a folder: two sizes, two themes. */
@@ -98,22 +98,22 @@ test.afterEach(async ({ request }) => {
   await control(request, '/local/cleanup');
 });
 
-test('an invited person creates a local account on the link, signs in, enrols a second factor and uses a recovery code', async ({
+test('an invited person creates a sign-in account on the link, signs in, enrols a second factor and uses a recovery code', async ({
   page,
   request,
 }) => {
-  // The operator adds local accounts: nothing to register anywhere.
+  // The operator adds sign-in accounts: nothing to register anywhere.
   await operatorAt(page, request, '/admin/identity-provider');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign-in');
-  await page.getByRole('link', { name: 'Add local accounts' }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Add local accounts');
+  await page.getByRole('link', { name: 'Add sign-in accounts' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Add sign-in accounts');
   await expect(page.getByText(/Nothing to register anywhere/)).toBeVisible();
   await snap(page, 'settings-sign-in-add-local');
   await page.getByRole('button', { name: 'Add the provider' }).click();
   await expect(page.getByTestId('idp-saved')).toBeVisible();
   const table = page.getByTestId('sign-in-providers');
-  await expect(table.getByRole('row')).toHaveCount(3); // header, the directory, local accounts
-  await expect(table).toContainText('Local accounts');
+  await expect(table.getByRole('row')).toHaveCount(3); // header, the directory, sign-in accounts
+  await expect(table).toContainText('Sign-in accounts');
   await expect(table).toContainText('kept by this gateway');
 
   // People: inviting an address hands the link over, since this gateway sends no mail.
@@ -196,7 +196,7 @@ test('an invited person creates a local account on the link, signs in, enrols a 
 
   // "Forgot your password" says beforehand that this gateway sends no mail.
   await signOut(page);
-  await page.goto('/account/forgot');
+  await page.goto('/sign-in-account/forgot');
   await expect(page.getByText(/sends no mail/)).toBeVisible();
   await snap(page, 'account-forgot');
 });

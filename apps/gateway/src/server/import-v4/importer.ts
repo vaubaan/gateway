@@ -4,20 +4,20 @@
  * the instance as it is when the phase starts, so a second run completes what
  * the first could not and never duplicates what it did:
  *
- *   1. connections  the v4 keys that are imported as is (Cloudflare, Vercel,
+ *   1. accounts  the v4 keys that are imported as is (Cloudflare, Vercel,
  *                   Stripe, SSH), created through the connect path of the
  *                   interface (check, first discovery, seal, audit); the
  *                   others listed as "to connect by hand";
  *   2. resources    each v4 binding matched to a discovered resource of the
- *                   owner's connections, its environment label carried when
+ *                   owner's accounts, its environment label carried when
  *                   it is a v5 label;
  *   3. missions     one per working v4 token, issued through the issuance
  *                   path of the interface (preview, authority, explicit
  *                   policy), deferred while one of its services has no
- *                   connection holding the project's resources.
+ *                   account holding the project's resources.
  *
  * A dry run computes the same plan and writes nothing: it never contacts a
- * provider, so what depends on a connection still to create is reported as
+ * provider, so what depends on an account still to create is reported as
  * "computed at apply". Nothing here prints; the caller renders the report and
  * prints the mission keys (`cli.ts`).
  *
@@ -32,12 +32,12 @@ import {
   importEd25519PrivateKey,
   SshKeyImportError,
   type Actor,
-  type ConnectionService,
+  type AccountService,
   type ImportedFrom,
-} from '../connections';
+} from '../accounts';
 import { withAssumedEnvs, type MissionService } from '../missions';
 import type {
-  IssuanceConnection,
+  IssuanceAccount,
   IssuanceResource,
   MissionDraft,
   PreviewIssue,
@@ -45,7 +45,7 @@ import type {
 import { MISSION_NAME_MAX_LENGTH } from '../../lib/missions/preview';
 import { withoutControlCharacters } from './control-characters';
 import type { Store } from '../store';
-import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';
+import type { AccountRecord, AccountResourceRecord } from '../store/types';
 import type { V4Account, V4Bundle, V4Mission, V4Project } from './bundle';
 import {
   isCaseInsensitiveRefProvider,
@@ -81,11 +81,8 @@ const SYSTEM = 'vaubaan-v4';
 export interface ImporterPorts {
   /** The single provider list: a v4 provider the instance does not ship is reported. */
   readonly registry: PluginRegistry;
-  readonly store: Pick<Store, 'users' | 'groups' | 'connections' | 'missions'>;
-  readonly connections: Pick<
-    ConnectionService,
-    'importPastedKey' | 'importSshKey' | 'updateResource'
-  >;
+  readonly store: Pick<Store, 'users' | 'groups' | 'accounts' | 'missions'>;
+  readonly accounts: Pick<AccountService, 'importPastedKey' | 'importSshKey' | 'updateResource'>;
   readonly missions: Pick<MissionService, 'issuanceContext' | 'preview' | 'issue'>;
   /**
    * Where an imported mission came from (M2 of the review): the missions an
@@ -146,7 +143,7 @@ export class ImportRefused extends Error {
   }
 }
 
-export type ConnectionStatus =
+export type AccountStatus =
   /** Dry run: would be created at apply. */
   | 'to-create'
   | 'created'
@@ -159,12 +156,12 @@ export type ConnectionStatus =
   | 'provider-not-shipped'
   | 'revoked-in-v4';
 
-export interface ConnectionOutcome {
+export interface AccountOutcome {
   readonly source: string;
   readonly provider: string;
   readonly displayName: string;
-  readonly status: ConnectionStatus;
-  readonly connectionId: string | null;
+  readonly status: AccountStatus;
+  readonly accountId: string | null;
   /** Why it failed, secrets blanked by the caller's redactor. */
   readonly detail: string | null;
 }
@@ -188,7 +185,7 @@ export type LabelStatus =
 
 export interface ResourceOutcome {
   readonly provider: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly ref: string;
   readonly status: LabelStatus;
   /** The v4 labels it was bound with. */
@@ -206,15 +203,15 @@ export type MissionStatus =
   | 'would-issue'
   | 'issued'
   | 'exists'
-  /** Dry run: depends on a connection still to create. */
-  | 'after-connections'
+  /** Dry run: depends on an account still to create. */
+  | 'after-accounts'
   | 'deferred'
   | 'nothing-to-issue'
   | 'refused';
 
-export interface MissionConnectionPlan {
+export interface MissionAccountPlan {
   readonly provider: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly refs: readonly string[];
   readonly riskIds: readonly RiskId[];
 }
@@ -225,7 +222,7 @@ export interface MissionOutcome {
   readonly name: string;
   readonly status: MissionStatus;
   readonly missionId: string | null;
-  readonly connections: readonly MissionConnectionPlan[];
+  readonly accounts: readonly MissionAccountPlan[];
   /** Why the mission waits, or what blocked it (deferred, refused). */
   readonly reasons: readonly string[];
   readonly dropped: readonly (DroppedRisk & { readonly provider: string })[];
@@ -259,14 +256,14 @@ export interface ImportReport {
   readonly apply: boolean;
   readonly org: string;
   readonly owner: string;
-  readonly connections: readonly ConnectionOutcome[];
+  readonly accounts: readonly AccountOutcome[];
   readonly byHand: readonly ByHandOutcome[];
   readonly resources: readonly ResourceOutcome[];
   readonly unmatched: readonly UnmatchedBinding[];
   readonly missions: readonly MissionOutcome[];
   readonly skipped: V4Bundle['skipped'];
   readonly keys: readonly IssuedKey[];
-  /** Something the run tried was refused (a connection, a mission). */
+  /** Something the run tried was refused (an account, a mission). */
   readonly failed: boolean;
 }
 
@@ -274,17 +271,17 @@ export interface ImportReport {
 // Normalized bundle
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** One credential of the bundle that becomes a connection. */
+/** One credential of the bundle that becomes an account. */
 interface Source {
   readonly source: string;
   readonly provider: string;
   readonly displayName: string;
   readonly revokedInV4: boolean;
-  /** The non-secret values a hand-made connection is recognised by. */
+  /** The non-secret values a hand-made account is recognised by. */
   readonly visibleFields: Readonly<Record<string, string>>;
   /** The projects bound to it in v4: a mission waits for it in a dry run. */
   readonly projectIds: ReadonlySet<string>;
-  readonly create: (actor: Actor) => Promise<{ readonly connection: ConnectionRecord }>;
+  readonly create: (actor: Actor) => Promise<{ readonly account: AccountRecord }>;
 }
 
 type Matcher =
@@ -370,7 +367,7 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
 
 function matches(
   matcher: Matcher,
-  resource: Pick<ConnectionResourceRecord, 'ref' | 'metadata' | 'env'>,
+  resource: Pick<AccountResourceRecord, 'ref' | 'metadata' | 'env'>,
 ): boolean {
   if (matcher.kind === 'stripe-account') {
     // The project's own mode only: a test-mode project never reaches live money.
@@ -394,10 +391,10 @@ function isV5Label(label: string): boolean {
 // The importer
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A connection the owner may build from, with its resource rows (who set each label). */
+/** An account the owner may build from, with its resource rows (who set each label). */
 interface Held {
-  readonly issuance: IssuanceConnection;
-  readonly records: readonly ConnectionResourceRecord[];
+  readonly issuance: IssuanceAccount;
+  readonly records: readonly AccountResourceRecord[];
   readonly importedFromOrg: boolean;
 }
 
@@ -417,9 +414,9 @@ export class Importer {
     const org = bundle.organization.slug;
     const sources = this.sourcesOf(bundle);
 
-    const connections: ConnectionOutcome[] = [];
+    const accounts: AccountOutcome[] = [];
     for (const source of sources) {
-      connections.push(await this.connect(actor, source, options.apply));
+      accounts.push(await this.connect(actor, source, options.apply));
     }
     const byHand = await this.byHand(actor, bundle);
 
@@ -435,9 +432,7 @@ export class Importer {
     // reads the labels it would set as set, so that it says what --apply does.
     const assumedEnvs = options.apply ? new Map<string, string>() : plannedEnvs(labels);
     const afterLabels = options.apply ? await this.held(actor, org) : withLabels(held, assumedEnvs);
-    const pending = new Set(
-      connections.filter((c) => c.status === 'to-create').map((c) => c.source),
-    );
+    const pending = new Set(accounts.filter((c) => c.status === 'to-create').map((c) => c.source));
     const waiting = sources.filter((s) => pending.has(s.source));
     const missions: MissionOutcome[] = [];
     const keys: IssuedKey[] = [];
@@ -468,7 +463,7 @@ export class Importer {
       apply: options.apply,
       org,
       owner: actor.user.email,
-      connections,
+      accounts,
       byHand,
       resources,
       unmatched: unmatchedOf(bindings, afterLabels, this.ports.registry),
@@ -476,8 +471,7 @@ export class Importer {
       skipped: bundle.skipped,
       keys,
       failed:
-        connections.some((c) => c.status === 'failed') ||
-        missions.some((m) => m.status === 'refused'),
+        accounts.some((c) => c.status === 'failed') || missions.some((m) => m.status === 'refused'),
     };
   }
 
@@ -499,7 +493,7 @@ export class Importer {
     return { user: lookup.user, groups: await this.ports.store.groups.groupsOf(lookup.user.id) };
   }
 
-  // ── Connections ───────────────────────────────────────────────────────────
+  // ── Accounts ───────────────────────────────────────────────────────────
 
   private importedFrom(bundle: V4Bundle, source: string): ImportedFrom {
     return { system: SYSTEM, org: bundle.organization.slug, source };
@@ -544,7 +538,7 @@ export class Importer {
         visibleFields: this.visibleFieldsOf(account.provider, 'api-key', mapped.fields),
         projectIds: projectsOf(account.provider),
         create: (actor) =>
-          this.ports.connections.importPastedKey(actor, account.provider, {
+          this.ports.accounts.importPastedKey(actor, account.provider, {
             displayName,
             fields: mapped.fields,
             importedFrom,
@@ -565,7 +559,7 @@ export class Importer {
         visibleFields: this.visibleFieldsOf(STRIPE_PROVIDER, 'api-key', fields),
         projectIds: new Set(account.projects.map((p) => p.project_id)),
         create: (actor) =>
-          this.ports.connections.importPastedKey(actor, STRIPE_PROVIDER, {
+          this.ports.accounts.importPastedKey(actor, STRIPE_PROVIDER, {
             displayName,
             fields,
             importedFrom,
@@ -587,7 +581,7 @@ export class Importer {
         create: (actor) => {
           // Converted here, at apply only: the dry run never touches the key.
           const keyPair = importEd25519PrivateKey(host.private_key, SSH_KEY_COMMENT);
-          return this.ports.connections.importSshKey(actor, {
+          return this.ports.accounts.importSshKey(actor, {
             providerId: SSH_PROVIDER,
             displayName: host.host_slug,
             fields,
@@ -600,25 +594,25 @@ export class Importer {
     return sources;
   }
 
-  private async owned(actor: Actor): Promise<ConnectionRecord[]> {
-    const owned = await this.ports.store.connections.listOwnedBy([
+  private async owned(actor: Actor): Promise<AccountRecord[]> {
+    const owned = await this.ports.store.accounts.listOwnedBy([
       { kind: 'user', id: actor.user.id },
       ...actor.groups.map((g) => ({ kind: 'group' as const, id: g.id })),
     ]);
     return owned.filter((c) => c.status !== 'revoked');
   }
 
-  private async connect(actor: Actor, source: Source, apply: boolean): Promise<ConnectionOutcome> {
+  private async connect(actor: Actor, source: Source, apply: boolean): Promise<AccountOutcome> {
     const outcome = (
-      status: ConnectionStatus,
-      connectionId: string | null = null,
+      status: AccountStatus,
+      accountId: string | null = null,
       detail: string | null = null,
-    ): ConnectionOutcome => ({
+    ): AccountOutcome => ({
       source: source.source,
       provider: source.provider,
       displayName: source.displayName,
       status,
-      connectionId,
+      accountId,
       detail,
     });
     if (!this.ports.registry.has(source.provider)) return outcome('provider-not-shipped');
@@ -635,7 +629,7 @@ export class Importer {
 
     try {
       const created = await source.create(actor);
-      return outcome('created', created.connection.id);
+      return outcome('created', created.account.id);
     } catch (err) {
       if (err instanceof ConnectError || err instanceof SshKeyImportError) {
         return outcome('failed', null, err.message);
@@ -654,7 +648,7 @@ export class Importer {
     return outcomes;
   }
 
-  private byHandOf(account: V4Account, owned: readonly ConnectionRecord[]): ByHandOutcome {
+  private byHandOf(account: V4Account, owned: readonly AccountRecord[]): ByHandOutcome {
     const provider = account.provider;
     if (!this.ports.registry.has(provider)) {
       return {
@@ -688,7 +682,7 @@ export class Importer {
       const record = owned.get(issuance.id);
       held.push({
         issuance,
-        records: await this.ports.store.connections.listResources(issuance.id),
+        records: await this.ports.store.accounts.listResources(issuance.id),
         importedFromOrg: record !== undefined && importedOrgOf(record) === org,
       });
     }
@@ -698,7 +692,7 @@ export class Importer {
   private planLabels(held: readonly Held[], bindings: readonly Binding[]): LabelPlan[] {
     const perResource = new Map<
       string,
-      { held: Held; record: ConnectionResourceRecord; labels: Set<string> }
+      { held: Held; record: AccountResourceRecord; labels: Set<string> }
     >();
     for (const binding of bindings) {
       for (const h of held) {
@@ -721,7 +715,7 @@ export class Importer {
       const v4Labels = [...labels].sort();
       const v5 = v4Labels.filter(isV5Label);
       const plan = (status: LabelStatus, env: string | null = record.env): LabelPlan => ({
-        connectionId: h.issuance.id,
+        accountId: h.issuance.id,
         provider: h.issuance.provider,
         resourceId: record.id,
         ref: record.ref,
@@ -734,7 +728,7 @@ export class Importer {
       else if (record.env === v5[0]) plans.push(plan('already-labelled'));
       else if (record.envSource === 'plugin') plans.push(plan('label-set-by-plugin'));
       else if (record.env !== null) plans.push(plan('kept-owner-label'));
-      // Shared with the owner: only the connection's owner labels its resources.
+      // Shared with the owner: only the account's owner labels its resources.
       else if (h.issuance.basis !== 'owner') plans.push(plan('not-owned'));
       else plans.push(plan('to-label', v5[0] ?? null));
     }
@@ -744,14 +738,14 @@ export class Importer {
   private async label(actor: Actor, plan: LabelPlan, apply: boolean): Promise<ResourceOutcome> {
     const outcome: ResourceOutcome = {
       provider: plan.provider,
-      connectionId: plan.connectionId,
+      accountId: plan.accountId,
       ref: plan.ref,
       status: plan.status,
       v4Labels: plan.v4Labels,
       env: plan.env,
     };
     if (plan.status !== 'to-label' || !apply || plan.env === null) return outcome;
-    await this.ports.connections.updateResource(actor, plan.connectionId, plan.resourceId, {
+    await this.ports.accounts.updateResource(actor, plan.accountId, plan.resourceId, {
       env: plan.env,
     });
     return { ...outcome, status: 'labelled' };
@@ -784,7 +778,7 @@ export class Importer {
       tokenName: mission.token_name,
       name,
       missionId: null,
-      connections: [] as MissionConnectionPlan[],
+      accounts: [] as MissionAccountPlan[],
       reasons: [] as string[],
       dropped: [] as (DroppedRisk & { provider: string })[],
       carried: [] as (CarriedRisk & { provider: string })[],
@@ -828,12 +822,12 @@ export class Importer {
     );
     base.reasons.push(...notShipped.map((p) => `${p}: this instance ships no plugin for it`));
 
-    const chosen: { provider: string; held: Held; records: ConnectionResourceRecord[] }[] = [];
+    const chosen: { provider: string; held: Held; records: AccountResourceRecord[] }[] = [];
     const deferred: string[] = [];
     let waitsForCreation = false;
     for (const provider of providers) {
       const own = bindings.filter((b) => b.provider === provider);
-      const best = bestConnection(held, provider, own);
+      const best = bestAccount(held, provider, own);
       if (best && best.records.length > 0) {
         chosen.push({ provider, held: best.held, records: best.records });
         continue;
@@ -850,10 +844,10 @@ export class Importer {
       );
     }
     if (deferred.length > 0) return done('deferred', { reasons: [...base.reasons, ...deferred] });
-    if (waitsForCreation) return done('after-connections');
+    if (waitsForCreation) return done('after-accounts');
 
-    const plans: MissionConnectionPlan[] = [];
-    const draftConnections: MissionDraft['connections'][number][] = [];
+    const plans: MissionAccountPlan[] = [];
+    const draftAccounts: MissionDraft['accounts'][number][] = [];
     const inMission = new Set(chosen.map((c) => c.provider));
     base.unbound.push(
       ...mission.accepted_risks.filter((id) => {
@@ -884,12 +878,12 @@ export class Importer {
       }
       plans.push({
         provider,
-        connectionId: h.issuance.id,
+        accountId: h.issuance.id,
         refs: selected.map((r) => r.ref),
         riskIds: translation.entries.map((e) => e.risk_id),
       });
-      draftConnections.push({
-        connection_id: h.issuance.id,
+      draftAccounts.push({
+        account_id: h.issuance.id,
         resources: { scope: 'selected', resource_ids: selected.map((r) => r.id) },
         everything_i_hold: false,
         policy: translation.entries.map((e) => ({
@@ -900,12 +894,12 @@ export class Importer {
         })),
       });
     }
-    base.connections.push(...plans);
-    if (draftConnections.length === 0) return done('nothing-to-issue');
+    base.accounts.push(...plans);
+    if (draftAccounts.length === 0) return done('nothing-to-issue');
 
     const draft: MissionDraft = {
       name,
-      connections: draftConnections,
+      accounts: draftAccounts,
       period: { kind: 'recurring', length_seconds: IMPORTED_MISSION_PERIOD_SECONDS },
       expires_at: mission.expires_at,
     };
@@ -946,7 +940,7 @@ export class Importer {
 }
 
 interface LabelPlan {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly provider: string;
   readonly resourceId: string;
   readonly ref: string;
@@ -959,24 +953,24 @@ interface LabelPlan {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function importedFromOf(c: Pick<ConnectionRecord, 'metadata'>): Record<string, unknown> | null {
+function importedFromOf(c: Pick<AccountRecord, 'metadata'>): Record<string, unknown> | null {
   const marker = c.metadata?.imported_from;
   if (typeof marker !== 'object' || marker === null) return null;
   const record = marker as Record<string, unknown>;
   return record.system === SYSTEM ? record : null;
 }
 
-function importedSourceOf(c: Pick<ConnectionRecord, 'metadata'>): string | null {
+function importedSourceOf(c: Pick<AccountRecord, 'metadata'>): string | null {
   const source = importedFromOf(c)?.source;
   return typeof source === 'string' ? source : null;
 }
 
-function importedOrgOf(c: Pick<ConnectionRecord, 'metadata'>): string | null {
+function importedOrgOf(c: Pick<AccountRecord, 'metadata'>): string | null {
   const org = importedFromOf(c)?.org;
   return typeof org === 'string' ? org : null;
 }
 
-function visibleFieldsOfRecord(c: Pick<ConnectionRecord, 'metadata'>): Record<string, string> {
+function visibleFieldsOfRecord(c: Pick<AccountRecord, 'metadata'>): Record<string, string> {
   const fields = c.metadata?.fields;
   if (typeof fields !== 'object' || fields === null) return {};
   return Object.fromEntries(
@@ -999,12 +993,12 @@ export function sameVisibleFields(
   return shared.length > 0 && shared.every((k) => a[k] === b[k]);
 }
 
-function bestConnection(
+function bestAccount(
   held: readonly Held[],
   provider: string,
   bindings: readonly Binding[],
-): { readonly held: Held; readonly records: ConnectionResourceRecord[] } | null {
-  let best: { held: Held; records: ConnectionResourceRecord[] } | null = null;
+): { readonly held: Held; readonly records: AccountResourceRecord[] } | null {
+  let best: { held: Held; records: AccountResourceRecord[] } | null = null;
   for (const h of held) {
     if (h.issuance.provider !== provider) continue;
     const records = h.records.filter(
@@ -1028,7 +1022,7 @@ function plannedEnvs(plans: readonly LabelPlan[]): Map<string, string> {
   );
 }
 
-/** The held connections with the labels the dry run would set. */
+/** The held accounts with the labels the dry run would set. */
 function withLabels(held: readonly Held[], planned: ReadonlyMap<string, string>): Held[] {
   if (planned.size === 0) return [...held];
   return held.map((h) => ({

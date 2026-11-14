@@ -198,7 +198,7 @@ describe('mission session view', () => {
       periodAnchor: new Date(now.getTime() - 3 * DAY_SECONDS * 1000).toISOString(),
       periodSeconds: DAY_SECONDS,
       expiresAt: null,
-      connections: [{ connectionId: rig.seeded.github.connection.id, resourceIds: [] }],
+      accounts: [{ accountId: rig.seeded.github.account.id, resourceIds: [] }],
       policy: [{ riskId: PR, quota: 2, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     await seedCall(rig, old, { now: yesterday, risks: [PR] });
@@ -410,7 +410,7 @@ describe('mission session view', () => {
         periodAnchor: new Date(now.getTime() - 3 * DAY_SECONDS * 1000).toISOString(),
         periodSeconds: DAY_SECONDS,
         expiresAt: null,
-        connections: [{ connectionId: rig.seeded.github.connection.id, resourceIds: [] }],
+        accounts: [{ accountId: rig.seeded.github.account.id, resourceIds: [] }],
         policy: [{ riskId: READ, quota: 50, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
       });
       await seedCall(rig, old, { now: yesterday, agentLabel: 'night-shift' });
@@ -477,7 +477,7 @@ describe('mission session view', () => {
         rig.seeded.ada,
         githubDraft(rig, {
           name: 'Busy',
-          connections: [{ connection_id: rig.seeded.github.connection.id, policy }],
+          accounts: [{ account_id: rig.seeded.github.account.id, policy }],
         }),
       );
       // The session is born with a real call; the bulk goes straight through the
@@ -672,7 +672,7 @@ describe('mission session view', () => {
       rig.seeded.ada,
       githubDraft(rig, {
         name: 'Busy',
-        connections: [{ connection_id: rig.seeded.github.connection.id, policy }],
+        accounts: [{ account_id: rig.seeded.github.account.id, policy }],
       }),
     );
     const total = TIMELINE_PAGE_SIZE + 5;
