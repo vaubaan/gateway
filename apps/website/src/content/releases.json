@@ -1,7 +1,7 @@
 {
-  "gateway": "2.0.0-alpha.20",
+  "gateway": "2.0.0-alpha.21",
   "prerelease": true,
-  "date": "2026-11-13",
+  "date": "2026-11-14",
   "plugins": {
     "asana": "0.1.0",
     "axonaut": "0.1.0",
@@ -9,7 +9,7 @@
     "cloudflare-dns": "4.0.0",
     "context7": "0.2.0",
     "fly": "0.4.0",
-    "github": "5.0.0",
+    "github": "5.1.0",
     "gmail": "2.0.0",
     "google-calendar": "0.4.0",
     "miro": "0.5.0",
@@ -21,6 +21,7 @@
     "stripe": "0.5.0",
     "supabase": "6.0.0",
     "upstash-redis": "4.0.0",
+    "vaubaan": "0.2.0",
     "vercel": "4.2.0"
   }
 }
