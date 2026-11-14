@@ -64,7 +64,7 @@ import {
   spkiHashOf,
   type AttestationPlatform,
   type BrokerAttestationKit,
-} from '../../../src/server/connections/broker-attestation';
+} from '../../../src/server/accounts/broker-attestation';
 import { fakeTlsCertificate } from './fake-tls-certificate';
 
 /** How long a one-time grant may wait for its redeem (contract: "minutes-long"). */
@@ -659,7 +659,7 @@ export function fakeEnclavePlatform(verifyKey: KeyObject): AttestationPlatform {
       if (payload.debug !== false) throw new AttestationRefused('the broker runs a debug image');
       const nonces = payload.eat_nonce;
       if (!Array.isArray(nonces) || nonces.length !== 1 || nonces[0] !== expected.spkiHash) {
-        throw new AttestationRefused('the attestation is not bound to this connection’s key');
+        throw new AttestationRefused('the attestation is not bound to this account’s key');
       }
       const { measurement, exp, iat } = payload;
       if (typeof measurement !== 'string' || typeof exp !== 'number' || typeof iat !== 'number') {

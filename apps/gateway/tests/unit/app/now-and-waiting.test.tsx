@@ -866,7 +866,7 @@ describe('the first run', () => {
           first_run: true,
           shared_accounts: [
             {
-              connection_id: 'c1',
+              account_id: 'c1',
               name: 'acme',
               service: 'GitHub',
               owner: 'Bob',
@@ -957,7 +957,7 @@ describe('the titles of what waits', () => {
 
 describe('the home, with a trust-raise proposal (risk model §4.7)', () => {
   const offer = {
-    connection_id: 'conn-gh',
+    account_id: 'conn-gh',
     account_name: 'GitHub main',
     resource_set_id: 'set-2',
     resource_set_position: 2,

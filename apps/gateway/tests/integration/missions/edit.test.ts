@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { executionInstance, line, type ExecutionInstance } from '../../support/execution/testing';
 import type { MissionDraft } from '../../../src/server/missions';
-import { agePastStaleGrace, flatConnections } from '../../support/store/testing';
+import { agePastStaleGrace, flatAccounts } from '../../support/store/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   githubDraft,
@@ -55,9 +55,9 @@ describe('editing a mission after issuance', () => {
       rig,
       rig.seeded.ada,
       githubDraft(rig, {
-        connections: [
+        accounts: [
           {
-            ...githubDraft(rig).connections[0],
+            ...githubDraft(rig).accounts[0],
             resources: { scope: 'selected', resource_refs: ['acme/app'] },
           },
         ],
@@ -90,7 +90,7 @@ describe('editing a mission after issuance', () => {
     return { draft: change(current.draft), revision: current.revision };
   };
   const githubLine = (draft: MissionDraft) => {
-    const [github] = draft.connections;
+    const [github] = draft.accounts;
     if (!github) throw new Error('no GitHub line');
     return github;
   };
@@ -119,7 +119,7 @@ describe('editing a mission after issuance', () => {
         ...draft,
         name: 'Ship the billing page, and the invoices',
         expires_at: expiry,
-        connections: [
+        accounts: [
           {
             ...github,
             resources: { scope: 'selected', resource_ids: [resourceId('acme/web')] },
@@ -145,7 +145,7 @@ describe('editing a mission after issuance', () => {
             ],
           },
           {
-            connection_id: rig.seeded.supabase.connection.id,
+            account_id: rig.seeded.supabase.account.id,
             // One environment: a set holds the resources of one (staging here).
             resources: { scope: 'selected', resource_refs: ['stgprojectref'] },
             policy: [
@@ -162,13 +162,11 @@ describe('editing a mission after issuance', () => {
     expect(after.name).toBe('Ship the billing page, and the invoices');
     expect(after.expiresAt).toBe(expiry);
     expect(after.periodSeconds).toBe(mission.periodSeconds);
-    expect(after.connections.map((c) => c.connectionId).sort()).toEqual(
-      [rig.seeded.github.connection.id, rig.seeded.supabase.connection.id].sort(),
+    expect(after.accounts.map((c) => c.accountId).sort()).toEqual(
+      [rig.seeded.github.account.id, rig.seeded.supabase.account.id].sort(),
     );
-    expect(
-      flatConnections(after).find((c) => c.connectionId === rig.seeded.github.connection.id),
-    ).toEqual({
-      connectionId: rig.seeded.github.connection.id,
+    expect(flatAccounts(after).find((c) => c.accountId === rig.seeded.github.account.id)).toEqual({
+      accountId: rig.seeded.github.account.id,
       resourceIds: [resourceId('acme/web')],
       // Added by the edit (ADR created-resources-join-the-mission's `source` column).
       resourceSources: { [resourceId('acme/web')]: 'edit' },
@@ -197,10 +195,10 @@ describe('editing a mission after issuance', () => {
     expect(entry?.before).toMatchObject({
       name: 'Ship the billing page',
       expires_at: null,
-      connections: [rig.seeded.github.connection.id],
+      accounts: [rig.seeded.github.account.id],
       resources: [
         {
-          connection_id: rig.seeded.github.connection.id,
+          account_id: rig.seeded.github.account.id,
           future: false,
           resource_ids: [resourceId('acme/app')],
         },
@@ -257,7 +255,7 @@ describe('editing a mission after issuance', () => {
       const github = githubLine(draft);
       return {
         ...draft,
-        connections: [
+        accounts: [
           {
             ...github,
             policy: (github.policy ?? []).map((p) => (p.risk_id === READ ? { ...p, quota: 0 } : p)),
@@ -276,8 +274,8 @@ describe('editing a mission after issuance', () => {
     expect(await audits()).toEqual([]);
 
     // acme/app goes stale at the provider: a creation would refuse it, a lowered limit is not.
-    agePastStaleGrace(rig.root.store, rig.seeded.github.connection.id); // past the grace of a fresh row
-    await rig.root.store.connections.syncDiscoveredResources(rig.seeded.github.connection.id, [
+    agePastStaleGrace(rig.root.store, rig.seeded.github.account.id); // past the grace of a fresh row
+    await rig.root.store.accounts.syncDiscoveredResources(rig.seeded.github.account.id, [
       { ref: 'acme/web', displayName: 'acme/web', env: null },
       { ref: 'acme/infra', displayName: 'acme/infra', env: null },
     ]);
@@ -285,7 +283,7 @@ describe('editing a mission after issuance', () => {
       const github = githubLine(draft);
       return {
         ...draft,
-        connections: [
+        accounts: [
           {
             ...github,
             policy: (github.policy ?? []).map((p) => (p.risk_id === READ ? { ...p, quota: 3 } : p)),
@@ -299,16 +297,14 @@ describe('editing a mission after issuance', () => {
     expect(await service().edit(rig.seeded.ada, mission.id, lower)).toMatchObject({ ok: true });
     const after = await fresh();
     // The stale resource stays where it was: it comes back if discovery returns it.
-    expect(after.connections[0]?.resourceSets[0]?.resourceIds).toEqual([resourceId('acme/app')]);
+    expect(after.accounts[0]?.resourceSets[0]?.resourceIds).toEqual([resourceId('acme/app')]);
     expect(after.policy.find((p) => p.riskId === READ)?.quota).toBe(3);
 
     // Moved to acme/web; adding the stale acme/app back is judged, with the creation's words.
     const select = (ids: string[]) =>
       edited((draft) => ({
         ...draft,
-        connections: [
-          { ...githubLine(draft), resources: { scope: 'selected', resource_ids: ids } },
-        ],
+        accounts: [{ ...githubLine(draft), resources: { scope: 'selected', resource_ids: ids } }],
       }));
     expect(
       await service().edit(rig.seeded.ada, mission.id, await select([resourceId('acme/web')])),
@@ -357,13 +353,11 @@ describe('editing a mission after issuance', () => {
       rig,
       rig.seeded.ada,
       githubDraft(rig, {
-        connections: [
-          { ...base, trust_levels: { read: 'trusting', 'no-such-action': 'autonomous' } },
-        ],
+        accounts: [{ ...base, trust_levels: { read: 'trusting', 'no-such-action': 'autonomous' } }],
       }),
     );
     const stored = await rig.root.store.missions.getById(recorded.id);
-    expect(stored?.connections[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'trusting' });
+    expect(stored?.accounts[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'trusting' });
 
     const current = await service().editView(rig.seeded.ada, recorded.id);
     if (!current) throw new Error('no edit view');
@@ -371,7 +365,7 @@ describe('editing a mission after issuance', () => {
     const line = githubLine(current.draft);
     const draft: MissionDraft = {
       ...current.draft,
-      connections: [
+      accounts: [
         {
           ...line,
           trust_levels: { read: 'autonomous' },
@@ -383,7 +377,7 @@ describe('editing a mission after issuance', () => {
       await service().edit(rig.seeded.ada, recorded.id, { draft, revision: current.revision }),
     ).toMatchObject({ ok: true });
     const after = await rig.root.store.missions.getById(recorded.id);
-    expect(after?.connections[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'autonomous' });
+    expect(after?.accounts[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'autonomous' });
   });
 
   it('is the creator’s alone; a revoked mission is not edited, an expired one is and comes back', async () => {
@@ -433,9 +427,7 @@ describe('editing a mission after issuance', () => {
       const github = githubLine(draft);
       return {
         ...draft,
-        connections: [
-          { ...github, policy: (github.policy ?? []).filter((p) => p.risk_id !== MERGE) },
-        ],
+        accounts: [{ ...github, policy: (github.policy ?? []).filter((p) => p.risk_id !== MERGE) }],
       };
     });
     const result = await service().edit(rig.seeded.ada, mission.id, body);
@@ -514,13 +506,13 @@ describe('an edited mission at the execution door', () => {
     const view = await service.editView(rig.ada, issued.mission.id);
     if (!view) throw new Error('no edit view');
     const scratch = rig.resources.find((r) => r.ref === 'scratch');
-    const [depot] = view.draft.connections;
+    const [depot] = view.draft.accounts;
     if (!scratch || !depot) throw new Error('fixture');
     const result = await service.edit(rig.ada, issued.mission.id, {
       revision: view.revision,
       draft: {
         ...view.draft,
-        connections: [{ ...depot, resources: { scope: 'selected', resource_ids: [scratch.id] } }],
+        accounts: [{ ...depot, resources: { scope: 'selected', resource_ids: [scratch.id] } }],
       },
     });
     expect(result).toMatchObject({ ok: true });

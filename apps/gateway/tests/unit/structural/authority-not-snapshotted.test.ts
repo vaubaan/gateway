@@ -1,5 +1,5 @@
 /**
- * Structural test (spec §10): "a user's authority on a connection is
+ * Structural test (spec §10): "a user's authority on an account is
  * recomputed from their current group membership, never from a snapshot."
  *
  * Two halves. Statically, the authority module keeps nothing between two
@@ -81,7 +81,7 @@ describe('authority is recomputed, never snapshotted', () => {
       rig = await authorityRig();
       const team = await rig.root.store.groups.getOrCreate('team', 'idp', 'idp');
       teamId = team.id;
-      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
         target: { kind: 'group', groupId: teamId },
         riskIds: [READ],
       });
@@ -128,14 +128,10 @@ describe('authority is recomputed, never snapshotted', () => {
     it('ownership through a group follows the membership too', async () => {
       const owners = await rig.root.store.groups.getOrCreate('owners', 'local', null);
       await rig.root.store.groups.addMember(owners.id, rig.ada.id);
-      await rig.root.connections.service.transfer(
-        await rig.actor(rig.ada),
-        rig.connection.id,
-        owners.id,
-      );
+      await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, owners.id);
       const canShare = async () =>
         rig.root.shares.service
-          .contextFor(await rig.actor(rig.bob), rig.connection.id)
+          .contextFor(await rig.actor(rig.bob), rig.account.id)
           .then(() => true)
           .catch(() => false);
       expect(await canShare()).toBe(false);
@@ -274,13 +270,13 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads the period anchor only; the status it decides on is the context’s, derived by the door',
       'budget/retention.ts':
         'reads the period anchor and length only, to know which period is the current one',
-      'connections/service.ts':
-        'reads the creator and the connections of a mission only, to authorize "check now" (`checkForMission`); never the status: a discovery of a connection is the owner’s act whatever the mission’s state',
+      'accounts/service.ts':
+        'reads the creator and the accounts of a mission only, to authorize "check now" (`checkForMission`); never the status: a discovery of an account is the owner’s act whatever the mission’s state',
       'import-v4/importer.ts':
         'reads the names of the owner’s missions and the stored `revoked` only, to recognise what an earlier import issued; an orphaned mission is still that mission and is not issued twice',
     };
     const LOADS =
-      /missions\s*\.\s*(?:getById|listForCreator|listForMember|listForConnection|findTokenByPrefix)\b/;
+      /missions\s*\.\s*(?:getById|listForCreator|listForMember|listForAccount|findTokenByPrefix)\b/;
     const DERIVES = /grounds\s*\.\s*(?:inspect|derive)\b/;
 
     it('every reader of a mission record derives the state or does not read it', () => {
@@ -310,7 +306,7 @@ describe('authority is recomputed, never snapshotted', () => {
         'budget/budget-stage.ts',
         'budget/retention.ts',
         'missions/token-issuer.ts',
-        'connections/service.ts',
+        'accounts/service.ts',
       ]) {
         // `record.status`, `mission.status`, `m.status`: none on a loaded record (the
         // pipeline context `ctx.mission.status` is the door's derived one).

@@ -53,9 +53,9 @@ describe('requests: exhaust and claim over HTTP', () => {
     });
     const issued = await root.missions.service.issue(seeded.ada, {
       name: 'Read the billing code',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           policy: [
             { risk_id: RISK, quota: 2, rate_limit: { max: 60, window_seconds: 60 }, gate: 'auto' },
             {
@@ -174,12 +174,12 @@ describe('requests: exhaust and claim over HTTP', () => {
     expect(await unknown.text()).toBe(await theirs.text());
   });
 
-  it('a co-owner of the connection is not the creator', async () => {
+  it('a co-owner of the account is not the creator', async () => {
     const claim = await exhaust();
     const group = await root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await root.store.groups.addMember(group.id, seeded.ada.id);
     await root.store.groups.addMember(group.id, seeded.bob.id);
-    await root.store.connections.transferOwner(seeded.github.connection.id, {
+    await root.store.accounts.transferOwner(seeded.github.account.id, {
       kind: 'group',
       id: group.id,
     });

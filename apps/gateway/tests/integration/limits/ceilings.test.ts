@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { completeLogin } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { fakePlugin } from '../../support/compose/testing';
-import { isConnectError } from '../../../src/server/connections';
+import { isConnectError } from '../../../src/server/accounts';
 import type { MissionDraft } from '../../../src/server/missions';
 import { silentLogger } from '../../../src/server/logging/logger';
 import { openMemoryStore, type Store } from '../../../src/server/store';
@@ -221,17 +221,17 @@ describe('limits.active_missions', () => {
   });
 });
 
-describe('limits.connections', () => {
+describe('limits.accounts', () => {
   async function acmeRoot(ceiling: string): Promise<GatewayRoot> {
     const root = await buildTestRoot({
-      env: { VAUBAAN_LIMITS_CONNECTIONS: ceiling },
+      env: { VAUBAAN_LIMITS_ACCOUNTS: ceiling },
       deps: { buildRegistry: async () => createRegistry([fakePlugin()]) },
     });
     roots.push(root);
     return root;
   }
 
-  it('refuses a new connection at the ceiling, never a reconnection, and allows one once a place is free', async () => {
+  it('refuses a new account at the ceiling, never a reconnection, and allows one once a place is free', async () => {
     const root = await acmeRoot('1');
     const user = await root.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
@@ -239,42 +239,42 @@ describe('limits.connections', () => {
       email: 'ada@example.com',
     });
     const actor = { user, groups: [] };
-    const first = await root.connections.service.start(actor, 'acme', {
+    const first = await root.accounts.service.start(actor, 'acme', {
       fields: { api_key: 'key-one' },
     });
-    if (first.kind !== 'connected') throw new Error('expected a connection');
+    if (first.kind !== 'connected') throw new Error('expected an account');
 
-    const refused = await root.connections.service
+    const refused = await root.accounts.service
       .start(actor, 'acme', { fields: { api_key: 'key-two' } })
       .then(
         () => null,
         (err: unknown) => err,
       );
-    expect(isConnectError(refused, 'connection-limit-reached')).toBe(true);
+    expect(isConnectError(refused, 'account-limit-reached')).toBe(true);
     expect(refused).toMatchObject({
       status: 409,
       detail: 'This gateway holds 1 connected account; its ceiling is 1.',
     });
     // The import stores without a start: refused when the account is stored.
     await expect(
-      root.connections.service.importPastedKey(actor, 'acme', {
+      root.accounts.service.importPastedKey(actor, 'acme', {
         displayName: 'Imported',
         fields: { api_key: 'key-three' },
         importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'v4:acme:1' },
       }),
-    ).rejects.toMatchObject({ code: 'connection-limit-reached' });
-    expect((await root.store.connections.list()).length).toBe(1);
+    ).rejects.toMatchObject({ code: 'account-limit-reached' });
+    expect((await root.store.accounts.list()).length).toBe(1);
 
     // Reconnecting the account adds nothing: never refused.
-    const reconnected = await root.connections.service.start(actor, 'acme', {
-      reconnectId: first.connection.id,
+    const reconnected = await root.accounts.service.start(actor, 'acme', {
+      reconnectId: first.account.id,
       fields: { api_key: 'key-one-rotated' },
     });
     expect(reconnected).toMatchObject({ kind: 'connected', reconnected: true });
 
-    await root.connections.service.revoke(actor, first.connection.id);
+    await root.accounts.service.revoke(actor, first.account.id);
     expect(
-      await root.connections.service.start(actor, 'acme', { fields: { api_key: 'key-four' } }),
+      await root.accounts.service.start(actor, 'acme', { fields: { api_key: 'key-four' } }),
     ).toMatchObject({ kind: 'connected', reconnected: false });
   });
 });
@@ -349,7 +349,7 @@ describe('limits.users', () => {
   });
 });
 
-describe('limits.users — an invitation link of a local account', () => {
+describe('limits.users — an invitation link of a sign-in account', () => {
   function form(fields: Record<string, string>): Request {
     return new Request(`${PUBLIC_URL}/form`, {
       method: 'POST',
@@ -375,7 +375,7 @@ describe('limits.users — an invitation link of a local account', () => {
       'create',
     );
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
-    const link = await root.auth.accounts.createLink({
+    const link = await root.auth.signInAccounts.createLink({
       kind: 'invite',
       providerId: 'local',
       email: 'ada@example.com',
@@ -389,16 +389,16 @@ describe('limits.users — an invitation link of a local account', () => {
     const password = 'a sentence ada remembers';
     const fields = { token: link.token, password, password_again: password };
 
-    const refused = await root.auth.handlers.createAccount(form(fields));
+    const refused = await root.auth.handlers.createSignInAccount(form(fields));
     expect(refused.status).toBe(303);
     expect(refused.headers.get('location')).toBe('/login?error=user-limit-reached');
-    expect(await root.store.localAccounts.list('local')).toEqual([]);
+    expect(await root.store.signInAccounts.list('local')).toEqual([]);
 
     await root.users.service.deactivate({ actorId: 'bootstrap', userId: null }, present.id);
-    const created = await root.auth.handlers.createAccount(form(fields));
+    const created = await root.auth.handlers.createSignInAccount(form(fields));
     expect(created.status).toBe(303);
     expect(created.headers.get('location')).not.toContain('error=');
-    expect((await root.store.localAccounts.list('local')).map((a) => a.email)).toEqual([
+    expect((await root.store.signInAccounts.list('local')).map((a) => a.email)).toEqual([
       'ada@example.com',
     ]);
   });

@@ -111,7 +111,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   'missions.handlers.snoozeTrustRaise': json('user', 200, (rig, headers) =>
     rig.root.missions.handlers.snoozeTrustRaise(
       post(`/api/missions/${rig.mission.id}/trust-raise/not-now`, headers, {
-        resource_set_id: rig.mission.connections[0]?.resourceSets[0]?.id,
+        resource_set_id: rig.mission.accounts[0]?.resourceSets[0]?.id,
         macro_action_id: 'read',
       }),
       rig.mission.id,
@@ -220,82 +220,82 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.claimId,
     ),
   ),
-  'connections.handlers.connect': form('user', 303, (rig, headers) =>
-    rig.root.connections.handlers.connect(
+  'accounts.handlers.connect': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.connect(
       post('/accounts/connect/vercel', headers, { name: 'Another', 'field.token': 'k' }),
       'vercel',
     ),
   ),
-  'connections.handlers.checkMissionResources': json('user', 200, (rig, headers) =>
-    rig.root.connections.handlers.checkMissionResources(
+  'accounts.handlers.checkMissionResources': json('user', 200, (rig, headers) =>
+    rig.root.accounts.handlers.checkMissionResources(
       post(`/api/missions/${rig.mission.id}/resources/check`, headers, {
-        connection_id: rig.mission.connections[0]?.connectionId ?? 'missing',
+        account_id: rig.mission.accounts[0]?.accountId ?? 'missing',
       }),
       rig.mission.id,
     ),
   ),
-  'connections.handlers.discover': form('user', 303, (rig, headers) =>
-    rig.root.connections.handlers.discover(
-      post(`/accounts/${rig.seeded.github.connection.id}/discover`, headers, {}),
-      rig.seeded.github.connection.id,
+  'accounts.handlers.discover': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.discover(
+      post(`/accounts/${rig.seeded.github.account.id}/discover`, headers, {}),
+      rig.seeded.github.account.id,
     ),
   ),
-  'connections.handlers.revoke': form('user', 303, (rig, headers) =>
-    rig.root.connections.handlers.revoke(
-      post(`/accounts/${rig.seeded.vercel.connection.id}/revoke`, headers, {}),
-      rig.seeded.vercel.connection.id,
+  'accounts.handlers.revoke': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.revoke(
+      post(`/accounts/${rig.seeded.vercel.account.id}/revoke`, headers, {}),
+      rig.seeded.vercel.account.id,
     ),
   ),
-  'connections.handlers.updateResource': form('user', 303, (rig, headers) => {
-    const connectionId = rig.seeded.github.connection.id;
+  'accounts.handlers.updateResource': form('user', 303, (rig, headers) => {
+    const accountId = rig.seeded.github.account.id;
     const resourceId = rig.seeded.github.resources[0]?.id ?? 'missing';
-    return rig.root.connections.handlers.updateResource(
-      post(`/accounts/${connectionId}/resources/${resourceId}`, headers, {
+    return rig.root.accounts.handlers.updateResource(
+      post(`/accounts/${accountId}/resources/${resourceId}`, headers, {
         display_name: 'Renamed',
       }),
-      connectionId,
+      accountId,
       resourceId,
     );
   }),
-  'connections.handlers.setDefaultEnv': form('user', 303, (rig, headers) =>
-    rig.root.connections.handlers.setDefaultEnv(
-      post(`/accounts/${rig.seeded.github.connection.id}/default-env`, headers, {
+  'accounts.handlers.setDefaultEnv': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.setDefaultEnv(
+      post(`/accounts/${rig.seeded.github.account.id}/default-env`, headers, {
         default_env: '',
       }),
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
     ),
   ),
-  'connections.handlers.transfer': form('user', 303, (rig, headers) =>
-    rig.root.connections.handlers.transfer(
-      post(`/accounts/${rig.seeded.github.connection.id}/transfer`, headers, {
+  'accounts.handlers.transfer': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.transfer(
+      post(`/accounts/${rig.seeded.github.account.id}/transfer`, headers, {
         group_id: 'no-such-group',
       }),
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
     ),
   ),
-  'connections.handlers.reassign': form('operator', 303, (rig, headers) =>
-    rig.root.connections.handlers.reassign(
-      post(`/admin/connections/${rig.seeded.github.connection.id}/reassign`, headers, {
+  'accounts.handlers.reassign': form('operator', 303, (rig, headers) =>
+    rig.root.accounts.handlers.reassign(
+      post(`/admin/accounts/${rig.seeded.github.account.id}/reassign`, headers, {
         owner_kind: 'user',
         owner_email: OPERATOR_EMAIL,
       }),
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
     ),
   ),
   'shares.handlers.share': form('user', 303, (rig, headers) =>
     rig.root.shares.handlers.share(
-      post(`/accounts/${rig.seeded.github.connection.id}/shares`, headers, {
+      post(`/accounts/${rig.seeded.github.account.id}/shares`, headers, {
         target_kind: 'user',
         target_email: OPERATOR_EMAIL,
         risk: PR,
       }),
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
     ),
   ),
   'shares.handlers.revoke': form('user', 303, (rig, headers) =>
     rig.root.shares.handlers.revoke(
-      post(`/accounts/${rig.seeded.github.connection.id}/shares/none/revoke`, headers, {}),
-      rig.seeded.github.connection.id,
+      post(`/accounts/${rig.seeded.github.account.id}/shares/none/revoke`, headers, {}),
+      rig.seeded.github.account.id,
       'none',
     ),
   ),
@@ -383,8 +383,8 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'none',
     ),
   ),
-  'users.handlers.accountLink': form('operator', 303, (rig, headers) =>
-    rig.root.users.handlers.accountLink(
+  'users.handlers.signInAccountLink': form('operator', 303, (rig, headers) =>
+    rig.root.users.handlers.signInAccountLink(
       post('/admin/users/local-link', headers, { kind: 'invite', email: 'guest@example.org' }),
     ),
   ),
@@ -521,7 +521,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/auth/bootstrap', headers, { token: TEST_BOOTSTRAP_TOKEN }),
     ),
   ),
-  // The forms of the local accounts (ADR local-accounts-sign-in-provider): no session
+  // The forms of the sign-in accounts (ADR local-accounts-sign-in-provider): no session
   // to ride, an origin check and a window each; a refusal is a redirect with a code.
   'auth.handlers.passwordLogin': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.passwordLogin(
@@ -529,9 +529,9 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'local',
     ),
   ),
-  'auth.handlers.createAccount': form('origin-only', 303, (rig, headers) =>
-    rig.root.auth.handlers.createAccount(
-      post('/api/account/create', headers, {
+  'auth.handlers.createSignInAccount': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.createSignInAccount(
+      post('/api/sign-in-account/create', headers, {
         token: 'not-a-link',
         password: 'a sentence long enough',
         password_again: 'a sentence long enough',
@@ -540,7 +540,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'auth.handlers.resetPassword': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.resetPassword(
-      post('/api/account/reset', headers, {
+      post('/api/sign-in-account/reset', headers, {
         token: 'not-a-link',
         password: 'a sentence long enough',
         password_again: 'a sentence long enough',
@@ -549,7 +549,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'auth.handlers.forgotPassword': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.forgotPassword(
-      post('/api/account/forgot', headers, { email: 'ada@example.com' }),
+      post('/api/sign-in-account/forgot', headers, { email: 'ada@example.com' }),
     ),
   ),
   'auth.handlers.secondFactorLogin': form('origin-only', 303, (rig, headers) =>
@@ -581,7 +581,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
     ),
   ),
   // Settings → Security: a signed-in user's own password and second factor. The rig's
-  // users signed in through the directory, so each answers "not a local account" (303).
+  // users signed in through the directory, so each answers "not a sign-in account" (303).
   'auth.handlers.beginSecondFactor': form('user', 303, (rig, headers) =>
     rig.root.auth.handlers.beginSecondFactor(
       post('/settings/security/second-factor/begin', headers, {}),
@@ -612,9 +612,9 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
 const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginStart': 'GET; starts a sign-in, the pending login is bound to a cookie',
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
-  'connections.handlers.callback':
+  'accounts.handlers.callback':
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
-  'connections.handlers.connectFile':
+  'accounts.handlers.connectFile':
     'GET; a screenshot of a connect guide, read from the plugin folder (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
@@ -622,7 +622,7 @@ const READS: Readonly<Record<string, string>> = {
 
 const SURFACES = [
   'auth',
-  'connections',
+  'accounts',
   'missions',
   'requests',
   'telemetry',

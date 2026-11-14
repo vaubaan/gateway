@@ -11,7 +11,7 @@ last_reviewed: 2026-11-05
 # Axonaut provider plugin — handbook
 
 `@vaubaan/plugin-axonaut`: the CRM, sales documents, projects and tickets of one Axonaut account,
-through Axonaut's REST API v2 with the API key of one Axonaut user. One resource per connection: the
+through Axonaut's REST API v2 with the API key of one Axonaut user. One resource per account: the
 account. Tools, slices and the catalog are tabled in the
 [plugin README](../../../plugins/axonaut/README.md); rules common to every plugin:
 [providers README](README.md).
@@ -192,5 +192,5 @@ header`). No permission choice: the key acts as its user, with the user's rights
   digits.
 - `nothing to update: …` → an update tool called with its id alone.
 - `account 'N' is not selected in this mission` → the key's account is another one: check
-  `account_id` in the connection's metadata.
+  `account_id` in the account's metadata.
 - 401 on every call → the key was regenerated in Axonaut; reconnect with the new one.

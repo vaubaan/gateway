@@ -144,7 +144,7 @@ describe('F2 — temporary refs', () => {
       {
         ref: stray,
         targetRef: 'refs/heads/feature/f2a',
-        connectionId: rig.github.id,
+        accountId: rig.github.id,
         repository: REPOSITORY,
         missionId: developer.mission.id,
         objectId: other,
@@ -193,7 +193,7 @@ describe('F2 — temporary refs', () => {
     const held = Array.from({ length: MAX_TEMPORARY_REFS_PER_MISSION }, (_, i) => ({
       ref: `refs/vaubaan/${String(i).padStart(32, '0')}`,
       targetRef: `refs/heads/feature/held-${i}`,
-      connectionId: rig.github.id,
+      accountId: rig.github.id,
       repository: REPOSITORY,
       missionId: mission.mission.id,
       objectId: main,

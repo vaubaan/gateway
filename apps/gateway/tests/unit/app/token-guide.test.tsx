@@ -8,8 +8,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { expiryWords, permissionLines, TokenGuide } from '@/components/connections/TokenGuide';
-import type { ConnectableProvider, TokenGuideView } from '@/server/connections';
+import { expiryWords, permissionLines, TokenGuide } from '@/components/accounts/TokenGuide';
+import type { ConnectableProvider, TokenGuideView } from '@/server/accounts';
 
 const GUIDE: TokenGuideView = {
   steps: [

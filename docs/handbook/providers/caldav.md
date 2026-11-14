@@ -68,7 +68,7 @@ before anything is sent (that is `google-calendar`). Rules common to every plugi
 - App password: iCloud (account.apple.com, Sign-In and Security, App-Specific Passwords; 2FA on;
   `https://caldav.icloud.com`); Fastmail (Privacy & Security, app passwords, "Calendars (CalDAV)";
   `https://caldav.fastmail.com`); Nextcloud (Security, Devices & sessions;
-  `https://<cloud>/remote.php/dav`). Menu paths to recheck at the first real connection.
+  `https://<cloud>/remote.php/dav`). Menu paths to recheck at the first real account.
 - No CalDAV endpoint deletes an app password: revocation is by hand only.
 
 ## Debug

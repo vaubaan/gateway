@@ -140,37 +140,37 @@ export async function refuseRequest(
 }
 
 /**
- * Makes a connection `unowned` the way production does (spec §2.3): its owner becomes a
+ * Makes an account `unowned` the way production does (spec §2.3): its owner becomes a
  * group without member, then the sweep that follows every membership removal marks it.
  * Returns that group, so a test can let a member join afterwards. The sweep is global:
- * every other active connection whose owner group is empty becomes `unowned` too.
+ * every other active account whose owner group is empty becomes `unowned` too.
  */
 export async function makeUnowned(
-  store: Pick<Store, 'connections' | 'groups'>,
-  connectionId: string,
+  store: Pick<Store, 'accounts' | 'groups'>,
+  accountId: string,
 ): Promise<GroupRecord> {
-  const group = await store.groups.createLocal(`ownerless-${connectionId}`);
-  if (!group) throw new InvariantError(`group ownerless-${connectionId} already exists`);
-  await store.connections.transferOwner(connectionId, { kind: 'group', id: group.id });
-  await store.connections.markOwnerlessUnowned();
-  const connection = await store.connections.getById(connectionId);
-  if (connection?.status !== 'unowned') {
+  const group = await store.groups.createLocal(`ownerless-${accountId}`);
+  if (!group) throw new InvariantError(`group ownerless-${accountId} already exists`);
+  await store.accounts.transferOwner(accountId, { kind: 'group', id: group.id });
+  await store.accounts.markOwnerlessUnowned();
+  const account = await store.accounts.getById(accountId);
+  if (account?.status !== 'unowned') {
     throw new InvariantError(
-      `connection ${connectionId} is '${connection?.status}', not unowned: only an active connection becomes unowned`,
+      `account ${accountId} is '${account?.status}', not unowned: only an active account becomes unowned`,
     );
   }
   return group;
 }
 
 /**
- * Moves the `first_seen_at` of every resource row of a connection back past the stale
+ * Moves the `first_seen_at` of every resource row of an account back past the stale
  * grace (`FRESH_RESOURCE_STALE_GRACE_MS`, ADR created-resources-join-the-mission), so the
  * next discovery that misses a ref marks it stale at once — what a row seen long ago gets.
  */
-export function agePastStaleGrace(store: Pick<Store, 'db'>, connectionId: string): void {
+export function agePastStaleGrace(store: Pick<Store, 'db'>, accountId: string): void {
   store.db
-    .prepare('UPDATE connection_resources SET first_seen_at = ? WHERE connection_id = ?')
-    .run('2000-01-01T00:00:00.000Z', connectionId);
+    .prepare('UPDATE account_resources SET first_seen_at = ? WHERE account_id = ?')
+    .run('2000-01-01T00:00:00.000Z', accountId);
 }
 
 /**
@@ -188,11 +188,11 @@ export async function heldArguments(
 }
 
 /**
- * A connection of a mission with one resource set, in the shape before sets existed;
+ * An account of a mission with one resource set, in the shape before sets existed;
  * `future` and `env` only when set, so that a test about something else compares lists.
  */
 export interface FlatSelection {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly resourceIds: readonly string[];
   readonly future?: true;
   readonly env?: string;
@@ -201,18 +201,18 @@ export interface FlatSelection {
 }
 
 /**
- * The connections of a mission whose connections have one resource set each, read flat
- * (risk model §4.7): what a test about something else than sets compares. A connection
+ * The accounts of a mission whose accounts have one resource set each, read flat
+ * (risk model §4.7): what a test about something else than sets compares. An account
  * with several sets is a test error.
  */
-export function flatConnections(mission: Pick<MissionRecord, 'connections'>): FlatSelection[] {
-  return mission.connections.map((c) => {
+export function flatAccounts(mission: Pick<MissionRecord, 'accounts'>): FlatSelection[] {
+  return mission.accounts.map((c) => {
     const [only, ...more] = c.resourceSets;
     if (!only || more.length > 0) {
-      throw new Error(`connection ${c.connectionId} has ${c.resourceSets.length} resource sets`);
+      throw new Error(`account ${c.accountId} has ${c.resourceSets.length} resource sets`);
     }
     return {
-      connectionId: c.connectionId,
+      accountId: c.accountId,
       resourceIds: only.resourceIds,
       ...(only.future ? { future: true as const } : {}),
       ...(only.env !== null ? { env: only.env } : {}),
@@ -229,15 +229,12 @@ export function flatPolicy(
   return mission.policy.map(({ resourceSetId: _set, ...line }) => line);
 }
 
-/** The one resource set of a mission's connection (the first when it has several). */
-export function firstSetOf(
-  mission: Pick<MissionRecord, 'connections'>,
-  connectionId?: string,
-): string {
+/** The one resource set of a mission's account (the first when it has several). */
+export function firstSetOf(mission: Pick<MissionRecord, 'accounts'>, accountId?: string): string {
   const c =
-    connectionId === undefined
-      ? mission.connections[0]
-      : mission.connections.find((x) => x.connectionId === connectionId);
+    accountId === undefined
+      ? mission.accounts[0]
+      : mission.accounts.find((x) => x.accountId === accountId);
   const id = c?.resourceSets[0]?.id;
   if (!id) throw new Error('the mission has no resource set there');
   return id;

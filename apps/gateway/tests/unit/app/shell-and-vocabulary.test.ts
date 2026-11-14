@@ -52,7 +52,7 @@ import {
   WHY_ORDER,
   whyValue,
 } from '../../../src/lib/vocabulary';
-import { CONNECT_CALLBACK_PATH, CONNECTIONS_PATH } from '../../../src/server/connections/service';
+import { CONNECT_CALLBACK_PATH, ACCOUNTS_PATH } from '../../../src/server/accounts/service';
 import { PROVIDERS_PATH } from '../../../src/lib/providers/links';
 import { INBOX_PATH } from '../../../src/server/requests/url';
 
@@ -61,7 +61,7 @@ const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/app')
 /** Does a page or a route answer this path? Dynamic segments are tried as `[id]` and `[provider]`. */
 function served(path: string): boolean {
   const segments = path.split('/').filter(Boolean);
-  const roots = ['(app)', 'admin/(guarded)', ''];
+  const roots = ['(app)', '(public)', 'admin/(guarded)', ''];
   return roots.some((root) => {
     const base = root === 'admin/(guarded)' ? segments.slice(1) : segments;
     if (root === 'admin/(guarded)' && segments[0] !== 'admin') return false;
@@ -146,7 +146,7 @@ describe('the side navigation', () => {
 
 describe('the routes follow the words', () => {
   it('serves the pages under the new names, from the constants the server redirects with', () => {
-    expect(CONNECTIONS_PATH).toBe(ROUTES.accounts);
+    expect(ACCOUNTS_PATH).toBe(ROUTES.accounts);
     expect(INBOX_PATH).toBe(ROUTES.waiting);
     expect(PROVIDERS_PATH).toBe(ROUTES.reference);
   });
@@ -156,6 +156,8 @@ describe('the routes follow the words', () => {
       ':first': 'new',
       ':rest*': 'github',
       ':path*': 'github',
+      ':page': 'create',
+      ':id': '[id]',
     };
     for (const { source, destination } of LEGACY_REDIRECTS) {
       // A destination may name a region of its page by a fragment.
@@ -205,7 +207,7 @@ describe('the routes follow the words', () => {
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
       expect(source).toMatch(
-        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations|settings\/connected-apps)\b/,
+        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations|settings\/connected-apps|account)\b/,
       );
     }
   });
@@ -241,7 +243,7 @@ describe('the theme choice', () => {
 
 describe('the vocabulary', () => {
   it('names each thing with one word, and keeps mission and macro-action', () => {
-    expect(TERMS.connection.one).toBe('account');
+    expect(TERMS.account.one).toBe('account');
     expect(TERMS.risk.many).toBe('permissions');
     expect(TERMS.missionToken.one).toBe('key');
     expect(TERMS.namedToken.one).toBe('machine key');
@@ -366,9 +368,10 @@ describe('the words of the accounts, reference, activity and settings pages', ()
   it('has a word for every refusal code and every administrative act of the protocol', () => {
     expect(Object.keys(REFUSAL_WORDS).sort()).toEqual([...REFUSAL_CODES].sort());
     for (const words of Object.values(ACT_WORDS)) expect(words.length).toBeGreaterThan(0);
-    // No protocol word is printed as prose: these are the interface's own.
+    // No protocol word is printed as prose: these are the interface's own. Account is
+    // both (ADR one-word-per-thing-account-service-plugin).
     for (const words of [...Object.values(REFUSAL_WORDS), ...Object.values(ACT_WORDS)]) {
-      expect(words).not.toMatch(/\b(connection|share|risk|delegation|operator|token)s?\b/);
+      expect(words).not.toMatch(/\b(share|risk|delegation|operator|token)s?\b/);
     }
   });
 });

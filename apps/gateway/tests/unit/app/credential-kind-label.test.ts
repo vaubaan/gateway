@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { credentialKindLabel } from '@/components/connections/parts';
+import { credentialKindLabel } from '@/components/accounts/parts';
 
 describe('credentialKindLabel', () => {
   it('names a way the plugin offers in a few words', () => {

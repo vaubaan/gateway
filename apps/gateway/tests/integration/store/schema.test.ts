@@ -18,6 +18,8 @@ import {
 import { openTestStore, StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing.ts';
 
 const EXPECTED_TABLES = [
+  'account_resources',
+  'accounts',
   'administrators',
   'approvals',
   'audit',
@@ -26,8 +28,6 @@ const EXPECTED_TABLES = [
   'audit_risk_set_members',
   'audit_risk_sets',
   'audit_risks',
-  'connection_resources',
-  'connections',
   'delegations',
   'events',
   'git_pending_refs',
@@ -35,10 +35,9 @@ const EXPECTED_TABLES = [
   'groups',
   'instance_config',
   'invitations',
-  'local_accounts',
   'local_links',
   'local_secrets',
-  'mission_connections',
+  'mission_accounts',
   'mission_members',
   'mission_policy',
   'mission_resource_sets',
@@ -59,6 +58,7 @@ const EXPECTED_TABLES = [
   'sessions',
   'share_restrictions',
   'shares',
+  'sign_in_accounts',
   'user_second_factor_secrets',
   'user_second_factors',
   'users',
@@ -103,7 +103,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(35);
+    expect(store.schemaVersion).toBe(36);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -142,10 +142,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(35);
+    expect(second.schemaVersion).toBe(36);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(35);
+    ).toBe(36);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

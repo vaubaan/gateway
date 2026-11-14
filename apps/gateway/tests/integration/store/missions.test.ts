@@ -1,5 +1,5 @@
 /**
- * Missions: connections with resource selection, policy rows checked against the catalog,
+ * Missions: accounts with resource selection, policy rows checked against the catalog,
  * tokens — one holder each, rotated or revoked on its own — and members. Spec §0
  * "Mission member", "Mission token"; §2.2, §3.2.
  */
@@ -15,7 +15,7 @@ import {
 } from '../../../src/server/store/index.ts';
 import {
   firstSetOf,
-  flatConnections,
+  flatAccounts,
   flatPolicy,
   openTestStore,
   type TestStore,
@@ -36,9 +36,9 @@ describe('missions repository', () => {
   let t: TestStore;
   let store: Store;
   let creator: string;
-  let connection: string;
+  let account: string;
   let resourceA: string;
-  let otherConnection: string;
+  let otherAccount: string;
 
   beforeEach(async () => {
     t = openTestStore();
@@ -50,21 +50,21 @@ describe('missions repository', () => {
         email: 'c@x',
       })
     ).id;
-    connection = (
-      await store.connections.create({
+    account = (
+      await store.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: creator },
         displayName: 'gh',
         credential: null,
       })
     ).id;
-    const resources = await store.connections.syncDiscoveredResources(connection, [
+    const resources = await store.accounts.syncDiscoveredResources(account, [
       { ref: 'acme/a', displayName: 'A' },
       { ref: 'acme/b', displayName: 'B' },
     ]);
     resourceA = resources[0]?.id ?? '';
-    otherConnection = (
-      await store.connections.create({
+    otherAccount = (
+      await store.accounts.create({
         provider: 'supabase',
         owner: { kind: 'user', id: creator },
         displayName: 'sb',
@@ -79,13 +79,13 @@ describe('missions repository', () => {
       name: 'Ship feature X',
       creatorUserId: creator,
       periodSeconds: 7 * 86_400,
-      connections: [{ connectionId: connection, resourceIds: [] }],
+      accounts: [{ accountId: account, resourceIds: [] }],
       policy: POLICY,
       ...overrides,
     });
   }
 
-  it('creates a mission with its connections and policy rows', async () => {
+  it('creates a mission with its accounts and policy rows', async () => {
     const m = await create({ expiresAt: '2026-12-31T00:00:00.000Z' });
     expect(m).toMatchObject({
       name: 'Ship feature X',
@@ -97,7 +97,7 @@ describe('missions repository', () => {
       issuedByMissionId: null,
       issuedViaClientName: null,
     });
-    expect(flatConnections(m)).toEqual([{ connectionId: connection, resourceIds: [] }]);
+    expect(flatAccounts(m)).toEqual([{ accountId: account, resourceIds: [] }]);
     expect(flatPolicy(m)).toEqual(POLICY);
     expect(
       store.db
@@ -108,59 +108,59 @@ describe('missions repository', () => {
     ).toBe(2);
     expect(await store.missions.getById(m.id)).toEqual(m);
     expect((await store.missions.listForCreator(creator)).map((x) => x.id)).toEqual([m.id]);
-    expect((await store.missions.listForConnection(connection)).map((x) => x.id)).toEqual([m.id]);
+    expect((await store.missions.listForAccount(account)).map((x) => x.id)).toEqual([m.id]);
   });
 
-  it('records a resource selection per connection', async () => {
+  it('records a resource selection per account', async () => {
     const m = await create({
-      connections: [
-        { connectionId: connection, resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceIds: [] },
+      accounts: [
+        { accountId: account, resourceIds: [resourceA] },
+        { accountId: otherAccount, resourceIds: [] },
       ],
     });
-    const byId = (a: { connectionId: string }, b: { connectionId: string }) =>
-      a.connectionId.localeCompare(b.connectionId);
-    expect([...flatConnections(m)].sort(byId)).toEqual(
+    const byId = (a: { accountId: string }, b: { accountId: string }) =>
+      a.accountId.localeCompare(b.accountId);
+    expect([...flatAccounts(m)].sort(byId)).toEqual(
       [
-        { connectionId: connection, resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceIds: [] },
+        { accountId: account, resourceIds: [resourceA] },
+        { accountId: otherAccount, resourceIds: [] },
       ].sort(byId),
     );
   });
 
   it('stores a set with future on and its environment, an explicit list like any other', async () => {
     const m = await create({
-      connections: [{ connectionId: connection, resourceIds: [resourceA], future: true }],
+      accounts: [{ accountId: account, resourceIds: [resourceA], future: true }],
     });
-    expect(flatConnections(m)).toEqual([
-      { connectionId: connection, resourceIds: [resourceA], future: true },
+    expect(flatAccounts(m)).toEqual([
+      { accountId: account, resourceIds: [resourceA], future: true },
     ]);
     expect(
       store.db
         .prepare('SELECT COUNT(*) AS n FROM mission_resources WHERE mission_id = ?')
         .get(m.id),
     ).toEqual({ n: 1 });
-    expect((await store.missions.getById(m.id))?.connections).toEqual(m.connections);
+    expect((await store.missions.getById(m.id))?.accounts).toEqual(m.accounts);
     // A set of future resources only names its environment.
     const empty = await create({
-      connections: [{ connectionId: connection, resourceIds: [], future: true, env: 'prod' }],
+      accounts: [{ accountId: account, resourceIds: [], future: true, env: 'prod' }],
     });
-    expect(flatConnections(empty)).toEqual([
-      { connectionId: connection, resourceIds: [], future: true, env: 'prod' },
+    expect(flatAccounts(empty)).toEqual([
+      { accountId: account, resourceIds: [], future: true, env: 'prod' },
     ]);
   });
 
   it('rejects inconsistent resource selections', async () => {
     await expect(
       create({
-        connections: [{ connectionId: connection, resourceIds: [resourceA], env: 'prod' }],
+        accounts: [{ accountId: account, resourceIds: [resourceA], env: 'prod' }],
       }),
     ).rejects.toThrow(/several environments/);
     await expect(
       create({
-        connections: [
+        accounts: [
           {
-            connectionId: connection,
+            accountId: account,
             resourceSets: [
               { resourceIds: [resourceA], future: true, policy: [] },
               { resourceIds: [], future: true, policy: [] },
@@ -172,13 +172,11 @@ describe('missions repository', () => {
     ).rejects.toThrow(/two resource sets take the future resources of one environment/);
     await expect(
       create({
-        connections: [{ connectionId: otherConnection, resourceIds: [resourceA] }],
+        accounts: [{ accountId: otherAccount, resourceIds: [resourceA] }],
         policy: [],
       }),
     ).rejects.toThrow(/does not belong/);
-    await expect(create({ connections: [], policy: [] })).rejects.toThrow(
-      /at least one connection/,
-    );
+    await expect(create({ accounts: [], policy: [] })).rejects.toThrow(/at least one account/);
     expect(await store.missions.listForCreator(creator)).toEqual([]);
   });
 
@@ -726,8 +724,8 @@ describe('missions repository', () => {
         details: {
           name_changed: true,
           expiry_changed: false,
-          connections_added: 1,
-          connections_removed: 0,
+          accounts_added: 1,
+          accounts_removed: 0,
           resources_added: 1,
           resources_removed: 0,
           scopes_changed: 1,
@@ -751,9 +749,9 @@ describe('missions repository', () => {
         unchanged: () => true,
         name: 'Ship feature Y',
         expiresAt: null,
-        connections: [
-          { connectionId: connection, resourceIds: [resourceA] },
-          { connectionId: otherConnection, resourceIds: [], future: true, env: 'staging' },
+        accounts: [
+          { accountId: account, resourceIds: [resourceA] },
+          { accountId: otherAccount, resourceIds: [], future: true, env: 'staging' },
         ],
         policy: [
           {
@@ -775,12 +773,12 @@ describe('missions repository', () => {
       });
       expect(result?.before.name).toBe('Ship feature X');
       expect(result?.mission).toMatchObject({ name: 'Ship feature Y' });
-      expect(flatConnections(result!.mission)).toMatchObject([
-        { connectionId: connection, resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceIds: [], future: true, env: 'staging' },
+      expect(flatAccounts(result!.mission)).toMatchObject([
+        { accountId: account, resourceIds: [resourceA] },
+        { accountId: otherAccount, resourceIds: [], future: true, env: 'staging' },
       ]);
-      // The kept connection kept its one set: its counters follow it.
-      expect(firstSetOf(result!.mission, connection)).toBe(firstSetOf(m, connection));
+      // The kept account kept its one set: its counters follow it.
+      expect(firstSetOf(result!.mission, account)).toBe(firstSetOf(m, account));
       expect(result?.mission.policy.map((p) => p.riskId).sort()).toEqual([
         'github.code-read',
         'supabase[staging].bulk-row-write',
@@ -812,7 +810,7 @@ describe('missions repository', () => {
         unchanged: () => false,
         name: 'Never',
         expiresAt: null,
-        connections: flatConnections(m),
+        accounts: flatAccounts(m),
         policy: flatPolicy(m),
         summary,
       };
@@ -837,7 +835,7 @@ describe('missions repository', () => {
           unchanged: () => true,
           name: m.name,
           expiresAt: null,
-          connections: flatConnections(m),
+          accounts: flatAccounts(m),
           policy: [
             { riskId: 'github.nope', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
           ],

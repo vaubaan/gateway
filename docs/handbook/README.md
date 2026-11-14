@@ -18,7 +18,7 @@ minutes.
 
 - [configuration](configuration.md) — configuration keys, crypto, the composition root.
 - [store](store.md) — the embedded SQLite store, migrations, backups.
-- [limits-and-counters](limits-and-counters.md) — ceilings on users, connections, active missions; `GET /ops/stats`.
+- [limits-and-counters](limits-and-counters.md) — ceilings on users, accounts, active missions; `GET /ops/stats`.
 - [oauth-broker-contract](oauth-broker-contract.md) — the calls between an instance and an OAuth broker.
 - [oauth-broker](oauth-broker.md) — the OAuth broker of `apps/oauth-broker`: running it in Confidential Space, releasing and verifying its image.
 - [first-install](first-install.md) — the acceptance run of a first installation, and reading a refusal.
@@ -32,7 +32,7 @@ minutes.
 
 - [authentication](authentication.md) — sign-in providers, admission, web session, bootstrap token, administrators.
 - [authority](authority.md) — owners, shares, local groups, orphaned missions.
-- [connections](connections.md) — connecting an account, credential refresh, resources.
+- [accounts](accounts.md) — connecting an account, credential refresh, resources.
 - [missions](missions.md) — issuing and editing a mission, members and tokens, the kit.
 - [requests](requests.md) — claims and approvals: the URL, who decides, expiry.
 - [audit](audit.md) — activity, retention, administrative entries.

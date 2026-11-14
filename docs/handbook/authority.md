@@ -1,12 +1,12 @@
 ---
-title: Authority — owners, shares, groups, orphaned missions, unowned connections
+title: Authority — owners, shares, groups, orphaned missions, unowned accounts
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/shares/
   - apps/gateway/src/lib/shares/
   - apps/gateway/src/lib/authority/
   - apps/gateway/src/server/groups/
-  - apps/gateway/src/server/connections/service.ts
+  - apps/gateway/src/server/accounts/service.ts
   - apps/gateway/src/server/execution/admission.ts
   - apps/gateway/src/server/auth/login.ts
   - apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts
@@ -15,7 +15,7 @@ last_reviewed: 2026-10-27
 
 # Authority — handbook
 
-How the gateway answers "what may this user accept on this connection, now?", and what follows
+How the gateway answers "what may this user accept on this account, now?", and what follows
 when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.3, §3.1, §7.3,
 §11.2. ADRs:
 [orphaned-missions-and-ownerless-connections](../decisions/orphaned-missions-and-ownerless-connections.md),
@@ -31,7 +31,7 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
 - [`catalog-authority.ts`](../../apps/gateway/src/lib/authority/catalog-authority.ts) — the
   enumeration and monotonicity rules everything reuses (browser-safe).
 - [`shares/service.ts`](../../apps/gateway/src/server/shares/service.ts),
-  [`connections/service.ts`](../../apps/gateway/src/server/connections/service.ts) — shares,
+  [`accounts/service.ts`](../../apps/gateway/src/server/accounts/service.ts) — shares,
   transfer, ownerless, reassign.
 
 ## Invariants
@@ -47,13 +47,13 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
   (`explicitRiskIdsOf`); "Select all" is resolved in the browser, the server never receives "all".
 - The verdict is about the creator alone: a member's own shares or groups never orphan or
   restore a mission.
-- `ownerActRefusal` is the one statement of "a revoked or unowned connection takes no owner act".
+- `ownerActRefusal` is the one statement of "a revoked or unowned account takes no owner act".
 - `unowned` is stored; only the operator's `reassign` clears it (a member rejoining does not).
 
 ## Traps
 
 - With nothing stored, "this act orphaned that mission" is a difference of two verdicts: an act
-  that can remove or return authority takes `watchConnection` / `MembershipSettler.watch` before
+  that can remove or return authority takes `watchAccount` / `MembershipSettler.watch` before
   and settles in a `finally` after its write. A forgotten watch loses an audit entry, never the
   state. Classify the act in `tests/integration/audit/admin-mutations.test.ts`.
 - Two settlers may see the same change: `settle` writes through `appendUnlessLatest`, so the
@@ -72,12 +72,12 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
 
 ## Debug
 
-- **`mission-inactive` / `orphaned`** → `/missions/<id>` shows cause, connection and uncovered
+- **`mission-inactive` / `orphaned`** → `/missions/<id>` shows cause, account and uncovered
   risks; the `missions` row says `active`, do not look there. `mission-orphaned` names the act.
-- **Should be back and is not** → a share must cover every accepted risk on that connection; a
+- **Should be back and is not** → a share must cover every accepted risk on that account; a
   group reaches the creator only once `groupsOf` lists it (IdP groups change at sign-in).
-  `connection-revoked` never ends.
-- **A connection vanished from its owners' list** → it is `unowned` (log
-  `connection has no owner left`); see `/accounts#without-owner`.
+  `account-revoked` never ends.
+- **An account vanished from its owners' list** → it is `unowned` (log
+  `account has no owner left`); see `/accounts#without-owner`.
 - **A sign-in orphaned missions** → the claims dropped a group; the next sign-in with it restores
   them.

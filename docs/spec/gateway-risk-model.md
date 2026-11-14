@@ -172,7 +172,7 @@ load (`persistence`, retired on 2026-11-13, included).
 
 ### 4.6 Macro-actions and trust levels
 
-What a creator ticks per connection, in the connector's words
+What a creator ticks per account, in the connector's words
 ([ADR](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)):
 
 - A catalog declares **3 to 6 macro-actions** (`id`, `label`, `description`, `entries`); every entry
@@ -220,9 +220,9 @@ What a creator ticks per connection, in the connector's words
 **Resource sets**
 ([ADR](../decisions/resource-sets-partition-a-mission-connection.md)).
 
-- A connection of a mission holds one or more resource sets. Each set has its resources, its
+- An account of a mission holds one or more resource sets. Each set has its resources, its
   macro-actions at their trust levels and its explicit policy, and keeps its own budget counters.
-- A resource belongs to exactly one set of its connection, and every resource of a set has the same
+- A resource belongs to exactly one set of its account, and every resource of a set has the same
   effective environment ([ADR](../decisions/resource-set-is-one-environment-with-optional-future-resources.md)).
   A set with **future** on takes the resources that later appear with its environment; a resource
   relabelled out of it leaves it.
@@ -233,12 +233,12 @@ What a creator ticks per connection, in the connector's words
   or list value equal to a mission resource's ref (the reading of §6, step 2). A slice citing refs of
   several sets — an org slug equal to an app's ref, a list of two resources — brings each in.
 - **Calls that cannot be placed in one set.** A call that names no mission resource, or resources
-  from several sets, goes to every candidate set: all the sets of the connection in the first case,
+  from several sets, goes to every candidate set: all the sets of the account in the first case,
   the named sets in the second. Then:
   - each touched risk must be accepted in every candidate set;
   - the most restrictive gate applies;
   - each set's quota and rate limit are checked and charged.
-- Environment resolution (§6) reads the resources of the whole connection. The set chooses only
+- Environment resolution (§6) reads the resources of the whole account. The set chooses only
   the policy.
 - With one set, the screen shows no set at all.
 
@@ -269,7 +269,7 @@ What a creator ticks per connection, in the connector's words
 
 ## 5. What a mission carries
 
-Its connections (one provider each); per connection its resources (ref, optional environment label);
+Its accounts (one provider each); per account its resources (ref, optional environment label);
 its resource sets (§4.7), each with its policy, one explicit entry per accepted risk, env-scoped
 risks qualified. No slice, pattern, explicit deny, macro-action or trust level.
 
@@ -289,7 +289,7 @@ or one the entry does not list, is refused; only account-scoped risks pass there
 
 ## 7. The plugin — classification
 
-- From the tool, the arguments and the mission's resources on the connection, a plugin returns the
+- From the tool, the arguments and the mission's resources on the account, a plugin returns the
   slices touched or a refusal of its own (unknown or retired tool, arguments no slice can be built
   from).
 - Classification is pure: no network, no credential, no state. It never sees the accepted risks.
@@ -336,7 +336,7 @@ their union, all required.
 
 ## 9. Checking a policy before issuance
 
-Checked at draft and again at issuance. Per connection, each requested risk may be **unknown** (not
+Checked at draft and again at issuance. Per account, each requested risk may be **unknown** (not
 an explicit id of the catalog), **duplicate**, **exceeds authority**, **unresolvable** (an
 environment no selected resource carries, on a provider that does not derive it), **budget missing**
 or **budget invalid** (not positive whole numbers, gate outside the closed set, rate above the

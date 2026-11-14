@@ -15,7 +15,7 @@
  *     a real row is `tests/integration/store/ownership-and-orphans.test.ts`.
  *
  * The behaviour above the schema is tested where it lives: the catalog check
- * of every write (`tests/integration/store/connections-shares.test.ts`), the
+ * of every write (`tests/integration/store/accounts-shares.test.ts`), the
  * issuance through a preset (`tests/integration/missions/mission-lifecycle.test.ts`).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

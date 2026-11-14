@@ -395,9 +395,9 @@ describe('streaming on the execution door', () => {
     })();
     expect(body.filter((m) => m.method === 'notifications/progress')).toHaveLength(1);
     expect(body.at(-1)).toMatchObject({ result: { isError: true } });
-    // One execution: no cache-drop retry, no refresh, and the connection is untouched.
+    // One execution: no cache-drop retry, no refresh, and the account is untouched.
     expect(instance.depot.calls).toHaveLength(1);
-    expect((await instance.root.store.connections.getById(instance.connection.id))?.status).toBe(
+    expect((await instance.root.store.accounts.getById(instance.account.id))?.status).toBe(
       'active',
     );
     expect(await auditEntry()).toMatchObject({

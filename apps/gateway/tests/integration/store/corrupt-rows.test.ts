@@ -29,7 +29,7 @@ describe('store rows with a value outside a closed set', () => {
   let t: TestStore;
   let store: Store;
   let userId: string;
-  let connectionId: string;
+  let accountId: string;
   let missionId: string;
 
   beforeEach(async () => {
@@ -42,8 +42,8 @@ describe('store rows with a value outside a closed set', () => {
         email: 'u@x',
       })
     ).id;
-    connectionId = (
-      await store.connections.create({
+    accountId = (
+      await store.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: userId },
         displayName: 'gh',
@@ -55,7 +55,7 @@ describe('store rows with a value outside a closed set', () => {
         name: 'm',
         creatorUserId: userId,
         periodSeconds: null,
-        connections: [{ connectionId, resourceIds: [] }],
+        accounts: [{ accountId, resourceIds: [] }],
         policy: [{ riskId: RISK, quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' }],
       })
     ).id;
@@ -103,14 +103,14 @@ describe('store rows with a value outside a closed set', () => {
 
   it('refuses an unknown shares.status', async () => {
     const share = await store.shares.create({
-      connectionId,
+      accountId,
       target: { kind: 'user', id: userId },
       restriction: [RISK],
       createdByUserId: userId,
     });
     corrupt('shares', 'status', 'id', share.id);
     await expectLoudFailure(
-      () => store.shares.get({ connectionId: share.connectionId, shareId: share.id }),
+      () => store.shares.get({ accountId: share.accountId, shareId: share.id }),
       'shares.status',
     );
   });
@@ -121,14 +121,14 @@ describe('store rows with a value outside a closed set', () => {
   });
 
   it('refuses an unknown mission_resources.source', async () => {
-    const [resource] = await store.connections.syncDiscoveredResources(connectionId, [
+    const [resource] = await store.accounts.syncDiscoveredResources(accountId, [
       { ref: 'corrupt/src', displayName: 'src' },
     ]);
     const mission = await store.missions.create({
       name: 'With a resource',
       creatorUserId: userId,
       periodSeconds: 86_400,
-      connections: [{ connectionId, resourceIds: [resource!.id] }],
+      accounts: [{ accountId, resourceIds: [resource!.id] }],
       policy: [],
     });
     corrupt('mission_resources', 'source', 'mission_id', mission.id);

@@ -4,14 +4,14 @@
  * `fixturePlugin()` builds the smallest plugin `definePlugin` accepts around
  * a given `CredentialSpec`, so every credential kind can be driven without a
  * real provider plugin; the `*_SPEC` constants are one spec per kind, with
- * endpoints on RFC 2606 hosts. `connectionsHarness()` assembles the
+ * endpoints on RFC 2606 hosts. `accountsHarness()` assembles the
  * module over the `:memory:` store, in-memory ports and a `mockFetch`.
  */
 import {
   createRegistry,
   definePlugin,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialSecret,
   type CredentialSpec,
   type OAuth2RegisteredClientSpec,
@@ -35,20 +35,20 @@ import { silentLogger } from '../../../src/server/logging';
 import type { ConfigRepo } from '../../../src/server/store/repositories/config';
 import { openTestStore, type TestStore } from '../store/testing';
 import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
-import { CredentialBroker } from '../../../src/server/connections/credentials';
+import { CredentialBroker } from '../../../src/server/accounts/credentials';
 import type { OAuthBrokerConfig } from '../../../src/server/config/types';
-import { OAuth2Clients, registeredClientKey } from '../../../src/server/connections/oauth2-clients';
-import type { BrokerAttestationKit } from '../../../src/server/connections/broker-attestation';
-import { OAuthBrokers } from '../../../src/server/connections/oauth-broker';
-import { NoticeStore, PendingConnectStore } from '../../../src/server/connections/pending';
-import { ConnectionService, type Actor } from '../../../src/server/connections/service';
+import { OAuth2Clients, registeredClientKey } from '../../../src/server/accounts/oauth2-clients';
+import type { BrokerAttestationKit } from '../../../src/server/accounts/broker-attestation';
+import { OAuthBrokers } from '../../../src/server/accounts/oauth-broker';
+import { NoticeStore, PendingConnectStore } from '../../../src/server/accounts/pending';
+import { AccountService, type Actor } from '../../../src/server/accounts/service';
 
 export const PUBLIC_URL = new URL('https://gateway.example.com');
 
 /**
  * An `oauth2` way. Its client is one the gateway registers itself, the only kind
  * there is (ADR gmail-over-imap-with-an-app-password); a test that is not about
- * the registration seeds it with `ConnectionsHarness.seedClient`.
+ * the registration seeds it with `AccountsHarness.seedClient`.
  */
 export const OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
@@ -98,9 +98,9 @@ export interface FixturePluginOptions {
   /** Tool titles, keyed by tool name. */
   readonly toolTitles?: Readonly<Record<string, string>>;
   readonly displayName?: string;
-  readonly discoverResources?: (ctx: ConnectionContext) => Promise<readonly Resource[]>;
-  readonly refresh?: (ctx: ConnectionContext) => Promise<CredentialSecret>;
-  readonly revoke?: (ctx: ConnectionContext) => Promise<void>;
+  readonly discoverResources?: (ctx: AccountContext) => Promise<readonly Resource[]>;
+  readonly refresh?: (ctx: AccountContext) => Promise<CredentialSecret>;
+  readonly revoke?: (ctx: AccountContext) => Promise<void>;
   readonly manualRevocation?: string;
   /**
    * Adds an env-scoped risk (`<id>.write-things`, acceptable in these environments):
@@ -256,13 +256,13 @@ export interface HarnessOptions {
   readonly brokerFetch?: typeof fetch;
 }
 
-export interface ConnectionsHarness extends TestStore {
+export interface AccountsHarness extends TestStore {
   readonly registry: PluginRegistry;
   readonly fetch: MockFetch;
   readonly clients: OAuth2Clients;
   readonly brokers: OAuthBrokers;
   readonly broker: CredentialBroker;
-  readonly service: ConnectionService;
+  readonly service: AccountService;
   readonly pending: PendingConnectStore;
   readonly notices: NoticeStore;
   readonly sessions: MemorySessionStore;
@@ -276,7 +276,7 @@ export interface ConnectionsHarness extends TestStore {
   seedClient(providerId: string, clientId: string, clientSecret: string | null): Promise<void>;
 }
 
-export function connectionsHarness(options: HarnessOptions): ConnectionsHarness {
+export function accountsHarness(options: HarnessOptions): AccountsHarness {
   const test = openTestStore();
   const registry = createRegistry(options.plugins);
   const fetch = mockFetch(options.routes ?? []);
@@ -303,7 +303,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     logger: silentLogger,
   });
   const broker = new CredentialBroker({
-    connections: test.store.connections,
+    accounts: test.store.accounts,
     registry,
     clients,
     brokers,
@@ -318,7 +318,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     logger: silentLogger,
     clock: test.clock,
   });
-  const service = new ConnectionService({
+  const service = new AccountService({
     store: test.store,
     registry,
     clients,

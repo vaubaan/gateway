@@ -8,7 +8,7 @@
  * `@/server/` types only (erased at build). And the pure rules under `src/lib/`
  * (`authority`, `missions`, `providers`, `shares`) import no value from
  * `src/server/`: one careless import there would carry the store into the bundle.
- * (`lib/auth`, `lib/connections`, `lib/instance.ts` are server-side page helpers.)
+ * (`lib/auth`, `lib/accounts`, `lib/instance.ts` are server-side page helpers.)
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';

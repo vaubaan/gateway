@@ -1,12 +1,12 @@
 ---
 title: OAuth broker contract — the calls between the gateway and a broker, and the attestation
 tracks:
-  - apps/gateway/src/server/connections/oauth-broker.ts
-  - apps/gateway/src/server/connections/broker-channel.ts
-  - apps/gateway/src/server/connections/broker-attestation.ts
-  - apps/gateway/src/server/connections/attestation-gcp.ts
-  - apps/gateway/src/server/connections/broker-measurements.json
-  - apps/gateway/tests/support/connections/fake-oauth-broker.ts
+  - apps/gateway/src/server/accounts/oauth-broker.ts
+  - apps/gateway/src/server/accounts/broker-channel.ts
+  - apps/gateway/src/server/accounts/broker-attestation.ts
+  - apps/gateway/src/server/accounts/attestation-gcp.ts
+  - apps/gateway/src/server/accounts/broker-measurements.json
+  - apps/gateway/tests/support/accounts/fake-oauth-broker.ts
   - apps/gateway/src/server/config/oauth-brokers.ts
   - packages/oauth-providers/src/providers.ts
 last_reviewed: 2026-11-05
@@ -23,12 +23,12 @@ an `attestation` mode ([configuration](configuration.md)).
 
 ## Start here
 
-- [`oauth-broker.ts`](../../apps/gateway/src/server/connections/oauth-broker.ts) — the calls.
-- [`broker-channel.ts`](../../apps/gateway/src/server/connections/broker-channel.ts) — the pinned
+- [`oauth-broker.ts`](../../apps/gateway/src/server/accounts/oauth-broker.ts) — the calls.
+- [`broker-channel.ts`](../../apps/gateway/src/server/accounts/broker-channel.ts) — the pinned
   TLS connection, `/attest`, timeouts.
-- [`attestation-gcp.ts`](../../apps/gateway/src/server/connections/attestation-gcp.ts) — its header
+- [`attestation-gcp.ts`](../../apps/gateway/src/server/accounts/attestation-gcp.ts) — its header
   lists every claim checked in a Confidential Space token.
-- [`fake-oauth-broker.ts`](../../apps/gateway/tests/support/connections/fake-oauth-broker.ts) — the
+- [`fake-oauth-broker.ts`](../../apps/gateway/tests/support/accounts/fake-oauth-broker.ts) — the
   reference behaviour; `oauth-broker.test.ts` pins every case below.
 
 ## Invariants
@@ -98,14 +98,14 @@ JSON `{ "error": "<[a-z_]{1,40}>", "message"? }`; the message is never shown or 
 | Status         | `error`                                                    | Where             | The gateway                                                               |
 | -------------- | ---------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------- |
 | 400            | `invalid_grant`                                            | `/grants/redeem`  | the connect fails (unknown, spent, expired, other instance, bad verifier) |
-| 400            | `invalid_grant`                                            | `/token`          | connection **expired** (the provider refused the refresh token)           |
+| 400            | `invalid_grant`                                            | `/token`          | account **expired** (the provider refused the refresh token)              |
 | 400            | `invalid_request`, `invalid_scope`, `unsupported_provider` | any               | broker failure                                                            |
 | 403            | `return_url_not_registered`                                | `/flows`          | broker failure                                                            |
 | 401            | `invalid_key`                                              | all but `/attest` | broker failure, never an expiry                                           |
 | 429, 5xx, none | `rate_limited`, `temporarily_unavailable`…                 | any               | broker failure, retried later                                             |
 | —              | attestation refused                                        | before any call   | broker failure: nothing sent, nothing expires                             |
 
-- **A broker failure is never an expiry**: only `invalid_grant` on `/token` ends a connection.
+- **A broker failure is never an expiry**: only `invalid_grant` on `/token` ends an account.
   Once the access token expires, provider calls fail until the broker is back.
 
 ## Outside the repo — what a broker operator provides

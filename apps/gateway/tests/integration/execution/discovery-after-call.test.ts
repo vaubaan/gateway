@@ -5,7 +5,7 @@
  * `resourceCreatingTools`, missions issued through the mission service.
  *
  * Spec §0 "Resource" (refreshed after a call that creates one), §3.1
- * "Resource selection" (a whole-connection mission reaches it), §8 (audit).
+ * "Resource selection" (a whole-account mission reaches it), §8 (audit).
  */
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import type { Resource } from '@vaubaan/plugin-sdk';
@@ -39,7 +39,7 @@ describe('execution door: discovery after a creating call', () => {
     await instance.close();
   });
 
-  const idle = (): Promise<void> => instance.root.connections.discoveryAfterCall.idle();
+  const idle = (): Promise<void> => instance.root.accounts.discoveryAfterCall.idle();
 
   async function discoveryEntries(): Promise<AdminAuditEntry[]> {
     const records = await instance.root.store.audit.list({ kind: 'admin' });
@@ -49,7 +49,7 @@ describe('execution door: discovery after a creating call', () => {
   }
 
   it('a successful creating call schedules one discovery, audited with its cause', async () => {
-    const mission = await instance.issue({ policy: [line(CREATE)], wholeConnection: true });
+    const mission = await instance.issue({ policy: [line(CREATE)], wholeAccount: true });
     instance.depot.scriptDiscovery(async () => [...SEEDED, space('fresh')]);
 
     const body = await instance.call(mission, 'depot__create_space', { space: 'fresh' });
@@ -57,7 +57,7 @@ describe('execution door: discovery after a creating call', () => {
     await idle();
 
     expect(instance.depot.discoveries()).toBe(1);
-    const refs = (await instance.root.store.connections.listResources(instance.connection.id)).map(
+    const refs = (await instance.root.store.accounts.listResources(instance.account.id)).map(
       (r) => r.ref,
     );
     expect(refs).toContain('fresh');
@@ -65,7 +65,7 @@ describe('execution door: discovery after a creating call', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       user_id: instance.ada.id,
-      object: { type: 'connection', id: instance.connection.id },
+      object: { type: 'account', id: instance.account.id },
       after: {
         ok: true,
         count: SEEDED.length + 1,
@@ -78,8 +78,8 @@ describe('execution door: discovery after a creating call', () => {
       },
     });
     // The account page reads the same record: "last checked" names the call.
-    const connection = await instance.root.store.connections.getById(instance.connection.id);
-    expect(connection?.metadata?.discovery).toMatchObject({
+    const account = await instance.root.store.accounts.getById(instance.account.id);
+    expect(account?.metadata?.discovery).toMatchObject({
       ok: true,
       afterCall: { missionId: mission.mission.id, tool: 'depot__create_space' },
     });
@@ -88,7 +88,7 @@ describe('execution door: discovery after a creating call', () => {
   it('a mission with future resources reaches the new resource of its environment on its next call', async () => {
     const mission = await instance.issue({
       policy: [line(CREATE), line(READ)],
-      wholeConnection: true,
+      wholeAccount: true,
     });
     // Discovered in staging: it joins the staging set, whose future is on.
     instance.depot.scriptDiscovery(async () => [...SEEDED, { ...space('fresh'), env: 'staging' }]);
@@ -109,8 +109,8 @@ describe('execution door: discovery after a creating call', () => {
   it('a resource a mission with future resources does not reach is refused with a hint that says when one is', async () => {
     // Hidden before issuance: not in the lists the mission was issued with.
     const scratch = instance.resources.find((r) => r.ref === 'scratch')!;
-    await instance.root.store.connections.setResourceHidden(scratch.id, true);
-    const mission = await instance.issue({ policy: [line(READ)], wholeConnection: true });
+    await instance.root.store.accounts.setResourceHidden(scratch.id, true);
+    const mission = await instance.issue({ policy: [line(READ)], wholeAccount: true });
 
     const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
     expect(body.error?.data?.code).toBe('resource-not-in-mission');
@@ -121,7 +121,7 @@ describe('execution door: discovery after a creating call', () => {
 
   it('a refused creating call schedules nothing', async () => {
     // The mission does not accept the creation risk: refused before execution.
-    const mission = await instance.issue({ policy: [line(READ)], wholeConnection: true });
+    const mission = await instance.issue({ policy: [line(READ)], wholeAccount: true });
 
     const body = await instance.call(mission, 'depot__create_space', { space: 'fresh' });
     expect(body.error?.data?.code).toBe('risk-not-accepted');
@@ -132,7 +132,7 @@ describe('execution door: discovery after a creating call', () => {
   });
 
   it('a creating call that failed upstream, or that the plugin declined, schedules nothing', async () => {
-    const mission = await instance.issue({ policy: [line(CREATE)], wholeConnection: true });
+    const mission = await instance.issue({ policy: [line(CREATE)], wholeAccount: true });
 
     instance.depot.script(async () => {
       throw new Error('upstream 500');
@@ -159,7 +159,7 @@ describe('execution door: discovery after a creating call', () => {
   });
 
   it('a burst of creations coalesces: one discovery in flight, one queued', async () => {
-    const mission = await instance.issue({ policy: [line(CREATE)], wholeConnection: true });
+    const mission = await instance.issue({ policy: [line(CREATE)], wholeAccount: true });
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     let run = 0;
@@ -183,7 +183,7 @@ describe('execution door: discovery after a creating call', () => {
   });
 
   it('the agent is answered before the discovery runs', async () => {
-    const mission = await instance.issue({ policy: [line(CREATE)], wholeConnection: true });
+    const mission = await instance.issue({ policy: [line(CREATE)], wholeAccount: true });
     let started = false;
     instance.depot.scriptDiscovery(async () => {
       started = true;

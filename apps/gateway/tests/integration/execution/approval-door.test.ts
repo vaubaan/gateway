@@ -15,7 +15,7 @@ import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf } from '../../../src/server/budget';
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import {
   executionInstance,
   TEST_PUBLIC_URL,
@@ -63,21 +63,21 @@ async function openRig(): Promise<Rig> {
     deps: { providerFetch: upstream, logWrite: (_level, text) => logs.push(text) },
   });
   const { store, missions } = instance.root;
-  const github = await store.connections.create({
+  const github = await store.accounts.create({
     provider: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({ kind: 'api-key', fields: { token: PAT }, metadata: {} }),
   });
-  await store.connections.syncDiscoveredResources(github.id, [
+  await store.accounts.syncDiscoveredResources(github.id, [
     { ref: 'acme/app', displayName: 'acme/app', env: null },
   ]);
   const issued = await missions.service.issue(instance.ada, {
     name: 'Develop acme/app',
     // The macro-actions as the plugin ships them, at a trust level: nothing adjusted.
-    connections: [
+    accounts: [
       {
-        connection_id: github.id,
+        account_id: github.id,
         trust_levels: { read: 'trusting', propose: 'trusting', administer: 'trusting' },
       },
     ],
@@ -127,7 +127,7 @@ describe('approve an action through the execution door (GitHub macro-actions at 
 
   const counters = async () => {
     const usage = await rig.root.budget.usageOf(budgetMissionOf(rig.mission.mission), new Date());
-    // One set on the connection: the counters read by risk.
+    // One set on the account: the counters read by risk.
     return Object.fromEntries(
       [...usage.consumed].map(([line, n]) => [line.slice(line.indexOf('::') + 2), n]),
     );

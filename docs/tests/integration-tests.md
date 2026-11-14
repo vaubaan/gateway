@@ -54,7 +54,7 @@ last_reviewed: 2026-11-14
 - ⚠️ **Telemetry classes of the shipped plugins** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — the reduction is tested on a fixture, not on each plugin's failures.
 - ⚠️ **The collector's SQL against PostgREST** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — `schema.sql` is checked as text and was applied by hand once; the `PT429` → 429 mapping comes from documentation.
 - ⚠️ **Group shares through the `vaubaan` plugin** (spec [§4.1 bis](../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin)) — tested in `AuthorityService`, not again over MCP.
-- ⚠️ **A ref the connection never discovered** (spec [§3.1](../spec/vaubaan-gateway.md#31-the-chain)) — rejected with the classifier's sentence rather than `resource-not-in-mission`; only the rejection is tested.
+- ⚠️ **A ref the account never discovered** (spec [§3.1](../spec/vaubaan-gateway.md#31-the-chain)) — rejected with the classifier's sentence rather than `resource-not-in-mission`; only the rejection is tested.
 - ⚠️ **A user removed from the IdP** (spec [§6](../spec/vaubaan-gateway.md#6-security)) — no deprovisioning feed; only an operator's deactivation sets `removed`.
 - ⚠️ **Entra ID above the group limit** (spec [§4.2](../spec/vaubaan-gateway.md#42-human-surface)) — overage markers replayed by `FakeIdp`, never against Entra.
 - ⚠️ **The door's authority re-check cost** (spec [§4.1](../spec/vaubaan-gateway.md#41-execution-surface)) — measured by `door-latency.bench.test.ts`, not asserted.

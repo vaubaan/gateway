@@ -29,7 +29,7 @@ const missionCtx: MissionContext = {
     prefix: 'vbn_live_abcd1234',
     holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
   },
-  connections: [],
+  accounts: [],
   resources: [],
   resource_sets: [],
   policy: [],

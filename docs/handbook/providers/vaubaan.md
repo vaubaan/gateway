@@ -21,7 +21,7 @@ Careful — and the agent calls the `vaubaan__*` tools on `/mcp` with that missi
 Rules common to every plugin: [providers README](README.md).
 
 The seven tools keep the names, arguments and answers of the retired management door
-(`list_my_connections`, `get_catalog`, `list_my_missions`, `preview_policy`, `issue_mission`,
+(`list_my_accounts`, `get_catalog`, `list_my_missions`, `preview_policy`, `issue_mission`,
 `rotate_mission_token`, `revoke_mission`), prefixed `vaubaan__`, so an agent instruction written for
 the door still names the right tool. One answer changed: `issued_via` names the issuing mission
 (`mission_id`, `mission_name`, `this_mission`) where it named the OAuth client.
@@ -68,7 +68,7 @@ the door still names the right tool. One answer changed: `issued_via` names the 
 - A `host` account carries no resource: missions on it use the "account without resources" path
   (`{ scope: 'all' }` of nothing); `discoverResources` answers `[]`.
 - **A host account takes no owner act**: never shared, transferred or reassigned, nothing to
-  reconnect (`ownerActRefusal` → `connection-personal`); it is not marked `unowned` when its person
+  reconnect (`ownerActRefusal` → `account-personal`); it is not marked `unowned` when its person
   is deactivated (the derived rule stops its missions) and is not listed among the ownerless
   accounts. Connecting again hands back the person's active account: one per person.
 - The plugin is enabled and disabled like any plugin (`plugins.enabled`); a pin declaring a `host`
@@ -106,14 +106,14 @@ refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL
 | ----------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------- |
 | `invalid-arguments`           | the arguments do not match the tool's input schema                                           | `issues`                         |
 | `draft-refused`               | `issue_mission` on a draft the preview does not accept                                       | `uncovered`, `issues`, `preview` |
-| `vaubaan-account-not-allowed` | `issue_mission` on a draft that names a Vaubaan account                                      | `connection_ids`                 |
+| `vaubaan-account-not-allowed` | `issue_mission` on a draft that names a Vaubaan account                                      | `account_ids`                    |
 | `self-not-allowed`            | `rotate_mission_token` or `revoke_mission` on the calling mission                            | `mission_id`                     |
 | `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key            |                                  |
 | `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change) | `mission_id`                     |
 | `mission-inactive`            | `rotate_mission_token` on a revoked, expired or orphaned mission                             | `mission_id`, `state`, `orphan`  |
 | `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                        | `mission_id`                     |
 | `unknown-provider`            | `get_catalog` on a provider the instance does not ship                                       | `providers`                      |
-| `unknown-connection`          | `get_catalog` with a `connection_id` the user holds nothing on                               | `connection_id`                  |
+| `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                  | `account_id`                     |
 | `instance-limit-reached`      | `issue_mission` while the instance holds as many active missions as `limits.active_missions` | `count`, `ceiling`               |
 | `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details               |                                  |
 

@@ -39,9 +39,9 @@ describe('missions: a token insert that lost the race is refused', () => {
     ({ ada, bob } = seeded);
     const draft: MissionDraft = {
       name: 'Ship the billing page',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],

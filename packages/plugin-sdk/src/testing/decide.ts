@@ -9,7 +9,7 @@
 import { envResolverFor, evaluateCall, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import type { Resource, RiskDecision, RiskId } from '@vaubaan/shared';
 
-import type { ClassifyConnection, ProviderPlugin } from '../plugin.ts';
+import type { ClassifyAccount, ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
 
 export {
@@ -37,12 +37,14 @@ export type { MissionPolicy, MissionPolicyEntry, RiskDecision } from '@vaubaan/s
 export interface CallUnderTest {
   readonly tool: string;
   readonly args: Readonly<Record<string, unknown>>;
-  /** The mission's resources on the connection. */
+  /** The mission's resources on the account. */
   readonly resources: readonly Resource[];
   /** The risks the mission accepted, qualified as a mission stores them (`acme[prod].widget-write`). */
   readonly accepted: readonly RiskId[];
-  /** The connection's public form fields, when the classifier reads them. */
-  readonly connection?: ClassifyConnection;
+  /** The account's public form fields, when the classifier reads them. */
+  readonly account?: ClassifyAccount;
+  /** @deprecated The former name of `account`, read when `account` is absent. Removed in 0.10. */
+  readonly connection?: ClassifyAccount;
   /** The plugin's indexed catalog ; built from `plugin.catalog` when absent. */
   readonly catalog?: IndexedRiskCatalog;
 }
@@ -59,7 +61,12 @@ export type CallDecision =
  * a mission allows, not of how much.
  */
 export function decideCall(plugin: ProviderPlugin, call: CallUnderTest): CallDecision {
-  const classified = plugin.classify(call.tool, call.args, call.resources, call.connection);
+  const classified = plugin.classify(
+    call.tool,
+    call.args,
+    call.resources,
+    call.account ?? call.connection,
+  );
   if ('denied' in classified) return { outcome: 'classify-denied', reason: classified.denied };
   return evaluateCall({
     executed_slices: classified.slices,

@@ -23,7 +23,7 @@
  */
 
 import type { RefusalCode, Resource, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
-import type { ClassifyConnection, ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ClassifyAccount, ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import {
   envResolverFor,
@@ -92,13 +92,13 @@ export type Classifier = Pick<ProviderPlugin, 'classify' | 'envOf'>;
 export function evaluateCallForMission(input: {
   tool: string;
   args: Readonly<Record<string, unknown>>;
-  /** The mission's resources on the connection the call targets. Handed to
+  /** The mission's resources on the account the call targets. Handed to
    *  the classifier and, unless `envResolver` is given, composed with the
    *  adapter's `envOf` to qualify the touched risks by environment. */
   resources: readonly Resource[];
-  /** The public form fields of that connection, handed to the classifier
-   *  (`ClassifyConnection`); absent outside a host. */
-  connection?: ClassifyConnection;
+  /** The public form fields of that account, handed to the classifier
+   *  (`ClassifyAccount`); absent outside a host. */
+  account?: ClassifyAccount;
   mission: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
@@ -113,7 +113,7 @@ export function evaluateCallForMission(input: {
     return { kind: 'no-catalog', provider: 'unknown' };
   }
 
-  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.connection);
+  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.account);
   if ('denied' in classified) {
     return { kind: 'classify-denied', reason: classified.denied };
   }
@@ -142,10 +142,10 @@ export function evaluateCallForMission(input: {
   };
 }
 
-/** One resource set of the connection a call targets, with what it accepts. */
+/** One resource set of the account a call targets, with what it accepts. */
 export interface ResourceSetToJudge {
   readonly id: string;
-  /** Its place among the sets of the connection, from 1. */
+  /** Its place among the sets of the account, from 1. */
   readonly position: number;
   /** The refs of the mission resources it holds. */
   readonly refs: readonly string[];
@@ -157,7 +157,7 @@ export interface ResourceSetToJudge {
  * The candidate sets of a call (risk model §4.7): for each slice, the sets of every
  * identifier or list value of the slice equal to a mission resource's ref — the rule
  * `resourceEnvResolver` reads environments by — and, for a slice that names none, every
- * set of the connection. A slice citing refs of several sets brings each of them in: an
+ * set of the account. A slice citing refs of several sets brings each of them in: an
  * org slug equal to an app's ref (`fly.org[acme].app[acme-db]`) or a list
  * (`board[b1,b2]`) can only widen the candidates, never narrow them to one set. What
  * cannot be placed in one set never gets one set's rights alone. Position order.
@@ -200,21 +200,21 @@ export function resourceSetsLabel(sets: readonly Pick<ResourceSetToJudge, 'posit
 }
 
 /**
- * Pure, like `evaluateCallForMission`, for a connection whose mission part holds
+ * Pure, like `evaluateCallForMission`, for an account whose mission part holds
  * resource sets (risk model §4.7): the call is classified once, its candidate sets
  * found from the slices, and the risk step (`evaluateCall`, unchanged) runs once per
  * candidate set against that set's accepted risks. Every touched risk must be accepted
  * in every candidate set; the missing ones are the union. Environment resolution reads
- * the resources of the whole connection: the set chooses only the policy. When the
- * connection has several sets, a refusal's hint names the sets it was judged against.
+ * the resources of the whole account: the set chooses only the policy. When the
+ * account has several sets, a refusal's hint names the sets it was judged against.
  */
 export function evaluateCallForResourceSets(input: {
   tool: string;
   args: Readonly<Record<string, unknown>>;
-  /** Every mission resource of the connection, all sets together. */
+  /** Every mission resource of the account, all sets together. */
   resources: readonly Resource[];
-  connection?: ClassifyConnection;
-  /** The sets of the connection, in position order; never empty. */
+  account?: ClassifyAccount;
+  /** The sets of the account, in position order; never empty. */
   sets: readonly ResourceSetToJudge[];
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
@@ -222,7 +222,7 @@ export function evaluateCallForResourceSets(input: {
 }): CallVerdict {
   const { tool, args, resources, sets, adapter, catalog } = input;
   if (!catalog) return { kind: 'no-catalog', provider: 'unknown' };
-  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.connection);
+  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.account);
   if ('denied' in classified) return { kind: 'classify-denied', reason: classified.denied };
 
   const slices = classified.slices;
@@ -255,14 +255,14 @@ export function evaluateCallForResourceSets(input: {
   }
   const [firstRefusal] = refused;
   if (!firstRefusal || firstRefusal.decision.outcome !== 'denied') {
-    // No candidate set: a connection without sets accepts nothing.
+    // No candidate set: an account without sets accepts nothing.
     return {
       kind: 'deny',
       code: 'risk-not-accepted',
       missing_risks: [],
       risks_touched: [],
       executed_slices: slices,
-      hint: 'this mission holds no resource set on this connection: it accepts nothing there.',
+      hint: 'this mission holds no resource set on this account: it accepts nothing there.',
       resource_set_ids,
       accepted_risks,
     };

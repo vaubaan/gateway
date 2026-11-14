@@ -309,7 +309,7 @@ describe('temporary refs are cleaned up on every path', () => {
       {
         ref: stray,
         targetRef: 'refs/heads/feature/stray',
-        connectionId: rig.github.id,
+        accountId: rig.github.id,
         repository: REPOSITORY,
         missionId: developer.mission.id,
         objectId: main,

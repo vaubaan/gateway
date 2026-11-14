@@ -4,7 +4,7 @@
  *
  * Every service checks ownership before it touches one of them, and a check
  * forgotten once would be an IDOR. The repositories therefore take a key that
- * carries the parent — `(missionId, tokenId)`, `(connectionId, shareId)`,
+ * carries the parent — `(missionId, tokenId)`, `(accountId, shareId)`,
  * `(missionId, requestId)` — and offer no bare-id variant: a lookup by id
  * alone does not compile (the type assertions below run in `tsc`), and the
  * source of the three repositories holds no statement that selects or updates
@@ -52,8 +52,8 @@ describe('lookups keyed by their parent', () => {
         /UPDATE mission_tokens SET last_used_at = \?\s+WHERE mission_id = \? AND id = \?/,
       ],
       'shares.ts': [
-        /FROM shares WHERE connection_id = \? AND id = \?/,
-        /UPDATE shares SET status = 'revoked', revoked_at = \?\s+WHERE connection_id = \? AND id = \? AND status = 'active'/,
+        /FROM shares WHERE account_id = \? AND id = \?/,
+        /UPDATE shares SET status = 'revoked', revoked_at = \?\s+WHERE account_id = \? AND id = \? AND status = 'active'/,
       ],
       'requests.ts': [/FROM requests WHERE mission_id = \? AND id = \?/],
     };

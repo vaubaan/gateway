@@ -2,12 +2,12 @@
  * The store side of "what a mission creates, it reaches" (ADR
  * created-resources-join-the-mission; migration 0024):
  *
- *   - `ConnectionsRepo.upsertDiscoveredResources` inserts a created ref or clears its
+ *   - `AccountsRepo.upsertDiscoveredResources` inserts a created ref or clears its
  *     stale flag, keeps owner edits, merges provider facts, touches no other row;
  *   - `syncDiscoveredResources` does not mark stale a row first seen less than
  *     `FRESH_RESOURCE_STALE_GRACE_MS` ago;
  *   - `MissionsRepo.addResources` adds to an explicit selection with its source, turns
- *     an empty `all` into `selected`, writes nothing under `connection`, and records a
+ *     an empty `all` into `selected`, writes nothing under `account`, and records a
  *     `resources-created` event in the mission's session;
  *   - `MissionsRepo.edit` stores the resource rows it adds with source `edit`
  *     (ADR mission-editable-after-issuance) and leaves the kept rows' source alone.
@@ -24,7 +24,7 @@ import {
 } from '../../../src/server/store/index.ts';
 import {
   firstSetOf,
-  flatConnections,
+  flatAccounts,
   openTestStore,
   type TestStore,
 } from '../../support/store/testing.ts';
@@ -38,7 +38,7 @@ describe('created resources in the store', () => {
   let t: TestStore;
   let store: Store;
   let creator: string;
-  let connection: string;
+  let account: string;
   let other: string;
 
   beforeEach(async () => {
@@ -48,30 +48,30 @@ describe('created resources in the store', () => {
       await store.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'c', email: 'c@x' })
     ).id;
     const create = (provider: string) =>
-      store.connections.create({
+      store.accounts.create({
         provider,
         owner: { kind: 'user', id: creator },
         displayName: provider,
         credential: null,
       });
-    connection = (await create('github')).id;
+    account = (await create('github')).id;
     other = (await create('supabase')).id;
-    await store.connections.syncDiscoveredResources(connection, [
+    await store.accounts.syncDiscoveredResources(account, [
       { ref: 'acme/a', displayName: 'A', metadata: { kept: 1, replaced: 'old' } },
       { ref: 'acme/b', displayName: 'B' },
     ]);
   });
   afterEach(() => store.close());
 
-  const rows = () => store.connections.listResources(connection);
+  const rows = () => store.accounts.listResources(account);
   const row = async (ref: string) => (await rows()).find((r) => r.ref === ref);
 
   describe('upsertDiscoveredResources', () => {
-    it('inserts a new ref, unlabelled so it reads the connection default; other rows untouched', async () => {
-      await store.connections.setDefaultEnv(connection, 'staging');
+    it('inserts a new ref, unlabelled so it reads the account default; other rows untouched', async () => {
+      await store.accounts.setDefaultEnv(account, 'staging');
       const before = await rows();
       t.clock.advance(MINUTE);
-      const [created, ...more] = await store.connections.upsertDiscoveredResources(connection, [
+      const [created, ...more] = await store.accounts.upsertDiscoveredResources(account, [
         { ref: 'acme/new', displayName: 'New', metadata: { url: 'u' } },
       ]);
       expect(more).toEqual([]);
@@ -79,7 +79,7 @@ describe('created resources in the store', () => {
         ref: 'acme/new',
         displayName: 'New',
         env: 'staging',
-        envSource: 'connection-default',
+        envSource: 'account-default',
         metadata: { url: 'u' },
         staleSince: null,
       });
@@ -89,16 +89,14 @@ describe('created resources in the store', () => {
 
     it('a known ref: stale flag cleared, provider facts merged, owner edits kept', async () => {
       const a = (await row('acme/a'))!;
-      await store.connections.setResourceDisplayName(a.id, 'Owner name');
-      await store.connections.setResourceEnv(a.id, 'prod');
-      await store.connections.setResourceHidden(a.id, true);
+      await store.accounts.setResourceDisplayName(a.id, 'Owner name');
+      await store.accounts.setResourceEnv(a.id, 'prod');
+      await store.accounts.setResourceHidden(a.id, true);
       t.clock.advance(FRESH_RESOURCE_STALE_GRACE_MS + MINUTE);
-      await store.connections.syncDiscoveredResources(connection, [
-        { ref: 'acme/b', displayName: 'B' },
-      ]);
+      await store.accounts.syncDiscoveredResources(account, [{ ref: 'acme/b', displayName: 'B' }]);
       expect((await row('acme/a'))?.staleSince).not.toBeNull();
 
-      const [again] = await store.connections.upsertDiscoveredResources(connection, [
+      const [again] = await store.accounts.upsertDiscoveredResources(account, [
         { ref: 'acme/a', displayName: 'Upstream', metadata: { replaced: 'new', url: 'u' } },
       ]);
       expect(again).toMatchObject({
@@ -111,14 +109,14 @@ describe('created resources in the store', () => {
       });
     });
 
-    it('returns the rows of the given refs only, once each, and refuses an unknown connection', async () => {
-      const got = await store.connections.upsertDiscoveredResources(connection, [
+    it('returns the rows of the given refs only, once each, and refuses an unknown account', async () => {
+      const got = await store.accounts.upsertDiscoveredResources(account, [
         { ref: 'acme/x', displayName: 'X' },
         { ref: 'acme/x', displayName: 'X again' },
       ]);
       expect(got.map((r) => [r.ref, r.displayName])).toEqual([['acme/x', 'X']]);
       await expect(
-        store.connections.upsertDiscoveredResources('nope', [{ ref: 'r', displayName: 'r' }]),
+        store.accounts.upsertDiscoveredResources('nope', [{ ref: 'r', displayName: 'r' }]),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
@@ -126,7 +124,7 @@ describe('created resources in the store', () => {
   describe('the stale grace of a fresh row', () => {
     it('a discovery that misses a row first seen within 15 minutes keeps it; past that, stale', async () => {
       t.clock.advance(MINUTE);
-      await store.connections.upsertDiscoveredResources(connection, [
+      await store.accounts.upsertDiscoveredResources(account, [
         { ref: 'acme/new', displayName: 'New' },
       ]);
       const listed = [
@@ -134,28 +132,24 @@ describe('created resources in the store', () => {
         { ref: 'acme/b', displayName: 'B' },
       ];
       t.clock.advance(FRESH_RESOURCE_STALE_GRACE_MS - MINUTE);
-      await store.connections.syncDiscoveredResources(connection, listed);
+      await store.accounts.syncDiscoveredResources(account, listed);
       expect((await row('acme/new'))?.staleSince).toBeNull();
 
       t.clock.advance(2 * MINUTE);
-      await store.connections.syncDiscoveredResources(connection, listed);
+      await store.accounts.syncDiscoveredResources(account, listed);
       expect((await row('acme/new'))?.staleSince).toBe(t.clock.now().toISOString());
     });
 
     it('a stale row that comes back is fresh again: protected anew', async () => {
       t.clock.advance(FRESH_RESOURCE_STALE_GRACE_MS + MINUTE);
-      await store.connections.syncDiscoveredResources(connection, [
-        { ref: 'acme/b', displayName: 'B' },
-      ]);
+      await store.accounts.syncDiscoveredResources(account, [{ ref: 'acme/b', displayName: 'B' }]);
       expect((await row('acme/a'))?.staleSince).not.toBeNull();
       t.clock.advance(MINUTE);
-      await store.connections.upsertDiscoveredResources(connection, [
+      await store.accounts.upsertDiscoveredResources(account, [
         { ref: 'acme/a', displayName: 'A' },
       ]);
       t.clock.advance(MINUTE);
-      await store.connections.syncDiscoveredResources(connection, [
-        { ref: 'acme/b', displayName: 'B' },
-      ]);
+      await store.accounts.syncDiscoveredResources(account, [{ ref: 'acme/b', displayName: 'B' }]);
       expect((await row('acme/a'))?.staleSince).toBeNull();
     });
   });
@@ -166,12 +160,12 @@ describe('created resources in the store', () => {
         name: 'm',
         creatorUserId: creator,
         periodSeconds: 86_400,
-        connections: [{ connectionId: connection, resourceIds: ids, future }],
+        accounts: [{ accountId: account, resourceIds: ids, future }],
         policy: POLICY,
       });
     const created = async () =>
       (
-        await store.connections.upsertDiscoveredResources(connection, [
+        await store.accounts.upsertDiscoveredResources(account, [
           { ref: 'acme/new', displayName: 'New' },
         ])
       )[0]!;
@@ -180,23 +174,23 @@ describe('created resources in the store', () => {
       const a = (await row('acme/a'))!;
       const m = await mission([a.id]);
       const fresh = await created();
-      const result = await store.missions.addResources(m.id, connection, [fresh.id], 'created');
+      const result = await store.missions.addResources(m.id, account, [fresh.id], 'created');
       expect(result).toEqual({
         placed: [{ resourceId: fresh.id, resourceSetId: firstSetOf(m) }],
         added: [fresh.id],
       });
       const stored = await store.missions.getById(m.id);
-      expect(flatConnections(stored!)[0]).toEqual({
-        connectionId: connection,
+      expect(flatAccounts(stored!)[0]).toEqual({
+        accountId: account,
         resourceIds: [a.id, fresh.id].sort(),
         resourceSources: { [fresh.id]: 'created' },
       });
       // Again: nothing repeated, the source kept.
-      expect(await store.missions.addResources(m.id, connection, [fresh.id], 'edit')).toEqual({
+      expect(await store.missions.addResources(m.id, account, [fresh.id], 'edit')).toEqual({
         placed: [{ resourceId: fresh.id, resourceSetId: firstSetOf(m) }],
         added: [],
       });
-      expect(flatConnections((await store.missions.getById(m.id))!)[0]?.resourceSources).toEqual({
+      expect(flatAccounts((await store.missions.getById(m.id))!)[0]?.resourceSources).toEqual({
         [fresh.id]: 'created',
       });
     });
@@ -204,8 +198,8 @@ describe('created resources in the store', () => {
     describe('with several resource sets (risk model §4.7)', () => {
       /** Set 1 holds acme/a (prod), set 2 acme/b (staging, future), set 3 none (prod, future). */
       const threeSets = async () => {
-        const a = await store.connections.setResourceEnv((await row('acme/a'))!.id, 'prod');
-        const b = await store.connections.setResourceEnv((await row('acme/b'))!.id, 'staging');
+        const a = await store.accounts.setResourceEnv((await row('acme/a'))!.id, 'prod');
+        const b = await store.accounts.setResourceEnv((await row('acme/b'))!.id, 'staging');
         const set = (resourceIds: string[], future: boolean, env?: string) => ({
           resourceIds,
           future,
@@ -216,23 +210,20 @@ describe('created resources in the store', () => {
           name: 'm',
           creatorUserId: creator,
           periodSeconds: 86_400,
-          connections: [
+          accounts: [
             {
-              connectionId: connection,
+              accountId: account,
               resourceSets: [set([a.id], false), set([b.id], true), set([], true, 'prod')],
             },
           ],
         });
       };
-      const setIds = (m: { connections: readonly { resourceSets: readonly { id: string }[] }[] }) =>
-        m.connections[0]!.resourceSets.map((x) => x.id);
+      const setIds = (m: { accounts: readonly { resourceSets: readonly { id: string }[] }[] }) =>
+        m.accounts[0]!.resourceSets.map((x) => x.id);
       const fresh = async (ref: string, env: string) =>
-        store.connections.setResourceEnv(
-          (
-            await store.connections.upsertDiscoveredResources(connection, [
-              { ref, displayName: ref },
-            ])
-          )[0]!.id,
+        store.accounts.setResourceEnv(
+          (await store.accounts.upsertDiscoveredResources(account, [{ ref, displayName: ref }]))[0]!
+            .id,
           env,
         );
       const placedIn = (result: { placed: readonly { resourceSetId: string }[] }) =>
@@ -244,7 +235,7 @@ describe('created resources in the store', () => {
         const r = await fresh('acme/p1', 'prod');
         expect(
           placedIn(
-            await store.missions.addResources(m.id, connection, [r.id], 'created', undefined, [
+            await store.missions.addResources(m.id, account, [r.id], 'created', undefined, [
               second!,
             ]),
           ),
@@ -257,7 +248,7 @@ describe('created resources in the store', () => {
         const p1 = await fresh('acme/p1', 'prod');
         expect(
           placedIn(
-            await store.missions.addResources(m.id, connection, [p1.id], 'created', undefined, [
+            await store.missions.addResources(m.id, account, [p1.id], 'created', undefined, [
               first!,
               third!,
             ]),
@@ -266,7 +257,7 @@ describe('created resources in the store', () => {
         const p2 = await fresh('acme/p2', 'prod');
         expect(
           placedIn(
-            await store.missions.addResources(m.id, connection, [p2.id], 'created', undefined, [
+            await store.missions.addResources(m.id, account, [p2.id], 'created', undefined, [
               first!,
               second!,
             ]),
@@ -281,7 +272,7 @@ describe('created resources in the store', () => {
         // Judged against set 2 only once the other candidate is gone: set 2, not set 1.
         expect(
           placedIn(
-            await store.missions.addResources(m.id, connection, [d1.id], 'created', undefined, [
+            await store.missions.addResources(m.id, account, [d1.id], 'created', undefined, [
               second!,
               'gone-set',
             ]),
@@ -290,7 +281,7 @@ describe('created resources in the store', () => {
         const d2 = await fresh('acme/d2', 'dev');
         expect(
           placedIn(
-            await store.missions.addResources(m.id, connection, [d2.id], 'created', undefined, [
+            await store.missions.addResources(m.id, account, [d2.id], 'created', undefined, [
               second!,
               first!,
             ]),
@@ -303,7 +294,7 @@ describe('created resources in the store', () => {
       const m = await mission([], true);
       const session = await store.sessions.getOrCreate(m.id);
       const fresh = await created();
-      await store.missions.addResources(m.id, connection, [fresh.id], 'created', {
+      await store.missions.addResources(m.id, account, [fresh.id], 'created', {
         tool: 'github__create_repo',
         actorUserId: creator,
       });
@@ -312,24 +303,24 @@ describe('created resources in the store', () => {
         [
           'resources-created',
           creator,
-          { tool: 'github__create_repo', connection_id: connection, refs: ['acme/new'] },
+          { tool: 'github__create_repo', account_id: account, refs: ['acme/new'] },
         ],
       ]);
     });
 
-    it('refuses a resource of another connection and a connection the mission does not carry', async () => {
+    it('refuses a resource of another account and an account the mission does not carry', async () => {
       const m = await mission();
-      const [foreign] = await store.connections.upsertDiscoveredResources(other, [
+      const [foreign] = await store.accounts.upsertDiscoveredResources(other, [
         { ref: 'proj', displayName: 'proj' },
       ]);
       await expect(
-        store.missions.addResources(m.id, connection, [foreign!.id], 'created'),
+        store.missions.addResources(m.id, account, [foreign!.id], 'created'),
       ).rejects.toBeInstanceOf(InvariantError);
       await expect(
         store.missions.addResources(m.id, other, [foreign!.id], 'created'),
       ).rejects.toBeInstanceOf(NotFoundError);
       // Nothing written by the refused call.
-      expect(flatConnections((await store.missions.getById(m.id))!)[0]).toMatchObject({
+      expect(flatAccounts((await store.missions.getById(m.id))!)[0]).toMatchObject({
         resourceIds: [],
       });
     });
@@ -340,9 +331,9 @@ describe('created resources in the store', () => {
       const insert = (source: string) =>
         store.db
           .prepare(
-            'INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO mission_resources (mission_id, account_id, resource_id, resource_set_id, source) VALUES (?, ?, ?, ?, ?)',
           )
-          .run(m.id, connection, b.id, firstSetOf(m), source);
+          .run(m.id, account, b.id, firstSetOf(m), source);
       expect(() => insert('other')).toThrow(/CHECK/);
       expect(() => insert('future')).not.toThrow();
     });
@@ -352,18 +343,18 @@ describe('created resources in the store', () => {
       const b = (await row('acme/b'))!;
       const m = await mission([a.id]);
       const fresh = await created();
-      await store.missions.addResources(m.id, connection, [fresh.id], 'created');
+      await store.missions.addResources(m.id, account, [fresh.id], 'created');
       const edited = await store.missions.edit(m.id, {
         actorUserId: creator,
         unchanged: () => true,
         name: m.name,
         expiresAt: null,
-        connections: [
+        accounts: [
           {
-            connectionId: connection,
+            accountId: account,
             resourceIds: [a.id, b.id, fresh.id],
           },
-          { connectionId: other, resourceIds: [], future: true },
+          { accountId: other, resourceIds: [], future: true },
         ],
         policy: POLICY,
         summary: (closed) => ({
@@ -371,8 +362,8 @@ describe('created resources in the store', () => {
           details: {
             name_changed: false,
             expiry_changed: false,
-            connections_added: 1,
-            connections_removed: 0,
+            accounts_added: 1,
+            accounts_removed: 0,
             resources_added: 1,
             resources_removed: 0,
             scopes_changed: 0,
@@ -386,8 +377,8 @@ describe('created resources in the store', () => {
       });
       expect(edited).not.toBeNull();
       const stored = await store.missions.getById(m.id);
-      expect(flatConnections(stored!).find((c) => c.connectionId === connection)).toEqual({
-        connectionId: connection,
+      expect(flatAccounts(stored!).find((c) => c.accountId === account)).toEqual({
+        accountId: account,
         resourceIds: [a.id, b.id, fresh.id].sort(),
         resourceSources: { [b.id]: 'edit', [fresh.id]: 'created' },
       });

@@ -56,9 +56,9 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
       prefix: 'abcdefgh',
       holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
     },
-    connections: [
+    accounts: [
       {
-        id: f.connectionId,
+        id: f.accountId,
         provider: 'github',
         display_name: 'gh',
         status: 'active',
@@ -67,7 +67,7 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
     ],
     resources: [],
     resource_sets: [...new Set(mission.policy.map((entry) => entry.resource_set_id ?? ''))].map(
-      (id, i) => ({ id, connection_id: f.connectionId, position: i + 1, resource_ids: [] }),
+      (id, i) => ({ id, account_id: f.accountId, position: i + 1, resource_ids: [] }),
     ),
     policy: mission.policy,
     session: null,
@@ -77,9 +77,9 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
 function buildPipeline(f: BudgetFixture, now: () => Date): CallPipeline {
   const resources: ResourceStage = {
     async resolve(ctx) {
-      const connection = ctx.connections[0];
-      if (!connection) throw new Error('fixture has a connection');
-      return { ok: true, target: { connection, resource: null } };
+      const account = ctx.accounts[0];
+      if (!account) throw new Error('fixture has an account');
+      return { ok: true, target: { account, resource: null } };
     },
   };
   const risks: RiskStage = {

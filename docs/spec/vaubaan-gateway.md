@@ -25,13 +25,23 @@ status: draft
 
 ## 0. Vocabulary
 
-**Words.** Tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration keys spell
-the protocol's words, and so does this spec where it states a rule. The interface speaks its own
-words; §4.2, §4.4 and §7 use them:
+**One word per thing** (ADR one-word-per-thing-account-service-plugin). Three words are the same
+in the interface, the code, the store and the protocol:
+
+- **account** — your account at a service, plugged once into the instance (the full form "your
+  account at a service" in definitions only; never "service account", which names a robot
+  identity on cloud platforms). The instance's own password accounts are **sign-in accounts**.
+- **service** — the third-party product a plugin connects to (a code host, a mailbox…). The code and the protocol still
+  say `provider` until its rename; a sign-in provider stays explicit (IdP).
+- **plugin** — only the code package: installed, pinned, built with the SDK, with its reference
+  page.
+
+For the other words, tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration
+keys spell the protocol's words, and so does this spec where it states a rule. The interface speaks
+its own words; §4.2, §4.4 and §7 use them:
 
 | The interface says                               | The protocol and this spec say                                                                |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| account                                          | connection                                                                                    |
 | access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                             |
 | "Shared with you"                                | shares received; missions one is a member of                                                  |
 | permission (its id stays visible, in mono)       | risk, `RiskId`                                                                                |
@@ -41,13 +51,13 @@ words; §4.2, §4.4 and §7 use them:
 | machine key                                      | named token                                                                                   |
 | Replace key                                      | rotate                                                                                        |
 | Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                           |
-| Vaubaan account                                  | the connection of the `vaubaan` plugin, a host account                                        |
+| Vaubaan account                                  | the account of the `vaubaan` plugin, a host account                                           |
 | Activity                                         | audit; the session of a mission                                                               |
 | teammate                                         | mission member                                                                                |
 | team                                             | group                                                                                         |
 | administrator                                    | operator                                                                                      |
 | service; OAuth client; Reference                 | provider; the OAuth client the instance registers at a provider; the reference of each plugin |
-| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)                                 |
+| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of an account)                                   |
 | setup kit                                        | bootstrap kit                                                                                 |
 | mission, macro-action, resource, environment     | the same                                                                                      |
 
@@ -69,9 +79,9 @@ carries, a callback registered at a provider).
   nobody by itself: it is shown, and an administrator applies it or not.
 - **Sign-in provider (IdP)** — where the instance delegates human identification: the company
   directory (OpenID Connect), a public service where people hold their own accounts (OpenID Connect,
-  GitHub), or the instance's **local accounts**. Several at once, each with an id, a name and its
+  GitHub), or the instance's **sign-in accounts**. Several at once, each with an id, a name and its
   own admission rule.
-- **Local account** — an email and a password kept by the instance, for a company without a
+- **Sign-in account** — an email and a password kept by the instance, for a company without a
   directory. A provider kind of its own (at most one), always invited-only: an account exists only
   for an invited address or an administrator, created through a single-use link, or by the setup for
   the first administrator. The instance stores no other password.
@@ -90,30 +100,31 @@ carries, a callback registered at a provider).
 - **User** — a human authenticated by a sign-in provider, identified by (issuer, subject), displayed
   by email. **Identities never merge by email**: one person through two providers is two users.
 - **Group** — a named set of users, from provider claims or else a local table kept by the operator;
-  names are unique across both sources, and a group is never deleted. Can own a connection and be
+  names are unique across both sources, and a group is never deleted. Can own an account and be
   the target of a share; never creates a mission.
 - **Principal** — a user or a group, where a rule applies to both.
-- **Vaubaan account** — a user's own connection of the `vaubaan` plugin, the gateway's management
+- **Vaubaan account** — a user's own account of the `vaubaan` plugin, the gateway's management
   tools as a service: created in one click, holding no secret, owned by that user alone and never
   shared. A mission on it lets an agent prepare missions in the creator's name (§4.1 bis). It
   replaced the delegations of the retired management door (ADR
   platform-management-is-a-plugin-on-the-execution-door).
 
-**Connections and authority**
+**Accounts and authority**
 
 - **Provider** — a cloud service supported by a plugin, described by its risk catalog.
-- **Connection** — a provider authenticated into the instance by a user: with a key the user made at
-  the provider and pasted (a token or an app password, often of one shared service account: the
+- **Account** — your account at a service (a provider), plugged into the instance by a user: with a
+  key the user made at the provider and pasted (a token or an app password, often of one shared
+  machine user: the
   instance decides who does what, the audit says who did), or, where the provider offers no such
   key, through its own authorization flow. Each plugin declares one way. Holds the long-lived
   credentials, encrypted at rest. Its **owner** is a principal: its creator, who may transfer it to
   a group they belong to. Every member of an owner group is an owner, with the full catalog: share,
   reconnect, transfer, revoke.
-- **Resource** — one thing reachable through a connection (a repository, a database project…).
-  Discovered by the plugin at connection, on demand, right after a gateway call that created one
+- **Resource** — one thing reachable through an account (a repository, a database project…).
+  Discovered by the plugin when the account is connected, on demand, right after a gateway call that created one
   (the plugin declares which calls create; the refresh never delays the answer), and every hour for
-  a connection that a mission's future resources depend on (§4.2 Resource selection). The
-  owner labels each with an **environment** (`prod`, `staging`…) and may give the connection a
+  an account that a mission's future resources depend on (§4.2 Resource selection). The
+  owner labels each with an **environment** (`prod`, `staging`…) and may give the account a
   **default environment**, carried by every resource without its own label, later ones included; a
   resource's own label wins; setting or clearing the default is an audited owner act.
   Environment-qualified `RiskId`s resolve against the label of the resource a call touches (or,
@@ -124,7 +135,7 @@ carries, a callback registered at a provider).
   likely cannot act on it (a public repository outside a token's grant); once the owner hides or
   shows it, the owner's choice stays. "Every resource known" excludes hidden and stale ones; selecting a
   stale one is refused at issuance.
-- **Share** — the owner grants a target (user or group) a **restriction** on the connection.
+- **Share** — the owner grants a target (user or group) a **restriction** on the account.
 - **Restriction** — an explicit enumeration of `RiskId`s of the provider's catalog: the upper bound
   of what the target may accept in their missions. Never a wildcard; empty authorizes nothing.
 - **RiskId** — identifier of an entry in a provider's risk catalog (`github.merge-protected`);
@@ -132,7 +143,7 @@ carries, a callback registered at a provider).
 
 **Missions**
 
-- **Mission** — a named objective for which a user issues a token. Carries one or more connections
+- **Mission** — a named objective for which a user issues a token. Carries one or more accounts
   and, within each, the resources it may touch, a closed set of accepted risks, a budget, an
   optional recurrence and an optional expiry. A mission does not expire unless its creator sets an
   expiry. Its name is at most 120 characters; a recurring period lasts 60 seconds to 366 days.
@@ -151,11 +162,11 @@ carries, a callback registered at a provider).
   window).
 - **Macro-action** — what an agent may do on one account, in the connector's own words ("Read",
   "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
-  ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
+  ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every account also offers "Anything else"
   (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Careful, Trusting,
   Autonomous), which pre-fills the gate and budget of each of its risks from the risk's row. It
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
-  the token. Every connection also offers the built-in expansion **"Everything I hold on this
+  the token. Every account also offers the built-in expansion **"Everything I hold on this
   account"** (`everything-i-hold`, §3.2).
 - **Gate** — `auto` (passes within budget, the default) or `approval` (each action approved by the
   mission creator before it runs).
@@ -237,10 +248,10 @@ Instance                          (one company, one trust domain)
 ├── Configuration                 (sign-in providers, master key, telemetry, public URL)
 ├── Users[]
 ├── Groups[]                      (provider claims or local table)
-├── Connections[]                 (owner: User | Group; 1 provider; encrypted credentials)
+├── Accounts[]                 (owner: User | Group; 1 provider; encrypted credentials)
 │     ├── Resources[]             (ref; environment label)
 │     └── Shares[]                (target: User | Group; restriction: RiskId[])
-├── Missions[]                    (creator: User; resources per connection; (budget, gate) per RiskId; period; expires_at?)
+├── Missions[]                    (creator: User; resources per account; (budget, gate) per RiskId; period; expires_at?)
 │     ├── Members[], Mission tokens[]  (one per member who generated theirs, plus named tokens)
 │     └── Session?                (events[]; counters per RiskId) ── Requests[]
 └── Audit                         (append-only)
@@ -248,12 +259,12 @@ Instance                          (one company, one trust domain)
 
 ### 2.2 Definitions
 
-- A user may own connections, belong to owner groups, receive shares and create missions; group
+- A user may own accounts, belong to owner groups, receive shares and create missions; group
   membership is resolved at each sign-in, or kept locally.
-- Several connections may exist for one provider.
+- Several accounts may exist for one provider.
 - A share lets the target accept, in their missions, a subset of its restriction; the owner revokes
-  it. There is one active share per connection and target: sharing again replaces its restriction. A
-  share to a user who owns the connection now (owner, or current member of the owner group) is
+  it. There is one active share per account and target: sharing again replaces its restriction. A
+  share to a user who owns the account now (owner, or current member of the owner group) is
   refused (`target-is-owner`); a share to a group, or to a former member, is ordinary.
 - A mission is the leaf of the authority chain: no parent or child mission.
 - A mission token is revealed once when generated, and rotated or revoked on its own.
@@ -261,12 +272,12 @@ Instance                          (one company, one trust domain)
 
 ### 2.3 States
 
-**Connection**: `active` → `expired` (the provider rejected the credential and refresh failed) →
+**Account**: `active` → `expired` (the provider rejected the credential and refresh failed) →
 `active` once an owner reconnects; `revoked` by an owner, terminal.
 
-- `expired`: every call through it fails `connection-unavailable` until reconnected.
+- `expired`: every call through it fails `account-unavailable` until reconnected.
 - `revoked`: it grounds no authority. Missions carrying it lose that part for good
-  (`connection-revoked`) and keep serving through their other connections; one left with none
+  (`account-revoked`) and keep serving through their other accounts; one left with none
   becomes `orphaned`
   ([orphaned-missions-and-ownerless-connections](../decisions/orphaned-missions-and-ownerless-connections.md)).
   Nothing takes the lost part's place but an edit or a new mission. Revoking erases the credential
@@ -281,7 +292,7 @@ reassigned, nothing to reconnect; it follows its person (their deactivation stop
 through the derived rule, their reactivation brings them back) and is disconnected like any account.
 
 **Share**: `active` → `revoked`, terminal. A mission whose creator then holds nothing on that
-connection loses its part there, reversibly: it returns when an access covers it again.
+account loses its part there, reversibly: it returns when an access covers it again.
 
 **Mission**:
 
@@ -289,20 +300,20 @@ connection loses its part there, reversibly: it returns when an access covers it
 - `exhausted` — per risk: a risk's quota is at zero for the period; calls touching it are refused
   with the claim URL, others pass.
 - `expired` — `expires_at` passed. Terminal unless the creator extends it.
-- `orphaned` — none of its connections serves it (each revoked, or the creator's access withdrawn),
+- `orphaned` — none of its accounts serves it (each revoked, or the creator's access withdrawn),
   a share was narrowed under it, or the creator was deactivated. Every call is refused. **Derived
   from the creator's current authority, never stored**: when the authority returns, the mission
   serves again, session and counters intact. A share that would bring orphaned missions back names
   them to the owner first (§7.3). An orphaned mission may be closed by its creator or, while
-  orphaned, by an owner of one of its connections.
+  orphaned, by an owner of one of its accounts.
 - `revoked` — by the creator, terminal.
 
 **User**: `active` ⇄ `deactivated` by an administrator. A deactivated user holds nothing from the
 next check: sign-in refused, web sessions over, member tokens revoked
-(`holder-deactivated`; they stay members), removed from every group (a connection left without owner
+(`holder-deactivated`; they stay members), removed from every group (an account left without owner
 becomes `unowned`), their missions `orphaned`. Reactivation restores the status only: missions whose
 authority still stands serve again; provider groups return at the next sign-in; local groups,
-tokens and reassigned connections do not.
+tokens and reassigned accounts do not.
 
 **Request**: `open` → `granted` | `refused` | `expired` (unanswered after a configured delay). A
 granted claim produces an extension or reset event; a granted approval request an approval, consumed
@@ -328,7 +339,7 @@ permissions and executes nothing.
 ### 3.1 The chain
 
 ```
-Connection owner              authority = the provider's full catalog
+Account owner              authority = the provider's full catalog
    │ share (restriction R1)
    ▼
 Beneficiary (user or group)   authority = R1
@@ -345,15 +356,15 @@ Executor(s)                   same token, same budget, optional agent label
 - **Enumeration.** No stage says "everything". "Select all" and `everything-i-hold` record the list
   resolved at the click or at issuance; a risk added to the catalog, or a widened authority, later
   does not widen the mission.
-- **Union of shares.** Several shares on one connection (direct and through groups) give the union
+- **Union of shares.** Several shares on one account (direct and through groups) give the union
   of the restrictions.
-- **The owner needs no share** to issue missions on their connection.
-- **One connection per provider in a mission**, each checked against the creator's authority there;
+- **The owner needs no share** to issue missions on their account.
+- **One account per provider in a mission**, each checked against the creator's authority there;
   a draft naming two of one provider is refused, naming both.
-- **Resource sets.** Within one connection, a mission can give different resources different
+- **Resource sets.** Within one account, a mission can give different resources different
   policies and budgets. Each resource belongs to one set. A call that cannot be placed in one set is
   judged by the strictest of its candidate sets (risk model §4.7).
-- **Resource selection.** A mission names, per connection and per set, the resources it may touch:
+- **Resource selection.** A mission names, per account and per set, the resources it may touch:
   an explicit list, all of one environment (a label, or none). A call citing a resource outside it is refused
   `resource-not-in-mission` before any risk is evaluated. **What a mission creates, it reaches**: a
   resource it creates through the gateway with a declared creating tool joins its selection right
@@ -372,7 +383,7 @@ Executor(s)                   same token, same budget, optional agent label
 - **The instance's own resources** — what hosts or runs the instance (where the plugin can tell, or
   as the operator lists in the configuration) — are never mission resources: not offered, a draft
   selecting one refused, a call citing one refused `resource-not-in-mission`, and the account page
-  says why; on a connection that hosts the instance, a tool that cannot be bound to one resource is
+  says why; on an account that hosts the instance, a tool that cannot be bound to one resource is
   refused
   ([self-resources-never-reachable-by-a-mission](../decisions/self-resources-never-reachable-by-a-mission.md)).
 
@@ -389,7 +400,7 @@ a mission whose accepted risk has no resolved budget.
   ([gateway-risk-model](./gateway-risk-model.md) §4bis), bounded by the catalog.
 - **Macro-actions and trust levels**
   ([macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
-  At issuance the creator ticks macro-actions per connection, each at a trust level (or duplicates a
+  At issuance the creator ticks macro-actions per account, each at a trust level (or duplicates a
   mission); the policy is pre-filled with their risks, gates and budgets, intersected with the
   creator's authority, then adjusted risk by risk. The persisted policy never references a
   macro-action or a trust level, so a changed catalog alters no mission; the trust levels are recorded with the
@@ -407,7 +418,7 @@ a mission whose accepted risk has no resolved budget.
 - **Editing a mission**
   ([mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)). The creator
   may edit a mission while it is not revoked or orphaned — never an agent: name, expiry,
-  connections, per connection the resources, permissions, and per permission its quota, rate limit
+  accounts, per account the resources, permissions, and per permission its quota, rate limit
   and gate. **Never its period**: a mission needing another is duplicated. The gates of an expired
   mission stay editable. An edit is judged by issuance's own check applied to what it moves, with
   the words a creation asking the same would get; a fact unrelated to the change does not refuse
@@ -490,7 +501,7 @@ an edit.
 The execution MCP endpoint (`Authorization: Bearer <mission token>`) and, for a provider whose
 agents speak git, the git remote of §4.1 ter: same token, admission, decision and audit.
 
-- **Discovery** (`tools/list`): the tools of the mission's providers, a lost connection's excepted,
+- **Discovery** (`tools/list`): the tools of the mission's providers, a lost account's excepted,
   filtered per provider, not per tool: a listed tool may still be refused `risk-not-accepted`
   (§11.2).
 - **Call** (`tools/call`): classification by the plugin, intersection with the catalog,
@@ -504,13 +515,13 @@ agents speak git, the git remote of §4.1 ter: same token, admission, decision a
   - `budget-exhausted`: `RiskId`, quota for the period, consumed, end of period, **claim URL**.
   - `approval-required`: every gated `RiskId` the call touches, argument fingerprint, **approval
     request URL**, validity delay, and the instruction to replay identically once approved.
-  - `resource-not-in-mission`: the ref cited, the connection, the resources the mission may touch.
+  - `resource-not-in-mission`: the ref cited, the account, the resources the mission may touch.
   - `rate-limited`: `RiskId`, limit, delay before retry.
-  - `connection-unavailable`: the connection is `expired`; its name and the owner to contact.
-  - `connection-revoked`: the connection no longer serves this mission: connection id and name,
-    cause (`connection-revoked` by its owner, `access-withdrawn` from the creator) and whether
+  - `account-unavailable`: the account is `expired`; its name and the owner to contact.
+  - `account-revoked`: the account no longer serves this mission: account id and name,
+    cause (`account-revoked` by its owner, `access-withdrawn` from the creator) and whether
     final; the hint says to keep using the other accounts and ask the creator for the replacing one.
-    Git on that connection is refused the same way.
+    Git on that account is refused the same way.
   - `mission-inactive`: `expired`, `orphaned` or `revoked`, with the reason.
   - `wrong-credential-kind`: the bearer is not a mission token, naming the door that would accept
     it.
@@ -537,13 +548,13 @@ every macro-action at Careful, in the creation form — and hands its key to an 
 `vaubaan__*` tools with it. The call passes the door, the budget, the gates and the audit like any
 other; the tools then act **in the name of the mission's creator**, within their current authority.
 
-- **Read** (`vaubaan__list_my_connections`, `vaubaan__get_catalog`, `vaubaan__list_my_missions`): my
-  connections and those shared with me, with the exact restriction; each provider's catalog with its
+- **Read** (`vaubaan__list_my_accounts`, `vaubaan__get_catalog`, `vaubaan__list_my_missions`): my
+  accounts and those shared with me, with the exact restriction; each provider's catalog with its
   macro-actions, each risk's row and its reason, and the trust level table; my missions, policy,
   session, remaining budget and who prepared each.
-- **Preview** (`vaubaan__preview_policy`) a draft `RiskId → (budget, gate)` on some connections:
+- **Preview** (`vaubaan__preview_policy`) a draft `RiskId → (budget, gate)` on some accounts:
   what passes, what exceeds the authority, what the mission could call; issues nothing. A draft
-  connection may give trust levels per macro-action, which write its policy when it gives none and
+  account may give trust levels per macro-action, which write its policy when it gives none and
   the missing budgets when it does, or name `everything-i-hold`; the preview answers with the
   explicit lines.
 - **Issue** (`vaubaan__issue_mission`) a mission. The creator is the calling mission's creator,
@@ -557,8 +568,8 @@ other; the tools then act **in the name of the mission's creator**, within their
   never rotates nor revokes itself (`self-not-allowed`); only the creator's own key or a machine key
   calls these tools — a teammate's key is refused (`teammate-key-not-allowed`).
 - **Never exposed**: answering a request; opening a gate, extending a budget, changing a mission's
-  limits or permissions, resetting a period; connecting, sharing, transferring or revoking a
-  connection; executing another provider's tool; adding members or making named tokens.
+  limits or permissions, resetting a period; connecting, sharing, transferring or revoking an
+  account; executing another provider's tool; adding members or making named tokens.
 - The plugin's `execute` is composed by the host from the mission service, never through the SDK;
   a plugin declaring a host account loads only bundled with the image, never from a pin. The host's
   own tool `vaubaan__request_permission` is answered by exact name before the registry, which refuses
@@ -572,8 +583,8 @@ For a provider whose plugin declares it, the instance is the agent's git remote:
 id; any number of plugins may declare one
 ([gateway-as-git-remote](../decisions/gateway-as-git-remote.md),
 [protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md)). A
-`<provider>` that is not a plugin declaring a git remote is answered not found; a mission without a
-connection on it is refused.
+`<provider>` that is not a plugin declaring a git remote is answered not found; a mission without an
+account on it is refused.
 
 - **Authentication**: the mission token is the HTTP password, read by a credential helper from the
   kit's variable (§4.4), never in a URL or file. Admission is the execution door's own: same
@@ -684,13 +695,13 @@ under the documentation base (§4.3).
   of 50 reached by Newer and Older, the page in the address; a filter applies as soon as it is
   chosen.
 - **Settings** — for everyone: theme; the second factor (enrol, replace, remove after a fresh
-  sign-in — never an administrator's); a local account's password; **Notifications** (my devices, messaging
+  sign-in — never an administrator's); a sign-in account's password; **Notifications** (my devices, messaging
   addresses and mail, §4.2 bis). For an administrator, **Administration**:
   - a setup checklist of what the instance still needs, with no step per service;
   - **sign-in providers**: kind, admission rule, the callback to register, whether on, and, after a
     restore on another address, that it was set up for the former one. An administrator adds, edits,
     tests, switches on/off and removes one, its secret never shown back; one set by the
-    configuration file is read-only and always on; local accounts are added in one step. A provider
+    configuration file is read-only and always on; sign-in accounts are added in one step. A provider
     added here is **off until a test passed**: the test runs its sign-in in another window, signs
     nobody in and writes no user, session or group, then shows what it returned and the verdict a
     sign-in would get; during setup the setup link's holder may make the tested identity the first
@@ -699,7 +710,7 @@ under the documentation base (§4.3).
     way in of every administrator;
   - **people**: deactivate, reactivate, make or unmake administrator; the administrators and who
     named them; when the configuration's rule differs from the applied one, the page offers to apply
-    it; **invitations** (with local accounts, inviting sends the account-creation link or shows it
+    it; **invitations** (with sign-in accounts, inviting sends the account-creation link or shows it
     to copy, and the page can resend it, send a password reset and reset a second factor, each
     audited). Removing an invitation stops the next sign-ins, not an open session;
   - **OAuth brokers**: where an account of a service with no key to paste signs in
@@ -818,7 +829,7 @@ message naming it.
 
 ### 4.3 bis Ceilings and counters
 
-An operator may cap how much an instance holds: `limits.users`, `limits.connections` and
+An operator may cap how much an instance holds: `limits.users`, `limits.accounts` and
 `limits.active_missions`, each a positive whole number. A ceiling that is absent is unlimited, and
 that is the default. The same counts serve the ceilings, the administrator's view and the counters
 endpoint, so the three never disagree:
@@ -826,14 +837,14 @@ endpoint, so the three never disagree:
 | Count           | What it counts                                                                                               |
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | users           | people not removed, whether or not they have signed in yet; never an agent or a mission token                |
-| connections     | connected accounts not revoked, every owner together; an expired or ownerless one still counts until revoked |
+| accounts        | connected accounts not revoked, every owner together; an expired or ownerless one still counts until revoked |
 | active missions | missions neither revoked nor past their end, orphaned ones included                                          |
 
 - **Enforced where an item would be added, never by cutting.**
   - A person is refused when they would become a new user: a first sign-in of any kind, an
     invitation sent or accepted, an administrator named who is not yet a user, a removed user
     reactivated.
-  - A connection is refused when a new one would be created: by any connect flow, before the
+  - An account is refused when a new one would be created: by any connect flow, before the
     provider is reached where the flow allows it, and again when the account is stored. Reconnecting
     an existing account is never refused.
   - A mission is refused when issuing it would add an active one: from the form, a duplicate, an
@@ -847,7 +858,7 @@ endpoint, so the three never disagree:
   ceiling is 3"); for an agent calling `vaubaan__issue_mission` it is a refusal code of its own. The
   administrator sees each count against its ceiling in the settings.
 
-**Counters.** `GET /ops/stats` answers counts only, for the operator's monitoring: users, connections
+**Counters.** `GET /ops/stats` answers counts only, for the operator's monitoring: users, accounts
 (total and by provider), active missions, calls of the current day (UTC) allowed and refused, the
 store's size on disk, the current key version and how many sealed values each key version still
 holds, and the configured ceilings. Never a name, an e-mail, an identifier of an item, a resource or a
@@ -862,8 +873,8 @@ command, in the interface's words (commands, variable, tool names and codes keep
 
 1. The environment variable carrying the token. Revealed once; the revisited kit shows it masked.
 2. The client's MCP configuration (instance URL, authorization header referencing the variable).
-3. An instruction block for the agent: whose key it holds, connections, resource refs (and, for a
-   whole connection, that later resources are reached), accepted risks, budget, what to do on each
+3. An instruction block for the agent: whose key it holds, accounts, resource refs (and, for a
+   whole account, that later resources are reached), accepted risks, budget, what to do on each
    refusal (hand the request URL to the human, never work around it) and when the key itself stops
    working.
 4. When the mission holds repositories served by the git remote: a credential helper reading the
@@ -879,8 +890,8 @@ values.
   `risk-not-accepted`, the speed mechanism. This spec adds the cumulative quota and the session.
   Stateless scope caps are not enforced: shipped catalogs declare none
   ([scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md)). Where that
-  document says binding, project policy or project-scoped root token, read: resource of a
-  connection, share restriction, mission.
+  document says binding, project policy or project-scoped root token, read: resource of an
+  account, share restriction, mission.
 - **Provider plugins** — one per provider: classify `(tool, arguments) → slices` and execute with an
   ephemeral credential. Each declares its one way of connecting (a pasted key with its form, check
   and guide; a key pair the instance generates; or the service's sign-in), how to withdraw the grant
@@ -898,7 +909,7 @@ values.
 - **Push services and messaging services** — reached outbound, without an account: a push service
   relays a sealed envelope it cannot read to the person's device; a messaging service receives what
   the person's address accepts. The instance holds the subscription or the address, nothing more.
-- **Providers** — the connection flow runs between user, provider and instance, no third party. A
+- **Providers** — the connect flow runs between user, provider and instance, no third party. A
   mailbox plugin may sign in with an app password; nothing is ever sent by mail.
 - **Community collector** — receives consenting instances' reports, publishes aggregates (§9).
 - **MCP clients** — any; the gateway knows the mission, not the client.
@@ -908,8 +919,8 @@ values.
 - **One trust domain.** The operator has access, in running memory, to decrypted credentials during
   a call
   ([trust-model-clear-at-rest-idp-style](../decisions/trust-model-clear-at-rest-idp-style.md)).
-- **Encryption at rest.** Connection credentials are encrypted with a key derived from the master
-  key, unique per connection, the connection id as authenticated data. The master key never lives in
+- **Encryption at rest.** Account credentials are encrypted with a key derived from the master
+  key, unique per account, the account id as authenticated data. The master key never lives in
   the store and leaves the process environment once read. Rotation reseals every stored secret, then
   the previous key is removed
   ([master-key-rotation-reseals-every-blob](../decisions/master-key-rotation-reseals-every-blob.md)).
@@ -934,7 +945,7 @@ values.
   makes an administrator. A sign-in whose groups could not be read is refused, never read as "no
   group" (`groups-unavailable`, `groups-overage`)
   ([users-keyed-by-issuer-and-subject](../decisions/users-keyed-by-issuer-and-subject.md)).
-- **Local accounts**
+- **Sign-in accounts**
   ([local-accounts-sign-in-provider](../decisions/local-accounts-sign-in-provider.md)): passwords
   hashed with a memory-hard function; a wrong password answered like an unknown address; the form
   rate-limited; a password of at least 12 characters; an account locked 15 minutes after 10 wrong
@@ -982,7 +993,7 @@ values.
   messaging addresses and the signing key pair are sealed under the master key and reach no log,
   audit or telemetry.
 - **Surface rate limits** per mission on the MCP endpoint (shared by its tokens), per user on
-  connection flows (ten attempts a minute), per address on the request page and every anonymous
+  connect flows (ten attempts a minute), per address on the request page and every anonymous
   surface.
 - **Mission tokens at rest**: only a SHA-256 digest is stored
   ([mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md)).
@@ -996,7 +1007,7 @@ values.
 
 The operator deploys the image with its configuration (§4.3), opens setup with the bootstrap token
 (typed, or in a setup link's fragment so it reaches no log), keeps the master key when the instance
-generated it, names the first administrator (setup creates a local account, or the admin rule or a
+generated it, names the first administrator (setup creates a sign-in account, or the admin rule or a
 passed provider test names them), switches a tested sign-in provider on, and **finishes the setup**:
 an explicit step, allowed once the key was handed over and an administrator has a way in, that
 revokes the bootstrap token.
@@ -1091,7 +1102,7 @@ may do.
 
 One entry per call, allowed or refused, and per administrative act.
 
-- **A call**: timestamp, mission, token and its holder, connection and resource ref, tool, argument
+- **A call**: timestamp, mission, token and its holder, account and resource ref, tool, argument
   hash, slices executed, risks touched, snapshot of accepted risks (each distinct snapshot stored
   once, [audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md)),
   decision and refusal reason, approval consumed, remaining budget after the call for each risk it
@@ -1100,15 +1111,15 @@ One entry per call, allowed or refused, and per administrative act.
 - **An administrative act**: timestamp, user, act, object, previous and new state when meaningful,
   and, when it came through the `vaubaan` plugin (§4.1 bis), the mission whose key made the call
   (that call is also in the mission's own activity, like any call). Acts include every change of
-  connection, share, mission (issuance, edit, extension, reset, approval, rotation, a lost or
+  account, share, mission (issuance, edit, extension, reset, approval, rotation, a lost or
   regained account naming the human whose act did it, orphaned or restored), member,
   administrator, admin rule, sign-in provider, second factor, master-key recovery and configuration.
   Entries written by the retired management door keep naming its client (history).
 - **Who reads what**: a user reads the entries of missions they created, of missions they are a
-  member of now (a removed member reads none, past ones included) and of connections they own; an
+  member of now (a removed member reads none, past ones included) and of accounts they own; an
   operator reads every entry, and alone those about groups and users; the bootstrap token reads
   administrative entries and no call. Nobody reads arguments; their fingerprint is shown only to who
-  answers for the call (the mission's creator, an owner of its connection).
+  answers for the call (the mission's creator, an owner of its account).
 - **Retention** is configured, 90 days by default; no cold archive. It also purges session history
   (timeline events, counters of periods ended longer ago) and never what the current period rests on
   (its counters, gates opened until it ends, credits given back by granted claims). A one-off
@@ -1155,7 +1166,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
 - **Unit, mandatory**, on:
   - each plugin's classifier, against recorded or doc-built provider responses (a classification
     error is a security hole);
-  - authority composition (§3.1): monotonicity, union of shares, partition per connection, resource
+  - authority composition (§3.1): monotonicity, union of shares, partition per account, resource
     selection and `resource-not-in-mission`, environment resolution against labels;
   - the budget (§3.2, §3.3): multi-risk decrement, rollover on read, atomicity on the last credit,
     concurrent agents on one token;
@@ -1165,7 +1176,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
   - structured refusals: every code, field and `hint`;
   - credential separation (§6): a session at the execution surface, a mission token on a request,
     refused unambiguously; the self rule of a mission holding a Vaubaan account;
-  - local accounts (§6): the memory-hard hash verifies the password only; lockout counts wrong
+  - sign-in accounts (§6): the memory-hard hash verifies the password only; lockout counts wrong
     passwords per account across restarts; a one-time code accepted once within one step of drift, a
     recovery code once, a link once and before expiry; unknown address and wrong password answered
     alike; no secret in a log, audit entry or report;
@@ -1175,7 +1186,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
     administrator a way in refused;
   - the second factor (§6): enrolled at the first sign-in through any provider and asked at every
     one after, before the session; waived for a provider outright or on its token's `mfa`, never for
-    an administrator; an earlier local account's factor moved to its person;
+    an administrator; an earlier sign-in account's factor moved to its person;
   - recovery by the master key (§6): the browser's proof equal to the instance's, a wrong key and a
     replayed challenge refused, the recovery session naming one administrator only, the entry, the
     mail and the thirty-day banner;
@@ -1188,7 +1199,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
   - the mailbox over IMAP (§5): the app password checked by an IMAP sign-in before storage, folders
     found by special use, ids and labels from the classifier's grammar, a draft appended and never
     sent.
-- **Integration**, on an ephemeral instance with embedded store and simulated IdP: connection,
+- **Integration**, on an ephemeral instance with embedded store and simulated IdP: account,
   share, issuance, claim, approval and replay, revocation, the git remote with the real `git` client
   against a local git server standing in for the provider (multi-ref pushes, claimed ref values,
   malformed requests), `orphaned` states, issuance by an MCP client holding a platform mission's key,
@@ -1205,7 +1216,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
     a preset reference;
   - every catalog groups each of its risks but the fallback in exactly one macro-action, and no
     catalog ships presets;
-  - a user's authority on a connection is recomputed from their current group membership, never from
+  - a user's authority on an account is recomputed from their current group membership, never from
     a snapshot;
   - the git remote admits with the execution door's own admission.
 - **Out of scope**: integration tests against real providers.
@@ -1233,7 +1244,7 @@ Not decided, or a v1 assumption usage may overturn.
 - **Answering from a notification.** v1: none, not even a refusal. Revisit if creators ask to
   refuse from the lock screen without opening the interface.
 - **Notification digest.** v1: one notification per event. A daily mail digest for alerts?
-- **Gate in shares**, approved by the connection owner? v1: no, the gate lives in the mission.
+- **Gate in shares**, approved by the account owner? v1: no, the gate lives in the mission.
 - **Resources in shares.** v1: no; a beneficiary may touch any resource within the shared risks.
 - **Agent label.** How a client transmits it, and whether an orchestrator imposes it on sub-agents.
 - **Scope of the management tools.** Missions only in v1; sharing stays a human gesture.

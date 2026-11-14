@@ -2,13 +2,13 @@
  * Who reads the arguments of an approval request (spec §3.5 "the request shows the
  * creator … the arguments in clear", §3.4 "any other identity is refused", §6): the
  * mission's creator and nobody else — not an operator, not a co-owner of the
- * connection through its owner group, not the bootstrap operator, not the executor
+ * account through its owner group, not the bootstrap operator, not the executor
  * holding the mission token. Over the real composition root and its HTTP handlers.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { seedConnection } from '../../support/missions/testing';
+import { seedAccount } from '../../support/missions/testing';
 import { ADDRESSED_TO_CREATOR, type ApprovalView } from '../../../src/server/requests';
 import type { MissionRecord, UserRecord } from '../../../src/server/store/types';
 import {
@@ -37,7 +37,7 @@ describe('the arguments of an approval request are for the creator only', () => 
   beforeEach(async () => {
     rig = await openAuditRig();
     const { root, seeded } = rig;
-    // A connection owned by a group: Ada and Carol both own it.
+    // An account owned by a group: Ada and Carol both own it.
     carol = await root.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
       subject: 'idp|carol',
@@ -45,7 +45,7 @@ describe('the arguments of an approval request are for the creator only', () => 
     });
     const team = await root.store.groups.getOrCreate('platform', 'local', null);
     await root.store.groups.setMembers(team.id, [seeded.ada.id, carol.id]);
-    const connection = await seedConnection(root.store, {
+    const account = await seedAccount(root.store, {
       provider: 'github',
       owner: { kind: 'group', id: team.id },
       displayName: 'team-org',
@@ -53,9 +53,9 @@ describe('the arguments of an approval request are for the creator only', () => 
     });
     const issued = await root.missions.service.issue(seeded.ada, {
       name: MISSION_NAME,
-      connections: [
+      accounts: [
         {
-          connection_id: connection.connection.id,
+          account_id: account.account.id,
           policy: [
             { risk_id: READ, quota: 5, rate_limit: { max: 50, window_seconds: 60 } },
             {
@@ -148,7 +148,7 @@ describe('the arguments of an approval request are for the creator only', () => 
 
   describe.each([
     ['an operator', () => rig.operator],
-    ['a co-owner of the connection through its owner group', () => carol],
+    ['a co-owner of the account through its owner group', () => carol],
     ['another user', () => rig.seeded.bob],
   ] as const)('%s', (_who, userOf) => {
     it('gets no view from the service', async () => {

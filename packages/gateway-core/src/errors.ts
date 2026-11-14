@@ -17,10 +17,10 @@
  *   -32001 Auth required (Vaubaan-specific, unknown or malformed bearer).
  */
 
-import type { ConnectionLoss } from './types.ts';
+import type { AccountLoss } from './types.ts';
 import {
   isRefusalCode,
-  type ConnectionStatus,
+  type AccountStatus,
   type JsonRpcError,
   type JsonRpcSuccess,
   type MissionStatus,
@@ -29,7 +29,7 @@ import {
   type RiskId,
   type Slice,
 } from '@vaubaan/shared';
-import type { BearerKind, ConnectionOwner, Door } from './types.ts';
+import type { BearerKind, AccountOwner, Door } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refusal shapes — one per code
@@ -59,7 +59,7 @@ export interface BudgetExhaustedRefusal extends RefusalBase<'budget-exhausted'> 
   readonly period_end: string | null;
   /** Where the mission creator can reset or extend. */
   readonly claim_url: string;
-  /** The resource set whose budget is spent, when the connection has several (risk model §4.7). */
+  /** The resource set whose budget is spent, when the account has several (risk model §4.7). */
   readonly resource_set?: string;
 }
 
@@ -85,8 +85,8 @@ export interface ApprovalRequiredRefusal extends RefusalBase<'approval-required'
 export interface ResourceNotInMissionRefusal extends RefusalBase<'resource-not-in-mission'> {
   /** The ref the arguments cited. */
   readonly cited_ref: string;
-  readonly connection: { readonly id: string; readonly name: string };
-  /** The resources the mission may touch on that connection. */
+  readonly account: { readonly id: string; readonly name: string };
+  /** The resources the mission may touch on that account. */
   readonly allowed_resources: readonly {
     readonly ref: string;
     readonly env: string | null;
@@ -98,36 +98,36 @@ export interface RateLimitedRefusal extends RefusalBase<'rate-limited'> {
   readonly risk_id: RiskId;
   readonly limit: RateLimit;
   readonly retry_after_seconds: number;
-  /** The resource set whose rate limit is reached, when the connection has several. */
+  /** The resource set whose rate limit is reached, when the account has several. */
   readonly resource_set?: string;
 }
 
-/** Statuses that make a connection unusable. An `unowned` connection (its
+/** Statuses that make an account unusable. An `unowned` account (its
  *  owning group emptied) keeps serving its missions until someone reconnects
  *  or revokes it (spec §2). */
-export const UNAVAILABLE_CONNECTION_STATUSES = [
+export const UNAVAILABLE_ACCOUNT_STATUSES = [
   'expired',
   'revoked',
-] as const satisfies readonly ConnectionStatus[];
-export type UnavailableConnectionStatus = (typeof UNAVAILABLE_CONNECTION_STATUSES)[number];
+] as const satisfies readonly AccountStatus[];
+export type UnavailableAccountStatus = (typeof UNAVAILABLE_ACCOUNT_STATUSES)[number];
 
-export function isUnavailableConnectionStatus(
-  status: ConnectionStatus,
-): status is UnavailableConnectionStatus {
-  return (UNAVAILABLE_CONNECTION_STATUSES as readonly ConnectionStatus[]).includes(status);
+export function isUnavailableAccountStatus(
+  status: AccountStatus,
+): status is UnavailableAccountStatus {
+  return (UNAVAILABLE_ACCOUNT_STATUSES as readonly AccountStatus[]).includes(status);
 }
 
-export interface ConnectionUnavailableRefusal extends RefusalBase<'connection-unavailable'> {
-  readonly connection: { readonly id: string; readonly name: string };
-  readonly status: UnavailableConnectionStatus;
+export interface AccountUnavailableRefusal extends RefusalBase<'account-unavailable'> {
+  readonly account: { readonly id: string; readonly name: string };
+  readonly status: UnavailableAccountStatus;
   /** Who can reconnect: the owner (user email or group name). */
-  readonly owner: Pick<ConnectionOwner, 'kind' | 'display'>;
+  readonly owner: Pick<AccountOwner, 'kind' | 'display'>;
 }
 
-export interface ConnectionRevokedRefusal extends RefusalBase<'connection-revoked'> {
-  readonly connection: { readonly id: string; readonly name: string };
-  /** `connection-revoked`: removed by its owner; `access-withdrawn`: the mission's creator lost it. */
-  readonly cause: ConnectionLoss;
+export interface AccountRevokedRefusal extends RefusalBase<'account-revoked'> {
+  readonly account: { readonly id: string; readonly name: string };
+  /** `account-revoked`: removed by its owner; `access-withdrawn`: the mission's creator lost it. */
+  readonly cause: AccountLoss;
   /** True when nothing brings it back: a new mission is needed for another account. */
   readonly final: boolean;
 }
@@ -149,8 +149,8 @@ export type Refusal =
   | ApprovalRequiredRefusal
   | ResourceNotInMissionRefusal
   | RateLimitedRefusal
-  | ConnectionUnavailableRefusal
-  | ConnectionRevokedRefusal
+  | AccountUnavailableRefusal
+  | AccountRevokedRefusal
   | MissionInactiveRefusal
   | WrongCredentialKindRefusal;
 
@@ -215,7 +215,7 @@ export const refuse = {
     consumed: number;
     period_end: string | null;
     claim_url: string;
-    /** "resource set 2", when the connection has several sets. */
+    /** "resource set 2", when the account has several sets. */
     resource_set?: string;
   }): BudgetExhaustedRefusal {
     const next = input.period_end
@@ -263,7 +263,7 @@ export const refuse = {
 
   resourceNotInMission(input: {
     cited_ref: string;
-    connection: { id: string; name: string };
+    account: { id: string; name: string };
     allowed_resources: readonly { ref: string; env: string | null; display_name: string | null }[];
     /** A set of the mission takes the resources that later appear in its environment. */
     takes_future_resources?: boolean;
@@ -276,17 +276,17 @@ export const refuse = {
       return {
         code: 'resource-not-in-mission',
         cited_ref: input.cited_ref,
-        connection: { id: input.connection.id, name: input.connection.name },
+        account: { id: input.account.id, name: input.account.name },
         allowed_resources: input.allowed_resources,
-        hint: `Resource '${input.cited_ref}' is not reached on connection '${input.connection.name}'. This mission reaches ${allowed} today, and takes the resources that later appear in the environment of its sets (except hidden ones). A resource created through the gateway is reached right after its creation; one created elsewhere once discovery finds it — every hour, or when the mission creator checks now.`,
+        hint: `Resource '${input.cited_ref}' is not reached on account '${input.account.name}'. This mission reaches ${allowed} today, and takes the resources that later appear in the environment of its sets (except hidden ones). A resource created through the gateway is reached right after its creation; one created elsewhere once discovery finds it — every hour, or when the mission creator checks now.`,
       };
     }
     return {
       code: 'resource-not-in-mission',
       cited_ref: input.cited_ref,
-      connection: { id: input.connection.id, name: input.connection.name },
+      account: { id: input.account.id, name: input.account.name },
       allowed_resources: input.allowed_resources,
-      hint: `Resource '${input.cited_ref}' is not part of this mission on connection '${input.connection.name}'. The mission may touch: ${allowed}. A resource this mission creates through the gateway is reached right after its creation. For one created elsewhere, use one of these refs, or ask the mission creator to add the resource: they edit the mission, your key stays the same and your next call reaches it.`,
+      hint: `Resource '${input.cited_ref}' is not part of this mission on account '${input.account.name}'. The mission may touch: ${allowed}. A resource this mission creates through the gateway is reached right after its creation. For one created elsewhere, use one of these refs, or ask the mission creator to add the resource: they edit the mission, your key stays the same and your next call reaches it.`,
     };
   },
 
@@ -294,7 +294,7 @@ export const refuse = {
     risk_id: RiskId;
     limit: RateLimit;
     retry_after_seconds: number;
-    /** "resource set 2", when the connection has several sets. */
+    /** "resource set 2", when the account has several sets. */
     resource_set?: string;
   }): RateLimitedRefusal {
     return {
@@ -307,30 +307,30 @@ export const refuse = {
     };
   },
 
-  connectionUnavailable(input: {
-    connection: { id: string; name: string };
-    status: UnavailableConnectionStatus;
-    owner: Pick<ConnectionOwner, 'kind' | 'display'>;
-  }): ConnectionUnavailableRefusal {
+  accountUnavailable(input: {
+    account: { id: string; name: string };
+    status: UnavailableAccountStatus;
+    owner: Pick<AccountOwner, 'kind' | 'display'>;
+  }): AccountUnavailableRefusal {
     const who =
       input.owner.kind === 'group'
         ? `a member of group '${input.owner.display}'`
         : `its owner ${input.owner.display}`;
     return {
-      code: 'connection-unavailable',
-      connection: { id: input.connection.id, name: input.connection.name },
+      code: 'account-unavailable',
+      account: { id: input.account.id, name: input.account.name },
       status: input.status,
       owner: { kind: input.owner.kind, display: input.owner.display },
-      hint: `Connection '${input.connection.name}' is ${input.status}; every call through it fails until ${who} reconnects it. Contact them; nothing you can do from here fixes it.`,
+      hint: `Account '${input.account.name}' is ${input.status}; every call through it fails until ${who} reconnects it. Contact them; nothing you can do from here fixes it.`,
     };
   },
 
-  connectionRevoked(input: {
-    connection: { id: string; name: string };
-    cause: ConnectionLoss;
-  }): ConnectionRevokedRefusal {
-    const name = input.connection.name;
-    const final = input.cause === 'connection-revoked';
+  accountRevoked(input: {
+    account: { id: string; name: string };
+    cause: AccountLoss;
+  }): AccountRevokedRefusal {
+    const name = input.account.name;
+    const final = input.cause === 'account-revoked';
     const why = final
       ? `Account '${name}' was removed from this gateway by its owner; it never comes back to this mission.`
       : `The creator of this mission no longer has access to account '${name}' (its owner withdrew it, or the creator left the team that held it). Calls through it are refused while it is so; this same token works on it again if the access is given back.`;
@@ -338,8 +338,8 @@ export const refuse = {
       ? 'To use that service again, ask the mission creator to issue a new mission for the account that replaces it.'
       : 'Ask the mission creator to get the access back, or to issue a new mission for another account.';
     return {
-      code: 'connection-revoked',
-      connection: { id: input.connection.id, name },
+      code: 'account-revoked',
+      account: { id: input.account.id, name },
       cause: input.cause,
       final,
       hint: `${why} The mission still serves its other accounts: keep using them. ${next} Do not retry calls through '${name}'.`,

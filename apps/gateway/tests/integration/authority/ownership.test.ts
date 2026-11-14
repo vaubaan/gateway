@@ -1,7 +1,7 @@
 /**
- * Ownership of a connection end to end (spec §0 "Connection", §2.3 "unowned",
+ * Ownership of an account end to end (spec §0 "Account", §2.3 "unowned",
  * §7.2, §11.2): transfer to a group the owner belongs to, the `unowned`
- * state when that group empties — the connection keeps serving the missions
+ * state when that group empties — the account keeps serving the missions
  * that still have grounds, nobody can share or reconnect it — and the
  * operator's reassignment, their only act on the domain.
  */
@@ -9,7 +9,7 @@ import { throughSecondFactor } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { ConnectError } from '../../../src/server/connections';
+import { ConnectError } from '../../../src/server/accounts';
 import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
 import { authorityRig, OPERATOR_EMAIL, PURGE, READ, type AuthorityRig } from './support';
@@ -32,15 +32,15 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
   });
 
   const transferToAdmins = async () =>
-    rig.root.connections.service.transfer(await rig.actor(rig.ada), rig.connection.id, admins.id);
+    rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, admins.id);
 
   it('transfers to a group the owner belongs to: every member, now and later, is a full owner', async () => {
     const transferred = await transferToAdmins();
     expect(transferred.owner).toEqual({ kind: 'group', id: admins.id });
-    expect(await rig.adminEntries('connection-transferred')).toMatchObject([
+    expect(await rig.adminEntries('account-transferred')).toMatchObject([
       {
         user_id: rig.ada.id,
-        object: { type: 'connection', id: rig.connection.id },
+        object: { type: 'account', id: rig.account.id },
         before: { owner: { kind: 'user', id: rig.ada.id } },
         after: { owner: { kind: 'group', id: admins.id } },
       },
@@ -48,23 +48,21 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
 
     // Ada is still an owner (she is in the group); Bob is not, until he joins.
     const { authority } = rig.root.missions;
-    const current = (await rig.root.store.connections.getById(rig.connection.id))!;
+    const current = (await rig.root.store.accounts.getById(rig.account.id))!;
     expect((await authority.authorityOf(rig.ada, current)).basis).toBe('owner');
     expect((await authority.authorityOf(rig.bob, current)).basis).toBe('none');
     await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'bob@example.com');
     expect((await authority.authorityOf(rig.bob, current)).basis).toBe('owner');
     expect(
-      (await rig.root.connections.service.listFor(await rig.actor(rig.bob))).map(
-        (v) => v.connection.id,
-      ),
-    ).toEqual([rig.connection.id]);
+      (await rig.root.accounts.service.listFor(await rig.actor(rig.bob))).map((v) => v.account.id),
+    ).toEqual([rig.account.id]);
     // A later member issues missions on the full catalog, with no share.
     expect((await rig.read(await rig.issueFor(rig.bob, [READ, PURGE]))).result).toBeDefined();
   });
 
   describe('a co-owner cannot keep a share for the day they leave the group (docs/spec/vaubaan-gateway.md)', () => {
     const shareAs = async (actor: UserRecord, email: string) =>
-      rig.root.shares.service.share(await rig.actor(actor), rig.connection.id, {
+      rig.root.shares.service.share(await rig.actor(actor), rig.account.id, {
         target: { kind: 'user', email },
         riskIds: [READ, PURGE],
       });
@@ -78,11 +76,11 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
       await expect(shareAs(rig.bob, 'bob@example.com')).rejects.toMatchObject({
         code: 'target-is-owner',
       });
-      // Two members cannot do it for each other either: the target owns the connection now.
+      // Two members cannot do it for each other either: the target owns the account now.
       await expect(shareAs(rig.ada, 'bob@example.com')).rejects.toMatchObject({
         code: 'target-is-owner',
       });
-      expect(await rig.root.store.shares.listForConnection(rig.connection.id)).toEqual([]);
+      expect(await rig.root.store.shares.listForAccount(rig.account.id)).toEqual([]);
       expect(await rig.adminEntries('share-created')).toEqual([]);
       // Somebody outside the group is still a target.
       expect((await shareAs(rig.bob, OPERATOR_EMAIL)).share.target).toEqual({
@@ -100,7 +98,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
 
       await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.bob.id);
 
-      const current = (await rig.root.store.connections.getById(rig.connection.id))!;
+      const current = (await rig.root.store.accounts.getById(rig.account.id))!;
       expect(await rig.root.missions.authority.authorityOf(rig.bob, current)).toMatchObject({
         basis: 'none',
         riskIds: [],
@@ -114,7 +112,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
       await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.bob.id);
       const outcome = await shareAs(rig.ada, 'bob@example.com');
       expect(outcome.share.target).toEqual({ kind: 'user', id: rig.bob.id });
-      const current = (await rig.root.store.connections.getById(rig.connection.id))!;
+      const current = (await rig.root.store.accounts.getById(rig.account.id))!;
       expect((await rig.root.missions.authority.authorityOf(rig.bob, current)).basis).toBe('share');
     });
 
@@ -123,7 +121,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
       await rig.root.groups.service.addMember(rig.operator.id, team.id, 'bob@example.com');
       const outcome = await rig.root.shares.service.share(
         await rig.actor(rig.bob),
-        rig.connection.id,
+        rig.account.id,
         { target: { kind: 'group', groupId: team.id }, riskIds: [READ] },
       );
       expect(outcome.targetLabel).toBe('group team');
@@ -136,24 +134,24 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     const ada = await rig.actor(rig.ada);
 
     await expect(
-      rig.root.connections.service.transfer(ada, rig.connection.id, others.id),
+      rig.root.accounts.service.transfer(ada, rig.account.id, others.id),
     ).rejects.toMatchObject({ code: 'transfer-not-member' });
-    // A forged actor claiming the group does not help: Bob does not own the connection.
+    // A forged actor claiming the group does not help: Bob does not own the account.
     await expect(
-      rig.root.connections.service.transfer(await rig.actor(rig.bob), rig.connection.id, others.id),
+      rig.root.accounts.service.transfer(await rig.actor(rig.bob), rig.account.id, others.id),
     ).rejects.toMatchObject({ code: 'not-found' });
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.owner).toEqual({
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.owner).toEqual({
       kind: 'user',
       id: rig.ada.id,
     });
-    expect(rig.root.connections.service.transferTargets(ada, rig.connection)).toEqual([
+    expect(rig.root.accounts.service.transferTargets(ada, rig.account)).toEqual([
       expect.objectContaining({ id: admins.id }),
     ]);
   });
 
   it('becomes unowned when the owner group empties: it keeps serving, nobody shares or reconnects, the operator reassigns', async () => {
     // Bob holds a share; Ada (owner through the group) has a mission of her own.
-    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'user', email: 'bob@example.com' },
       riskIds: [READ],
     });
@@ -168,7 +166,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
       rig.ada.id,
     );
     expect(removal).toMatchObject({ unowned: 1, orphaned: 1 });
-    const unowned = (await rig.root.store.connections.getById(rig.connection.id))!;
+    const unowned = (await rig.root.store.accounts.getById(rig.account.id))!;
     expect(unowned.status).toBe('unowned');
 
     // Missions keep running where the authority is still there (the share)…
@@ -181,34 +179,34 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     await expect(rig.root.shares.service.contextFor(ada, unowned.id)).rejects.toMatchObject({
       code: 'not-found',
     });
-    await expect(rig.root.connections.service.get(ada, unowned.id)).rejects.toBeInstanceOf(
+    await expect(rig.root.accounts.service.get(ada, unowned.id)).rejects.toBeInstanceOf(
       ConnectError,
     );
-    expect(await rig.root.connections.service.listFor(ada)).toEqual([]);
+    expect(await rig.root.accounts.service.listFor(ada)).toEqual([]);
 
     // The operator sees it and names a new owner.
-    const ownerless = await rig.root.connections.service.listOwnerless();
-    expect(ownerless.map((v) => [v.connection.id, v.owner_label])).toEqual([
+    const ownerless = await rig.root.accounts.service.listOwnerless();
+    expect(ownerless.map((v) => [v.account.id, v.owner_label])).toEqual([
       [unowned.id, 'group depot-admins'],
     ]);
-    const reassigned = await rig.root.connections.service.reassign(rig.operator.id, unowned.id, {
+    const reassigned = await rig.root.accounts.service.reassign(rig.operator.id, unowned.id, {
       kind: 'user',
       email: 'ada@example.com',
     });
     expect(reassigned).toMatchObject({ status: 'active', owner: { kind: 'user', id: rig.ada.id } });
-    expect(await rig.adminEntries('connection-reassigned')).toMatchObject([
+    expect(await rig.adminEntries('account-reassigned')).toMatchObject([
       {
         user_id: rig.operator.id,
         before: { owner: { kind: 'group', id: admins.id }, status: 'unowned' },
         after: { owner: { kind: 'user', id: rig.ada.id }, status: 'active' },
       },
     ]);
-    expect(await rig.root.connections.service.listOwnerless()).toEqual([]);
+    expect(await rig.root.accounts.service.listOwnerless()).toEqual([]);
 
     // The new owner acts again; the share and its mission never stopped.
     expect((await rig.root.shares.service.contextFor(ada, unowned.id)).shares).toHaveLength(1);
     expect((await rig.read(bobs)).result).toBeDefined();
-    // Ada owns the connection again: the mission her lost membership had orphaned is
+    // Ada owns the account again: the mission her lost membership had orphaned is
     // restored by the operator's act, and its token serves again.
     expect(await rig.statusOf(adas)).toBe('active');
     expect((await rig.read(adas)).result).toBeDefined();
@@ -223,11 +221,11 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     expect((await rig.read(await rig.issueFor(rig.ada, [READ]))).result).toBeDefined();
   });
 
-  it('reassigns only an ownerless connection, to a known user or a group that has members', async () => {
-    const reassign = rig.root.connections.service.reassign.bind(rig.root.connections.service);
+  it('reassigns only an ownerless account, to a known user or a group that has members', async () => {
+    const reassign = rig.root.accounts.service.reassign.bind(rig.root.accounts.service);
     const toAda = { kind: 'user', email: 'ada@example.com' } as const;
-    // An owned connection is not the operator's business.
-    await expect(reassign(rig.operator.id, rig.connection.id, toAda)).rejects.toMatchObject({
+    // An owned account is not the operator's business.
+    await expect(reassign(rig.operator.id, rig.account.id, toAda)).rejects.toMatchObject({
       code: 'not-ownerless',
     });
     await expect(reassign(rig.operator.id, 'nope', toAda)).rejects.toMatchObject({
@@ -237,44 +235,43 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     await transferToAdmins();
     await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
     await expect(
-      reassign(rig.operator.id, rig.connection.id, { kind: 'user', email: 'ghost@example.com' }),
+      reassign(rig.operator.id, rig.account.id, { kind: 'user', email: 'ghost@example.com' }),
     ).rejects.toMatchObject({ code: 'owner-unknown' });
     // The emptied group itself is not an owner.
     await expect(
-      reassign(rig.operator.id, rig.connection.id, { kind: 'group', groupId: admins.id }),
+      reassign(rig.operator.id, rig.account.id, { kind: 'group', groupId: admins.id }),
     ).rejects.toMatchObject({ code: 'owner-group-empty' });
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('unowned');
 
     await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'bob@example.com');
-    // A member came back, yet the connection stays unowned until the operator decides.
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
-    const reassigned = await reassign(rig.operator.id, rig.connection.id, {
+    // A member came back, yet the account stays unowned until the operator decides.
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('unowned');
+    const reassigned = await reassign(rig.operator.id, rig.account.id, {
       kind: 'group',
       groupId: admins.id,
     });
     expect(reassigned).toMatchObject({ status: 'active', owner: { kind: 'group', id: admins.id } });
   });
 
-  it('expires an unowned connection whose credential dies; it stays reassignable and its new owner reconnects', async () => {
+  it('expires an unowned account whose credential dies; it stays reassignable and its new owner reconnects', async () => {
     await transferToAdmins();
     await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
     // The provider rejects the key and the plugin cannot refresh it.
-    await expect(rig.root.connections.credentials.refresh(rig.connection.id)).rejects.toBeDefined();
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('expired');
+    await expect(rig.root.accounts.credentials.refresh(rig.account.id)).rejects.toBeDefined();
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('expired');
 
-    expect(
-      (await rig.root.connections.service.listOwnerless()).map((v) => v.connection.id),
-    ).toEqual([rig.connection.id]);
-    const reassigned = await rig.root.connections.service.reassign(
-      rig.operator.id,
-      rig.connection.id,
-      { kind: 'user', email: 'bob@example.com' },
-    );
+    expect((await rig.root.accounts.service.listOwnerless()).map((v) => v.account.id)).toEqual([
+      rig.account.id,
+    ]);
+    const reassigned = await rig.root.accounts.service.reassign(rig.operator.id, rig.account.id, {
+      kind: 'user',
+      email: 'bob@example.com',
+    });
     expect(reassigned).toMatchObject({
       status: 'expired',
       owner: { kind: 'user', id: rig.bob.id },
     });
-    expect(await rig.root.connections.service.listOwnerless()).toEqual([]);
+    expect(await rig.root.accounts.service.listOwnerless()).toEqual([]);
   });
 });
 
@@ -337,7 +334,7 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     await signIn(bobClaims(['depot-readers']));
     const readers = (await rig.root.store.groups.getByName('depot-readers'))!;
     expect(readers.source).toBe('idp');
-    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'group', groupId: readers.id },
       riskIds: [READ],
     });
@@ -358,7 +355,7 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
   it('a group claim missing at one sign-in is not a permanent outage: the next sign-in that carries it restores the same mission', async () => {
     await signIn(bobClaims(['depot-readers']));
     const readers = (await rig.root.store.groups.getByName('depot-readers'))!;
-    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'group', groupId: readers.id },
       riskIds: [READ],
     });
@@ -398,18 +395,14 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     expect(await rig.adminEntries('mission-restored')).toHaveLength(1);
   });
 
-  it('turns a connection unowned when the sign-in removed the last member of its IdP owner group', async () => {
+  it('turns an account unowned when the sign-in removed the last member of its IdP owner group', async () => {
     await signIn(adaClaims(['depot-owners']));
     const owners = (await rig.root.store.groups.getByName('depot-owners'))!;
-    await rig.root.connections.service.transfer(
-      await rig.actor(rig.ada),
-      rig.connection.id,
-      owners.id,
-    );
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('active');
+    await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, owners.id);
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('active');
 
     await signIn(adaClaims([]));
-    expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+    expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('unowned');
   });
 
   it('merges IdP and local groups: a sign-in never touches a local membership', async () => {
@@ -423,11 +416,11 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     // Both kinds ground authority alike.
     const idpGroup = (await rig.root.store.groups.getByName('from-idp'))!;
     const ada = await rig.actor(rig.ada);
-    await rig.root.shares.service.share(ada, rig.connection.id, {
+    await rig.root.shares.service.share(ada, rig.account.id, {
       target: { kind: 'group', groupId: idpGroup.id },
       riskIds: [READ],
     });
-    await rig.root.shares.service.share(ada, rig.connection.id, {
+    await rig.root.shares.service.share(ada, rig.account.id, {
       target: { kind: 'group', groupId: local.id },
       riskIds: [PURGE],
     });

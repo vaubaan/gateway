@@ -71,7 +71,7 @@ and the catalog rationale are product rules: spec [`resend.md`](../../spec/resen
   verified domain.
 - Every send is `external-unbounded` → zone lists empty or the recipient domain not listed exactly;
   `describe_zones` shows what the classifier sees.
-- `carries no domain_id` → refresh the connection's resources.
+- `carries no domain_id` → refresh the account's resources.
 - `… acceptable only in [staging, dev]` → add the recipient to the zone lists, or send from a
   `staging` / `dev` domain.
 - A field missing upstream → not declared in `tools.ts`; declare and classify it.

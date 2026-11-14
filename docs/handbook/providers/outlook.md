@@ -13,7 +13,7 @@ last_reviewed: 2026-11-05
 tools on Microsoft Graph v1.0 (`https://graph.microsoft.com/v1.0`), called with an access token from
 the OAuth broker's `microsoft` provider
 ([outlook-through-the-oauth-broker-microsoft-provider](../../decisions/outlook-through-the-oauth-broker-microsoft-provider.md),
-[broker contract](../oauth-broker-contract.md)). One resource per connection, the account's
+[broker contract](../oauth-broker-contract.md)). One resource per account, the account's
 mailbox; no environment. Mail is Gmail's zoning model, the calendar Google Calendar's. Rules
 common to every plugin: [providers README](README.md).
 
@@ -128,7 +128,7 @@ Every tool reaches a named risk; none reaches the fallback (`plugin.test.ts`: `f
   (a personal Microsoft account may use a Gmail address).
 - **403 is not 401**: a 401 is a rejected token (the host refreshes through the broker and
   retries); Graph's 403 (`ErrorAccessDenied`, a tenant policy, a mailbox not licensed) is reported
-  as an upstream failure and never expires the connection (upstream stage). 429 carries
+  as an upstream failure and never expires the account (upstream stage). 429 carries
   `Retry-After`.
 - **No revocation at Microsoft**: the broker's `/revoke` for `microsoft` calls nothing (Microsoft
   has no endpoint for one refresh token; `revokeSignInSessions` would sign the person out
@@ -175,7 +175,7 @@ field by field.
 
 - `sendMail` with attachments: no upload path is modelled.
 - Mail rules, mailbox settings and automatic replies: posture changes with no risk modelled.
-- Other users' and shared mailboxes (`/users/{id}`): one connection is one account.
+- Other users' and shared mailboxes (`/users/{id}`): one account is one account.
 - Calendar sharing and permissions: a change of who can read the agenda, not modelled.
 - `event: cancel` with a message: `delete_event` covers it.
 - Contacts, To Do, Teams: other services, not asked for.
@@ -213,7 +213,7 @@ The first two lines are the plugin's `excludedTools` (`identity.ts`), shown on i
 - "Microsoft refused to read this account (User.Read)" → an administrator must consent, or the
   tenant blocks the app.
 - A call fails with HTTP 403 `ErrorAccessDenied` → not an expired token: a permission or a mailbox
-  policy; the connection stays active.
+  policy; the account stays active.
 - `InefficientFilter` from Graph → the `$filter` no longer starts with `receivedDateTime`
   (`filterOf` in `mail.ts`).
 - A search returns fewer messages than `top` → the full-text page was narrowed to the other terms

@@ -152,7 +152,7 @@ export const INVARIANTS: readonly Invariant[] = [
         ],
       },
       {
-        file: `${INTEGRATION}/store/connections-shares.test.ts`,
+        file: `${INTEGRATION}/store/accounts-shares.test.ts`,
         tests: [
           'refuses a risk id that is not in the loaded catalog (no wildcard can be persisted)',
           'the schema itself rejects a wildcard even if the catalog check were bypassed',
@@ -297,7 +297,7 @@ export const INVARIANTS: readonly Invariant[] = [
     statement:
       'A user’s authority is recomputed from the store at every question — issuance, the owner check, the execution door, the admin rule — and `orphaned` is derived from it at every read, never stored.',
     source: 'spec §2.3, §10; ADR orphaned-missions-and-ownerless-connections',
-    specBullet: 'authority on a connection is recomputed',
+    specBullet: 'authority on an account is recomputed',
     proofs: [
       {
         file: `${STRUCTURAL}/authority-not-snapshotted.test.ts`,
@@ -443,7 +443,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'vaubaan-plugin-hard-deny',
     statement:
-      'The `vaubaan` plugin cannot answer a request, open a gate, touch a connection or a share, or execute another tool: nothing of the instance but seven mission methods and static catalogs is reachable from its ports. A mission never rotates nor revokes itself, a mission it issues never holds a Vaubaan account, and rotation reaches only the missions the calling mission issued.',
+      'The `vaubaan` plugin cannot answer a request, open a gate, touch an account or a share, or execute another tool: nothing of the instance but seven mission methods and static catalogs is reachable from its ports. A mission never rotates nor revokes itself, a mission it issues never holds a Vaubaan account, and rotation reaches only the missions the calling mission issued.',
     source: 'spec §4.1 bis, §6; ADR platform-management-is-a-plugin-on-the-execution-door',
     proofs: [
       {
@@ -644,7 +644,7 @@ export const INVARIANTS: readonly Invariant[] = [
         ],
       },
       {
-        file: `${SERVER}/connections/service.test.ts`,
+        file: `${SERVER}/accounts/service.test.ts`,
         tests: ['rate-limits connect attempts per user'],
       },
       {
@@ -996,7 +996,7 @@ export const INVARIANTS: readonly Invariant[] = [
         ],
       },
       {
-        file: `${SERVER}/connections/oauth-broker.test.ts`,
+        file: `${SERVER}/accounts/oauth-broker.test.ts`,
         tests: ['a key the broker presents and no attestation carries gets nothing'],
       },
     ],
@@ -1027,7 +1027,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'lookups-keyed-by-parent',
     statement:
-      'A mission token, a share and the arguments a request holds are read and changed only with their parent (mission, connection, mission): no repository method takes their id alone.',
+      'A mission token, a share and the arguments a request holds are read and changed only with their parent (mission, account, mission): no repository method takes their id alone.',
     source: 'Security audit 2026-10-31, L8; handbook store',
     proofs: [
       {
@@ -1078,6 +1078,21 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'scans a meaningful set of files',
           'no scanned file names a trust level, a tier or a level in French',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'one-word-per-thing',
+    statement:
+      'What a person or an agent reads says account for an account at a service: the interface words, the bootstrap text, the site documentation, the handbooks and every plugin README, catalog, tool schema and data model, the word it replaced kept only for its unrelated senses and for the names that cannot move.',
+    source: 'ADR one-word-per-thing-account-service-plugin',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/one-word-per-thing.test.ts`,
+        tests: [
+          'scans the human-facing text',
+          'no human-facing text says connection for an account',
         ],
       },
     ],

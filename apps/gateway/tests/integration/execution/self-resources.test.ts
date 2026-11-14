@@ -44,15 +44,15 @@ describe('self resources: never reachable by a mission', () => {
 
   /** A mission stored with every space selected, the self one included: what the store may hold. */
   async function storedWithSelf(): Promise<IssuedMission> {
-    const { root, ada, connection, resources } = instance;
+    const { root, ada, account, resources } = instance;
     const mission = await root.store.missions.create({
       name: 'Issued before the instance knew its own project',
       creatorUserId: ada.id,
       periodSeconds: 86_400,
       // One set per environment: the self one (prod) alone in its own.
-      connections: [
+      accounts: [
         {
-          connectionId: connection.id,
+          accountId: account.id,
           resourceSets: ['staging', 'prod'].map((env) => ({
             resourceIds: resources.filter((r) => r.env === env).map((r) => r.id),
             policy: [READ_LINE],
@@ -74,22 +74,22 @@ describe('self resources: never reachable by a mission', () => {
   });
 
   it('flags it at issuance, leaves it out of "all", refuses it when selected', async () => {
-    const { root, ada, connection } = instance;
+    const { root, ada, account } = instance;
     const context = await root.missions.service.issuanceContext(ada);
-    const listed = context.find((c) => c.id === connection.id)?.resources ?? [];
+    const listed = context.find((c) => c.id === account.id)?.resources ?? [];
     expect(listed.filter((r) => r.self).map((r) => r.ref)).toEqual([SELF]);
 
     const all = await instance.issue({ policy: [line('depot.read')] });
-    const stored = all.mission.connections[0]?.resourceSets[0]?.resourceIds ?? [];
+    const stored = all.mission.accounts[0]?.resourceSets[0]?.resourceIds ?? [];
     const selfId = instance.resources.find((r) => r.ref === SELF)!.id;
     expect(stored).not.toContain(selfId);
     expect(stored).toHaveLength(2);
 
     const picked = await root.missions.service.issue(ada, {
       name: 'Picks the host',
-      connections: [
+      accounts: [
         {
-          connection_id: connection.id,
+          account_id: account.id,
           resources: { scope: 'selected', resource_refs: ['scratch', SELF] },
           policy: [line('depot.read')],
         },
@@ -117,7 +117,7 @@ describe('self resources: never reachable by a mission', () => {
     expect(instance.depot.calls.length).toBe(seen + 1);
   });
 
-  it('marks the connection that reaches it, so its unbound tools are unavailable (re-check M-1)', async () => {
+  it('marks the account that reaches it, so its unbound tools are unavailable (re-check M-1)', async () => {
     const { mission } = await storedWithSelf();
     const { root } = instance;
     const token = {
@@ -131,15 +131,15 @@ describe('self resources: never reachable by a mission', () => {
       token as never,
       root.config.selfResources,
     );
-    expect(withSelf.connections[0]?.hosts_instance).toBe(true);
+    expect(withSelf.accounts[0]?.hosts_instance).toBe(true);
     const without = await loadMissionContext(root.store, mission, token as never, []);
-    expect(without.connections[0]?.hosts_instance).toBe(false);
+    expect(without.accounts[0]?.hosts_instance).toBe(false);
   });
 
   it('is not listed on the mission page nor in the kit', async () => {
     const { mission } = await storedWithSelf();
     const detail = await instance.root.missions.service.get(instance.ada, mission.id);
-    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
+    expect(detail?.accounts[0]?.resources.map((r) => r.ref).sort()).toEqual([
       'app-staging',
       'scratch',
     ]);

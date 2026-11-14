@@ -69,9 +69,9 @@ describe('missions: members and per-holder tokens', () => {
   function draft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],
@@ -193,7 +193,7 @@ describe('missions: members and per-holder tokens', () => {
       expect((await bobToken()).secret).toMatch(SECRET_SHAPE);
 
       // The creator loses the authority: the mission is orphaned for every holder...
-      await root.store.connections.revoke(seeded.github.connection.id);
+      await root.store.accounts.revoke(seeded.github.account.id);
       expect((await root.missions.service.get(bob, mission.id))?.state.kind).toBe('orphaned');
       // ...and a member cannot generate a token for a mission that serves no call.
       expect(await team.generateToken(bob, mission.id)).toEqual({
@@ -635,7 +635,7 @@ describe('missions: members and per-holder tokens', () => {
           {
             missionId: null,
             user: null,
-            connectionId: null,
+            accountId: null,
             tool: null,
             decision: null,
             agentLabel: null,

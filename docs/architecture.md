@@ -6,7 +6,7 @@ title: Architecture in ten minutes
 
 The path of a request through Vaubaan Gateway, for a person reading the code for the first time.
 Each part links to its handbook, which names the files to open first. The words are the protocol's
-(connection, risk, budget, gate); the interface calls the same things account, permission, limits
+(account, risk, budget, gate); the interface calls the same things account, permission, limits
 and "ask me first" ([README, Words](../README.md#words)).
 
 ## One process, two ways in
@@ -30,7 +30,7 @@ and "ask me first" ([README, Words](../README.md#words)).
   6 audit entry, allowed or refused                               │
       │                                                           │
       ▼                                                           ▼
- STORE (one SQLite file): connections and encrypted credentials, shares,
+ STORE (one SQLite file): accounts and encrypted credentials, shares,
  missions, token digests, counters, requests, audit
 ```
 

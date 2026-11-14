@@ -26,9 +26,9 @@ import type { MissionPolicyEntry } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf, countersAgreeWithAudit } from '../../../src/server/budget';
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import type { MissionDraft } from '../../../src/server/missions';
-import type { ConnectionRecord, MissionRecord } from '../../../src/server/store/types';
+import type { AccountRecord, MissionRecord } from '../../../src/server/store/types';
 import {
   depotSecret,
   executionInstance,
@@ -68,7 +68,7 @@ function twinPlugin(): ProviderPlugin {
     tools: [
       tool('read', 'Read an item of a space.'),
       tool('copy', 'Copy an item from one space to another.'),
-      tool('whoami', 'The account behind the connection.'),
+      tool('whoami', 'The account behind the account.'),
       tool('fork', 'Fork a space into a new one.'),
     ],
     resourceCreatingTools: [`${TWIN}__fork`],
@@ -206,7 +206,7 @@ const ask = (riskId: string, quota = 100): MissionPolicyEntry =>
 
 describe('resource sets through the execution door', () => {
   let instance: ExecutionInstance;
-  let twin: ConnectionRecord;
+  let twin: AccountRecord;
   const idOf = new Map<string, string>();
 
   beforeEach(async () => {
@@ -214,13 +214,13 @@ describe('resource sets through the execution door', () => {
       deps: { buildRegistry: async () => createRegistry([twinPlugin()]) },
     });
     const { root, ada } = instance;
-    twin = await root.store.connections.create({
+    twin = await root.store.accounts.create({
       provider: TWIN,
       owner: { kind: 'user', id: ada.id },
       displayName: 'Twin main',
       credential: serializeSecret(depotSecret()),
     });
-    const rows = await root.store.connections.syncDiscoveredResources(twin.id, [
+    const rows = await root.store.accounts.syncDiscoveredResources(twin.id, [
       { ref: 'alpha', displayName: 'alpha' },
       { ref: 'beta', displayName: 'beta' },
       { ref: 'gamma', displayName: 'gamma' },
@@ -236,9 +236,9 @@ describe('resource sets through the execution door', () => {
   ): Promise<IssuedMission> {
     const draft: MissionDraft = {
       name: 'Two sets',
-      connections: [
+      accounts: [
         {
-          connection_id: twin.id,
+          account_id: twin.id,
           resource_sets: [
             {
               resources: { scope: 'selected', resource_refs: ['alpha', 'gamma'] },
@@ -257,7 +257,7 @@ describe('resource sets through the execution door', () => {
   }
 
   const setsOf = (mission: MissionRecord): [string, string] => {
-    const sets = mission.connections[0]?.resourceSets ?? [];
+    const sets = mission.accounts[0]?.resourceSets ?? [];
     return [sets[0]?.id ?? '', sets[1]?.id ?? ''];
   };
 
@@ -376,8 +376,8 @@ describe('resource sets through the execution door', () => {
     const forked = await instance.call(issued, 'twin__fork', { space: 'beta' });
     expect(forked.error).toBeUndefined();
     const record = await instance.root.store.missions.getById(issued.mission.id);
-    const [, second] = record!.connections[0]!.resourceSets;
-    const forkId = (await instance.root.store.connections.listResources(twin.id)).find(
+    const [, second] = record!.accounts[0]!.resourceSets;
+    const forkId = (await instance.root.store.accounts.listResources(twin.id)).find(
       (r) => r.ref === 'beta-fork',
     )?.id;
     expect(forkId).toBeDefined();
@@ -397,10 +397,10 @@ describe('resource sets through the execution door', () => {
       }),
     );
     const catalog = (await response.json()) as {
-      connections: { resources: { ref: string; resource_set?: string }[] }[];
+      accounts: { resources: { ref: string; resource_set?: string }[] }[];
       budget: { risk_id: string; quota: number; resource_set?: string }[];
     };
-    const twinResources = catalog.connections.flatMap((c) => c.resources);
+    const twinResources = catalog.accounts.flatMap((c) => c.resources);
     expect(twinResources.find((r) => r.ref === 'beta')?.resource_set).toBe('resource set 2');
     expect(twinResources.find((r) => r.ref === 'alpha')?.resource_set).toBe('resource set 1');
     expect(catalog.budget.map((b) => [b.risk_id, b.quota, b.resource_set])).toEqual([

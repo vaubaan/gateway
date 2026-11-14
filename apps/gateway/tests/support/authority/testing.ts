@@ -4,7 +4,7 @@
 import type { MissionGrounds } from '../../../src/server/authority/mission-grounds';
 
 /**
- * `MissionGrounds` for a fixture that has no connection, share or group to
+ * `MissionGrounds` for a fixture that has no account, share or group to
  * read (a budget or request test over a bare store): every mission is
  * grounded, so its stored status is the one the reader sees. A test about
  * `orphaned` uses the real module (`createAuthorityModule`).

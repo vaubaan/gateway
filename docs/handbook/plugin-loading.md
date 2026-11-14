@@ -41,7 +41,7 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 
 - **The pin wins, never silently**: one `info` line per pin at boot (`… pinned from <dir> (replaces bundled <v>)`) and one for the plugins `plugins.enabled` leaves out.
 - **Fail closed at boot**: every refusal is a `ConfigError` (exit 78) whose message holds the pin's directory, or names the provider and its account count. A pin is never skipped.
-- **The accounts check runs after the store opens** (`root.ts`, before the sealed-keys probe): it counts connections not revoked, so a revoked account of a dropped plugin does not block.
+- **The accounts check runs after the store opens** (`root.ts`, before the sealed-keys probe): it counts accounts not revoked, so a revoked account of a dropped plugin does not block.
 - **The host reads SDK errors by brand only** (`isUpstreamAuthError`…, [plugin-sdk](plugin-sdk.md)): a pin carries its own SDK copy. `loader.test.ts` proves `instanceof` is false on a real bundle.
 - **`package.json` version = `plugin.version`** for a pin, as for a bundled plugin; a mismatch is refused.
 - **A pin never declares a `host` account**: such a plugin runs on the gateway's own services, which only the image binds (the `vaubaan` plugin, [providers/vaubaan](providers/vaubaan.md)); the loader refuses it and the bundle script skips it (`"vaubaan": { "bundleable": false }`).

@@ -45,7 +45,7 @@ plugin: [providers/github](providers/github.md).
 - The door is the host's; any number of plugins declare `gitRemote`, each
   reached only under its own id (`PluginRegistry.gitRemoteOf`). An unknown
   `<provider>`, or one without `gitRemote`, is a `404` before the key is read;
-  a mission without a connection on it is refused by the resource stage,
+  a mission without an account on it is refused by the resource stage,
   audited like any call. `repositoryOf` receives the path after the provider
   segment, `.git` removed.
 

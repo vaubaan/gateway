@@ -66,7 +66,7 @@ const REASON_NAME = /^reason$/;
  */
 const REASON_IS_A_CODE: ReadonlySet<string> = new Set([
   // `ConnectRefusalReason`, a closed union.
-  'apps/gateway/src/server/connections/service.ts — connection refused: installation not bound to the user',
+  'apps/gateway/src/server/accounts/service.ts — account refused: installation not bound to the user',
   // `AUTH_FAILURE_OF[…]`: why a retired token is retired (`rotated`, `holder-removed`, …).
   'apps/gateway/src/server/execution/admission.ts — retired mission token presented at the execution surface',
   // Why a label carrier was dropped (`too-long`, `invalid-character`, `not-a-string`): never its value.

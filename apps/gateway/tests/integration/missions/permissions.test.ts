@@ -159,16 +159,16 @@ describe('creator permission edits and deliberate agent requests', () => {
       email: 'limited@example.com',
     });
     const share = (riskIds: readonly string[]) =>
-      rig.root.shares.service.share({ user: rig.ada, groups: [] }, rig.connection.id, {
+      rig.root.shares.service.share({ user: rig.ada, groups: [] }, rig.account.id, {
         target: { kind: 'user', email: bob.email },
         riskIds,
       });
     await share([READ, WRITE]);
     const issued = await rig.root.missions.service.issue(bob, {
       name: 'Limited creator',
-      connections: [
+      accounts: [
         {
-          connection_id: rig.connection.id,
+          account_id: rig.account.id,
           resources: { scope: 'selected', resource_refs: ['app-staging'] },
           policy: [line(READ, 3)],
         },
@@ -381,7 +381,7 @@ describe('creator permission edits and deliberate agent requests', () => {
     ).toMatchObject({ outcome: 'refused', refusal: { code: 'approval-required' } });
   });
   it('does not resurrect stopped or orphaned missions', async () => {
-    await rig.root.store.connections.revoke(rig.connection.id);
+    await rig.root.store.accounts.revoke(rig.account.id);
     expect(await edit([...(await policy()), line(WRITE)])).toMatchObject({
       ok: false,
       reason: 'inactive',

@@ -11,7 +11,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
   const oldDir = mkdtempSync(join(tmpdir(), 'permission-old-schema-'));
   for (const file of readdirSync(DEFAULT_MIGRATIONS_DIR)) {
     // Every migration but 0016, the one under test: the repositories of this build
-    // read the columns later migrations add (0017 `connections.default_env`), and the
+    // read the columns later migrations add (0017 `accounts.default_env`), and the
     // migrator applies a missing version whatever was applied after it.
     if (/^\d{4}_/.test(file) && Number(file.slice(0, 4)) !== 16)
       copyFileSync(join(DEFAULT_MIGRATIONS_DIR, file), join(oldDir, file));
@@ -28,7 +28,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
       subject: 'owner',
       email: 'owner@example.com',
     });
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       displayName: 'GitHub',
       owner: { kind: 'user', id: user.id },
@@ -38,7 +38,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
       name: 'Existing mission',
       creatorUserId: user.id,
       periodSeconds: null,
-      connections: [{ connectionId: connection.id, resourceIds: [] }],
+      accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',
@@ -73,7 +73,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(35);
+    expect(store.schemaVersion).toBe(36);
     expect(await store.requests.getById(request.id)).toEqual(request);
     expect(await heldArguments(store, request.id)).toEqual({
       marker: 'preserved encrypted content',

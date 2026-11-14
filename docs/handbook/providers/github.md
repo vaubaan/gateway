@@ -10,7 +10,7 @@ last_reviewed: 2026-11-14
 
 `@vaubaan/plugin-github`: repositories, pull requests, issues, releases, workflow runs and logs,
 and the instance's git remote ([git-remote](../git-remote.md),
-[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). One connection is a
+[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). One account is a
 fine-grained personal access token
 ([token first](../../decisions/one-place-to-authorize-services-token-first.md)). No risk is
 env-scoped. Rules common to every plugin: [providers README](README.md).
@@ -99,7 +99,7 @@ env-scoped. Rules common to every plugin: [providers README](README.md).
   `hiddenByDefault` — under a fine-grained token always (its grant on a public repository cannot
   be read), under any other token when `permissions.push` is false (no token of that user can
   write it). The host stores it hidden from new missions while the owner never hid nor showed it
-  (`connection_resources.hidden_edited`, ADR connect-driver-and-resource-curation, amendment
+  (`account_resources.hidden_edited`, ADR connect-driver-and-resource-curation, amendment
   2026-11-14); the account page tags it "the key may only read it".
 - **The trade-off.** A public repository that _is_ in the grant is hidden too: the owner shows it
   once on the account page (untick "Hide from new missions"), and every later refresh keeps that.

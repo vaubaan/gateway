@@ -1,7 +1,7 @@
 /**
  * Missions end to end inside the process (spec §10 "integration on an
  * ephemeral instance"): the composition root on the `:memory:` store, real
- * plugin catalogs and their macro-actions, connections and resources seeded through the
+ * plugin catalogs and their macro-actions, accounts and resources seeded through the
  * repositories. Issue → the token verifies → rotate → the old token is
  * refused → revoke → `mission-inactive`.
  */
@@ -18,9 +18,9 @@ import {
   TRUST_LEVELS,
   type MissionDraft,
 } from '../../../src/server/missions';
-import { catalogEnvs, seedConnection } from '../../support/missions/testing';
+import { catalogEnvs, seedAccount } from '../../support/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
-import { agePastStaleGrace, flatConnections, flatPolicy } from '../../support/store/testing';
+import { agePastStaleGrace, flatAccounts, flatPolicy } from '../../support/store/testing';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
@@ -56,9 +56,7 @@ describe('missions: issue, rotate, revoke', () => {
   function githubDraft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [
-        { connection_id: seeded.github.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS },
-      ],
+      accounts: [{ account_id: seeded.github.account.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
       period: DAILY,
       expires_at: null,
       ...overrides,
@@ -137,9 +135,9 @@ describe('missions: issue, rotate, revoke', () => {
     expect(mission.creatorUserId).toBe(seeded.ada.id);
     expect(mission.periodSeconds).toBe(86_400);
     expect(mission.expiresAt).toBeNull();
-    expect(flatConnections(mission)).toEqual([
+    expect(flatAccounts(mission)).toEqual([
       {
-        connectionId: seeded.github.connection.id,
+        accountId: seeded.github.account.id,
         resourceIds: seeded.github.resources.map((r) => r.id).sort(),
         // Kept only to redraw the form: the policy below is what decides.
         trustLevels: DEVELOPER_TRUST_LEVELS,
@@ -153,28 +151,28 @@ describe('missions: issue, rotate, revoke', () => {
       preview.policy.map((e) => e.risk_id).sort(),
     );
     expect(mission.policy.every((e) => e.quota >= 1 && e.rateLimit >= 1)).toBe(true);
-    expect(preview.connections[0]?.left_out).toEqual([]);
+    expect(preview.accounts[0]?.left_out).toEqual([]);
     expect(JSON.stringify(mission)).not.toContain('preset');
   });
 
   it('does not cover a resource discovered after issuance', async () => {
     const { mission } = await issued();
-    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
+    await root.store.accounts.syncDiscoveredResources(seeded.github.account.id, [
       ...seeded.github.resources.map((r) => ({ ref: r.ref, displayName: r.displayName })),
       { ref: 'acme/new-repo', displayName: 'acme/new-repo' },
     ]);
     const reread = await root.store.missions.getById(mission.id);
-    expect(reread?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
+    expect(reread?.accounts[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
     const detail = await missions.get(seeded.ada, mission.id);
-    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
+    expect(detail?.accounts[0]?.resources.map((r) => r.ref).sort()).toEqual([
       'acme/app',
       'acme/infra',
       'acme/web',
     ]);
   });
 
-  it('reaches nothing on a connection that had no resource at issuance, even once discovery finds some', async () => {
-    const empty = await seedConnection(root.store, {
+  it('reaches nothing on an account that had no resource at issuance, even once discovery finds some', async () => {
+    const empty = await seedAccount(root.store, {
       provider: 'github',
       owner: { kind: 'user', id: seeded.bob.id },
       displayName: 'empty-org',
@@ -183,21 +181,21 @@ describe('missions: issue, rotate, revoke', () => {
     const { mission, token } = await issued(
       {
         name: 'Nothing to touch yet',
-        connections: [{ connection_id: empty.connection.id, trust_levels: { read: 'careful' } }],
+        accounts: [{ account_id: empty.account.id, trust_levels: { read: 'careful' } }],
         period: DAILY,
         expires_at: null,
       },
       seeded.bob,
     );
-    expect(flatConnections(mission)).toEqual([
+    expect(flatAccounts(mission)).toEqual([
       {
-        connectionId: empty.connection.id,
+        accountId: empty.account.id,
         resourceIds: [],
         trustLevels: { read: 'careful' },
       },
     ]);
 
-    await root.store.connections.syncDiscoveredResources(empty.connection.id, [
+    await root.store.accounts.syncDiscoveredResources(empty.account.id, [
       { ref: 'acme/later', displayName: 'acme/later' },
     ]);
 
@@ -215,7 +213,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(ctx.resources).toEqual([]);
     // The page and the kit say what the door enforces.
     const detail = await missions.get(seeded.bob, mission.id);
-    expect(detail?.connections.map((c) => c.resources)).toEqual([[]]);
+    expect(detail?.accounts.map((c) => c.resources)).toEqual([[]]);
     expect(detail?.kit?.agent_instructions).not.toContain('acme/later');
     const rotated = await missions.rotate(seeded.bob, mission.id);
     expect(rotated.ok && rotated.kit.agent_instructions).not.toContain('acme/later');
@@ -223,21 +221,21 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('lists no hidden resource in the kit of a mission issued on "all" when every resource is hidden', async () => {
     for (const resource of seeded.github.resources) {
-      await root.store.connections.setResourceHidden(resource.id, true);
+      await root.store.accounts.setResourceHidden(resource.id, true);
     }
     const { mission, kit } = await issued();
-    expect(mission.connections[0]?.resourceSets[0]?.resourceIds).toEqual([]);
+    expect(mission.accounts[0]?.resourceSets[0]?.resourceIds).toEqual([]);
     for (const resource of seeded.github.resources) {
       expect(kit.agent_instructions).not.toContain(`\`${resource.ref}\``);
     }
     const detail = await missions.get(seeded.ada, mission.id);
-    expect(detail?.connections[0]?.resources).toEqual([]);
+    expect(detail?.accounts[0]?.resources).toEqual([]);
   });
 
   it('drops a resource that turned stale from the detail and the kit, like the door does', async () => {
     const { mission, token } = await issued();
-    agePastStaleGrace(root.store, seeded.github.connection.id); // past the grace of a fresh row
-    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
+    agePastStaleGrace(root.store, seeded.github.account.id); // past the grace of a fresh row
+    await root.store.accounts.syncDiscoveredResources(seeded.github.account.id, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
     ]);
@@ -254,23 +252,23 @@ describe('missions: issue, rotate, revoke', () => {
     const reachable = ctx.resources.map((r) => r.ref).sort();
     expect(reachable).toEqual(['acme/app', 'acme/infra']);
     const detail = await missions.get(seeded.ada, mission.id);
-    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual(reachable);
+    expect(detail?.accounts[0]?.resources.map((r) => r.ref).sort()).toEqual(reachable);
     expect(detail?.kit?.agent_instructions).not.toContain('`acme/web`');
   });
 
   it('resolves "all" without hidden and stale resources; a hidden one only when ticked', async () => {
-    const connectionId = seeded.github.connection.id;
+    const accountId = seeded.github.account.id;
     const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
-    await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
+    await root.store.accounts.setResourceHidden(idOf('acme/infra'), true);
     // Discovery no longer returns acme/web: it turns stale, it is not deleted.
-    agePastStaleGrace(root.store, connectionId); // past the grace of a fresh row
-    await root.store.connections.syncDiscoveredResources(connectionId, [
+    agePastStaleGrace(root.store, accountId); // past the grace of a fresh row
+    await root.store.accounts.syncDiscoveredResources(accountId, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
     ]);
 
     const context = await missions.issuanceContext(seeded.ada);
-    const github = context.find((c) => c.id === connectionId);
+    const github = context.find((c) => c.id === accountId);
     expect(github?.resources.map((r) => [r.ref, r.hidden, r.stale]).sort()).toEqual([
       ['acme/app', false, false],
       ['acme/infra', true, false],
@@ -278,14 +276,14 @@ describe('missions: issue, rotate, revoke', () => {
     ]);
 
     const all = await issued();
-    expect(all.mission.connections[0]?.resourceSets[0]?.resourceIds).toEqual([idOf('acme/app')]);
+    expect(all.mission.accounts[0]?.resourceSets[0]?.resourceIds).toEqual([idOf('acme/app')]);
 
     const withHidden = await issued(
       githubDraft({
         name: 'With the hidden one',
-        connections: [
+        accounts: [
           {
-            connection_id: connectionId,
+            account_id: accountId,
             trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/infra'] },
           },
@@ -293,15 +291,15 @@ describe('missions: issue, rotate, revoke', () => {
       }),
     );
     expect(
-      [...(withHidden.mission.connections[0]?.resourceSets[0]?.resourceIds ?? [])].sort(),
+      [...(withHidden.mission.accounts[0]?.resourceSets[0]?.resourceIds ?? [])].sort(),
     ).toEqual([idOf('acme/app'), idOf('acme/infra')].sort());
 
     const withStale = await missions.issue(
       seeded.ada,
       githubDraft({
-        connections: [
+        accounts: [
           {
-            connection_id: connectionId,
+            account_id: accountId,
             trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
           },
@@ -312,24 +310,24 @@ describe('missions: issue, rotate, revoke', () => {
     expect(withStale.preview.issues.map((i) => i.code)).toEqual(['resource-stale']);
   });
 
-  it('future resources: the whole connection is the known list with future on, and a resource found later is written in', async () => {
-    const connectionId = seeded.github.connection.id;
+  it('future resources: the whole account is the known list with future on, and a resource found later is written in', async () => {
+    const accountId = seeded.github.account.id;
     const before = await issued();
     const { mission, token, kit } = await issued(
       githubDraft({
         name: 'Run the whole account',
-        connections: [
+        accounts: [
           {
-            connection_id: connectionId,
+            account_id: accountId,
             trust_levels: DEVELOPER_TRUST_LEVELS,
-            resources: { scope: 'connection' },
+            resources: { scope: 'account' },
           },
         ],
       }),
     );
-    expect(flatConnections(mission)).toEqual([
+    expect(flatAccounts(mission)).toEqual([
       {
-        connectionId,
+        accountId,
         resourceIds: seeded.github.resources.map((r) => r.id).sort(),
         future: true,
         trustLevels: DEVELOPER_TRUST_LEVELS,
@@ -341,12 +339,10 @@ describe('missions: issue, rotate, revoke', () => {
     // The audit of the issuance records the lists and `future`, so the width is on record.
     const issuedEntries = await root.store.audit.list({ kind: 'admin', act: 'mission-issued' });
     expect(
-      issuedEntries.map(
-        (e) => e.kind === 'admin' && (e.after as { connections: unknown }).connections,
-      ),
+      issuedEntries.map((e) => e.kind === 'admin' && (e.after as { accounts: unknown }).accounts),
     ).toContainEqual([
       {
-        connection_id: connectionId,
+        account_id: accountId,
         resource_ids: seeded.github.resources.map((r) => r.id).sort(),
         resource_sets: [
           {
@@ -362,19 +358,15 @@ describe('missions: issue, rotate, revoke', () => {
 
     // Discovery finds a new repository, the owner hides one, another vanishes.
     const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
-    await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
-    agePastStaleGrace(root.store, connectionId); // past the grace of a fresh row
-    const snapshot = await root.connections.futureResources.snapshot(connectionId);
-    await root.store.connections.syncDiscoveredResources(connectionId, [
+    await root.store.accounts.setResourceHidden(idOf('acme/infra'), true);
+    agePastStaleGrace(root.store, accountId); // past the grace of a fresh row
+    const snapshot = await root.accounts.futureResources.snapshot(accountId);
+    await root.store.accounts.syncDiscoveredResources(accountId, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
       { ref: 'acme/new', displayName: 'acme/new' },
     ]);
-    const moves = await root.connections.futureResources.settle(
-      connectionId,
-      snapshot,
-      seeded.ada.id,
-    );
+    const moves = await root.accounts.futureResources.settle(accountId, snapshot, seeded.ada.id);
     expect(moves.map((m) => [m.missionId, m.ref, m.change, m.reason])).toEqual([
       [mission.id, 'acme/new', 'joined', 'discovered'],
     ]);
@@ -390,8 +382,8 @@ describe('missions: issue, rotate, revoke', () => {
     // The hidden repository stays: it was in the list. The stale one is not reached.
     expect(ctx.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/infra', 'acme/new']);
     const detail = await missions.get(seeded.ada, mission.id);
-    expect(detail?.connections[0]?.future).toBe(true);
-    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
+    expect(detail?.accounts[0]?.future).toBe(true);
+    expect(detail?.accounts[0]?.resources.map((r) => r.ref).sort()).toEqual([
       'acme/app',
       'acme/infra',
       'acme/new',
@@ -403,8 +395,8 @@ describe('missions: issue, rotate, revoke', () => {
       [
         mission.id,
         {
-          connection_id: connectionId,
-          resource_set_id: mission.connections[0]?.resourceSets[0]?.id,
+          account_id: accountId,
+          resource_set_id: mission.accounts[0]?.resourceSets[0]?.id,
           refs: ['acme/new'],
           reason: 'discovered',
         },
@@ -413,28 +405,28 @@ describe('missions: issue, rotate, revoke', () => {
 
     // A mission issued on "every resource known now" is not widened by the same discovery.
     const known = await missions.get(seeded.ada, before.mission.id);
-    expect(known?.connections[0]?.future).toBe(false);
-    expect(known?.connections[0]?.resources.map((r) => r.ref)).not.toContain('acme/new');
+    expect(known?.accounts[0]?.future).toBe(false);
+    expect(known?.accounts[0]?.resources.map((r) => r.ref)).not.toContain('acme/new');
 
     // The owner's page of the account says it; a copy is as wide as its source.
-    const onAccount = await missions.onConnection(seeded.ada, connectionId);
+    const onAccount = await missions.onAccount(seeded.ada, accountId);
     expect(onAccount.find((m) => m.id === mission.id)?.future).toBe(true);
     expect(onAccount.find((m) => m.id === before.mission.id)?.future).toBe(false);
     const copy = await missions.duplicate(seeded.ada, mission.id);
     if (!copy.ok) throw new Error('duplicate refused');
-    expect(copy.mission.connections[0]?.resourceSets[0]).toMatchObject({ future: true });
+    expect(copy.mission.accounts[0]?.resourceSets[0]).toMatchObject({ future: true });
   });
 
   it('drops a resource that turned stale when duplicating', async () => {
     const source = await issued();
-    agePastStaleGrace(root.store, seeded.github.connection.id); // past the grace of a fresh row
-    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
+    agePastStaleGrace(root.store, seeded.github.account.id); // past the grace of a fresh row
+    await root.store.accounts.syncDiscoveredResources(seeded.github.account.id, [
       { ref: 'acme/app', displayName: 'acme/app' },
     ]);
     const copy = await missions.duplicate(seeded.ada, source.mission.id);
     if (!copy.ok) throw new Error('duplicate refused');
-    expect(copy.mission.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
-    expect(source.mission.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
+    expect(copy.mission.accounts[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
+    expect(source.mission.accounts[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
   });
 
   describe('a token row of another algorithm', () => {
@@ -472,13 +464,13 @@ describe('missions: issue, rotate, revoke', () => {
     // only, never the store's camelCase record.
     expect(entry?.kind === 'admin' && entry.after).toEqual({
       name: 'Ship the billing page',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           resource_ids: seeded.github.resources.map((r) => r.id).sort(),
           resource_sets: [
             {
-              resource_set_id: mission.connections[0]?.resourceSets[0]?.id,
+              resource_set_id: mission.accounts[0]?.resourceSets[0]?.id,
               position: 1,
               future: false,
               env: null,
@@ -501,7 +493,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(mission.policy).toHaveLength(
       githubActionRows(Object.keys(DEVELOPER_TRUST_LEVELS)).length,
     );
-    expect(JSON.stringify(entry)).not.toMatch(/connectionId|resourceScope|resourceIds|riskId/);
+    expect(JSON.stringify(entry)).not.toMatch(/accountId|resourceScope|resourceIds|riskId/);
     const secretPart = token.secret.slice(-32);
     expect(JSON.stringify(audit)).not.toContain(secretPart);
     const dump = root.store.db
@@ -514,9 +506,9 @@ describe('missions: issue, rotate, revoke', () => {
     const result = await missions.issue(
       seeded.ada,
       githubDraft({
-        connections: [
+        accounts: [
           {
-            connection_id: seeded.github.connection.id,
+            account_id: seeded.github.account.id,
             policy: [{ risk_id: 'github.merge-protected' }, { risk_id: 'github.*', quota: 1 }],
           },
         ],
@@ -531,17 +523,17 @@ describe('missions: issue, rotate, revoke', () => {
     expect(await root.store.missions.listForCreator(seeded.ada.id)).toEqual([]);
   });
 
-  it('refuses a mission on a connection the creator holds no authority on', async () => {
+  it('refuses a mission on an account the creator holds no authority on', async () => {
     const result = await missions.issue(seeded.bob, githubDraft());
     if (result.ok || result.reason !== 'refused') throw new Error('expected a refusal');
-    expect(result.preview.issues.map((i) => i.code)).toEqual(['connection-unknown']);
+    expect(result.preview.issues.map((i) => i.code)).toEqual(['account-unknown']);
     expect(await missions.issuanceContext(seeded.bob)).toEqual([]);
   });
 
   it('lets a member of the owner group issue, and stops when they leave it', async () => {
     const group = await root.store.groups.getOrCreate('github-admins', 'local', null);
     await root.store.groups.addMember(group.id, seeded.bob.id);
-    await root.store.connections.transferOwner(seeded.github.connection.id, {
+    await root.store.accounts.transferOwner(seeded.github.account.id, {
       kind: 'group',
       id: group.id,
     });
@@ -550,32 +542,32 @@ describe('missions: issue, rotate, revoke', () => {
     expect((await missions.issue(seeded.bob, githubDraft())).ok).toBe(false);
   });
 
-  it('issues a three-connection mission with one partition per connection', async () => {
+  it('issues a three-account mission with one partition per account', async () => {
     const result = await issued({
       name: 'Three providers',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           trust_levels: { read: 'careful' },
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
         },
         {
-          connection_id: seeded.supabase.connection.id,
+          account_id: seeded.supabase.account.id,
           trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
         },
-        { connection_id: seeded.vercel.connection.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
+        { account_id: seeded.vercel.account.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
       ],
       period: DAILY,
       expires_at: null,
     });
     const providers = result.mission.policy.map((e) => e.riskId.split(/[.[]/)[0]);
     expect(new Set(providers)).toEqual(new Set(['github', 'supabase', 'vercel']));
-    // One partition per connection: each holds its own provider's lines, all of them.
-    expect(result.preview.connections.map((c) => c.passes.length)).toEqual(
+    // One partition per account: each holds its own provider's lines, all of them.
+    expect(result.preview.accounts.map((c) => c.passes.length)).toEqual(
       ['github', 'supabase', 'vercel'].map((p) => providers.filter((q) => q === p).length),
     );
     for (const [index, provider] of ['github', 'supabase', 'vercel'].entries()) {
-      const passes = result.preview.connections[index]?.passes ?? [];
+      const passes = result.preview.accounts[index]?.passes ?? [];
       expect(passes.length, provider).toBeGreaterThan(0);
       expect(
         passes.every((e) => e.risk_id.startsWith(provider)),
@@ -583,7 +575,7 @@ describe('missions: issue, rotate, revoke', () => {
       ).toBe(true);
     }
     // Careful on Read: the global search, in row 2, asks first.
-    expect(result.preview.connections[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
+    expect(result.preview.accounts[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.read-meta', 'auto'],
       ['github.search-global', 'approval'],
@@ -598,9 +590,9 @@ describe('missions: issue, rotate, revoke', () => {
     const prodOnly = { scope: 'selected', resource_refs: ['prdprojectref'] } as const;
     const explicit = await missions.preview(seeded.ada, {
       name: 'Prod only',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.supabase.connection.id,
+          account_id: seeded.supabase.account.id,
           resources: prodOnly,
           policy: [
             {
@@ -620,15 +612,15 @@ describe('missions: issue, rotate, revoke', () => {
       expires_at: null,
     });
     expect(explicit.ok).toBe(false);
-    expect(explicit.connections[0]?.unresolvable).toEqual([
+    expect(explicit.accounts[0]?.unresolvable).toEqual([
       { risk_id: 'supabase[staging].bulk-row-write', env: 'staging' },
     ]);
 
     const fromTrustLevels = await missions.preview(seeded.ada, {
       name: 'Prod only',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.supabase.connection.id,
+          account_id: seeded.supabase.account.id,
           resources: prodOnly,
           trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
         },
@@ -637,7 +629,7 @@ describe('missions: issue, rotate, revoke', () => {
       expires_at: null,
     });
     expect(fromTrustLevels.ok).toBe(true);
-    const leftOut = fromTrustLevels.connections[0]?.left_out ?? [];
+    const leftOut = fromTrustLevels.accounts[0]?.left_out ?? [];
     expect(leftOut.length).toBeGreaterThan(0);
     // At Trusting no row is left out: only the environments no project carries.
     expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
@@ -651,9 +643,9 @@ describe('missions: issue, rotate, revoke', () => {
   it('duplicates a mission: same policy, its own token and budget, source untouched', async () => {
     const source = await issued(
       githubDraft({
-        connections: [
+        accounts: [
           {
-            connection_id: seeded.github.connection.id,
+            account_id: seeded.github.account.id,
             trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
             // Beside a policy the trust levels decide nothing: each line carries its budget.
@@ -672,7 +664,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(copy.mission.name).toBe('Ship the billing page (copy)');
     // Same lines, in the copy's own set: the copy counts on its own.
     expect(flatPolicy(copy.mission)).toEqual(flatPolicy(source.mission));
-    expect(flatConnections(copy.mission)).toEqual(flatConnections(source.mission));
+    expect(flatAccounts(copy.mission)).toEqual(flatAccounts(source.mission));
     expect(copy.mission.periodSeconds).toBe(source.mission.periodSeconds);
     expect(copy.mission.expiresAt).toBeNull();
     expect(copy.token.prefix).not.toBe(source.token.prefix);
@@ -689,13 +681,13 @@ describe('missions: issue, rotate, revoke', () => {
       ok: false,
       reason: 'not-found',
     });
-    await root.store.connections.transferOwner(seeded.github.connection.id, {
+    await root.store.accounts.transferOwner(seeded.github.account.id, {
       kind: 'user',
       id: seeded.bob.id,
     });
     const refused = await missions.duplicate(seeded.ada, source.mission.id);
     if (refused.ok || refused.reason !== 'refused') throw new Error('expected a refusal');
-    expect(refused.preview.issues.map((i) => i.code)).toEqual(['connection-unknown']);
+    expect(refused.preview.issues.map((i) => i.code)).toEqual(['account-unknown']);
   });
 
   it('rotates and revokes only for the creator; revoke is idempotent; a revoked mission cannot rotate', async () => {
@@ -761,7 +753,7 @@ describe('missions: issue, rotate, revoke', () => {
     if (!detail) throw new Error('detail missing');
     expect(detail.state.kind).toBe('active');
     expect(detail.policy.every((r) => r.label !== r.risk_id && r.remaining === r.quota)).toBe(true);
-    expect(detail.connections[0]).toMatchObject({ provider: 'github', display_name: 'acme-org' });
+    expect(detail.accounts[0]).toMatchObject({ provider: 'github', display_name: 'acme-org' });
     expect(detail.kit?.reveals_secret).toBe(false);
     expect(detail.kit?.env).toContain(`vbn_live_${token.prefix}_…`);
     expect(JSON.stringify(detail)).not.toContain(token.secret);
@@ -853,15 +845,15 @@ describe('missions: issuance context', () => {
     expect(byProvider.get('gmail')).not.toHaveProperty('experimental');
     expect(byProvider.get('vercel')?.derives_env).toBe(true);
     expect(byProvider.get('supabase')?.derives_env).toBe(false);
-    for (const connection of context) {
-      const registered = root.registry.get(connection.provider);
-      expect(connection.macro_actions).toEqual(
+    for (const account of context) {
+      const registered = root.registry.get(account.provider);
+      expect(account.macro_actions).toEqual(
         registered ? macroActionsOf(registered.plugin.catalog) : undefined,
       );
-      expect(connection.macro_actions.length).toBeGreaterThan(0);
-      expect(connection).not.toHaveProperty('presets');
-      expect(connection.authority).toEqual(connection.risks.map((r) => r.risk_id));
-      expect(connection.authority.every((id) => !/[*?]/.test(id))).toBe(true);
+      expect(account.macro_actions.length).toBeGreaterThan(0);
+      expect(account).not.toHaveProperty('presets');
+      expect(account.authority).toEqual(account.risks.map((r) => r.risk_id));
+      expect(account.authority.every((id) => !/[*?]/.test(id))).toBe(true);
     }
     expect(
       byProvider
@@ -871,28 +863,26 @@ describe('missions: issuance context', () => {
     ).toEqual(['prod', 'staging']);
   });
 
-  it('leaves out revoked connections and keeps expired ones visible but unusable', async () => {
+  it('leaves out revoked accounts and keeps expired ones visible but unusable', async () => {
     const { service } = root.missions;
-    await root.store.connections.revoke(seeded.vercel.connection.id);
-    expect(await root.store.connections.markExpired(seeded.github.connection.id)).toBe(true);
+    await root.store.accounts.revoke(seeded.vercel.account.id);
+    expect(await root.store.accounts.markExpired(seeded.github.account.id)).toBe(true);
     const context = await service.issuanceContext(seeded.ada);
     expect(context.some((c) => c.provider === 'vercel')).toBe(false);
     expect(context.find((c) => c.provider === 'github')?.status).toBe('expired');
     const preview = await service.preview(seeded.ada, {
-      name: 'On an expired connection',
-      connections: [
-        { connection_id: seeded.github.connection.id, trust_levels: { read: 'careful' } },
-      ],
+      name: 'On an expired account',
+      accounts: [{ account_id: seeded.github.account.id, trust_levels: { read: 'careful' } }],
       period: DAILY,
       expires_at: null,
     });
-    expect(preview.issues.map((i) => i.code)).toEqual(['connection-unavailable']);
+    expect(preview.issues.map((i) => i.code)).toEqual(['account-unavailable']);
   });
 
   it('leaves an unlabelled resource out of "all", and refuses it picked, on an env-scoped catalog', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
-    const { connection } = await seedConnection(root.store, {
+    const { account } = await seedAccount(root.store, {
       provider: 'supabase',
       owner,
       displayName: 'supabase (bob)',
@@ -900,22 +890,22 @@ describe('missions: issuance context', () => {
     });
     const preview = await service.preview(seeded.bob, {
       name: 'One project without a label',
-      connections: [{ connection_id: connection.id, trust_levels: SUPABASE_STAGING_TRUST_LEVELS }],
+      accounts: [{ account_id: account.id, trust_levels: SUPABASE_STAGING_TRUST_LEVELS }],
       period: DAILY,
       expires_at: null,
     });
     // It passes on the labelled one; the creator is told what was left out.
     expect(preview.ok).toBe(true);
-    expect(preview.notices.map((n) => [n.code, n.resource_refs, n.connection_id])).toEqual([
-      ['unlabelled-resources-left-out', ['unlabelled'], connection.id],
+    expect(preview.notices.map((n) => [n.code, n.resource_refs, n.account_id])).toEqual([
+      ['unlabelled-resources-left-out', ['unlabelled'], account.id],
     ]);
     expect(preview.resolved[0]?.resource_sets.map((set) => set.env)).toEqual(['staging']);
     // Picked by name, it is refused: a resource enters a set only labelled.
     const picked = await service.preview(seeded.bob, {
       name: 'The unlabelled project',
-      connections: [
+      accounts: [
         {
-          connection_id: connection.id,
+          account_id: account.id,
           resources: { scope: 'selected', resource_refs: ['unlabelled'] },
           trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
         },
@@ -928,8 +918,8 @@ describe('missions: issuance context', () => {
     // Vercel derives the environment from the call: nothing to say.
     const vercel = await root.missions.service.preview(seeded.ada, {
       name: 'Vercel',
-      connections: [
-        { connection_id: seeded.vercel.connection.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
+      accounts: [
+        { account_id: seeded.vercel.account.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
       ],
       period: DAILY,
       expires_at: null,
@@ -937,10 +927,10 @@ describe('missions: issuance context', () => {
     expect(vercel.notices.filter((n) => n.code !== 'split-by-environment')).toEqual([]);
   });
 
-  it("reads unlabelled resources under the connection's default environment at issuance", async () => {
+  it("reads unlabelled resources under the account's default environment at issuance", async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
-    const { connection } = await seedConnection(root.store, {
+    const { account } = await seedAccount(root.store, {
       provider: 'supabase',
       owner,
       displayName: 'supabase staging org (bob)',
@@ -952,9 +942,9 @@ describe('missions: issuance context', () => {
     });
     const draft = {
       name: 'On new projects',
-      connections: [
+      accounts: [
         {
-          connection_id: connection.id,
+          account_id: account.id,
           resources: {
             scope: 'selected' as const,
             resource_refs: ['created-yesterday', 'created-today'],
@@ -969,9 +959,9 @@ describe('missions: issuance context', () => {
     expect(unlabelled.issues.map((n) => n.code)).toEqual(['resource-unlabelled']);
     expect(unlabelled.issues[0]?.message).toContain('default environment');
 
-    await root.store.connections.setDefaultEnv(connection.id, 'staging');
+    await root.store.accounts.setDefaultEnv(account.id, 'staging');
     const context = await service.issuanceContext(seeded.bob);
-    const issuance = context.find((c) => c.id === connection.id);
+    const issuance = context.find((c) => c.id === account.id);
     expect(issuance?.default_env).toBe('staging');
     expect(issuance?.resources.map((r) => [r.ref, r.env])).toEqual([
       ['created-today', 'staging'],
@@ -992,32 +982,28 @@ describe('missions: issuance context', () => {
     let composed = 0;
     for (const provider of root.registry.ids) {
       const envs = catalogEnvs(root.registry, provider);
-      const { connection } = await seedConnection(root.store, {
+      const { account } = await seedAccount(root.store, {
         provider,
         owner,
         displayName: `${provider} (bob)`,
         resources: [{ ref: 'unlabelled' }, ...envs.map((env) => ({ ref: `res-${env}`, env }))],
       });
-      const issuance = (await service.issuanceContext(seeded.bob)).find(
-        (c) => c.id === connection.id,
-      );
+      const issuance = (await service.issuanceContext(seeded.bob)).find((c) => c.id === account.id);
       const known = new Set(issuance?.risks.map((r) => r.risk_id));
       for (const action of issuance?.macro_actions ?? []) {
         for (const trustLevel of TRUST_LEVELS) {
           const where = `${provider}/${action.id}@${trustLevel}`;
           const preview = await service.preview(seeded.bob, {
             name: where,
-            connections: [
-              { connection_id: connection.id, trust_levels: { [action.id]: trustLevel } },
-            ],
+            accounts: [{ account_id: account.id, trust_levels: { [action.id]: trustLevel } }],
             period: DAILY,
             expires_at: null,
           });
-          const leftOut = preview.connections[0]?.left_out ?? [];
+          const leftOut = preview.accounts[0]?.left_out ?? [];
           // The owner holds the whole catalog and every environment is labelled: one set
           // per environment, and only the trust level itself leaves a risk out of a set —
           // besides the risks of the other environments.
-          for (const set of preview.connections[0]?.resource_sets ?? []) {
+          for (const set of preview.accounts[0]?.resource_sets ?? []) {
             expect(
               set.left_out.every(
                 (s) =>
@@ -1071,7 +1057,7 @@ describe('missions: issuance context', () => {
         `${provider} must not ship the built-in id`,
       ).not.toContain('everything-i-hold');
       const envs = catalogEnvs(root.registry, provider);
-      const { connection } = await seedConnection(root.store, {
+      const { account } = await seedAccount(root.store, {
         provider,
         owner,
         displayName: `${provider} (everything)`,
@@ -1079,15 +1065,13 @@ describe('missions: issuance context', () => {
       });
       const draft = {
         name: `${provider} wide`,
-        connections: [{ connection_id: connection.id, everything_i_hold: true }],
+        accounts: [{ account_id: account.id, everything_i_hold: true }],
         period: DAILY,
         expires_at: null,
       };
       const preview = await service.preview(seeded.bob, draft);
       expect(preview.issues, provider).toEqual([]);
-      const issuance = (await service.issuanceContext(seeded.bob)).find(
-        (c) => c.id === connection.id,
-      );
+      const issuance = (await service.issuanceContext(seeded.bob)).find((c) => c.id === account.id);
       // Every non-deprecated id of the owner's authority: every env is labelled here.
       const expected = (issuance?.risks ?? [])
         .filter((r) => !r.deprecated && issuance?.authority.includes(r.risk_id))

@@ -11,7 +11,7 @@ import {
   CredentialFieldInputs,
   credentialFieldId,
   fieldErrorWords,
-} from '@/components/connections/parts';
+} from '@/components/accounts/parts';
 import { Field, Input } from '@/components/ui';
 
 /** `for` of every `<label>` and `id` of every control in the markup. */

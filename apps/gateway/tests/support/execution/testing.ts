@@ -5,8 +5,8 @@
  * handle — a resource ref the classifier requires, an account-level tool, an
  * env-scoped risk, a risk meant to be gated — and an `execute` the test
  * scripts. `executionInstance()` builds the real composition root on the
- * `:memory:` store with that plugin (and any other), then seeds a user, a
- * connection with its resources and a mission through the repositories and the
+ * `:memory:` store with that plugin (and any other), then seeds a user, an
+ * account with its resources and a mission through the repositories and the
  * mission service, the way an operator would.
  */
 import {
@@ -28,11 +28,11 @@ import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/
 import { memoryStoreDeps } from '../compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../config/testing';
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import type { MissionDraft } from '../../../src/server/missions';
 import type {
-  ConnectionRecord,
-  ConnectionResourceRecord,
+  AccountRecord,
+  AccountResourceRecord,
   MissionRecord,
   UserRecord,
 } from '../../../src/server/store/types';
@@ -108,7 +108,7 @@ export function depotPlugin(): DepotPlugin {
       tool('read_item', 'Read an item of a space.'),
       tool('write_item', 'Write an item of a space.'),
       tool('purge', 'Delete every item of a space.'),
-      tool('whoami', 'The account behind the connection.'),
+      tool('whoami', 'The account behind the account.'),
       tool('create_space', 'Create a space.'),
     ],
     resourceCreatingTools: [`${DEPOT}__create_space`],
@@ -135,7 +135,7 @@ export function depotPlugin(): DepotPlugin {
               name: 'account',
               parent: null,
               cardinalities: ['one'],
-              description: 'The account behind the connection: its profile, its spaces.',
+              description: 'The account behind the account: its profile, its spaces.',
             },
           ],
         },
@@ -331,15 +331,15 @@ export interface ExecutionInstance {
   readonly root: GatewayRoot;
   readonly depot: DepotPlugin;
   readonly ada: UserRecord;
-  readonly connection: ConnectionRecord;
-  readonly resources: readonly ConnectionResourceRecord[];
-  /** Issues a mission on the Depot connection for Ada. */
+  readonly account: AccountRecord;
+  readonly resources: readonly AccountResourceRecord[];
+  /** Issues a mission on the Depot account for Ada. */
   issue(input: {
     readonly policy: readonly MissionPolicyEntry[];
     /** Resource refs; default: every seeded space. */
     readonly spaces?: readonly string[];
-    /** Issue with future resources (legacy scope `connection`); `spaces` is then ignored. */
-    readonly wholeConnection?: boolean;
+    /** Issue with future resources (legacy scope `account`); `spaces` is then ignored. */
+    readonly wholeAccount?: boolean;
     readonly period?: MissionDraft['period'];
     readonly name?: string;
   }): Promise<IssuedMission>;
@@ -394,14 +394,14 @@ export async function executionInstance(
     email: 'ada@example.com',
     displayName: 'Ada',
   });
-  const connection = await root.store.connections.create({
+  const account = await root.store.accounts.create({
     provider: DEPOT,
     owner: { kind: 'user', id: ada.id },
     displayName: 'Depot main',
     credential: serializeSecret(depotSecret()),
   });
-  const resources = await root.store.connections.syncDiscoveredResources(
-    connection.id,
+  const resources = await root.store.accounts.syncDiscoveredResources(
+    account.id,
     (options.spaces ?? DEFAULT_SPACES).map((s) => ({
       ref: s.ref,
       displayName: s.ref,
@@ -414,16 +414,16 @@ export async function executionInstance(
     root,
     depot,
     ada,
-    connection,
+    account,
     resources,
     async issue(input) {
       const result = await root.missions.service.issue(ada, {
         name: input.name ?? 'Test mission',
-        connections: [
+        accounts: [
           {
-            connection_id: connection.id,
-            resources: input.wholeConnection
-              ? { scope: 'connection' }
+            account_id: account.id,
+            resources: input.wholeAccount
+              ? { scope: 'account' }
               : input.spaces
                 ? { scope: 'selected', resource_refs: [...input.spaces] }
                 : { scope: 'all' },

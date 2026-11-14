@@ -64,7 +64,7 @@ One resource per board; no environment. Rules common to every plugin:
 
 - On the Enterprise plan the org admin enables Miro's MCP server once; until then discovery's `403`
   is shown as a `CredentialRefusal` (`MCP_SERVER_REFUSED`) on the account page.
-- The consent page makes the person pick one team: a second team is a second connection.
+- The consent page makes the person pick one team: a second team is a second account.
 - No revocation endpoint: remove "Vaubaan Gateway" from the Miro profile's apps.
 
 ## Procedures

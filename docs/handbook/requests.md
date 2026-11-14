@@ -81,7 +81,7 @@ ADR [atomic-budget-accounting](../decisions/atomic-budget-accounting.md).
 ## Debug
 
 - **403 on `/r/…` for the right person** → not `missions.creator_user_id`
-  (owning the connection is not enough), or a bootstrap session.
+  (owning the account is not enough), or a bootstrap session.
 - **429 on `/r/…` for everybody** → `trusted_proxies` empty.
 - **`invalid-expiry` on a later date than shown** → another decision extended
   it meanwhile. **`invalid-amount`** → more than the current period consumed.

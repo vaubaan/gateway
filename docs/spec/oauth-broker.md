@@ -70,7 +70,7 @@ operator.
   then attests nothing, its operator can read both secrets and run other code that sees every
   token, and gateways reach it only declared unattested.
 - **The instance verifies before it sends**: no verifier and no refresh token before the evidence
-  is checked against the allowlist shipped with the gateway release and binds the connection's
+  is checked against the allowlist shipped with the gateway release and binds the account's
   key. A broker its own administrator declares unattested is the only exception, and says so.
 - **The public front sees a code it cannot use**: the broker's own verifier never leaves the
   enclave.

@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser, requirePrincipal } from '@/lib/auth/session';
-import { currentActor } from '@/lib/connections/session';
+import { currentActor } from '@/lib/accounts/session';
 import { getRoot, resetRoot, type GatewayRoot } from '@/server/compose';
 import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
@@ -54,7 +54,7 @@ const REDIRECTING_PAGES: Readonly<Record<string, string>> = {
 
 /**
  * The handlers a route of the surface may delegate to. Each was read in
- * `src/server/connections/handlers.ts` and authenticates before anything
+ * `src/server/accounts/handlers.ts` and authenticates before anything
  * else: `connect`, `discover`, `revoke` and `updateResource` through
  * `guardMutation` (origin, then session, then "a user"), `callback` through
  * `guardSession` (a top-level GET from the provider carries no `Origin`).
@@ -62,22 +62,22 @@ const REDIRECTING_PAGES: Readonly<Record<string, string>> = {
  * through `guardMutation` too. The behaviour is asserted below, route by route.
  */
 const AUTHENTICATING_HANDLERS: readonly string[] = [
-  'connections.handlers.connect',
-  'connections.handlers.callback',
+  'accounts.handlers.connect',
+  'accounts.handlers.callback',
   // `GET /reference/<id>/connect/<file>`: `guardSession` with the role `user` first.
-  'connections.handlers.connectFile',
-  'connections.handlers.discover',
-  'connections.handlers.revoke',
-  'connections.handlers.updateResource',
-  'connections.handlers.setDefaultEnv',
-  // `transfer` (connections) and the share acts (`src/server/shares/handlers.ts`): `guardMutation`
+  'accounts.handlers.connectFile',
+  'accounts.handlers.discover',
+  'accounts.handlers.revoke',
+  'accounts.handlers.updateResource',
+  'accounts.handlers.setDefaultEnv',
+  // `transfer` (accounts) and the share acts (`src/server/shares/handlers.ts`): `guardMutation`
   // first, like the others.
-  'connections.handlers.transfer',
+  'accounts.handlers.transfer',
   'shares.handlers.share',
   'shares.handlers.revoke',
   'oauth.handlers.revokeDelegation',
   // Settings → Security (`src/server/auth/local-handlers.ts`): `guardMutation` with the role
-  // `user`, then the local account behind the session (ADR local-accounts-sign-in-provider).
+  // `user`, then the sign-in account behind the session (ADR local-accounts-sign-in-provider).
   'auth.handlers.beginSecondFactor',
   'auth.handlers.confirmSecondFactor',
   'auth.handlers.removeSecondFactor',
@@ -161,23 +161,19 @@ describe('the human surface authenticates in every page and route', () => {
       expect(await outcomeOf(currentUser)).toEqual({ kind: 'redirect', to: '/login' });
     });
 
-    // The first `currentActor()` loads the connection service and its plugins cold: about 5 s
+    // The first `currentActor()` loads the account service and its plugins cold: about 5 s
     // already on main, so the default 5 s timeout made this test flaky in CI.
-    it(
-      'return the user, with the actor of the connection service',
-      { timeout: 30_000 },
-      async () => {
-        await signInUser('ada');
-        expect(await outcomeOf(currentUser)).toMatchObject({
-          kind: 'returned',
-          value: { root, principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
-        });
-        expect(await outcomeOf(currentActor)).toMatchObject({
-          kind: 'returned',
-          value: { root, actor: { user: { email: 'ada@example.com' }, groups: [] } },
-        });
-      },
-    );
+    it('return the user, with the actor of the account service', { timeout: 30_000 }, async () => {
+      await signInUser('ada');
+      expect(await outcomeOf(currentUser)).toMatchObject({
+        kind: 'returned',
+        value: { root, principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
+      });
+      expect(await outcomeOf(currentActor)).toMatchObject({
+        kind: 'returned',
+        value: { root, actor: { user: { email: 'ada@example.com' }, groups: [] } },
+      });
+    });
   });
 
   it('finds the pages and the routes of the surface', () => {
@@ -297,7 +293,7 @@ describe('the human surface authenticates in every page and route', () => {
       for (const response of responses) expect(refused(response)).toBe(true);
     });
 
-    it('refuses the bootstrap operator: connections belong to users', async () => {
+    it('refuses the bootstrap operator: accounts belong to users', async () => {
       await signInBootstrap();
       for (const response of await call()) expect(refused(response)).toBe(true);
     });

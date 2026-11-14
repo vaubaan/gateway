@@ -19,7 +19,7 @@
  *      so no value can be derived from a call;
  *   3. none of the things spec §9 forbids appears anywhere on the wire:
  *      argument values, argument hashes, resource refs, mission, session,
- *      user and connection identifiers, the mission tokens and their
+ *      user and account identifiers, the mission tokens and their
  *      holders (a member's id and email, the name of a named token: who is
  *      calling never leaves the instance), the agent label, the caller's
  *      address and user agent, the instance's host name, the provider's
@@ -330,8 +330,8 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       mission.prefix,
       instance.ada.id,
       instance.ada.email,
-      instance.connection.id,
-      instance.connection.displayName,
+      instance.account.id,
+      instance.account.displayName,
       DEPOT_API_KEY,
       new URL(TEST_PUBLIC_URL).host,
       ...instance.resources.flatMap((r) => [r.id, r.ref]),

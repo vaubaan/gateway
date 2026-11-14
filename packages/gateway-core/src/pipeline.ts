@@ -5,7 +5,7 @@
  * intersection with the catalog, check `risks_touched ⊆ accepted_risks`,
  * budget check, upstream credential mint, forward, audit"), §3.1 ("refused
  * with `resource-not-in-mission`, before any risk is evaluated"), §2.3
- * (connection and mission states), §6 (three credentials, one trust domain),
+ * (account and mission states), §6 (three credentials, one trust domain),
  * §8 (one audit entry per call, allowed or refused).
  *
  * Order of a `tools/call`:
@@ -13,7 +13,7 @@
  *   authenticate(bearer, door)      wrong-credential-kind  (this module)
  *   mission state                   mission-inactive       (this module)
  *   resource resolution             resource-not-in-mission (ResourceStage, execution door)
- *   connection availability         connection-revoked, connection-unavailable (this module)
+ *   account availability         account-revoked, account-unavailable (this module)
  *   classify + risk decision        risk-not-accepted      (RiskStage over risk-gateway.ts)
  *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage)
  *   upstream mint + forward         —                      (UpstreamStage, execution door)
@@ -22,9 +22,9 @@
  * A refused call decrements nothing and still produces an audit entry. An
  * allowed call that fails upstream keeps `decision: 'allowed'` and records
  * `upstream_error` (the decision is what the gateway did) — including when
- * the failure is the provider rejecting the connection's credential for
+ * the failure is the provider rejecting the account's credential for
  * good: the upstream stage then throws `UpstreamRefusalError` and the
- * outcome carries the `connection-unavailable` refusal the agent reads.
+ * outcome carries the `account-unavailable` refusal the agent reads.
  * `upstream_error` is a bounded summary the host built (`UpstreamFailureError
  * .summary`), never the provider's text: providers echo input in their
  * errors, and the audit keeps no trace of the arguments but their hash. The
@@ -63,7 +63,7 @@ import type { AuditWriter, CallAuditEntry } from './audit.ts';
 import {
   AuthError,
   isRefusal,
-  isUnavailableConnectionStatus,
+  isUnavailableAccountStatus,
   refuse,
   type Refusal,
 } from './errors.ts';
@@ -73,7 +73,7 @@ import {
   tokenAttributionOf,
   type BearerKind,
   type Door,
-  type MissionConnection,
+  type MissionAccount,
   type MissionContext,
   type MissionResource,
 } from './types.ts';
@@ -160,7 +160,7 @@ export class DoorAuthenticator {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mission and connection state (pure)
+// Mission and account state (pure)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Why a mission is inactive, per status. Keyed by status so a new status
@@ -200,24 +200,24 @@ export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | nu
   return null;
 }
 
-/** `connection-revoked` when the connection's part of the mission is lost (revoked, or
- *  the creator's access withdrawn: the mission serves through its other connections);
- *  `connection-unavailable` when the connection is `expired`. An `unowned` connection
+/** `account-revoked` when the account's part of the mission is lost (revoked, or
+ *  the creator's access withdrawn: the mission serves through its other accounts);
+ *  `account-unavailable` when the account is `expired`. An `unowned` account
  *  keeps serving its missions (spec §2: "missions keep running, but nobody can share
  *  or reconnect"). */
-export function checkConnectionAvailable(connection: MissionConnection): Refusal | null {
-  const lost = connection.lost ?? (connection.status === 'revoked' ? 'connection-revoked' : null);
+export function checkAccountAvailable(account: MissionAccount): Refusal | null {
+  const lost = account.lost ?? (account.status === 'revoked' ? 'account-revoked' : null);
   if (lost) {
-    return refuse.connectionRevoked({
-      connection: { id: connection.id, name: connection.display_name },
+    return refuse.accountRevoked({
+      account: { id: account.id, name: account.display_name },
       cause: lost,
     });
   }
-  if (!isUnavailableConnectionStatus(connection.status)) return null;
-  return refuse.connectionUnavailable({
-    connection: { id: connection.id, name: connection.display_name },
-    status: connection.status,
-    owner: { kind: connection.owner.kind, display: connection.owner.display },
+  if (!isUnavailableAccountStatus(account.status)) return null;
+  return refuse.accountUnavailable({
+    account: { id: account.id, name: account.display_name },
+    status: account.status,
+    owner: { kind: account.owner.kind, display: account.owner.display },
   });
 }
 
@@ -261,10 +261,10 @@ export interface CallRequest {
   readonly signal?: AbortSignal;
 }
 
-/** The connection and resource a call targets. */
+/** The account and resource a call targets. */
 export interface CallTarget {
-  readonly connection: MissionConnection;
-  /** Null for tools that address the connection as a whole. */
+  readonly account: MissionAccount;
+  /** Null for tools that address the account as a whole. */
   readonly resource: MissionResource | null;
 }
 
@@ -275,7 +275,7 @@ export interface CallTarget {
  * and the classifier's slices.
  *
  * A call that has no target at all — a tool no registered plugin owns, a
- * provider the mission holds no connection for — is a structural rejection
+ * provider the mission holds no account for — is a structural rejection
  * (`reason`, no refusal code): the pipeline audits it as `refused` with
  * `refusal_code: null` and returns `rejected`.
  */
@@ -339,7 +339,7 @@ export interface BudgetStage {
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
  *  provider's result. The executor never sees the credential (spec §2.4).
  *  Throws `UpstreamRefusalError` when the provider rejected the credential
- *  and it could not be refreshed (spec §2.3 connection `expired`), and
+ *  and it could not be refreshed (spec §2.3 account `expired`), and
  *  `UpstreamFailureError` for any other failure. A throw of another type is
  *  still an upstream failure, audited by its class name alone. */
 export interface UpstreamStage {
@@ -348,13 +348,13 @@ export interface UpstreamStage {
 
 /**
  * Thrown by an `UpstreamStage` when the call was allowed and counted, but the
- * connection turned out to be unusable while forwarding: the provider
- * rejected the credential and the refresh failed, or the connection was
+ * account turned out to be unusable while forwarding: the provider
+ * rejected the credential and the refresh failed, or the account was
  * revoked between the decision and the forward. The pipeline keeps the audit
  * entry `decision: 'allowed'` with `upstream_error` (the budget decision
  * stands, the credit is not refunded — ADR atomic-budget-accounting) and
  * returns the refusal on the `failed` outcome so the door answers
- * `connection-unavailable` instead of an opaque provider error.
+ * `account-unavailable` instead of an opaque provider error.
  */
 export class UpstreamRefusalError extends Error {
   constructor(
@@ -577,7 +577,7 @@ export type CallOutcome =
       /** Allowed, then the provider failed. `error` is the provider's detail,
        *  for the caller only: the audit entry holds a host-built summary
        *  (`audit.upstream_error`). `refusal` is set when the failure is a
-       *  structured one the agent must read (`connection-unavailable` after a
+       *  structured one the agent must read (`account-unavailable` after a
        *  rejected refresh). */
       readonly kind: 'failed';
       readonly error: string;
@@ -654,7 +654,7 @@ export function callAuditBase(ctx: MissionContext, call: CallRequest, now: Date)
     token_kind: attribution.token_kind,
     token_holder: attribution.holder,
     session_id: ctx.session?.id ?? null,
-    connection_id: null,
+    account_id: null,
     resource_ref: null,
     tool: call.tool,
     arguments_hash: fingerprintArguments(call.args),
@@ -794,7 +794,7 @@ export class CallPipeline {
     );
   }
 
-  /** Resource resolution, then connection availability. */
+  /** Resource resolution, then account availability. */
   private async resolveTarget(
     ctx: MissionContext,
     call: CallRequest,
@@ -813,11 +813,11 @@ export class CallPipeline {
     const { target } = resolved;
     const entry: CallAuditEntry = {
       ...base,
-      connection_id: target.connection.id,
+      account_id: target.account.id,
       resource_ref: target.resource?.ref ?? null,
     };
 
-    const unavailable = checkConnectionAvailable(target.connection);
+    const unavailable = checkAccountAvailable(target.account);
     if (unavailable) return this.refused(entry, unavailable);
     return { target, entry };
   }
@@ -838,7 +838,7 @@ export class CallPipeline {
       case 'no-catalog':
         return this.rejected(
           entry,
-          `risk catalog for '${target.connection.provider}' is not loaded; refusing (fail closed).`,
+          `risk catalog for '${target.account.provider}' is not loaded; refusing (fail closed).`,
           HOST_BUILT,
         );
       case 'classify-denied':

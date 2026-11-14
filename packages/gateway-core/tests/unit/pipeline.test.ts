@@ -8,7 +8,7 @@ import { indexCatalog } from '@vaubaan/policy-engine';
 
 import {
   CallPipeline,
-  checkConnectionAvailable,
+  checkAccountAvailable,
   checkMissionActive,
   UPSTREAM_ERROR_SUMMARY_MAX_LENGTH,
   UpstreamFailureError,
@@ -24,7 +24,7 @@ import {
 import { MemoryAuditWriter, type AuditWriter } from '../../src/audit.ts';
 import {
   acceptedRisksOf,
-  type MissionConnection,
+  type MissionAccount,
   type MissionContext,
   type MissionResource,
 } from '../../src/types.ts';
@@ -69,7 +69,7 @@ const catalog: RiskCatalog = {
 };
 const indexed = indexCatalog(catalog);
 
-const connection: MissionConnection = {
+const account: MissionAccount = {
   id: 'con_1',
   provider: 'supabase',
   display_name: 'Supabase (acme)',
@@ -79,7 +79,7 @@ const connection: MissionConnection = {
 
 const resource: MissionResource = {
   id: 'res_1',
-  connection_id: 'con_1',
+  account_id: 'con_1',
   provider: 'supabase',
   ref: 'prj_x',
   env: 'staging',
@@ -101,9 +101,9 @@ const ctx: MissionContext = {
     prefix: 'vbn_live_abcd1234',
     holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
   },
-  connections: [connection],
+  accounts: [account],
   resources: [resource],
-  resource_sets: [{ id: 'set_1', connection_id: 'con_1', position: 1, resource_ids: ['res_1'] }],
+  resource_sets: [{ id: 'set_1', account_id: 'con_1', position: 1, resource_ids: ['res_1'] }],
   policy: [
     {
       risk_id: 'supabase.read-data',
@@ -141,7 +141,7 @@ function sliceFor(action: 'R' | 'W'): Slice {
 
 /** Risk stage over the real decision core; the classifier is a stub that
  *  emits a read or a write slice. The mission's resources on the target
- *  connection go straight to the classifier and the env resolver. */
+ *  account go straight to the classifier and the env resolver. */
 function riskStage(action: 'R' | 'W' | 'deny' | 'no-catalog'): RiskStage {
   const classifier: Classifier = {
     classify: () =>
@@ -154,7 +154,7 @@ function riskStage(action: 'R' | 'W' | 'deny' | 'no-catalog'): RiskStage {
       evaluateCallForMission({
         tool: req.tool,
         args: req.args,
-        resources: c.resources.filter((r) => r.connection_id === target.connection.id),
+        resources: c.resources.filter((r) => r.account_id === target.account.id),
         mission: { id: c.token.id, accepted_risks: acceptedRisksOf(c) },
         adapter: classifier,
         catalog: action === 'no-catalog' ? undefined : indexed,
@@ -163,7 +163,7 @@ function riskStage(action: 'R' | 'W' | 'deny' | 'no-catalog'): RiskStage {
 }
 
 const resolveTarget: ResourceStage = {
-  resolve: async () => ({ ok: true, target: { connection, resource } }),
+  resolve: async () => ({ ok: true, target: { account, resource } }),
 };
 
 const allowBudget: BudgetStage = {
@@ -249,30 +249,30 @@ describe('checkMissionActive', () => {
   });
 });
 
-describe('checkConnectionAvailable', () => {
-  test('active and unowned pass: an unowned connection keeps serving its missions (spec §2)', () => {
-    expect(checkConnectionAvailable(connection)).toBeNull();
-    expect(checkConnectionAvailable({ ...connection, status: 'unowned' })).toBeNull();
+describe('checkAccountAvailable', () => {
+  test('active and unowned pass: an unowned account keeps serving its missions (spec §2)', () => {
+    expect(checkAccountAvailable(account)).toBeNull();
+    expect(checkAccountAvailable({ ...account, status: 'unowned' })).toBeNull();
   });
 
   test('expired refuses naming the owner who reconnects it', () => {
-    const r = checkConnectionAvailable({ ...connection, status: 'expired' });
-    expect(r?.code).toBe('connection-unavailable');
-    if (r?.code === 'connection-unavailable') {
+    const r = checkAccountAvailable({ ...account, status: 'expired' });
+    expect(r?.code).toBe('account-unavailable');
+    if (r?.code === 'account-unavailable') {
       expect(r.status).toBe('expired');
       expect(r.owner.display).toBe('ana@example.test');
     }
   });
 
-  test('revoked, or lost to the mission, refuses connection-revoked', () => {
-    const revoked = checkConnectionAvailable({ ...connection, status: 'revoked' });
-    expect(revoked).toMatchObject({ code: 'connection-revoked', final: true });
-    const withdrawn = checkConnectionAvailable({ ...connection, lost: 'access-withdrawn' });
+  test('revoked, or lost to the mission, refuses account-revoked', () => {
+    const revoked = checkAccountAvailable({ ...account, status: 'revoked' });
+    expect(revoked).toMatchObject({ code: 'account-revoked', final: true });
+    const withdrawn = checkAccountAvailable({ ...account, lost: 'access-withdrawn' });
     expect(withdrawn).toMatchObject({
-      code: 'connection-revoked',
+      code: 'account-revoked',
       cause: 'access-withdrawn',
       final: false,
-      connection: { id: connection.id },
+      account: { id: account.id },
     });
   });
 });
@@ -297,7 +297,7 @@ describe('CallPipeline', () => {
       token_kind: 'member',
       token_holder: 'usr_1',
       session_id: 'ses_1',
-      connection_id: 'con_1',
+      account_id: 'con_1',
       resource_ref: 'prj_x',
       tool: 'supabase__execute_sql',
       arguments_hash: fingerprintArguments(call.args),
@@ -323,7 +323,7 @@ describe('CallPipeline', () => {
       resources: {
         resolve: async () => {
           touched = true;
-          return { ok: true, target: { connection, resource } };
+          return { ok: true, target: { account, resource } };
         },
       },
     });
@@ -339,7 +339,7 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'refused',
       refusal_code: null,
-      connection_id: null,
+      account_id: null,
       remaining_budget: null,
     });
     // The caller reads which argument; the audit, which keeps no trace of the arguments
@@ -409,7 +409,7 @@ describe('CallPipeline', () => {
       resources: {
         resolve: async () => {
           touched = true;
-          return { ok: true, target: { connection, resource } };
+          return { ok: true, target: { account, resource } };
         },
       },
     });
@@ -421,7 +421,7 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'refused',
       refusal_code: 'mission-inactive',
-      connection_id: null,
+      account_id: null,
       remaining_budget: null,
     });
     expect(audit.calls[0]!.refusal_reason).toBe(out.refusal.hint);
@@ -431,7 +431,7 @@ describe('CallPipeline', () => {
     let risksEvaluated = false;
     const refusal = refuse.resourceNotInMission({
       cited_ref: 'prj_other',
-      connection: { id: 'con_1', name: connection.display_name },
+      account: { id: 'con_1', name: account.display_name },
       allowed_resources: [{ ref: 'prj_x', env: 'staging', display_name: 'API staging' }],
     });
     const { p, audit } = pipeline({
@@ -450,19 +450,19 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]!.refusal_code).toBe('resource-not-in-mission');
   });
 
-  test('expired connection: connection-unavailable, target recorded in the audit', async () => {
+  test('expired account: account-unavailable, target recorded in the audit', async () => {
     const { p, audit } = pipeline({
       resources: {
         resolve: async () => ({
           ok: true,
-          target: { connection: { ...connection, status: 'expired' }, resource },
+          target: { account: { ...account, status: 'expired' }, resource },
         }),
       },
     });
     const out = await p.execute(ctx, call);
     expect(out.kind).toBe('refused');
-    if (out.kind === 'refused') expect(out.refusal.code).toBe('connection-unavailable');
-    expect(audit.calls[0]).toMatchObject({ connection_id: 'con_1', resource_ref: 'prj_x' });
+    if (out.kind === 'refused') expect(out.refusal.code).toBe('account-unavailable');
+    expect(audit.calls[0]).toMatchObject({ account_id: 'con_1', resource_ref: 'prj_x' });
   });
 
   test('risk not accepted: the decision core refuses a write the policy does not accept; budget untouched', async () => {
@@ -645,10 +645,10 @@ describe('CallPipeline', () => {
   });
 
   test('UpstreamRefusalError: the entry stays allowed, the outcome carries the refusal', async () => {
-    const refusal = refuse.connectionUnavailable({
-      connection: { id: connection.id, name: connection.display_name },
+    const refusal = refuse.accountUnavailable({
+      account: { id: account.id, name: account.display_name },
       status: 'expired',
-      owner: connection.owner,
+      owner: account.owner,
     });
     const { p, audit } = pipeline({
       upstream: {
@@ -661,7 +661,7 @@ describe('CallPipeline', () => {
     expect(out.kind).toBe('failed');
     if (out.kind === 'failed') {
       expect(out.refusal).toBe(refusal);
-      expect(out.error).toBe('connection-unavailable: the provider rejected the credential');
+      expect(out.error).toBe('account-unavailable: the provider rejected the credential');
     }
     expect(audit.calls).toHaveLength(1);
     expect(audit.calls[0]).toMatchObject({
@@ -669,7 +669,7 @@ describe('CallPipeline', () => {
       refusal_code: null,
       // The refusal and its status; the broker's message (which may quote the
       // provider) stays on the outcome.
-      upstream_error: 'connection-unavailable: expired',
+      upstream_error: 'account-unavailable: expired',
       remaining_budget: expect.any(Object) as object,
     });
   });
@@ -692,7 +692,7 @@ describe('CallPipeline', () => {
       decision: 'refused',
       refusal_code: null,
       refusal_reason: "unknown tool 'x__y'",
-      connection_id: null,
+      account_id: null,
     });
   });
 
@@ -752,7 +752,7 @@ describe('CallPipeline', () => {
         refusal_code: null,
         refusal_reason: out.reason,
         // What was known when the stage failed is kept.
-        connection_id: 'con_1',
+        account_id: 'con_1',
         resource_ref: 'prj_x',
         tool: call.tool,
         arguments_hash: fingerprintArguments(call.args),
@@ -783,7 +783,7 @@ describe('CallPipeline', () => {
       expect(audit.calls[0]).toMatchObject({
         decision: 'refused',
         refusal_code: null,
-        connection_id: null,
+        account_id: null,
       });
     });
 

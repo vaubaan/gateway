@@ -42,13 +42,13 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   });
 
   const shareToBob = async (riskIds: readonly string[]) =>
-    rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'user', email: 'bob@example.com' },
       riskIds,
     });
 
   it('runs the whole chain: the beneficiary is bounded by R1, and loses the mission with the share', async () => {
-    // Before any share, Bob holds nothing on Ada's connection.
+    // Before any share, Bob holds nothing on Ada's account.
     expect(await rig.root.missions.service.issuanceContext(rig.bob)).toEqual([]);
 
     // The owner shares R1.
@@ -65,7 +65,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     // …and issues within R1.
     const context = await rig.root.missions.service.issuanceContext(rig.bob);
     expect(context.map((c) => [c.id, c.authority])).toEqual([
-      [rig.connection.id, [READ, WRITE_STAGING]],
+      [rig.account.id, [READ, WRITE_STAGING]],
     ]);
     const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
     expect((await rig.read(mission)).result).toBeDefined();
@@ -76,13 +76,13 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     if (beyond.ok || beyond.reason !== 'refused') throw new Error('expected a refusal');
     const exceeded = beyond.preview.issues.find((i) => i.code === 'exceeds-authority');
     expect(exceeded?.risk_ids).toEqual([PURGE, WRITE_PROD]);
-    expect(beyond.preview.connections[0]?.exceeds).toEqual([PURGE, WRITE_PROD]);
+    expect(beyond.preview.accounts[0]?.exceeds).toEqual([PURGE, WRITE_PROD]);
 
     // The owner revokes the share: the mission is orphaned at once…
     const revoked = await rig.root.shares.service.revoke(
       await rig.actor(rig.ada),
       shared.share.id,
-      shared.share.connectionId,
+      shared.share.accountId,
     );
     expect(revoked).toMatchObject({ share: { status: 'revoked' }, orphaned: 1 });
     expect(await rig.statusOf(mission)).toBe('orphaned');
@@ -97,7 +97,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       after: {
         status: 'orphaned',
         cause: 'authority-lost',
-        connection_id: rig.connection.id,
+        account_id: rig.account.id,
         uncovered: [READ, WRITE_STAGING],
       },
     });
@@ -148,7 +148,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       uncovered: [WRITE_STAGING],
     });
     // One active share per target: the previous one is revoked, not kept beside.
-    const shares = await rig.root.store.shares.listForConnection(rig.connection.id);
+    const shares = await rig.root.store.shares.listForAccount(rig.account.id);
     expect(shares.map((s) => s.status).sort()).toEqual(['active', 'revoked']);
   });
 
@@ -156,7 +156,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     const team = await rig.root.groups.service.create(rig.operator.id, 'depot-team');
     await rig.root.groups.service.addMember(rig.operator.id, team.id, 'bob@example.com');
     await shareToBob([READ]);
-    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'group', groupId: team.id },
       riskIds: [WRITE_STAGING],
     });
@@ -186,7 +186,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   it('is seen by the door itself when nobody watched: authority is never snapshotted in a mission', async () => {
     const team = await rig.root.store.groups.getOrCreate('depot-team', 'local', null);
     await rig.root.store.groups.addMember(team.id, rig.bob.id);
-    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'group', groupId: team.id },
       riskIds: [READ],
     });
@@ -231,7 +231,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const revoked = await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         first.share.id,
-        first.share.connectionId,
+        first.share.accountId,
       );
       expect(revoked.orphaned).toBe(1);
       expect(await rig.statusOf(mission)).toBe('orphaned');
@@ -269,7 +269,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
           before: {
             status: 'orphaned',
             cause: 'authority-lost',
-            connection_id: rig.connection.id,
+            account_id: rig.account.id,
             uncovered: [READ],
           },
           after: { status: 'active' },
@@ -294,7 +294,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         first.share.id,
-        first.share.connectionId,
+        first.share.accountId,
       );
 
       // Narrower than what the mission accepted: still orphaned, and it says why.
@@ -303,7 +303,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const detail = await rig.root.missions.service.get(rig.bob, mission.mission.id);
       expect(detail?.orphan).toEqual({
         cause: 'authority-lost',
-        connection_id: rig.connection.id,
+        account_id: rig.account.id,
         uncovered: [WRITE_STAGING],
       });
 
@@ -315,7 +315,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     it('is detected by the door in both directions without any administrative entry', async () => {
       const team = await rig.root.store.groups.getOrCreate('depot-team', 'local', null);
       await rig.root.store.groups.addMember(team.id, rig.bob.id);
-      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
         target: { kind: 'group', groupId: team.id },
         riskIds: [READ],
       });
@@ -336,7 +336,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     it('a group membership the operator returns restores the missions it grounded', async () => {
       const team = await rig.root.groups.service.create(rig.operator.id, 'depot-team');
       await rig.root.groups.service.addMember(rig.operator.id, team.id, 'bob@example.com');
-      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
         target: { kind: 'group', groupId: team.id },
         riskIds: [READ],
       });
@@ -357,19 +357,19 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       ]);
     });
 
-    it('a revoked connection never comes back: its missions stay orphaned whatever is shared afterwards', async () => {
+    it('a revoked account never comes back: its missions stay orphaned whatever is shared afterwards', async () => {
       await shareToBob([READ]);
       const bobs = await rig.issueFor(rig.bob, [READ]);
       const adas = await rig.issueFor(rig.ada, [READ]);
-      await rig.root.connections.service.revoke(await rig.actor(rig.ada), rig.connection.id);
+      await rig.root.accounts.service.revoke(await rig.actor(rig.ada), rig.account.id);
 
-      // The service refuses to share a revoked connection…
+      // The service refuses to share a revoked account…
       await expect(shareToBob([READ, PURGE])).rejects.toMatchObject({
-        code: 'connection-revoked',
+        code: 'account-revoked',
       });
       // …and a share written behind its back grounds nothing either.
       await rig.root.store.shares.create({
-        connectionId: rig.connection.id,
+        accountId: rig.account.id,
         target: { kind: 'user', id: rig.bob.id },
         restriction: [READ, PURGE],
         createdByUserId: rig.ada.id,
@@ -380,8 +380,8 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       }
       const detail = await rig.root.missions.service.get(rig.bob, bobs.mission.id);
       expect(detail?.orphan).toMatchObject({
-        cause: 'connection-revoked',
-        connection_id: rig.connection.id,
+        cause: 'account-revoked',
+        account_id: rig.account.id,
       });
       expect(await rig.adminEntries('mission-restored')).toEqual([]);
     });
@@ -396,7 +396,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         first.share.id,
-        first.share.connectionId,
+        first.share.accountId,
       );
       expect(await rig.statusOf(revokedMission)).toBe('revoked');
       expect(await rig.statusOf(expiredMission)).toBe('expired');
@@ -424,7 +424,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         first.share.id,
-        first.share.connectionId,
+        first.share.accountId,
       );
       const { service } = rig.root.missions;
       expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
@@ -467,7 +467,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   it('lets the creator close an orphaned mission for good: no gate edit, the creator revokes', async () => {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.accountId);
 
     const { service } = rig.root.missions;
     expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
@@ -493,19 +493,19 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     expect(inactive(await rig.read(mission)).status).toBe('orphaned');
   });
 
-  it('orphans every mission of a connection its owner revokes, the owner’s own included', async () => {
+  it('orphans every mission of an account its owner revokes, the owner’s own included', async () => {
     await shareToBob([READ]);
     const bobs = await rig.issueFor(rig.bob, [READ]);
     const adas = await rig.issueFor(rig.ada, [READ, PURGE]);
 
-    await rig.root.connections.service.revoke(await rig.actor(rig.ada), rig.connection.id);
+    await rig.root.accounts.service.revoke(await rig.actor(rig.ada), rig.account.id);
 
     expect(await rig.statusOf(bobs)).toBe('orphaned');
     expect(await rig.statusOf(adas)).toBe('orphaned');
     const entries = await rig.adminEntries('mission-orphaned');
     expect(entries.map((e) => (e.after as { cause: string }).cause)).toEqual([
-      'connection-revoked',
-      'connection-revoked',
+      'account-revoked',
+      'account-revoked',
     ]);
     expect(inactive(await rig.read(adas)).status).toBe('orphaned');
   });
@@ -513,7 +513,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   it('shows each side its own half in the Audit: share acts to the owner, the orphaning to the creator', async () => {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.accountId);
 
     const actsSeenBy = async (user: typeof rig.ada, isOperator = false) => {
       const { entries } = await rig.root.audit.query.search(
@@ -522,7 +522,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       );
       return entries.flatMap((e) => (e.kind === 'admin' ? [`${e.act}:${e.object.id}`] : [])).sort();
     };
-    // The owner of the connection: what happened to its shares.
+    // The owner of the account: what happened to its shares.
     expect(await actsSeenBy(rig.ada)).toEqual(
       [`share-created:${share.id}`, `share-revoked:${share.id}`].sort(),
     );
@@ -540,17 +540,17 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const bob = await rig.actor(rig.bob);
       const asBob = rig.root.shares.service;
       await expect(
-        asBob.share(bob, rig.connection.id, {
+        asBob.share(bob, rig.account.id, {
           target: { kind: 'user', email: 'ops@example.com' },
           riskIds: [READ],
         }),
       ).rejects.toMatchObject({ code: 'not-found' });
-      await expect(asBob.contextFor(bob, rig.connection.id)).rejects.toBeInstanceOf(ShareError);
-      await expect(asBob.revoke(bob, share.id, share.connectionId)).rejects.toMatchObject({
+      await expect(asBob.contextFor(bob, rig.account.id)).rejects.toBeInstanceOf(ShareError);
+      await expect(asBob.revoke(bob, share.id, share.accountId)).rejects.toMatchObject({
         code: 'not-found',
       });
       expect(
-        (await rig.root.store.shares.get({ connectionId: share.connectionId, shareId: share.id }))
+        (await rig.root.store.shares.get({ accountId: share.accountId, shareId: share.id }))
           ?.status,
       ).toBe('active');
       expect(await rig.adminEntries('share-revoked')).toEqual([]);
@@ -560,14 +560,10 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const admins = await rig.root.groups.service.create(rig.operator.id, 'depot-admins');
       await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
       await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ops@example.com');
-      await rig.root.connections.service.transfer(
-        await rig.actor(rig.ada),
-        rig.connection.id,
-        admins.id,
-      );
+      await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, admins.id);
       const outcome = await rig.root.shares.service.share(
         await rig.actor(rig.operator),
-        rig.connection.id,
+        rig.account.id,
         { target: { kind: 'user', email: 'bob@example.com' }, riskIds: [READ] },
       );
       expect(outcome.share.createdByUserId).toBe(rig.operator.id);
@@ -597,7 +593,7 @@ describe('a request on an orphaned mission still expires on the normal delay', (
   });
 
   const shareToBob = async (riskIds: readonly string[]) =>
-    rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'user', email: 'bob@example.com' },
       riskIds,
     });
@@ -620,7 +616,7 @@ describe('a request on an orphaned mission still expires on the normal delay', (
     await rig.root.shares.service.revoke(
       await rig.actor(rig.ada),
       first.share.id,
-      first.share.connectionId,
+      first.share.accountId,
     );
     // The page states the limit: the request can be granted until it expires.
     const viewed = await rig.root.requests.service.view(rig.bob, claim.id);
@@ -684,7 +680,7 @@ describe('a request on an orphaned mission still expires on the normal delay', (
     await rig.root.shares.service.revoke(
       await rig.actor(rig.ada),
       first.share.id,
-      first.share.connectionId,
+      first.share.accountId,
     );
     expect((await purge()).error?.data).toMatchObject({
       code: 'mission-inactive',

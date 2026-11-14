@@ -36,7 +36,7 @@ messaging addresses (a service's incoming webhook) and mail. Spec: [vaubaan-gate
 
 ## Invariants
 
-- **The dispatch points**, each called after its commit, never awaited: `budget/session-service.ts` (`notifyOpened`, a claim or approval request this call created, not one found open), `execution/permission-request.ts`, `connections/credentials.ts` (only the call whose `markExpired` made the transition), `authority/mission-grounds.ts` (`settle`, so every act that orphans is covered, sign-ins and deactivations included), `missions/mission-service.ts` `revoke`. The dispatch drops a mission orphaned or revoked by its own creator: they know, `backup/scheduled.ts`, `auth/recovery.ts`.
+- **The dispatch points**, each called after its commit, never awaited: `budget/session-service.ts` (`notifyOpened`, a claim or approval request this call created, not one found open), `execution/permission-request.ts`, `accounts/credentials.ts` (only the call whose `markExpired` made the transition), `authority/mission-grounds.ts` (`settle`, so every act that orphans is covered, sign-ins and deactivations included), `missions/mission-service.ts` `revoke`. The dispatch drops a mission orphaned or revoked by its own creator: they know, `backup/scheduled.ts`, `auth/recovery.ts`.
 - **A payload carries no argument**: `notification.ts` has no field for one, the builder is pure, and a property test feeds arbitrary arguments through a refusal. Never add a field of the call to `NotificationBody`.
 - **Best effort, at once, once**: `background.ts` runs at most 4 deliveries, drops past 1000 waiting, never retries. `404`/`410` drops the device (`gone`); any other failure only stamps `last_failure_*`. Nothing reaches the executor.
 - **The endpoint is a capability URL**: sealed in `subscription_blob`, never logged, audited or shown; rows dedupe on its SHA-256, so a person subscribing on a shared browser takes the device over (a `device-removed` entry lands in the former person's trail). At most `DEVICES_MAX` (20) live devices per person: each notification posts to every one.
@@ -71,4 +71,4 @@ messaging addresses (a service's incoming webhook) and mail. Spec: [vaubaan-gate
 - **`status: 403`** → the device subscribed with another key pair (a store restored from elsewhere): remove and subscribe again.
 - **A device reads "dropped"** → its browser unsubscribed or expired the subscription; subscribe again from it.
 - **An address shows "no answer"** → egress closed to that host, a redirect, a timeout, or (ntfy, generic) its name now resolves inside a private range: the log line `notification not delivered` carries `address_kind` and `status` (`refused: private-destination`…), never the URL.
-- **"This instance does not deliver mail"** → no `mail.*` configured; the local accounts' links are then shown to the administrator too.
+- **"This instance does not deliver mail"** → no `mail.*` configured; the sign-in accounts' links are then shown to the administrator too.

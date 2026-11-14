@@ -128,7 +128,7 @@ service, Gmail an app password (IMAP); Miro's OAuth client is registered by
 the gateway itself, and Google Calendar goes through an OAuth broker the
 instance is enrolled with (`oauth_brokers.*`, handbook
 [oauth-broker](../docs/handbook/oauth-broker.md)). Handbook:
-[connections](../docs/handbook/connections.md).
+[accounts](../docs/handbook/accounts.md).
 
 Minimum to start: `public_url` (https), `store.path`,
 `encryption.master_key` (or its file with `encryption.generate_master_key`),
@@ -390,7 +390,7 @@ apps/gateway/restore.mjs …`.
   There is no downgrade: an older image refuses a newer database.
 - **Changing the identity provider**: a user is the pair (issuer, subject),
   so another identity provider means new accounts for everybody; the earlier
-  ones keep their connections and missions and are reached by nobody. When
+  ones keep their accounts and missions and are reached by nobody. When
   you upgrade an instance that already has users, let somebody sign in once
   **before** you change its issuer: the existing accounts are bound to the
   issuer of the provider `idp` at the first start after the upgrade (handbook

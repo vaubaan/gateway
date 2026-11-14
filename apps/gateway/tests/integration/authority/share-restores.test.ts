@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { NOTICE_PARAM } from '../../../src/server/connections';
+import { NOTICE_PARAM } from '../../../src/server/accounts';
 import { SHARE_CONFIRM_PARAM, SHARE_FIELDS, type ShareInput } from '../../../src/server/shares';
 import type { UserRecord } from '../../../src/server/store/types';
 import { authorityRig, PURGE, READ, WRITE_STAGING, type AuthorityRig } from './support';
@@ -35,11 +35,11 @@ describe('a share that would bring orphaned missions back', () => {
 
   const ada = () => rig.actor(rig.ada);
   const share = async (input: ShareInput) =>
-    rig.root.shares.service.share(await ada(), rig.connection.id, input);
+    rig.root.shares.service.share(await ada(), rig.account.id, input);
   const forecast = async (input: ShareInput) =>
-    rig.root.shares.service.forecast(await ada(), rig.connection.id, input);
+    rig.root.shares.service.forecast(await ada(), rig.account.id, input);
   const activeShares = async () =>
-    (await rig.root.store.shares.listForConnection(rig.connection.id)).filter(
+    (await rig.root.store.shares.listForAccount(rig.account.id)).filter(
       (s) => s.status === 'active',
     );
 
@@ -48,7 +48,7 @@ describe('a share that would bring orphaned missions back', () => {
     const { share: first } = await share(toBob([READ, WRITE_STAGING]));
     const reader = await rig.issueFor(rig.bob, [READ]);
     const writer = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-    await rig.root.shares.service.revoke(await ada(), first.id, first.connectionId);
+    await rig.root.shares.service.revoke(await ada(), first.id, first.accountId);
     expect(await rig.statusOf(reader)).toBe('orphaned');
     expect(await rig.statusOf(writer)).toBe('orphaned');
     return { reader, writer };
@@ -99,7 +99,7 @@ describe('a share that would bring orphaned missions back', () => {
       await share({ target: { kind: 'group', groupId: team.id }, riskIds: [READ] });
       const { share: direct } = await share(toBob([WRITE_STAGING]));
       const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-      await rig.root.shares.service.revoke(await ada(), direct.id, direct.connectionId);
+      await rig.root.shares.service.revoke(await ada(), direct.id, direct.accountId);
       expect(await rig.statusOf(mission)).toBe('orphaned');
 
       // The group share still gives the read half: the missing half alone restores it.
@@ -116,7 +116,7 @@ describe('a share that would bring orphaned missions back', () => {
         return share({ target: { kind: 'group', groupId: team.id }, riskIds: [WRITE_STAGING] });
       })();
       const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-      await rig.root.shares.service.revoke(await ada(), toTeam.id, toTeam.connectionId);
+      await rig.root.shares.service.revoke(await ada(), toTeam.id, toTeam.accountId);
       expect(await rig.statusOf(mission)).toBe('orphaned');
 
       // Replacing Bob's share by the write half alone drops the read half he holds.
@@ -145,11 +145,7 @@ describe('a share that would bring orphaned missions back', () => {
       await expect(forecast(toBob([]))).rejects.toMatchObject({ code: 'restriction-empty' });
       await expect(forecast(toBob(['depot.*']))).rejects.toMatchObject({ code: 'risk-unknown' });
       await expect(
-        rig.root.shares.service.forecast(
-          await rig.actor(rig.bob),
-          rig.connection.id,
-          toBob([READ]),
-        ),
+        rig.root.shares.service.forecast(await rig.actor(rig.bob), rig.account.id, toBob([READ])),
       ).rejects.toMatchObject({ code: 'not-found' });
     });
   });
@@ -172,7 +168,7 @@ describe('a share that would bring orphaned missions back', () => {
         ...restores.map((id): [string, string] => [SHARE_FIELDS.restore, id]),
       ];
       return rig.root.shares.handlers.share(
-        new Request(`${PUBLIC_URL}/accounts/${rig.connection.id}/shares`, {
+        new Request(`${PUBLIC_URL}/accounts/${rig.account.id}/shares`, {
           method: 'POST',
           headers: {
             'content-type': 'application/x-www-form-urlencoded',
@@ -181,7 +177,7 @@ describe('a share that would bring orphaned missions back', () => {
           },
           body: new URLSearchParams(fields).toString(),
         }),
-        rig.connection.id,
+        rig.account.id,
       );
     }
 
@@ -196,7 +192,7 @@ describe('a share that would bring orphaned missions back', () => {
       const session = await sessionOf(rig.ada);
 
       const url = locationOf(await post(session, [READ]));
-      expect(url.pathname).toBe(`/accounts/${rig.connection.id}/share`);
+      expect(url.pathname).toBe(`/accounts/${rig.account.id}/share`);
       // The URL carries an opaque id, nothing of the share.
       expect([...url.searchParams.keys()]).toEqual([SHARE_CONFIRM_PARAM]);
       expect(await activeShares()).toEqual([]);
@@ -204,7 +200,7 @@ describe('a share that would bring orphaned missions back', () => {
 
       const id = url.searchParams.get(SHARE_CONFIRM_PARAM);
       expect(await rig.root.shares.pending.read(session, id)).toEqual({
-        connectionId: rig.connection.id,
+        accountId: rig.account.id,
         input: toBob([READ]),
       });
       // Read as often as the page is loaded, and by that session only.
@@ -218,8 +214,8 @@ describe('a share that would bring orphaned missions back', () => {
       const session = await sessionOf(rig.ada);
 
       const url = locationOf(await post(session, [READ], [reader.mission.id]));
-      expect(url.pathname).toBe(`/accounts/${rig.connection.id}`);
-      const notice = await rig.root.connections.notices.take(
+      expect(url.pathname).toBe(`/accounts/${rig.account.id}`);
+      const notice = await rig.root.accounts.notices.take(
         session,
         url.searchParams.get(NOTICE_PARAM),
       );
@@ -248,7 +244,7 @@ describe('a share that would bring orphaned missions back', () => {
     it('shares at once when nothing would come back', async () => {
       const session = await sessionOf(rig.ada);
       const url = locationOf(await post(session, [READ]));
-      expect(url.pathname).toBe(`/accounts/${rig.connection.id}`);
+      expect(url.pathname).toBe(`/accounts/${rig.account.id}`);
       expect([...url.searchParams.keys()]).toEqual([NOTICE_PARAM]);
       expect((await activeShares()).length).toBe(1);
     });

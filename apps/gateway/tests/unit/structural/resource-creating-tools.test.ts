@@ -1,7 +1,7 @@
 /**
  * Structural test (ADR created-resources-join-the-mission): the tools of the
- * shipped plugins whose success creates a resource of the connection — the
- * calls after which the execution door runs the connection's discovery again,
+ * shipped plugins whose success creates a resource of the account — the
+ * calls after which the execution door runs the account's discovery again,
  * and whose answer the plugin reads (`createdResources`) so the mission that
  * made the call reaches what it created (ADR created-resources-join-the-mission).
  *

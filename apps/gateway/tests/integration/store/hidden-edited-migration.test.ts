@@ -48,7 +48,12 @@ describe('resources hidden before migration 0034', () => {
     run(resource, 'r-app', 'acme/app', 'app', AT, 0);
     run(resource, 'r-old', 'acme/old', 'old', AT, 1);
 
-    runMigrations(db, shipped, clock);
+    // Up to the last migration before the rename of 0036, whose names this test reads.
+    runMigrations(
+      db,
+      shipped.filter((m) => m.version < 36),
+      clock,
+    );
 
     const rows = db
       .prepare('SELECT id, hidden, hidden_edited FROM connection_resources ORDER BY id')
