@@ -52,10 +52,11 @@ your identity provider), supported providers from the plugin list, the licence, 
 ### 2.2 User docs — `/docs`
 
 In English; every command works on the released image. Concepts in the interface's words, quick look
-(the demo), install, configuration (every key of gateway §4.3), connecting a provider (the three
+(the demo), the interface page by page, install, configuration (every key of gateway §4.3), connecting a provider (the three
 ways; each service's guide is on its plugin page, §2.3 item 9, and the former per-service pages
 redirect there), missions and agents (clients, management door, git remote), operations (backup, key rotation,
-upgrade, retention, telemetry), known limitations.
+upgrade, retention, telemetry), accounts, administration, known limitations. Every page of the
+gateway's interface links to one of these pages.
 
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
 

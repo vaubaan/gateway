@@ -21,6 +21,7 @@ import { riskExplainer } from '@/lib/providers/reference';
 import {
   ACTIVITY_WORDS,
   count,
+  DOC_PAGES,
   PAGES,
   ROUTES,
   TIMELINE_SCOPE,
@@ -95,6 +96,7 @@ export default async function TimelinePage({ searchParams }: Props) {
       <PageHeader
         title={PAGES.activity.title}
         lede={timelineLede(root.config.retentionDays)}
+        doc={DOC_PAGES.activityTimeline}
         width="wide"
       />
 

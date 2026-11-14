@@ -20,6 +20,7 @@ export {
   type Stat,
   type SummaryItem,
 } from './Page.tsx';
+export { DocLink, DocsProvider } from './DocLink.tsx';
 export { SubNav, SubNavFrame, type SubNavGroup, type SubNavItem } from './SubNav.tsx';
 export { Container, Stack } from './Layout.tsx';
 export { Card, CardHeader, CardTitle, CardBody, CardFooter } from './Card.tsx';

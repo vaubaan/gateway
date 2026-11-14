@@ -21,7 +21,13 @@ import {
   Tag,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { CONFIG_WORDS, formatNumber, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import {
+  DOC_PAGES,
+  CONFIG_WORDS,
+  formatNumber,
+  SETTINGS_ACTIONS,
+  SETTINGS_PAGES,
+} from '@/lib/vocabulary';
 import {
   ENABLED_FIELD,
   INSTANCE_ID_ACTION,
@@ -62,6 +68,7 @@ export default async function TelemetryPage({ searchParams }: Props) {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.telemetry}
         title={SETTINGS_PAGES.telemetry.title}
         lede={SETTINGS_PAGES.telemetry.lede}
         status={<Tag>{state.enabled ? 'on' : 'off'}</Tag>}

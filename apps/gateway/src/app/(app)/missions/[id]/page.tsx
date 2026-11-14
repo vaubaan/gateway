@@ -48,6 +48,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import {
+  DOC_PAGES,
   ACTIONS,
   agoSentence,
   asksFirst,
@@ -281,6 +282,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
   return (
     <MissionActsProvider team={team} kit={detail.kit}>
       <PageHeader
+        doc={DOC_PAGES.mission}
         crumbs={[{ label: 'Missions', href: ROUTES.missions }, { label: mission.name }]}
         title={mission.name}
         status={

@@ -42,6 +42,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import {
+  DOC_PAGES,
   agoSentence,
   count,
   KEY_WORDS,
@@ -217,6 +218,7 @@ export default async function MissionSessionPage({ params }: Props) {
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.missionActivity}
         width="wide"
         crumbs={[
           { label: 'Missions', href: ROUTES.missions },

@@ -42,6 +42,7 @@ import { NoticeBanner } from '@/components/connections/parts';
 import { requireOperator } from '@/lib/auth/session';
 import { takeNotice } from '@/lib/connections/session';
 import {
+  DOC_PAGES,
   CONFIG_WORDS,
   CEILING_WORDS,
   count,
@@ -367,7 +368,11 @@ export default async function SetupPage({ searchParams }: Props) {
 
   return (
     <>
-      <PageHeader title={SETTINGS_PAGES.setup.title} lede={SETTINGS_PAGES.setup.lede} />
+      <PageHeader
+        doc={DOC_PAGES.setup}
+        title={SETTINGS_PAGES.setup.title}
+        lede={SETTINGS_PAGES.setup.lede}
+      />
       <NoticeBanner notice={notice} />
 
       <Section

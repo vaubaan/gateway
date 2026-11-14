@@ -34,7 +34,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
-import { NOTIFICATION_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, NOTIFICATION_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   ADDRESS_PROBLEMS,
   DONE_PARAM,
@@ -160,6 +160,7 @@ export default async function NotificationsPage({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.notifications}
         title={SETTINGS_PAGES.notifications.title}
         lede={SETTINGS_PAGES.notifications.lede}
       />

@@ -17,7 +17,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { root, principal } = await currentPrincipal();
   if (!principal) redirect('/login');
   return (
-    <AppShell principal={principal} instance={await root.instance.name.identity()}>
+    <AppShell
+      principal={principal}
+      instance={await root.instance.name.identity()}
+      docsRoot={root.config.docs.url.href}
+    >
       {children}
     </AppShell>
   );

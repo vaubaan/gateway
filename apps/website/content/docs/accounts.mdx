@@ -1,0 +1,33 @@
+---
+title: Accounts
+description: The accounts of an instance — yours and the ones shared with you, an account's page, environment labels, giving access to a teammate or a team, and accounts left without an owner.
+---
+
+An account is a cloud account connected once to the instance; agents reach it only through a mission key. How to connect one is [Connect a provider](/docs/providers), and each service's guide is on its [plugin page](/plugins).
+
+## Yours and shared with you
+
+**Accounts** lists two groups. **Yours**: the accounts you own, alone or with a team — every permission, and you decide who else may use them. **Shared with you**: a part of an account a colleague gave you; your missions can use that part, never more. A disconnected account leaves the list for a closed section under it: the activity and the missions that ran on it still name it.
+
+## An account
+
+Accounts → an account shows its state, its resources, who has access and the missions that use it.
+
+- **Resources** are what the service lists for the account (repositories, projects, zones…), checked again by **Refresh** and after a call that creates one. A resource can be hidden from new missions; one no longer found stays named where a mission used it.
+- **Reconnect** replaces the credential (a new token, a new sign-in) without touching the missions; the page warns before an expiry the service reports.
+- **Transfer ownership** gives the account to another person or a team.
+- **Disconnect** stops every mission on the account at once, with the reason in each refusal. It deletes nothing at the service: revoke the key there too.
+
+## Environment labels
+
+The owner labels each resource with its environment, such as `staging` or `prod`, in the account's resources. Some permissions exist only for one environment (`supabase[prod].row-write`): a mission can hold them only on resources carrying that label, and the [plugin page](/plugins) of the service says which ones. **Default environment for unlabelled resources** applies a label to every resource without one of its own, including the ones found later; a resource's own label always wins. Where the service itself says the environment, the label is shown and not edited here.
+
+A mission's card holds resources of one environment; it can also take the [resources found later](/docs/missions#resources-found-later) in that environment.
+
+## Give access
+
+The owner opens **Give access** on the account: a person by address, or a team, then the permissions they may use. The person may then create missions on the account within those permissions, never beyond. What is stored is the explicit list ticked at that time, never "everything": a permission the service's catalog gains later is not part of it. **Who has access** lists what each person may let their agents do, at most; **Edit** changes it, **Remove** takes it back and stops the missions that relied on it, with the reason in every refusal.
+
+## Without an owner
+
+When every owner of an account has left, the account keeps serving its missions, but nobody can reconnect it or give access until an administrator names an owner. Administrators see these accounts at the end of **Accounts**, only when one exists.

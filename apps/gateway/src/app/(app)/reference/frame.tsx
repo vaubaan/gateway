@@ -4,7 +4,15 @@
  * list is the plugin registry's (`providerCards`); nothing is enumerated here.
  */
 import { Mono, PageHeader, ServiceMark, SubNav, SubNavFrame, Tag } from '@/components/ui';
-import { count, PAGES, PLUGIN_WORDS, REFERENCE_WORDS, ROUTES, TERMS } from '@/lib/vocabulary';
+import {
+  DOC_PAGES,
+  count,
+  PAGES,
+  PLUGIN_WORDS,
+  REFERENCE_WORDS,
+  ROUTES,
+  TERMS,
+} from '@/lib/vocabulary';
 import { providerPath } from '@/lib/providers/links';
 import type { ProviderCard } from '@/lib/providers/reference';
 import type { PluginInventory, PluginInventoryEntry } from '@/server/plugins';
@@ -85,7 +93,12 @@ export function ReferenceFrame({
         />
       }
     >
-      <PageHeader title={PAGES.reference.title} lede={PAGES.reference.lede} width="wide" />
+      <PageHeader
+        doc={DOC_PAGES.reference}
+        title={PAGES.reference.title}
+        lede={PAGES.reference.lede}
+        width="wide"
+      />
       {children}
     </SubNavFrame>
   );

@@ -16,7 +16,7 @@ import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Button, ButtonLink, PageHeader, Row, Rows, Section } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { currentTheme } from '@/lib/theme-server';
-import { ACTIONS, PAGES, ROUTES, SECTIONS, THEME_WORDS } from '@/lib/vocabulary';
+import { DOC_PAGES, ACTIONS, PAGES, ROUTES, SECTIONS, THEME_WORDS } from '@/lib/vocabulary';
 import { SECURITY_PAGE } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,11 @@ export default async function SettingsPage() {
 
   return (
     <SettingsFrame principal={principal}>
-      <PageHeader title={PAGES.settings.title} lede={PAGES.settings.lede} />
+      <PageHeader
+        doc={DOC_PAGES.settings}
+        title={PAGES.settings.title}
+        lede={PAGES.settings.lede}
+      />
       <Section title="You" first>
         <Rows>
           <Row

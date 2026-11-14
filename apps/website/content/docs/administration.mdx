@@ -1,0 +1,38 @@
+---
+title: Administration
+description: The pages an administrator finds under Settings → Administration — Setup, Sign-in, People, Teams, Telemetry, Registered apps, Encryption, Plugins — what each decides, and where the details are.
+---
+
+Settings → Administration, for the people who administer the instance, in the order a gateway is set up. An administrator configures the instance; they never answer another person's requests, nor create missions on accounts they do not hold. Installing and the first sign-in: [Install](/docs/install#first-sign-in).
+
+## Setup
+
+What the gateway needs before colleagues use it, as a checklist that says what is done and what is left: a sign-in provider, administrators, the accounts without owner, the apps that wait for a decision, telemetry, the instance's name. Then who administers it and what the mounted configuration holds. The one field is the instance's **name**, shown under the brand and in every tab; it is read-only when the configuration sets `instance_name`.
+
+## Sign-in
+
+The providers people sign in through: your company's OpenID Connect directory, GitHub, Google or Microsoft presets, or local accounts kept by the instance. **Add a sign-in provider**, then **Test** it in another window — a test signs nobody in — and switch it on once it passed. A provider set in the configuration is shown read-only and always on. One person signing in through two providers is two people. The keys and callbacks: [Configuration](/docs/configuration#sign-in-providers).
+
+## People
+
+Everyone who has signed in, with the provider they came through; the gateway keeps no directory. **Make administrator** and **No longer administrator** name who administers it; nothing may leave the instance without an administrator who can sign in. **Deactivate** offboards a person without the identity provider: no sign-in, no session, no key, their connected apps disconnected, and their missions stop for want of an owner — the page lists what it stops before you confirm. Under the list, the **invitations**: the addresses allowed to sign in on a provider that admits by invitation.
+
+## Teams
+
+A team owns accounts or receives an access; it never creates a mission. Teams your identity provider sends are filled at each sign-in and read-only here; **local teams** are kept by the administrator, for an identity provider that sends none.
+
+## Registered apps
+
+The apps that may ask people to connect them through the [management door](/docs/missions/management-door). Depending on the registration policy, a new app waits for an administrator: **Approve** lets it reach a consent screen; **Disable** bars it and disconnects it from everyone. Whatever is decided here, each person still consents on a screen that names the app.
+
+## Encryption
+
+The master key every stored secret is sealed with: where it comes from, and its download for an administrator who signed in recently. Without it, a backup cannot be opened: keep it apart from the backups ([Backup and restore](/docs/operations/backup-and-restore#keep-the-key-apart), [Master key rotation](/docs/operations/master-key-rotation)). The page also reports the scheduled backup, when one is configured.
+
+## Telemetry
+
+Off until you turn it on: [Telemetry](/docs/operations/telemetry) says what each level sends.
+
+## Plugins
+
+Every plugin the instance knows — bundled with the image or pinned by the operator — how many accounts each serves, its community validation, and what the published versions say is behind; **Check now** reads the versions feed again. Read-only: a plugin changes when the image or the plugins directory does ([Upgrade](/docs/operations/upgrade)).

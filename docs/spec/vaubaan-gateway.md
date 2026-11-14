@@ -599,7 +599,8 @@ are confirmed by typing a name. Creating, editing and anything that can be switc
 once, with a busy button and the outcome on the page that follows; a refusal shows where it
 applies. **The instance's name** (§4.3) is shown
 above the navigation, in every page title and on the sign-in page, as text; the public URL's host
-stands in without one.
+stands in without one. Every page header carries an (i) link to that page's documentation
+under the documentation base (§4.3).
 
 - **Now** — the home. _Something waits_: my requests first, then running missions one line each,
   then counts leading elsewhere. _Nothing waits_: one sentence and how many missions run. _First
@@ -785,6 +786,8 @@ committed:
 - the **versions check** (`updates.check`, on by default; `updates.feed_url`): at start and daily,
   the instance reads the published versions feed — a request carrying nothing about the instance —
   and compares locally; the result is shown in Administration › Plugins, nothing is downloaded;
+- the **documentation base** (`docs.url`, default `https://vaubaan.com/docs`): where the (i) link
+  of every page header points;
 - optionally, the instance's **name**: 1 to 64 characters, no control characters, a label never
   markup.
 - optionally, **ceilings** on users, connected accounts and active missions, and the **counters

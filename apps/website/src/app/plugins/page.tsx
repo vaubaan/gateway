@@ -1,4 +1,5 @@
 import { GeneratedPage, generatedPageMetadata } from '@/components/GeneratedPage';
+import { pluginListComponents } from '@/components/plugin/PluginListLink';
 import { liveSite, pageMarkdown } from '@/site/live';
 
 // HEALTH_REVALIDATE_SECONDS: the collector is read again at most once an hour.
@@ -8,5 +9,11 @@ export const metadata = generatedPageMetadata('/plugins');
 
 export default async function PluginsPage() {
   const live = await liveSite();
-  return <GeneratedPage path="/plugins" markdown={pageMarkdown('/plugins', live) ?? ''} />;
+  return (
+    <GeneratedPage
+      path="/plugins"
+      markdown={pageMarkdown('/plugins', live) ?? ''}
+      components={pluginListComponents(live.plugins)}
+    />
+  );
 }

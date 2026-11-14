@@ -22,6 +22,7 @@ import { RevokeConnection } from '@/components/connections/RevokeConnection';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import {
   Avatar,
+  DocLink,
   Button,
   ButtonLink,
   Callout,
@@ -50,6 +51,7 @@ import {
   type Column,
 } from '@/components/ui';
 import {
+  DOC_PAGES,
   ACCOUNT_ACTIONS,
   ACCOUNT_PAGES,
   ACCOUNT_STATES,
@@ -645,7 +647,13 @@ export function AccountView({
       ? [
           {
             id: 'environment',
-            header: ACCOUNT_WORDS.environment,
+            header: (
+              <span className={shared.headWithDoc}>
+                {ACCOUNT_WORDS.environment}
+                <DocLink to={DOC_PAGES.environmentLabels} testId="doc-link-environment-labels" />
+              </span>
+            ),
+            label: ACCOUNT_WORDS.environment,
             nowrap: true,
             cell: (resource: ConnectionResourceRecord) => <ResourceEnv resource={resource} />,
           } satisfies Column<ConnectionResourceRecord>,
@@ -735,6 +743,7 @@ export function AccountView({
   return (
     <DetailScope id="account:details">
       <PageHeader
+        doc={DOC_PAGES.account}
         crumbs={[
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: connection.displayName },

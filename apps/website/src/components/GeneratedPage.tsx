@@ -8,7 +8,7 @@
 import type { Metadata } from 'next';
 
 import { twinPathOf } from '@/content/outputs';
-import { MarkdownBody } from '@/components/MarkdownBody';
+import { MarkdownBody, type MarkdownComponents } from '@/components/MarkdownBody';
 import { markdownOf, pageMeta } from '@/site/data';
 
 export function generatedPageMetadata(path: string): Metadata {
@@ -23,15 +23,18 @@ export function generatedPageMetadata(path: string): Metadata {
 export function GeneratedPage({
   path,
   markdown = markdownOf(path),
+  components,
 }: {
   readonly path: string;
   readonly markdown?: string;
+  /** Renderers a page adds to the HTML only; the twin stays the Markdown. */
+  readonly components?: MarkdownComponents;
 }) {
   const meta = pageMeta(path);
   return (
     <div className="page">
       <article className="prose">
-        <MarkdownBody markdown={markdown} />
+        <MarkdownBody markdown={markdown} components={components} />
         <p className="meta">
           {meta?.lastModified ? `Last changed ${meta.lastModified}. ` : ''}
           This page as Markdown: <a href={twinPathOf(path)}>{twinPathOf(path)}</a>

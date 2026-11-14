@@ -165,28 +165,36 @@ test('Railway: a workspace token, checked, named by its workspace', async ({ pag
   expect(log.calls.some((c) => c.url === RAILWAY_GRAPHQL_URL)).toBe(true);
 });
 
-test('Vercel: a team or one project, chosen before the steps; a project token named by its project', async ({
+test('Vercel: one project or the team, the narrowest first; a project token named by its project', async ({
   page,
   request,
 }) => {
   await signIn(page);
   await page.goto('/accounts/new/vercel');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Vercel account$/);
+  // The (i) of the header leads to the service's connect guide on the site.
+  await expect(page.getByTestId('page-doc-link')).toHaveAttribute(
+    'href',
+    /\/plugins\/vercel#connect$/,
+  );
   const guide = page.getByTestId('token-guide');
   const team = page.getByTestId('token-alternative-team');
   const project = page.getByTestId('token-alternative-project');
 
-  // Team first: its step and field show, the project's do not.
-  await expect(team).toBeChecked();
+  // The narrowest key first (ADR one-place-to-authorize-services-token-first, 2026-11-14):
+  // one project is checked, its step and field show, the team's do not.
+  await expect(project).toBeChecked();
+  await expect(guide.getByText(/copy the Project ID/)).toBeVisible();
+  await expect(guide.getByText(/copy the Team ID/)).toBeHidden();
+  await expect(page.getByLabel(/Project ID/)).toBeVisible();
+  await expect(page.getByLabel(/Team ID/)).toBeHidden();
+
+  await team.check();
   await expect(guide.getByText(/copy the Team ID/)).toBeVisible();
   await expect(guide.getByText(/copy the Project ID/)).toBeHidden();
-  await expect(page.getByLabel(/Team ID/)).toBeVisible();
   await expect(page.getByLabel(/Project ID/)).toBeHidden();
 
   await project.check();
-  await expect(guide.getByText(/copy the Project ID/)).toBeVisible();
-  await expect(guide.getByText(/copy the Team ID/)).toBeHidden();
-  await expect(page.getByLabel(/Team ID/)).toBeHidden();
   await captureAll(page, 'connect-vercel-project-token');
   await project.check(); // captureAll reloads the page: choose again
 

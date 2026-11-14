@@ -86,20 +86,22 @@ shape). Vercel's own tool result is passed through, its `isError` included.
 ## Credential
 
 `api-key` with three fields and two alternatives (`CredentialAlternative`),
-collected by the host's generic form: a radio "Team" or "One project", then the
+collected by the host's generic form: a radio "One project" or "Team", then the
 token and the chosen alternative's ID. The host keeps only that one.
 
 | Field        | Secret | Alternative | Value                                                                                                 |
 | ------------ | ------ | ----------- | ----------------------------------------------------------------------------------------------------- |
-| `token`      | yes    | both        | A Vercel access token (Account Settings → Tokens), Scope: the team with All Projects, or one project. |
-| `team_id`    | no     | Team        | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.   |
+| `token`      | yes    | both        | A Vercel access token (Account Settings → Tokens), Scope: one project, or the team with All Projects. |
 | `project_id` | no     | One project | The project id (`prj_…`, Project Settings → General). The connection reaches that project only.       |
+| `team_id`    | no     | Team        | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.   |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
-reached with a personal access token, which is what works. The guide asks
-first for the team with All Projects (the missions narrow it to their
-projects); a token scoped to one project is accepted too (ADR
-`one-place-to-authorize-services-token-first`, amendment 2026-11-11).
+reached with a personal access token, which is what works. The guide lists
+first, and checks, a token scoped to one project: a key per project keeps a
+leak or a mistake inside that project, while one key for the whole team makes
+every mission depend on it; the team with All Projects comes second, for
+missions that span its projects (ADR `one-place-to-authorize-services-token-first`,
+amendments 2026-11-11 and 2026-11-14).
 `vercelAuth` reads the mode from the field there, so a connection made with
 `team_id` before the alternatives keeps working.
 

@@ -4,7 +4,7 @@
  * is open, and one request beside it.
  */
 import { EmptyState, InboxFrame, PageHeader, SummaryLine } from '@/components/ui';
-import { PAGES, REQUEST_WORDS, ROUTES } from '@/lib/vocabulary';
+import { DOC_PAGES, PAGES, REQUEST_WORDS, ROUTES } from '@/lib/vocabulary';
 import type { GatewayRoot } from '@/server/compose';
 import { riskExplainer } from '@/lib/providers/reference';
 import type { RequestSummary, RequestView as View, WaitingItem } from '@/server/requests';
@@ -45,7 +45,14 @@ function ledeOf(open: number): string {
 }
 
 export function WaitingHeader({ open }: { open: number }) {
-  return <PageHeader title={PAGES.waiting.title} lede={ledeOf(open)} width="wide" />;
+  return (
+    <PageHeader
+      doc={DOC_PAGES.waiting}
+      title={PAGES.waiting.title}
+      lede={ledeOf(open)}
+      width="wide"
+    />
+  );
 }
 
 /** The inbox with one request open beside the list. */

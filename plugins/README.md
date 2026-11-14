@@ -505,7 +505,7 @@ amended 2026-10-31). The template's
 | `createUrl`         | The token page itself, not the dashboard: one visit.                                                                                                                                                                                                                                                                                                                                                                             |
 | `guide.steps`       | `GuideStep { do, path?, url?, code?, screenshot? }`: one imperative sentence each, in order, the last one at the paste. The menus to follow go in `path`, in the provider's own labels (1–8, ≤ 40 characters each; the page draws them as highlighted chips, and the sentence never repeats them); a page in `url`, a command in `code` (rendered copyable).                                                                     |
 | `guide.screenshots` | Optional: one picture of the hard screen, `{ '<file>.webp': { source, licence, taken, alt } }`, the file in `docs/connect/` of the plugin folder (PNG or WebP, ≤ 300 KB, ≤ 1600 px wide) and named by one step's `screenshot`. `source` is the https page it comes from or `ours`; `licence` is `CC-BY-4.0`, `MIT`, `Apache-2.0` or `ours` — never NonCommercial or NoDerivatives. No e-mail, avatar or real token in the image. |
-| `guide.reach`       | `{ what, grant, why }`: what the token reaches, in the provider's words; the **widest** grant there (`All zones`, `Full access`; GitHub asks for the repositories the missions will use); why: each mission narrows it.                                                                                                                                                                                                          |
+| `guide.reach`       | `{ what, grant, why }`: what the token reaches, in the provider's words; the **widest** grant there (`All zones`, `Full access`; GitHub asks for the repositories the missions will use; a key with `alternatives` lists the narrowest first); why: each mission narrows it.                                                                                                                                                     |
 | `guide.permissions` | The permissions to tick, as the provider's page names them, each with the tools it serves (every tool served by one); empty when the token carries no choice, and `reach` says what it opens.                                                                                                                                                                                                                                    |
 | `guide.expiry`      | `provider-reports` (`verify` reads it), `person-types` with `recommendedDays` (the provider never says it back), or `none` with a `reason` (how the person ends the token).                                                                                                                                                                                                                                                      |
 | `guide.docsUrl`     | The provider's documentation of this kind of token.                                                                                                                                                                                                                                                                                                                                                                              |
@@ -513,8 +513,12 @@ amended 2026-10-31). The template's
 
 Ask for the widest grant the provider offers for what the account connects,
 and say why: the person grants once, and the gateway narrows what each
-mission may do, call by call. A guide that asks for the narrowest key sends
-the person back to the provider each time a mission needs a little more.
+mission may do, call by call. A guide that asks for the narrowest permissions
+sends the person back to the provider each time a mission needs a little more. Where the key itself
+can be wide or confined (`alternatives`: a whole team, or one project), list
+the narrowest one that fits the missions first and the wide one after it, and
+say why in `reach.why`: a key per project keeps a leak or a mistake inside
+that project; one key for everything makes every mission depend on it.
 Never ask the person to create an integration, an OAuth app or a service
 account when a key pasted once does the job. Write the guide from the
 provider's documentation (Context7), never from memory. The worked example is

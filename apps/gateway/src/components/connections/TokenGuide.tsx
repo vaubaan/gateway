@@ -168,8 +168,8 @@ function AlternativeChoice({
 
 /**
  * Steps 1 and 2 of the connect page for a token way. A key with alternatives
- * starts with the radio (`chosen` is checked, the first one otherwise), bound
- * to the form `formId`.
+ * starts with the radio (`chosen` is checked, the first one otherwise: the
+ * plugin lists the narrowest first), bound to the form `formId`.
  */
 export function TokenGuide({
   service,

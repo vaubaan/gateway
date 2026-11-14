@@ -84,3 +84,9 @@ a.name:hover {
 .reveal:hover {
   text-decoration: underline;
 }
+/* A column head with its (i) to the docs. */
+.headWithDoc {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}

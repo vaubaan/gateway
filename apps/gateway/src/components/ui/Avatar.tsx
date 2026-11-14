@@ -18,6 +18,8 @@
  */
 import type { CSSProperties } from 'react';
 
+import { serviceMarkColors } from '@vaubaan/shared/service-mark';
+
 import { Icon } from './Icon.tsx';
 import styles from './Avatar.module.css';
 
@@ -141,13 +143,6 @@ export function serviceLetters(name: string): string {
 }
 
 /**
- * Below this relative luminance (sRGB, 0 to 1) a brand colour is close enough
- * to black to vanish on the dark paper: GitHub's #181717 is 0.006, Fly.io's
- * #24175B 0.017; Stripe's #635BFF, the darkest one kept, is 0.17.
- */
-const NEAR_BLACK_LUMINANCE = 0.1;
-
-/**
  * The mark of a service as the registry hands it out (`ServiceIcon` of the
  * plugin SDK, spelled here so that a client component bundles no server
  * package): the `d` of its icon on a 24-unit grid and the brand colour it is
@@ -158,27 +153,14 @@ export interface ServiceMarkIcon {
   readonly color: string | null;
 }
 
-/** sRGB channel (0–255) to linear light, per WCAG 2. */
-function linear(channel: number): number {
-  const c = channel / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
 /**
  * The colour a mark takes in the dark theme: the brand colour itself, or
  * the ink when the brand is near black (it would vanish on the dark paper).
- * `#RRGGBB` in, a CSS colour out.
+ * `#RRGGBB` in, a CSS colour out. The rule is `serviceMarkColors`
+ * (`@vaubaan/shared/service-mark`), the one the public site draws with too.
  */
 export function darkThemeMarkColor(hex: string): string {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  if (!match) return hex;
-  const [r, g, b] = match.slice(1).map((pair) => Number.parseInt(pair, 16)) as [
-    number,
-    number,
-    number,
-  ];
-  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-  return luminance < NEAR_BLACK_LUMINANCE ? 'var(--ink)' : hex;
+  return serviceMarkColors(hex).dark ?? 'var(--ink)';
 }
 
 export function ServiceMark({

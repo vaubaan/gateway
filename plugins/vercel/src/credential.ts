@@ -4,7 +4,9 @@
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 :
  *       grant wide at the service, the mission narrows ; amended 2026-11-11 :
- *       a token scoped to one project is accepted too).
+ *       a token scoped to one project is accepted too ; amended 2026-11-14 :
+ *       the narrowest key that fits the missions first, so "One project" is
+ *       listed, and checked, before "Team").
  *
  * Read through Context7 on 2026-10-31 and 2026-11-11 (Vercel docs "Access
  * tokens", REST API reference) : a token is made on the Account Tokens page
@@ -17,8 +19,8 @@
  * scoped token is denied user-level resources, team-level resources and
  * other projects.
  *
- * Two alternatives on the connect form (`CredentialAlternative`) : `team`
- * asks the Team ID, `project` the Project ID. The host keeps only the chosen
+ * Two alternatives on the connect form (`CredentialAlternative`), the
+ * narrowest first : `project` asks the Project ID, `team` the Team ID. The host keeps only the chosen
  * one's field, so the mode is read from which field is there
  * (`vercelAuth`) : a connection made before the alternatives holds
  * `team_id` and stays a team connection, without migration.
@@ -87,23 +89,9 @@ export const vercelCredential: ApiKeyCredentialSpec = {
   ],
   alternatives: [
     {
-      id: 'team',
-      label: 'Team',
-      help: 'Every project of the team, now and later; each mission names the ones it reaches.',
-      fields: [FIELD.teamId],
-      steps: [
-        {
-          do: 'Open the team on Vercel and copy the Team ID (team_…).',
-          path: ['Settings', 'General', 'Team ID'],
-        },
-        { do: NAME_AND_TOKEN_STEP, path: TOKENS_PATH, url: VERCEL_TOKENS_URL },
-        { do: 'Choose the team, then All Projects.', path: ['Scope'] },
-      ],
-    },
-    {
       id: 'project',
       label: 'One project',
-      help: 'A token scoped to one project: the account reaches that project only.',
+      help: 'A token scoped to one project: the account reaches that project only. One account per project.',
       fields: [FIELD.projectId],
       steps: [
         {
@@ -114,6 +102,20 @@ export const vercelCredential: ApiKeyCredentialSpec = {
         { do: 'Choose the team that owns the project, then the project.', path: ['Scope'] },
       ],
     },
+    {
+      id: 'team',
+      label: 'Team',
+      help: 'Every project of the team, now and later; each mission names the ones it reaches, and every one depends on this key.',
+      fields: [FIELD.teamId],
+      steps: [
+        {
+          do: 'Open the team on Vercel and copy the Team ID (team_…).',
+          path: ['Settings', 'General', 'Team ID'],
+        },
+        { do: NAME_AND_TOKEN_STEP, path: TOKENS_PATH, url: VERCEL_TOKENS_URL },
+        { do: 'Choose the team, then All Projects.', path: ['Scope'] },
+      ],
+    },
   ],
   guide: {
     steps: [
@@ -122,8 +124,8 @@ export const vercelCredential: ApiKeyCredentialSpec = {
     ],
     reach: {
       what: 'Scope',
-      grant: 'The team with All Projects, or one project',
-      why: 'This gateway gives a mission only the projects and permissions it names: a team token saves a new token for each project, a project token confines the account to one.',
+      grant: 'One project, or the team with All Projects',
+      why: 'A key per project keeps a leak or a mistake inside that project; one key for everything makes every mission depend on it. Choose the team when your missions span its projects.',
     },
     // A Vercel token carries no permission choice beyond its scope.
     permissions: [],

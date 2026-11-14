@@ -24,7 +24,7 @@ import {
   Section,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { CONFIG_WORDS, formatNumber, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, CONFIG_WORDS, formatNumber, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { timeOfDay, type BackupView } from '@/server/backup';
 import {
   CONFIRMED_FIELD,
@@ -66,7 +66,11 @@ export default async function EncryptionPage({ searchParams }: Props) {
 
   return (
     <>
-      <PageHeader title={SETTINGS_PAGES.encryption.title} lede={SETTINGS_PAGES.encryption.lede} />
+      <PageHeader
+        doc={DOC_PAGES.encryption}
+        title={SETTINGS_PAGES.encryption.title}
+        lede={SETTINGS_PAGES.encryption.lede}
+      />
 
       {problem && (
         <div className={styles.notes}>

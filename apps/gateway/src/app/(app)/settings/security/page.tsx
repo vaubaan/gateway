@@ -27,6 +27,7 @@ import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import { ENROL_PARAM, localAccountIdOf, safeReturnTo, SECURITY_PAGE } from '@/server/auth';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 import { otpauthUrl } from '@/server/crypto/totp';
+import { DOC_PAGES } from '@/lib/vocabulary';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,6 +68,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
   return (
     <SettingsFrame principal={principal}>
       <PageHeader
+        doc={DOC_PAGES.security}
         title="Security"
         lede={
           account

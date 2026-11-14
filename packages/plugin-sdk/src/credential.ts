@@ -172,16 +172,21 @@ export function screenshotSourceHost(screenshot: Pick<Screenshot, 'source'>): st
  * one-place-to-authorize-services-token-first, amendment 2026-10-31): the
  * person grants the widest the provider offers for what this account
  * connects, once, and each mission narrows it — except where the token picks
- * the resources it reaches (amendment 2026-11-13: GitHub asks for the
- * repositories the missions will use). The connect page shows it above the
- * steps.
+ * the resources it reaches
+ * (amendment 2026-11-13: GitHub asks for the repositories the missions will
+ * use), and where the key has alternatives, listed narrowest first
+ * (amendment 2026-11-14: a key per project keeps a leak or a mistake inside
+ * it). The connect page shows it above the steps.
  */
 export interface TokenReach {
   /** What the token reaches, in the provider's words: "Repository access", "Zone Resources". */
   readonly what: string;
   /** What to pick there: "All zones", "Full access", "Only select repositories: the ones the missions will use". */
   readonly grant: string;
-  /** Why wide is safe and saves a second visit: one sentence, the gateway's argument. */
+  /**
+   * Why this breadth, in one sentence, the gateway's argument: each mission narrows a wide grant;
+   * with alternatives, why the narrowest key that fits the missions comes first.
+   */
   readonly why: string;
 }
 
@@ -255,7 +260,9 @@ export interface CredentialCheck {
  * the host asks and keeps only the fields shared by every alternative plus
  * the chosen one's. The choice itself is not stored: the plugin reads which
  * field is there (ADR plugin-contract-and-credential-spec, amendment
- * 2026-11-11).
+ * 2026-11-11). List the narrowest shape that fits the person's missions first
+ * and the wide one after it: the first is checked when the page opens (ADR
+ * one-place-to-authorize-services-token-first, amendment 2026-11-14).
  */
 export interface CredentialAlternative {
   /** A lowercase slug (`team`, `project`): what the form sends. */
@@ -286,7 +293,7 @@ export interface ApiKeyCredentialSpec {
   readonly fields: readonly CredentialField[];
   /**
    * Two to `CREDENTIAL_ALTERNATIVES_MAX` shapes of the key, one chosen at
-   * connect ; absent when the key has one shape.
+   * connect, the narrowest first ; absent when the key has one shape.
    */
   readonly alternatives?: readonly CredentialAlternative[];
   /** URL of the provider page where the user creates the key: the token page itself, not a dashboard. */

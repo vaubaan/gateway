@@ -1,8 +1,9 @@
 /**
  * The frame of a page, inside the application shell.
  *
- * - `PageHeader` — where one is (crumbs), the title, **one sentence** of lede
- *   at most, **one primary action** and at most two secondary ones.
+ * - `PageHeader` — where one is (crumbs), the title with its (i) to the docs
+ *   (`doc`, a `DOC_PAGES` entry), **one sentence** of lede at most, **one
+ *   primary action** and at most two secondary ones.
  * - `Section` / `SectionHeading` — a region of the page: a heading, an
  *   optional count, an optional short note on the right. Sections are
  *   separated by whitespace (`--section-gap`), not by boxes.
@@ -17,8 +18,9 @@
  */
 import Link from 'next/link';
 
-import { formatNumber } from '@/lib/vocabulary';
+import { formatNumber, type DocTarget } from '@/lib/vocabulary';
 
+import { DocLink } from './DocLink';
 import styles from './Page.module.css';
 import { TrailSetter } from './Trail';
 
@@ -60,6 +62,7 @@ export function PageHeader({
   primary,
   secondary,
   more,
+  doc,
   width = 'default',
   level = 1,
 }: {
@@ -77,6 +80,8 @@ export function PageHeader({
   secondary?: readonly [React.ReactNode] | readonly [React.ReactNode, React.ReactNode];
   /** Everything else, behind "···". */
   more?: React.ReactNode;
+  /** The page of the user docs that explains this one: an (i) after the title, opening a new tab. */
+  doc?: DocTarget;
   /** The measure of the page column: `narrow` for one object or a form, `wide` for a table. */
   width?: PageWidth;
   /** `2` when the header is shown inside another page (a preview, the gallery). */
@@ -91,11 +96,14 @@ export function PageHeader({
       {level === 1 && <TrailSetter items={[...(crumbs ?? []), { label }]} />}
       <div className={styles.headerRow}>
         <div className={styles.headerText}>
-          <Title className={styles.title}>
-            {mark && <span className={styles.titleMark}>{mark}</span>}
-            <span>{title}</span>
-            {status && <span className={styles.titleStatus}>{status}</span>}
-          </Title>
+          <div className={styles.titleLine}>
+            <Title className={styles.title}>
+              {mark && <span className={styles.titleMark}>{mark}</span>}
+              <span>{title}</span>
+              {status && <span className={styles.titleStatus}>{status}</span>}
+            </Title>
+            {doc && <DocLink to={doc} testId="page-doc-link" />}
+          </div>
           {lede && <p className={styles.lede}>{lede}</p>}
         </div>
         {hasActions && (

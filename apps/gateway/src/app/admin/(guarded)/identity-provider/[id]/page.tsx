@@ -14,7 +14,7 @@ import {
 import styles from '@/components/settings/settings.module.css';
 import { Callout, PageHeader, Section } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { DEFAULT_CLAIM_MAPPING, IDP_PAGE } from '@/server/auth';
 import { entraTenantOf, GOOGLE_ISSUER, issuerKey } from '@/server/config';
 
@@ -47,6 +47,7 @@ export default async function SignInProviderPage({ params, searchParams }: Props
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.signIn}
         title={provider.name}
         lede={`${provider.kind === 'local' ? 'Local accounts' : github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}

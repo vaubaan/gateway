@@ -700,7 +700,22 @@ td code.id {
   justify-content: center;
   border-radius: 12px;
   background: var(--fill);
-  color: var(--ink);
+  color: var(--mark-color, var(--ink));
+}
+/* Beside a service's name in a list (the plugin list). */
+.pp-svc-sm {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+@media (prefers-color-scheme: dark) {
+  /* A near-black brand would vanish on the dark paper: the ink instead (serviceMarkColors). */
+  .pp-svc {
+    color: var(--mark-color-dark, var(--ink));
+  }
 }
 
 .pp-meta {

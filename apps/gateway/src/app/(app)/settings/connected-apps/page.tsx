@@ -35,6 +35,7 @@ import {
 import { currentUser } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
 import {
+  DOC_PAGES,
   APP_END_WORDS,
   APP_STATES,
   count,
@@ -292,6 +293,7 @@ export default async function ConnectedAppsPage({
   return (
     <>
       <PageHeader
+        doc={DOC_PAGES.connectedApps}
         title={SETTINGS_PAGES.connectedApps.title}
         lede={SETTINGS_PAGES.connectedApps.lede}
         primary={

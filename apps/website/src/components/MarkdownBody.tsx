@@ -16,9 +16,20 @@ export const MARKDOWN_COMPONENTS = {
   ),
 };
 
-export function MarkdownBody({ markdown }: { readonly markdown: string }) {
+/** The renderers of the Markdown's elements; a page may add its own (the plugin list's links). */
+export type MarkdownComponents = typeof MARKDOWN_COMPONENTS & {
+  readonly a?: (props: ComponentProps<'a'>) => React.ReactNode;
+};
+
+export function MarkdownBody({
+  markdown,
+  components = MARKDOWN_COMPONENTS,
+}: {
+  readonly markdown: string;
+  readonly components?: MarkdownComponents;
+}) {
   return (
-    <Markdown remarkPlugins={[remarkGfm, remarkHeading]} components={MARKDOWN_COMPONENTS}>
+    <Markdown remarkPlugins={[remarkGfm, remarkHeading]} components={components}>
       {markdown}
     </Markdown>
   );
