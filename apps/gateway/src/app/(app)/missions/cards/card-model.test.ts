@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { acmeConnection } from '../../../../../tests/support/missions/testing';
+import { ACME_RESOURCES, acmeConnection } from '../../../../../tests/support/missions/testing';
 
 import {
   addCard,
@@ -22,6 +22,8 @@ import {
   cardDigest,
   changeSummary,
   customView,
+  defaultTicked,
+  freeIdsOf,
   freeResources,
   gaugeOf,
   levelLabel,
@@ -100,6 +102,29 @@ describe('"+ Add an account": resources grouped by environment', () => {
         [null, ['res-scratch'], false],
       ],
     );
+  });
+
+  it('keeps hidden resources apart, and ticks by itself only a group’s one resource', () => {
+    const staging = (id: string, hidden: boolean) => ({
+      ...ACME_RESOURCES[0]!,
+      id,
+      ref: id,
+      env: 'staging',
+      hidden,
+    });
+    const many = acmeConnection({
+      resources: [staging('a', false), staging('b', false), staging('h', true)],
+    });
+    const [group] = resourceGroups(many, stateOf(), null);
+    expect(group?.resources.map((r) => r.resource.id)).toEqual(['a', 'b']);
+    expect(group?.hidden.map((r) => r.resource.id)).toEqual(['h']);
+    expect(defaultTicked(group)).toEqual([]);
+    expect(freeIdsOf(group)).toEqual(['a', 'b']);
+    const one = acmeConnection({ resources: [staging('a', false), staging('h', true)] });
+    expect(defaultTicked(resourceGroups(one, stateOf(), null)[0])).toEqual(['a']);
+    // Another card holds the only listed one: nothing is free, nothing ticked.
+    const held = stateOf(card(['a'], 'staging', 'x'));
+    expect(defaultTicked(resourceGroups(one, held, null)[0])).toEqual([]);
   });
 
   it('lets unlabelled resources in where the provider reads the environment from the call', () => {

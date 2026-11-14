@@ -394,9 +394,8 @@ test('a call that touches two gated risks asks once: one request, one approval, 
     .check();
   await propose.getByRole('button', { name: 'Apply' }).click();
   await expect(trustLevelChoice(hedy, card, 'Propose', 'Custom')).toBeChecked();
+  // Saved at once, no confirmation: the mission page says so.
   await hedy.getByRole('button', { name: 'Save changes' }).click();
-  await expect(hedy.getByTestId('edit-changes')).toContainText('runs freely → asks first');
-  await hedy.getByTestId('confirm-edit').getByRole('button', { name: 'Save changes' }).click();
   await expect(hedy.getByTestId('mission-edited')).toBeVisible();
 
   // ── One refusal, naming both risks, with one URL ────────────────────────

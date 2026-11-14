@@ -332,6 +332,12 @@ function ResourceEditor({
         <Checkbox name="hidden" defaultChecked={resource.hidden}>
           Hide from new missions (the missions that already name it keep it)
         </Checkbox>
+        {resource.hidden && !resource.hiddenEdited && (
+          <Hint>
+            Hidden when the account was refreshed: the key most likely may only read it. Untick to
+            offer it to new missions; a refresh then keeps your choice.
+          </Hint>
+        )}
       </div>
       <div className={styles.editorActions}>
         <Button type="submit" variant="primary" size="sm">
@@ -616,7 +622,12 @@ export function AccountView({
       cell: (resource) => (
         <span className={shared.namedText}>
           <span>
-            <Mono>{resource.ref}</Mono> {resource.hidden && <Tag>{ACCOUNT_WORDS.hidden}</Tag>}{' '}
+            <Mono>{resource.ref}</Mono>{' '}
+            {resource.hidden && (
+              <Tag>
+                {resource.hiddenEdited ? ACCOUNT_WORDS.hidden : ACCOUNT_WORDS.hiddenByDiscovery}
+              </Tag>
+            )}{' '}
             {selfRefs.has(resource.ref) && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}{' '}
             {resource.staleSince && (
               <Tag tone="warn">

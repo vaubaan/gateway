@@ -345,7 +345,14 @@ export interface GroupResource {
 export interface ResourceGroup {
   /** The environment label, `null` for the resources without one. */
   readonly env: string | null;
+  /** The resources listed: neither hidden from new missions nor stale nor the instance's own. */
   readonly resources: readonly GroupResource[];
+  /**
+   * The resources hidden from new missions (by the owner, or by discovery: a public GitHub
+   * repository the token cannot act on), listed collapsed and never ticked by default — as
+   * "every resource known" leaves them out (`preview.ts`). One a card holds stays tickable.
+   */
+  readonly hidden: readonly GroupResource[];
   /** Resources without a label do not enter a card where the provider needs labels. */
   readonly selectable: boolean;
   /** Another card of this account already takes the future resources of this environment. */
@@ -356,7 +363,8 @@ export interface ResourceGroup {
  * The resources of an account a card may pick, one group per environment (labelled
  * ones in the account's order, then the ones without a label), plus an empty group per
  * environment of the catalog no resource carries yet — a card of future resources only.
- * Stale resources and the instance's own never enter a mission and are not listed.
+ * Stale resources and the instance's own never enter a mission and are not listed; hidden
+ * ones are apart (`ResourceGroup.hidden`).
  */
 export function resourceGroups(
   connection: IssuanceConnection,
@@ -377,11 +385,14 @@ export function resourceGroups(
   if (listedResources.some((r) => r.env === null) || (!labelled && envs.length === 0)) {
     envs.push(null);
   }
+  const of = (env: string | null, hidden: boolean) =>
+    listedResources
+      .filter((r) => r.env === env && r.hidden === hidden)
+      .map((resource) => ({ resource, elsewhere: held.has(resource.id) }));
   return envs.map((env) => ({
     env,
-    resources: listedResources
-      .filter((r) => r.env === env)
-      .map((resource) => ({ resource, elsewhere: held.has(resource.id) })),
+    resources: of(env, false),
+    hidden: of(env, true),
     selectable: env !== null || !labelled,
     futureElsewhere: others.some((card) => card.future && card.env === env),
   }));
@@ -395,6 +406,20 @@ export function freeResources(
   const groups = resourceGroups(connection, state, null);
   const all = groups.flatMap((g) => g.resources);
   return { free: all.filter((r) => !r.elsewhere).length, total: all.length };
+}
+
+/** The listed resources of a group no other card holds: what "Select all" ticks. */
+export function freeIdsOf(group: ResourceGroup | undefined): string[] {
+  return (group?.resources ?? []).filter((r) => !r.elsewhere).map((r) => r.resource.id);
+}
+
+/**
+ * What choosing a group ticks by itself: its one free listed resource, else nothing — a
+ * person ticks what the mission needs, or "Select all". Hidden ones are never ticked.
+ */
+export function defaultTicked(group: ResourceGroup | undefined): string[] {
+  const free = freeIdsOf(group);
+  return free.length === 1 ? free : [];
 }
 
 /** The account reached as itself: it lists no resource, and a card of it ticks none. */

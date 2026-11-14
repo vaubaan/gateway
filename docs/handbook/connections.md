@@ -11,7 +11,7 @@ tracks:
   - apps/gateway/src/server/plugins/connect-files.ts
   - apps/gateway/src/app/(app)/reference/[id]/connect/
   - apps/gateway/tests/integration/connections/
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-14
 ---
 
 # Connections — handbook
@@ -47,6 +47,7 @@ discovering and curating its resources. Spec:
 - **A connection of another owner reads exactly like a missing one** (`not-found`).
 - **Views are snake_case, records camelCase**: `ConnectionView` and `ConnectionDetail` cross into pages and the management door (`provider_label`, `way_retired`, `token_expires_at`, `owner_label`, `default_env_choices`…); the `connection` they carry is the store's camelCase `ConnectionRecord`.
 - **The effective environment label is computed on read** (`resource-env.ts`: own label, else the connection default); the default is never written to a resource row, so clearing it un-labels inheriting resources.
+- **`hidden` has two writers, the owner first.** Discovery stores a plugin's `Resource.hiddenByDefault` as `hidden` (insert, and every `syncDiscoveredResources` of a row with `hidden_edited = 0`); an owner's hide or show (`setResourceHidden`) sets `hidden_edited`, after which no discovery touches it. A creating call's `upsertDiscoveredResources` never changes a known row's mark. ADR [connect-driver-and-resource-curation](../decisions/connect-driver-and-resource-curation.md), amendment 2026-11-14; the account page tags a discovery-hidden row "the key may only read it".
 - **Every write that adds resources or moves a label settles the missions.** `storeDiscovery` (connect, Refresh, after a call, hourly, "check now"), `updateResource` (an owner's label), `setDefaultEnv` and `CreatedResources.record` take a `FutureResources.snapshot` before the write and `settle` after it, in the name of the human who acted, or `DISCOVERY_ACTOR_ID` (`discovery`) for the gateway's own discoveries. A write through the store alone (tests, the importer) moves nothing. `settle` never throws.
 - **Discovery runs every hour** for the connections a running mission's set with `future` on depends on (`MissionsRepo.connectionsWithFutureSets`), one after the other, the first run one hour after boot, never two runs at once. Not audited itself (the joins are); a failure is recorded on the connection and logged by connection only.
 - **"Check now"** (`POST /api/missions/<id>/resources/check`, `{ connection_id }`, `ConnectionService.checkForMission`): the mission's creator or an owner of the connection; anyone else, or a connection the mission does not carry, is `not-found` (404). Rate-limited per user (`CHECK_NOW_RATE_LIMIT`), audited `resources-discovered` with `cause: check-now`. Answers the discovery record, `last_checked_at` and what joined or left THIS mission, by set.

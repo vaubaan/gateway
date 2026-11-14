@@ -7,9 +7,10 @@
  * origin and the session like every other mutation, and answers with a
  * redirect — so nothing here needs a fetch.
  *
- * Use it for an act that stops, removes or hands over something (remove an
- * access, deactivate a person, disconnect an app). An act that only adds or
- * edits is a plain submit button.
+ * Use it only before an act that deletes, stops or hands over something and
+ * cannot simply be undone (remove an access, deactivate a person, disconnect an
+ * app; spec §4.2). An act that adds, edits or can be switched back is a plain
+ * submit button: no confirmation.
  *
  * `consequence` and `children` are rendered nodes: a server page passes them
  * as it would to any client component.

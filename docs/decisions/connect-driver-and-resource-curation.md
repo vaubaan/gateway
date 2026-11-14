@@ -52,3 +52,38 @@ routinely different environments.
 ### Write the default into each unlabelled row
 
 Clearing it could no longer tell owner labels from copies, and every writer would have to apply it.
+
+## Amendment 2026-11-14: a plugin may hide what the credential cannot act on
+
+### Context
+
+GitHub lists every public repository its user is related to, whatever the fine-grained token's
+grant, and offers no way for a token to list its own repositories. An owner whose token reaches one
+repository saw dozens in the mission form, ticked by default, and unticked them by hand.
+
+### Decision
+
+`Resource.hiddenByDefault` (plugin SDK 0.9.1) is a provider fact: discovery stores it as `hidden`
+while the owner never hid nor showed the resource. The owner's choice is kept apart, as the edited
+name is: `connection_resources.hidden_edited` (migration 0034) is set by every owner hide or show,
+and then discovery never changes `hidden`. Rows hidden before 0034 were the owner's; visible ones
+take the hint at their next discovery. A creating call's answer carries no hint and changes no mark.
+
+### Consequences
+
+- A resource the owner showed stays shown across refreshes; one never touched follows the plugin
+  both ways (hidden, then shown when the hint goes away).
+- A hidden resource is left out of "every resource known", of future joins and of the mission
+  form's default ticks; reach is still the stored lists, so a running mission keeps it.
+- GitHub's rule and its trade-off (a granted public repository is hidden until shown): handbook
+  [providers/github](../handbook/providers/github.md).
+
+### Rejected alternatives
+
+#### Apply the hint to new rows only
+
+The connections that suffer today would keep every public repository listed.
+
+#### Leave out what the plugin thinks unusable
+
+The owner could no longer select a granted public repository, nor see why it is missing.

@@ -374,6 +374,22 @@
   color: var(--ink-3);
   font-size: var(--text-xs);
 }
+.groupSelectAll {
+  margin-left: auto;
+}
+.groupHidden summary {
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.groupHidden[open] summary {
+  margin-bottom: var(--space-1);
+}
+.groupHiddenList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 
 /* ── The summary bar ─────────────────────────────────────────────────────── */
 .bar {

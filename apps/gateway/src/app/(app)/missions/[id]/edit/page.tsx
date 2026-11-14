@@ -111,8 +111,6 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
         missionId: view.mission.id,
         revision: view.revision,
         snapshot: view.snapshot,
-        used: view.used,
-        openRequests: view.open_requests,
         ...(offer
           ? {
               raise: {

@@ -232,44 +232,6 @@
   white-space: nowrap;
 }
 
-/* What is confirmed before a mission exists: every permission, with its limit. */
-.explicit {
-  display: grid;
-  gap: var(--space-4);
-}
-.explicitAccount {
-  margin: 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
-}
-.explicitNote {
-  margin-left: var(--space-2);
-  color: var(--ink-3);
-  font-weight: var(--weight-regular);
-}
-.explicitRows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.explicitRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px 110px;
-  gap: var(--space-3);
-  align-items: start;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--text-sm);
-}
-.explicitRow:last-child {
-  border-bottom: 0;
-}
-.explicitLimits {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
 .figure {
   font-variant-numeric: tabular-nums;
 }
@@ -616,12 +578,6 @@ p.railRefused {
 .addResourceSet:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-.explicitSet {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-regular);
-  color: var(--ink-2);
 }
 
 /* Trust-raise proposals on the mission page (risk model §4.7), one callout each. */

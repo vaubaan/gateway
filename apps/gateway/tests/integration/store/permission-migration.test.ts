@@ -73,7 +73,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(33);
+    expect(store.schemaVersion).toBe(34);
     expect(await store.requests.getById(request.id)).toEqual(request);
     expect(await heldArguments(store, request.id)).toEqual({
       marker: 'preserved encrypted content',

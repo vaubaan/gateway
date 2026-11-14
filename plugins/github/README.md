@@ -4,7 +4,10 @@ GitHub provider plugin for Vaubaan Gateway, written against
 [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One connection is one
 **fine-grained personal access token**; one resource is one repository the
 token reaches (`owner/repo`); a mission picks repositories and macro-actions at
-a trust level, which write the risks it accepts.
+a trust level, which write the risks it accepts. Public repositories, which
+every token reads whatever its grant, are discovered hidden from new missions
+until the account's owner shows them (handbook, "Repositories outside the
+grant").
 
 Handbook: [`docs/handbook/providers/github.md`](../../docs/handbook/providers/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),

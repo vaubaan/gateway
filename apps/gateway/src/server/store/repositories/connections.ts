@@ -147,8 +147,9 @@ export interface ConnectionsRepo {
    * Discovery merge (spec §0 "Resource"): provider facts are refreshed, owner edits are
    * kept, nothing is deleted.
    *  - a new ref is inserted; an `env` the plugin returns marks the label `plugin`-set;
-   *  - a known ref keeps its id, its owner label, its owner metadata, its `hidden` flag and
-   *    its display name once the owner renamed it; the discovered metadata replaces the
+   *  - a known ref keeps its id, its owner label, its owner metadata, its `hidden` flag once
+   *    the owner hid or showed it (else `hidden` follows the plugin's hint) and its display
+   *    name once the owner renamed it; the discovered metadata replaces the
    *    previous provider facts; a plugin-set `env` always follows the plugin;
    *  - a ref the discovery no longer returns is marked stale (`staleSince`), unless it
    *    was first seen less than `FRESH_RESOURCE_STALE_GRACE_MS` ago; a stale ref that
@@ -219,6 +220,7 @@ interface ResourceRow {
   env_source: string;
   display_name_edited: number;
   hidden: number;
+  hidden_edited: number;
   stale_since: string | null;
   first_seen_at: string | null;
 }
@@ -227,14 +229,15 @@ const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, displa
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
   provider_grant, default_env`;
 const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
-  owner_metadata_json, env_source, display_name_edited, hidden, stale_since, first_seen_at`;
+  owner_metadata_json, env_source, display_name_edited, hidden, hidden_edited, stale_since,
+  first_seen_at`;
 /**
  * Every read that becomes a `ConnectionResourceRecord` goes through this join, so the
  * effective label (own label, else the connection's default) is computed in one place.
  */
 const RESOURCE_READ = `SELECT r.id, r.connection_id, r.ref, r.env, r.display_name, r.discovered_at,
   r.metadata_json, r.owner_metadata_json, r.env_source, r.display_name_edited, r.hidden,
-  r.stale_since, r.first_seen_at, c.default_env
+  r.hidden_edited, r.stale_since, r.first_seen_at, c.default_env
   FROM connection_resources r JOIN connections c ON c.id = r.connection_id`;
 
 /** Every status of the schema's `CHECK`; a status added to the union fails to compile here. */
@@ -299,6 +302,7 @@ function resourceToRecord(row: ResourceReadRow): ConnectionResourceRecord {
     ownerMetadata,
     displayNameEdited: row.display_name_edited === 1,
     hidden: row.hidden === 1,
+    hiddenEdited: row.hidden_edited === 1,
     staleSince: row.stale_since,
   };
 }
@@ -409,11 +413,15 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? AND ref = ?`,
   );
   const insertDiscovered = db.prepare<
-    [string, string, string, string | null, string, string, string | null, string, string]
+    [string, string, string, string | null, string, string, string | null, string, string, number]
   >(
     `INSERT INTO connection_resources (id, connection_id, ref, env, display_name, discovered_at,
-       metadata_json, env_source, first_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       metadata_json, env_source, first_seen_at, hidden)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  // The plugin's hidden hint, on a row whose owner never hid nor showed it (migration 0034).
+  const hintHidden = db.prepare<[number, string]>(
+    'UPDATE connection_resources SET hidden = ? WHERE id = ? AND hidden_edited = 0',
   );
   // A stale row that comes back counts as first seen again: the grace protects it anew.
   const updateDiscovered = db.prepare<
@@ -433,8 +441,9 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
   const setDisplayNameStmt = db.prepare<[string, number, string]>(
     'UPDATE connection_resources SET display_name = ?, display_name_edited = ? WHERE id = ?',
   );
+  // The owner's choice: discovery no longer changes it (`hidden_edited`).
   const setHiddenStmt = db.prepare<[number, string]>(
-    'UPDATE connection_resources SET hidden = ? WHERE id = ?',
+    'UPDATE connection_resources SET hidden = ?, hidden_edited = 1 WHERE id = ?',
   );
   const setOwnerMetadataStmt = db.prepare<[string | null, string]>(
     'UPDATE connection_resources SET owner_metadata_json = ? WHERE id = ?',
@@ -472,6 +481,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         toJson(r.metadata ?? null),
         pluginEnv !== null ? 'plugin' : 'owner',
         now,
+        r.hidden === true ? 1 : 0,
       );
       return;
     }
@@ -490,6 +500,8 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       now,
       existing.id,
     );
+    // A discovery states the hint in full; a creating call's answer says nothing of it.
+    if (!keepMetadata) hintHidden.run(r.hidden === true ? 1 : 0, existing.id);
   }
 
   function requireResource(id: string): ConnectionResourceRecord {

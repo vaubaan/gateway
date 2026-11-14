@@ -45,8 +45,8 @@ test('the creator adds a requested permission, then removes it directly, with th
   await page.getByRole('checkbox', { name: `Include ${risk}`, exact: true }).check();
   await page.getByLabel(`Quota for ${risk}`, { exact: true }).fill('3');
   await page.getByRole('checkbox', { name: `Ask first for ${risk}`, exact: true }).uncheck();
-  await page.getByRole('button', { name: 'Review permissions', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('all people and keys');
+  // No confirmation: the editor says what saving does, and saving answers.
+  await expect(page.getByTestId('permissions-editor')).toContainText('all people and keys');
   await page.getByRole('button', { name: 'Add permissions and answer', exact: true }).click();
   await expect(page.getByTestId('request-decided')).toBeVisible();
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
@@ -64,9 +64,6 @@ test('the creator adds a requested permission, then removes it directly, with th
     .check();
   await modal.getByRole('button', { name: 'Apply' }).click();
   await page.getByRole('button', { name: 'Save changes' }).click();
-  const confirm = page.getByTestId('confirm-edit');
-  await expect(page.getByTestId('edit-changes')).toContainText('Refused from the next call');
-  await confirm.getByRole('button', { name: 'Save changes' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}\\?edited=1$`));
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
     outcome: 'refused',

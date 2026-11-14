@@ -257,6 +257,7 @@ export function usableResourcesOf(
       displayName: cleanName(r.displayName) ?? r.ref,
       env: label?.ok ? label.env : null,
       metadata: r.metadata ?? null,
+      ...(r.hiddenByDefault === true ? { hidden: true } : {}),
     });
   }
   return { usable, unusable };

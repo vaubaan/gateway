@@ -46,7 +46,7 @@ export function AccountSections({ icons }: { icons: GalleryIcons }) {
       <GallerySection
         id="confirm-submit"
         title="Asked first"
-        rule="An act that stops, removes or hands over something is a button that opens a dialog stating the consequence; confirming posts a plain form. An act that only adds or edits is a plain submit button."
+        rule="Only an act that deletes, stops or hands over something for good is asked first: a button that opens a dialog stating the consequence; confirming posts a plain form. An act that adds, edits or can be switched back is a plain submit button, with no confirmation."
       >
         <Specimen name="Remove, deactivate, disconnect" note="the dialog opens on a press">
           {() => (

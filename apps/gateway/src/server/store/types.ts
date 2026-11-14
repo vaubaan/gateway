@@ -145,8 +145,13 @@ export interface ConnectionResourceRecord {
   readonly ownerMetadata: Record<string, unknown> | null;
   /** True once the owner renamed the resource; discovery then keeps `displayName`. */
   readonly displayNameEdited: boolean;
-  /** Hidden by the owner: kept and selectable by ref, left out of default listings. */
+  /** Hidden from new missions: kept and selectable by ref, left out of default listings. */
   readonly hidden: boolean;
+  /**
+   * True once the owner hid or showed the resource; discovery then keeps `hidden`. While
+   * false, `hidden` is the plugin's hint of the last discovery (`Resource.hiddenByDefault`).
+   */
+  readonly hiddenEdited: boolean;
   /** Set when the last discovery no longer returned the ref; `null` while it is reachable. */
   readonly staleSince: Iso | null;
 }
@@ -164,6 +169,8 @@ export interface DiscoveredResource {
   readonly env?: string | null;
   /** Provider-specific, non-secret facts (`Resource.metadata`); only `syncDiscoveredResources` stores them. */
   readonly metadata?: Readonly<Record<string, unknown>> | null;
+  /** The plugin's hint (`Resource.hiddenByDefault`); applied only while the owner never chose. */
+  readonly hidden?: boolean;
 }
 
 export interface ShareRecord {

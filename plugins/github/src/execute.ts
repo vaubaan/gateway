@@ -120,19 +120,23 @@ function refusalOf(tool: string, denied: string): string {
  * Resources reachable through the connection : one `Resource` per
  * repository the token reaches (`GET /user/repos`, a bare list), paged by
  * `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`. The owner labels the
- * environment later. An answer that is not a list is GitHub's failure
- * (`UpstreamProtocolError`), not an account without repositories.
+ * environment later. A public repository the token most likely cannot act on
+ * is marked `hiddenByDefault` (`hiddenByDefault` below). An answer that is not a
+ * list is GitHub's failure (`UpstreamProtocolError`), not an account without
+ * repositories.
  */
 export async function discoverGithubResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const headers = githubApiHeaders(githubTokenOf(ctx));
+  const token = githubTokenOf(ctx);
+  const fineGrained = token.startsWith(FINE_GRAINED_PREFIX);
+  const headers = githubApiHeaders(token);
   const out: Resource[] = [];
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
     const url = `${GITHUB_API_BASE}/user/repos?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const repositories = await httpJson(ctx, { url, headers }, isList);
     for (const repository of repositories) {
-      const resource = resourceOf(repository);
+      const resource = resourceOf(repository, fineGrained);
       if (resource !== null) {
         out.push(resource);
         continue;
@@ -149,8 +153,30 @@ export async function discoverGithubResources(
   return out;
 }
 
+/** GitHub's prefix of a fine-grained personal access token (its token formats page). */
+const FINE_GRAINED_PREFIX = 'github_pat_';
+
+/**
+ * Whether a repository of `/user/repos` is listed hidden from new missions
+ * (handbook providers/github "Repositories outside the grant"). GitHub gives a
+ * token no way to list the repositories it was granted, and every token reads
+ * every public repository; so only a **public** repository is ever hidden:
+ *   - one the user cannot push to (`permissions.push` false): no token of theirs
+ *     can write it, it is in the list only because public repositories are readable;
+ *   - any public one under a fine-grained token: its grant on a public repository
+ *     cannot be read, and `permissions` states the user's role, not the token's.
+ * A private repository is listed only when the token was granted it: never hidden.
+ * The owner shows what they need; discovery never overrides that choice.
+ */
+function hiddenByDefault(repository: Record<string, unknown>, fineGrained: boolean): boolean {
+  if (repository.private !== false) return false;
+  if (fineGrained) return true;
+  const permissions = repository.permissions;
+  return isRecord(permissions) && permissions.push === false;
+}
+
 /** One repository of `/user/repos` as a resource, or `null` when its `full_name` is not `owner/repo`. */
-function resourceOf(repository: unknown): Resource | null {
+function resourceOf(repository: unknown, fineGrained: boolean): Resource | null {
   if (!isRecord(repository)) return null;
   const named = repoFullName(repository.full_name);
   if (named === null) return null;
@@ -164,6 +190,7 @@ function resourceOf(repository: unknown): Resource | null {
       ...(typeof isPrivate === 'boolean' ? { private: isPrivate } : {}),
       ...(typeof archived === 'boolean' ? { archived } : {}),
     },
+    ...(hiddenByDefault(repository, fineGrained) ? { hiddenByDefault: true } : {}),
   };
 }
 

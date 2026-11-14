@@ -3,24 +3,17 @@
 /**
  * "+ Add an account" (spec §4.2): step 1 picks the account, step 2 its resources,
  * grouped by environment — one environment per card. Each group is a radio: choosing
- * one ticks its free resources, and switching unticks the previous group's; resources
- * are then ticked one by one, and "+ future <resources>" adds those that later appear
- * in that environment. Resources without a label are listed but not selectable where
+ * one ticks its resource when it has exactly one, and nothing otherwise ("Select all"
+ * ticks its free ones); switching unticks the previous group's. Resources are ticked one
+ * by one, and "+ future <resources>" adds those that later appear in that environment.
+ * Resources hidden from new missions are collapsed under "Hidden from new missions (n)",
+ * never ticked by default. Resources without a label are listed but not selectable where
  * the provider needs labels. "Change" on a card reopens step 2.
  */
 import Link from 'next/link';
 import { useState } from 'react';
 
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  EnvTag,
-  Radio,
-  SearchField,
-  ServiceMark,
-  Tag,
-} from '@/components/ui';
+import { Button, Checkbox, Dialog, EnvTag, Radio, SearchField, ServiceMark } from '@/components/ui';
 import type { ServiceMarkIcon } from '@/components/ui';
 import { ACTIONS, CARD_WORDS, ROUTES } from '@/lib/vocabulary';
 import type { IssuanceConnection } from '@/lib/missions/model';
@@ -28,6 +21,8 @@ import type { IssuanceConnection } from '@/lib/missions/model';
 import { cardsOf, type CardResources, type CardState, type FormState } from '../new/form-state';
 import {
   accountLabel,
+  defaultTicked,
+  freeIdsOf,
   freeResources,
   nounCount,
   resourceGroups,
@@ -162,10 +157,6 @@ function startGroup(
   return selectable.length === 1 ? selectable[0]?.env : undefined;
 }
 
-function freeIdsOf(group: ResourceGroup | undefined): string[] {
-  return (group?.resources ?? []).filter((r) => !r.elsewhere).map((r) => r.resource.id);
-}
-
 function ResourceStep({
   connection,
   state,
@@ -190,19 +181,36 @@ function ResourceStep({
       ? editing.resourceIds
       : initial === undefined
         ? []
-        : freeIdsOf(groups.find((g) => g.env === initial)),
+        : defaultTicked(groups.find((g) => g.env === initial)),
   );
   const [future, setFuture] = useState(editing?.future ?? false);
+  // Open at first only where the card being changed holds a hidden resource; the person
+  // opens or closes it after that (a constant prop, so a tick never closes it).
+  const [openHidden] = useState(
+    () =>
+      new Set(
+        groups
+          .filter((g) => g.hidden.some((r) => editing?.resourceIds.includes(r.resource.id)))
+          .map((g) => g.env ?? 'no label'),
+      ),
+  );
   const noun = connection.resource_noun;
   const labelled = showsEnv(connection);
   const several = groups.filter((g) => g.selectable).length > 1;
-  const nothingListed = groups.every((g) => g.resources.length === 0);
+  const nothingListed = groups.every((g) => g.resources.length + g.hidden.length === 0);
 
   function choose(group: ResourceGroup) {
     if (group.env === env) return;
     setEnv(group.env);
-    setTicked(freeIdsOf(group));
+    setTicked(defaultTicked(group));
     setFuture(false);
+  }
+  function selectAll(group: ResourceGroup) {
+    if (group.env !== env) {
+      setEnv(group.env);
+      setFuture(false);
+    }
+    setTicked(freeIdsOf(group));
   }
   function tick(group: ResourceGroup, id: string, on: boolean) {
     if (group.env !== env) {
@@ -267,6 +275,20 @@ function ResourceStep({
                   ? nounCount(group.resources.length, noun)
                   : CARD_WORDS.notSelectable}
               </span>
+              {group.selectable && freeIdsOf(group).length > 1 && (
+                <span className={styles.groupSelectAll}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${CARD_WORDS.selectAll} in ${label}`}
+                    onClick={() => selectAll(group)}
+                    data-testid={`select-all-${label}`}
+                  >
+                    {CARD_WORDS.selectAll}
+                  </Button>
+                </span>
+              )}
             </div>
             <div className={styles.groupBody}>
               {group.resources.map(({ resource, elsewhere }) =>
@@ -279,7 +301,6 @@ function ResourceStep({
                     onChange={(e) => tick(group, resource.id, e.target.checked)}
                   >
                     {resourceName(resource)}
-                    {resource.hidden && <Tag>hidden by its owner</Tag>}
                     {elsewhere && (
                       <span className={styles.groupNote}> {CARD_WORDS.inAnotherCard}</span>
                     )}
@@ -296,6 +317,31 @@ function ResourceStep({
                     </Link>
                   </span>
                 ),
+              )}
+              {group.selectable && group.hidden.length > 0 && (
+                <details
+                  className={styles.groupHidden}
+                  open={openHidden.has(label)}
+                  data-testid={`hidden-${label}`}
+                >
+                  <summary>{CARD_WORDS.hiddenResources(group.hidden.length)}</summary>
+                  <div className={styles.groupHiddenList}>
+                    {group.hidden.map(({ resource, elsewhere }) => (
+                      <Checkbox
+                        key={resource.id}
+                        checked={on && ticked.includes(resource.id)}
+                        disabled={elsewhere}
+                        aria-label={`Hidden resource ${resource.ref}`}
+                        onChange={(e) => tick(group, resource.id, e.target.checked)}
+                      >
+                        {resourceName(resource)}
+                        {elsewhere && (
+                          <span className={styles.groupNote}> {CARD_WORDS.inAnotherCard}</span>
+                        )}
+                      </Checkbox>
+                    ))}
+                  </div>
+                </details>
               )}
               {group.selectable && (
                 <Checkbox

@@ -342,6 +342,51 @@ describe('connections repository', () => {
     );
   });
 
+  it('follows the plugin’s hidden hint until the owner hides or shows the resource', async () => {
+    const c = await store.connections.create({
+      provider: 'github',
+      owner: { kind: 'user', id: owner },
+      displayName: 'x',
+      credential: null,
+    });
+    const hiddenOf = async () =>
+      Object.fromEntries(
+        (await store.connections.listResources(c.id)).map((r) => [
+          r.ref,
+          [r.hidden, r.hiddenEdited],
+        ]),
+      );
+    const first = await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+      { ref: 'acme/site', displayName: 'acme/site', hidden: true },
+      { ref: 'octo/docs', displayName: 'octo/docs', hidden: true },
+    ]);
+    expect(await hiddenOf()).toEqual({
+      'acme/app': [false, false],
+      'acme/site': [true, false],
+      'octo/docs': [true, false],
+    });
+    // The owner shows one hinted resource: discovery never hides it again.
+    const site = first.find((r) => r.ref === 'acme/site')!;
+    await store.connections.setResourceHidden(site.id, false);
+    await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'acme/app', displayName: 'acme/app', hidden: true },
+      { ref: 'acme/site', displayName: 'acme/site', hidden: true },
+      { ref: 'octo/docs', displayName: 'octo/docs' },
+    ]);
+    // An untouched row follows the hint both ways; the owner's choice stays.
+    expect(await hiddenOf()).toEqual({
+      'acme/app': [true, false],
+      'acme/site': [false, true],
+      'octo/docs': [false, false],
+    });
+    // A creating call's answer says nothing of the hint: a known row keeps its mark.
+    await store.connections.upsertDiscoveredResources(c.id, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+    ]);
+    expect((await hiddenOf())['acme/app']).toEqual([true, false]);
+  });
+
   it('refreshes, expires, reconnects and revokes without ever resurrecting a revoked connection', async () => {
     const c = await store.connections.create({
       provider: 'supabase',
