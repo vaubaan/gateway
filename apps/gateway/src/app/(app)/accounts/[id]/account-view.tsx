@@ -22,7 +22,7 @@ import { RevokeAccount } from '@/components/accounts/RevokeAccount';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import {
   Avatar,
-  DocLink,
+  DocHint,
   Button,
   ButtonLink,
   Callout,
@@ -652,7 +652,7 @@ export function AccountView({
             header: (
               <span className={shared.headWithDoc}>
                 {ACCOUNT_WORDS.environment}
-                <DocLink to={DOC_PAGES.environmentLabels} testId="doc-link-environment-labels" />
+                <DocHint to={DOC_PAGES.environmentLabels} testId="doc-link-environment-labels" />
               </span>
             ),
             label: ACCOUNT_WORDS.environment,

@@ -17,7 +17,7 @@ import {
   Button,
   Checkbox,
   Dialog,
-  DocLink,
+  DocHint,
   EnvTag,
   Radio,
   SearchField,
@@ -372,7 +372,7 @@ function ResourceStep({
                 </Checkbox>
               )}
               {group === firstFuture && (
-                <DocLink to={DOC_PAGES.futureResources} testId="doc-link-future-resources" />
+                <DocHint to={DOC_PAGES.futureResources} testId="doc-link-future-resources" />
               )}
             </div>
           </div>

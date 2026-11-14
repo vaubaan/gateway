@@ -53,7 +53,7 @@ export default async function ServiceReferencePage({ params }: Props) {
     <ReferenceFrame cards={providerCards(root.registry)}>
       <PageHeader
         level={2}
-        doc={serviceDoc(reference.id, reference.name)}
+        doc={serviceDoc(reference.id, reference.name, 'page', reference.description)}
         mark={<ServiceMark name={reference.name} icon={reference.icon} size="lg" />}
         title={reference.name}
         lede={
