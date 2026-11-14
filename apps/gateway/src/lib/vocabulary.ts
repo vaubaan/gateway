@@ -1733,7 +1733,7 @@ export const DOC_PAGES = {
   settings: {
     label: PAGES.settings.title,
     path: 'interface#settings',
-    hint: 'Your own settings: the theme, your security, notifications, signing out everywhere. An administrator also finds the administration of this gateway here.',
+    hint: 'Your own settings: the theme, your security, notifications, signing out everywhere. Administrators also set up this gateway from here.',
   },
   notifications: {
     label: SETTINGS_PAGES.notifications.title,
