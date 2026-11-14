@@ -4,7 +4,7 @@
  * the telemetry's instance profile, so that none of them disagrees with another:
  *
  *   users            people not removed (`users.status = 'active'`), signed in or not;
- *                    never an agent, a mission token or a management-door client
+ *                    never an agent or a mission token
  *   connections      connected accounts not revoked, every owner together; an expired
  *                    or ownerless one counts until it is revoked
  *   active missions  neither revoked nor past their end, orphaned ones included

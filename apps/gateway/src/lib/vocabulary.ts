@@ -6,7 +6,7 @@
  * not change and are never taken from here: MCP tool names, refusal codes, risk
  * ids, catalog YAML, database columns, API fields and configuration keys keep
  * the names the spec gives them (`connection`, `share`, `risk`, `gate`,
- * `quota`, `request`, `delegation`, `operator`…). A page prints an id as the
+ * `quota`, `request`, `operator`…). A page prints an id as the
  * protocol spells it (in mono) and everything around it with these words.
  *
  * Pure and browser-safe, usable in server and client components. Its imports
@@ -56,7 +56,6 @@ export const ROUTES = {
   activityTimeline: '/activity/timeline',
   reference: '/reference',
   settings: '/settings',
-  connectedApps: '/settings/connected-apps',
   notifications: '/settings/notifications',
   administration: '/admin',
   design: '/design',
@@ -119,7 +118,6 @@ export const TERMS = {
   missionToken: { one: 'key', many: 'keys' },
   namedToken: { one: 'machine key', many: 'machine keys' },
   request: { one: 'request', many: 'requests' },
-  delegation: { one: 'connected app', many: 'connected apps' },
   provider: { one: 'service', many: 'services' },
   member: { one: 'teammate', many: 'teammates' },
   operator: { one: 'administrator', many: 'administrators' },
@@ -223,7 +221,6 @@ export const SECTIONS = {
   yours: 'Yours',
   peopleAndKeys: 'People and keys',
   permissionsAndUsage: 'Permissions and usage',
-  connectedApps: 'Connected apps',
   notifications: 'Notifications',
   administrators: 'Administrators',
   peopleAndTeams: 'People and teams',
@@ -493,6 +490,8 @@ export const ACCOUNT_ACTIONS = {
   closeMission: 'Close',
   connect: 'Connect',
   save: 'Save',
+  /** On the Vaubaan account: the prefilled creation (ADR platform-management-is-a-plugin-on-the-execution-door). */
+  createPlatformMission: 'Create the platform management mission',
 } as const;
 
 /** Column heads and short facts of the accounts pages. */
@@ -740,11 +739,13 @@ export const ACT_WORDS = {
   'gate-changed': 'changed “ask me first”',
   'approval-granted': 'approved a call',
   'request-refused': 'refused a request',
+  // History: the management door and its delegations were retired on 2026-11-14.
   'delegation-granted': 'connected an app',
   'delegation-revoked': 'disconnected an app',
   'group-created': 'created a team',
   'group-member-added': 'added someone to a team',
   'group-member-removed': 'removed someone from a team',
+  // History, like the delegations above.
   'oauth-client-approved': 'approved an app',
   'oauth-client-disabled': 'disabled an app',
   'user-deactivated': 'deactivated a person',
@@ -788,7 +789,7 @@ export const ACT_WORDS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings and administration (`/settings/**`, `/admin/**`). Protocol names:
-// delegation, OAuth client, identity provider, provider app, user, group,
+// identity provider, provider app, user, group,
 // operator, bootstrap token, telemetry.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -796,10 +797,6 @@ export const SETTINGS_PAGES = {
   notifications: {
     title: 'Notifications',
     lede: 'The devices, messaging addresses and mail that tell you when something waits for you or stopped without you. A notification names a mission or an account; you answer in the interface.',
-  },
-  connectedApps: {
-    title: 'Connected apps',
-    lede: 'Apps you allowed to prepare missions in your name. They can never execute a call or answer a request.',
   },
   setup: {
     title: 'Setup',
@@ -828,10 +825,6 @@ export const SETTINGS_PAGES = {
   encryption: {
     title: 'Encryption',
     lede: 'The key every stored secret is sealed with. Without it, a backup of this gateway cannot be opened.',
-  },
-  registeredApps: {
-    title: 'Registered apps',
-    lede: 'The apps that may ask people to connect them. Whatever is decided here, each person still consents on a screen that names the app.',
   },
   plugins: {
     title: 'Plugins',
@@ -1057,31 +1050,6 @@ export const CEILING_WORDS = {
   },
 } as const;
 
-/** The state of a connected app (a delegation). Keyed by `DelegationState`. */
-export const APP_STATES = {
-  active: { label: 'connected', tone: null },
-  idle: { label: 'must ask you again', tone: null },
-  expired: { label: 'consent ended', tone: null },
-  revoked: { label: 'disconnected', tone: null },
-} as const satisfies Record<string, StateWord>;
-
-/** Why a connected app was disconnected. Keyed by `DelegationRevokeReason`. */
-export const APP_END_WORDS = {
-  user: 'by you',
-  client: 'by the app itself (it signed out)',
-  operator: 'by an administrator, who disabled the app',
-  'user-deactivated': 'by an administrator, who deactivated your account',
-  'refresh-token-replay': 'by the gateway: one of its tokens was presented twice',
-  'authorization-code-replay': 'by the gateway: its authorization code was presented twice',
-} as const;
-
-/** The state of a registered app (an OAuth client). Keyed by `ClientStatus`. */
-export const REGISTERED_APP_STATES = {
-  approved: { label: 'approved', tone: null },
-  pending: { label: 'Waiting for your approval', tone: 'warn' },
-  disabled: { label: 'disabled', tone: null },
-} as const satisfies Record<string, StateWord>;
-
 /** "3 of 5 done" — the setup checklist counts itself. */
 export function stepsDone(done: number, total: number): string {
   return `${formatNumber(done)} of ${formatNumber(total)} done`;
@@ -1228,11 +1196,26 @@ export const NOW = {
   atItsLimit(n: number): string {
     return `${formatNumber(n)} at ${n === 1 ? 'its' : 'their'} limit`;
   },
-  preparedBy(app: string): string {
-    return `prepared by ${app} for you`;
+  /** `who` is `issuerName(...)`: the issuing mission, or the app of a mission prepared by delegation. */
+  preparedBy(who: string): string {
+    return `prepared by ${who} for you`;
   },
   noCallYet: 'no call yet',
 } as const;
+
+/**
+ * Who prepared a mission for its creator, as a page names it: the issuing mission
+ * ("mission “Release notes”"), or — history — the app that issued it by delegation
+ * before the management door was retired (its own claim, not verified).
+ */
+export function issuerName(issuer: {
+  readonly mission_name: string | null;
+  readonly client_name: string | null;
+}): string {
+  if (issuer.mission_name !== null) return `mission “${issuer.mission_name}”`;
+  if (issuer.client_name !== null) return issuer.client_name;
+  return 'a mission that no longer exists';
+}
 
 /** The words of a first run: what the product is, the model, the steps. */
 export const FIRST_RUN = {
@@ -1686,7 +1669,6 @@ export const DOC_PAGES = {
   reference: { label: PAGES.reference.title, path: '../plugins' },
   settings: { label: PAGES.settings.title, path: 'interface#settings' },
   notifications: { label: SETTINGS_PAGES.notifications.title, path: 'missions/notifications' },
-  connectedApps: { label: SETTINGS_PAGES.connectedApps.title, path: 'missions/management-door' },
   security: { label: 'Security', path: 'interface#security' },
   setup: { label: SETTINGS_PAGES.setup.title, path: 'administration#setup' },
   firstAdministrator: { label: 'The first administrator', path: 'install#first-sign-in' },
@@ -1694,10 +1676,6 @@ export const DOC_PAGES = {
   people: { label: SETTINGS_PAGES.people.title, path: 'administration#people' },
   teams: { label: SETTINGS_PAGES.teams.title, path: 'administration#teams' },
   telemetry: { label: SETTINGS_PAGES.telemetry.title, path: 'operations/telemetry' },
-  registeredApps: {
-    label: SETTINGS_PAGES.registeredApps.title,
-    path: 'administration#registered-apps',
-  },
   encryption: { label: SETTINGS_PAGES.encryption.title, path: 'administration#encryption' },
   plugins: { label: SETTINGS_PAGES.plugins.title, path: 'administration#plugins' },
   // Concepts that trip people, linked from inside a form (a few, no more).

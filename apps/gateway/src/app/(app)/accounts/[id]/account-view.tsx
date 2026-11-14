@@ -511,6 +511,8 @@ export function AccountView({
   const revoked = connection.status === 'revoked';
   // Give access, reconnect: the rule is the services' (`ownerActRefusal`, spec §2.3).
   const ownerActs = context.unshareable === null;
+  // The Vaubaan account: its person's own, never shared; it offers the platform mission.
+  const personal = context.unshareable === 'connection-personal';
   const catalog = new Map(context.risks.map((risk) => [risk.risk_id, risk] as const));
   const total = context.risks.length;
   // The missions this account still serves: a disconnection would take it from them.
@@ -762,12 +764,20 @@ export function AccountView({
             <ButtonLink href={sharePath(connection.id)} variant="primary">
               {ACTIONS.giveAccess}
             </ButtonLink>
+          ) : personal && !revoked ? (
+            <ButtonLink
+              href={`${ROUTES.newMission}?platform=${encodeURIComponent(connection.id)}`}
+              variant="primary"
+            >
+              {ACCOUNT_ACTIONS.createPlatformMission}
+            </ButtonLink>
           ) : undefined
         }
       />
       <NoticeBanner notice={notice} />
 
       {(note ||
+        (personal && !revoked) ||
         connection.status === 'expired' ||
         connection.status === 'unowned' ||
         revoked ||
@@ -776,6 +786,18 @@ export function AccountView({
         (detail.discovery && !detail.discovery.ok && !revoked)) && (
         <div className={styles.notes}>
           {note}
+          {personal && !revoked && (
+            <Callout
+              tone="neutral"
+              title="Your own account on this gateway"
+              testId="account-personal"
+            >
+              It holds no secret and is yours alone: nobody can be given access to it. A mission on
+              it lets an agent read your accounts and missions and prepare, re-key or stop missions
+              in your name, within what you hold and what the mission allows. Disconnecting it stops
+              every mission that uses it.
+            </Callout>
+          )}
           {tokenExpiresSoon && detail.token_expires_at && (
             <Callout
               tone="warn"

@@ -41,7 +41,7 @@ words; §4.2, §4.4 and §7 use them:
 | machine key                                      | named token                                                                                   |
 | Replace key                                      | rotate                                                                                        |
 | Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                           |
-| connected app                                    | delegation, held by an OAuth client                                                           |
+| Vaubaan account                                  | the connection of the `vaubaan` plugin, a host account                                        |
 | Activity                                         | audit; the session of a mission                                                               |
 | teammate                                         | mission member                                                                                |
 | team                                             | group                                                                                         |
@@ -52,8 +52,8 @@ words; §4.2, §4.4 and §7 use them:
 | mission, macro-action, resource, environment     | the same                                                                                      |
 
 Page paths follow the interface's words (`/accounts`, `/waiting`, `/activity`, `/reference`,
-`/settings`); protocol paths do not move (the two MCP doors, the request URL a refusal carries, a
-callback registered at a provider).
+`/settings`); protocol paths do not move (the MCP door, the git remote, the request URL a refusal
+carries, a callback registered at a provider).
 
 **Deployment**
 
@@ -93,10 +93,11 @@ callback registered at a provider).
   names are unique across both sources, and a group is never deleted. Can own a connection and be
   the target of a share; never creates a mission.
 - **Principal** — a user or a group, where a rule applies to both.
-- **Delegation** — a user authorizes an agent, through an OAuth consent in the interface, to act on
-  their behalf on the management surface, with a short-lived, revocable **delegated token** bounded
-  by the user's authority. A delegation has an **absolute lifetime** (ninety days by default). A
-  delegated token neither executes a provider tool nor answers a request.
+- **Vaubaan account** — a user's own connection of the `vaubaan` plugin, the gateway's management
+  tools as a service: created in one click, holding no secret, owned by that user alone and never
+  shared. A mission on it lets an agent prepare missions in the creator's name (§4.1 bis). It
+  replaced the delegations of the retired management door (ADR
+  platform-management-is-a-plugin-on-the-execution-door).
 
 **Connections and authority**
 
@@ -233,8 +234,8 @@ without ever holding a credential, within a declared objective.
 
 ```
 Instance                          (one company, one trust domain)
-├── Configuration                 (sign-in providers, master key, telemetry, public URL; registered OAuth clients)
-├── Users[] ── Delegations[]
+├── Configuration                 (sign-in providers, master key, telemetry, public URL)
+├── Users[]
 ├── Groups[]                      (provider claims or local table)
 ├── Connections[]                 (owner: User | Group; 1 provider; encrypted credentials)
 │     ├── Resources[]             (ref; environment label)
@@ -275,6 +276,10 @@ Instance                          (one company, one trust domain)
 - `unowned`: its owner group became empty. Missions keep running; nobody can share or reconnect
   until the operator reassigns an owner — the operator's only act on the domain.
 
+A **Vaubaan account** (host account) takes no owner act at all: never shared, transferred or
+reassigned, nothing to reconnect; it follows its person (their deactivation stops its missions
+through the derived rule, their reactivation brings them back) and is disconnected like any account.
+
 **Share**: `active` → `revoked`, terminal. A mission whose creator then holds nothing on that
 connection loses its part there, reversibly: it returns when an access covers it again.
 
@@ -293,11 +298,11 @@ connection loses its part there, reversibly: it returns when an access covers it
 - `revoked` — by the creator, terminal.
 
 **User**: `active` ⇄ `deactivated` by an administrator. A deactivated user holds nothing from the
-next check: sign-in refused, web sessions over, delegations revoked, member tokens revoked
+next check: sign-in refused, web sessions over, member tokens revoked
 (`holder-deactivated`; they stay members), removed from every group (a connection left without owner
 becomes `unowned`), their missions `orphaned`. Reactivation restores the status only: missions whose
 authority still stands serve again; provider groups return at the next sign-in; local groups,
-delegations, tokens and reassigned connections do not.
+tokens and reassigned connections do not.
 
 **Request**: `open` → `granted` | `refused` | `expired` (unanswered after a configured delay). A
 granted claim produces an extension or reset event; a granted approval request an approval, consumed
@@ -314,8 +319,9 @@ permissions and executes nothing.
   2026-10-31); work that needs one goes through the gateway, as git does through its remote.
 - An exfiltrated mission token grants the mission's rights within its budget until revoked; the
   audit names its holder, and revoking it leaves other holders working.
-- An exfiltrated delegated token issues missions within the user's authority until revoked or
-  expired; every mission so issued is visible to the user and marked delegated.
+- An exfiltrated key of a mission holding a Vaubaan account issues missions within the creator's
+  authority and that mission's accepted risks and budget, until revoked; every mission so issued is
+  visible to the creator and marked as prepared by that mission, and none carries a Vaubaan account.
 
 ## 3. Authority — composing restrictions
 
@@ -400,7 +406,7 @@ a mission whose accepted risk has no resolved budget.
   which lines that cannot be repaired (row 4) run freely, and the fallback; no gate is added silently.
 - **Editing a mission**
   ([mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)). The creator
-  may edit a mission while it is not revoked or orphaned — never a delegation: name, expiry,
+  may edit a mission while it is not revoked or orphaned — never an agent: name, expiry,
   connections, per connection the resources, permissions, and per permission its quota, rate limit
   and gate. **Never its period**: a mission needing another is duplicated. The gates of an expired
   mission stay editable. An edit is judged by issuance's own check applied to what it moves, with
@@ -520,35 +526,44 @@ agents speak git, the git remote of §4.1 ter: same token, admission, decision a
   complete before the first part leaves; a broken stream is an allowed call with an upstream error,
   its credit consumed.
 
-### 4.1 bis Management surface over MCP
+### 4.1 bis Management surface: the `vaubaan` plugin
 
-A second MCP door for agents acting on behalf of a user. The instance is the OAuth authorization
-server (standard MCP server authorization, metadata discovery included); it relies on the sign-in
-providers to identify the user at consent
-([management-door-authorization-server](../decisions/management-door-authorization-server.md)).
+The gateway's own management tools are a provider plugin, `vaubaan`, called on the execution door
+like any service's: a risk catalog, macro-actions, a data model and a Reference page
+([platform-management-is-a-plugin-on-the-execution-door](../decisions/platform-management-is-a-plugin-on-the-execution-door.md)).
+A user connects their **Vaubaan account** in one click (a host account: no secret, theirs alone,
+never shared), issues a mission on it — the interface offers the **platform management mission**,
+every macro-action at Careful, in the creation form — and hands its key to an agent, which calls the
+`vaubaan__*` tools with it. The call passes the door, the budget, the gates and the audit like any
+other; the tools then act **in the name of the mission's creator**, within their current authority.
 
-- **Read**: my connections and those shared with me, with the exact restriction; each provider's
-  catalog with its macro-actions, each risk's row and its reason, and the trust level table; my missions, policy,
-  session and remaining budget.
-- **Preview** a draft `RiskId → (budget, gate)` on some connections: what passes, what exceeds the
-  authority, what the mission could call; issues nothing. A draft connection may give trust levels per
-  macro-action, which write its policy when it gives none and the missing budgets when it does, or
-  name `everything-i-hold`; the preview answers with the explicit lines.
-- **Issue** a mission. The creator is the **delegating user**, never the agent. The answer holds the
-  token, revealed once, and the bootstrap kit.
-- **Rotate** the token of a mission this delegation issued (another mission is refused
-  `mission-not-issued-here`); **revoke** any of the user's missions.
+- **Read** (`vaubaan__list_my_connections`, `vaubaan__get_catalog`, `vaubaan__list_my_missions`): my
+  connections and those shared with me, with the exact restriction; each provider's catalog with its
+  macro-actions, each risk's row and its reason, and the trust level table; my missions, policy,
+  session, remaining budget and who prepared each.
+- **Preview** (`vaubaan__preview_policy`) a draft `RiskId → (budget, gate)` on some connections:
+  what passes, what exceeds the authority, what the mission could call; issues nothing. A draft
+  connection may give trust levels per macro-action, which write its policy when it gives none and
+  the missing budgets when it does, or name `everything-i-hold`; the preview answers with the
+  explicit lines.
+- **Issue** (`vaubaan__issue_mission`) a mission. The creator is the calling mission's creator,
+  never the agent; the new mission names the calling one as the mission that prepared it. The answer
+  holds the token, revealed once, and the bootstrap kit.
+- **Rotate** (`vaubaan__rotate_mission_token`) the token of a mission the calling mission issued
+  (another is refused `mission-not-issued-here`); **revoke** (`vaubaan__revoke_mission`) any of the
+  creator's missions.
+- **The self rule**, checked by the host at every call whatever the stored selection says: a mission
+  issued here never carries a Vaubaan account (`vaubaan-account-not-allowed`); the calling mission
+  never rotates nor revokes itself (`self-not-allowed`); only the creator's own key or a machine key
+  calls these tools — a teammate's key is refused (`teammate-key-not-allowed`).
 - **Never exposed**: answering a request; opening a gate, extending a budget, changing a mission's
-  limits, resetting a period; connecting, sharing, transferring or revoking a connection; executing
-  a provider tool; adding members or making named tokens.
-- **Clients** register themselves under the configured policy: open, operator-approved (a
-  loopback-only client may be approved automatically) or closed. At most 50 registrations wait; a
-  client unused for 30 days is removed. A client's standing is checked at every use: disabling it
-  stops its delegations at the next request.
-- Consent is asked at every authorization.
-- A refresh token presented again after its rotation is accepted only within a short reuse window
-  (30 seconds by default); otherwise a replayed refresh token or code revokes the delegation and
-  names the still-running missions it issued, for review, without revoking them.
+  limits or permissions, resetting a period; connecting, sharing, transferring or revoking a
+  connection; executing another provider's tool; adding members or making named tokens.
+- The plugin's `execute` is composed by the host from the mission service, never through the SDK;
+  a plugin declaring a host account loads only bundled with the image, never from a pin. The host's
+  own tool `vaubaan__request_permission` is answered by exact name before the registry, which refuses
+  a plugin tool of the same name.
+- The retired management door, `/mcp/manage`, answers 404 with a hint to this plugin.
 
 ### 4.1 ter Git remote — the second door of the execution surface
 
@@ -616,7 +631,8 @@ under the documentation base (§4.3).
   the mission. A closed request shows its outcome; anyone but the creator reads one sentence and
   nothing of it.
 - **Missions** — mine and those I am a teammate of; a row says when it waits for my answer and names
-  the connected app that prepared it; stopped missions are behind a filter. **Creating**, on one
+  the mission whose agent prepared it ("prepared by mission X for you"); stopped missions are behind
+  a filter. **Creating**, on one
   screen: a name (or a copy of a mission, or a pasted agent proposal), the period and the end, and
   one **card** per resource set. "Add an account" picks an account, then its resources grouped by
   environment (one environment per card), plus "future" ones — nothing ticked by itself unless
@@ -648,6 +664,10 @@ under the documentation base (§4.3).
   missions stop. **"Give access"**: a person or team, then the permission checklist with "select
   all", each with its row and reason; it lists the orphaned missions the access would bring back.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
+  **The Vaubaan service** is among the services: "Connect" is one click, no field; its account page
+  names the missions that use it, offers no "Give access", and offers **Create the platform
+  management mission** — the creation form prefilled with that account, every macro-action at
+  Careful, the form's default period and end, which the person may change before creating it.
 - **Reference** — generated for every registered plugin, read-only, for any signed-in user:
   **Permissions** (permissions by macro-action, each with its row and the reason of the row, base
   budget and its gate at each trust level; a permission
@@ -664,8 +684,7 @@ under the documentation base (§4.3).
   of 50 reached by Newer and Older, the page in the address; a filter applies as soon as it is
   chosen.
 - **Settings** — for everyone: theme; the second factor (enrol, replace, remove after a fresh
-  sign-in — never an administrator's); a local account's password; **Connected apps** (until when
-  each consent runs, the missions it prepared, disconnect); **Notifications** (my devices, messaging
+  sign-in — never an administrator's); a local account's password; **Notifications** (my devices, messaging
   addresses and mail, §4.2 bis). For an administrator, **Administration**:
   - a setup checklist of what the instance still needs, with no step per service;
   - **sign-in providers**: kind, admission rule, the callback to register, whether on, and, after a
@@ -703,7 +722,7 @@ under the documentation base (§4.3).
     version that fixes it, and a pin older than what the image bundles. Nothing is installed,
     updated or removed from here: a plugin changes when the operator changes the image or the
     directory ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
-  - teams (local ones); registered apps (approve, disable); telemetry; the instance's name. Other
+  - teams (local ones); telemetry; the instance's name. Other
     §4.3 keys are shown, not edited; the name and the telemetry opt-in are set here unless the
     configuration sets them (then read-only). Every interface change is audited.
 
@@ -793,8 +812,7 @@ committed:
 - optionally, **ceilings** on users, connected accounts and active missions, and the **counters
   token** that opens the counters (§4.3 bis).
 
-Optional keys have defaults, among them the delegation's absolute lifetime and the audit retention
-(ninety days each), the request expiry (twenty-four hours) and the approval validity (ten minutes),
+Optional keys have defaults, among them the audit retention (ninety days), the request expiry (twenty-four hours) and the approval validity (ten minutes),
 and the git remote's largest push and longest request. Anything missing makes startup fail with a
 message naming it.
 
@@ -805,11 +823,11 @@ An operator may cap how much an instance holds: `limits.users`, `limits.connecti
 that is the default. The same counts serve the ceilings, the administrator's view and the counters
 endpoint, so the three never disagree:
 
-| Count           | What it counts                                                                                                          |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| users           | people not removed, whether or not they have signed in yet; never an agent, a mission token or a management-door client |
-| connections     | connected accounts not revoked, every owner together; an expired or ownerless one still counts until revoked            |
-| active missions | missions neither revoked nor past their end, orphaned ones included                                                     |
+| Count           | What it counts                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------ |
+| users           | people not removed, whether or not they have signed in yet; never an agent or a mission token                |
+| connections     | connected accounts not revoked, every owner together; an expired or ownerless one still counts until revoked |
+| active missions | missions neither revoked nor past their end, orphaned ones included                                          |
 
 - **Enforced where an item would be added, never by cutting.**
   - A person is refused when they would become a new user: a first sign-in of any kind, an
@@ -818,15 +836,15 @@ endpoint, so the three never disagree:
   - A connection is refused when a new one would be created: by any connect flow, before the
     provider is reached where the flow allows it, and again when the account is stored. Reconnecting
     an existing account is never refused.
-  - A mission is refused when issuing it would add an active one: from the form, a duplicate, the
-    management door or the v4 import. Giving an expired mission a new end (an edit or a granted
+  - A mission is refused when issuing it would add an active one: from the form, a duplicate, an
+    agent's `vaubaan__issue_mission` or the v4 import. Giving an expired mission a new end (an edit or a granted
     extension) counts as adding one.
 - **At or above a ceiling**, the instance keeps working: nothing existing is removed, disabled or
   stopped, and only the additions of that count are refused, until enough items are removed or
   revoked by the people of the instance. A ceiling lowered under the current count is accepted at
   startup.
 - **The refusal names the ceiling** and the count ("This gateway holds 3 active missions, its
-  ceiling is 3"); for an agent on the management door it is a refusal code of its own. The
+  ceiling is 3"); for an agent calling `vaubaan__issue_mission` it is a refusal code of its own. The
   administrator sees each count against its ceiling in the settings.
 
 **Counters.** `GET /ops/stats` answers counts only, for the operator's monitoring: users, connections
@@ -941,15 +959,16 @@ values.
   Content-Security-Policy admitting only the instance's own scripts and forbidding framing,
   `nosniff`, a same-origin referrer policy, a permissions policy granting no device, HSTS when the
   public URL is https.
-- **Separation of the three credentials.** The mission token opens the execution surface only, the
-  delegated token the management surface only, the human session the interface only; requests are
-  granted only in a human session. An executor can neither claim for itself, approve itself nor
-  modify its mission, even holding its creator's delegated token.
-- **Short, traceable delegated tokens.** Short lifetime, renewal through a revocable refresh token,
-  management scope only. No token outlives the delegation's absolute lifetime; an expired delegation
-  is shown `expired`, not revoked; shortening the configured lifetime shortens every delegation,
-  lengthening it revives none. Every mission issued by delegation carries in the audit the client
-  and the delegating user.
+- **Separation of the two credentials.** The mission token opens the execution surface (the MCP
+  door and the git remote) only, the human session the interface only; requests are granted only in
+  a human session. An executor can neither claim for itself nor approve itself.
+- **An executor cannot modify its mission.** No tool edits a mission. A mission holding a Vaubaan
+  account (§4.1 bis) never rotates nor revokes itself, and a mission it issues never carries a
+  Vaubaan account: checked by the host at every call, whatever the stored selection says, like the
+  instance's own resources ([ADR](../decisions/platform-management-is-a-plugin-on-the-execution-door.md)).
+  Only the creator's own key or a machine key calls those tools. Every mission issued this way
+  names, on the mission and in the audit, the mission that prepared it, and acts in the creator's
+  name only.
 - **Authoritative, atomic counting.** Budget decision and decrement are one operation: two
   concurrent calls on a quota's last credit give exactly one allow and one refusal
   ([atomic-budget-accounting](../decisions/atomic-budget-accounting.md)).
@@ -1046,9 +1065,11 @@ account gets a machine key. A teammate who leaves loses their key at once.
 
 ### 7.10 Have an agent prepare a mission
 
-A user connects their agent to the management surface and consents; the agent reads the authority
-and the catalog, previews, issues. The mission appears under the user's name, marked as prepared by
-that connected app.
+A user connects their Vaubaan account (one click), creates the platform management mission the
+account page offers (prefilled in the creation form, every macro-action at Careful) and gives its
+key to their agent. The agent reads the authority and the catalogs, previews, issues — asking first
+where the mission says so. The new mission appears under the user's name, marked as prepared by the
+platform mission; it never holds a Vaubaan account.
 
 ### 7.11 Update a plugin
 
@@ -1077,14 +1098,15 @@ One entry per call, allowed or refused, and per administrative act.
   touched, agent label, upstream latency, client origin. Risk field shapes:
   [gateway-risk-model](./gateway-risk-model.md) §12.
 - **An administrative act**: timestamp, user, act, object, previous and new state when meaningful,
-  and the delegated client when it came from the management surface. Acts include every change of
+  and, when it came through the `vaubaan` plugin (§4.1 bis), the mission whose key made the call
+  (that call is also in the mission's own activity, like any call). Acts include every change of
   connection, share, mission (issuance, edit, extension, reset, approval, rotation, a lost or
-  regained account naming the human whose act did it, orphaned or restored), member, delegation,
+  regained account naming the human whose act did it, orphaned or restored), member,
   administrator, admin rule, sign-in provider, second factor, master-key recovery and configuration.
+  Entries written by the retired management door keep naming its client (history).
 - **Who reads what**: a user reads the entries of missions they created, of missions they are a
   member of now (a removed member reads none, past ones included) and of connections they own; an
-  user also reads the administrative entries about delegations they gave; an operator reads every
-  entry, and alone those about groups, OAuth clients and users; the bootstrap token reads
+  operator reads every entry, and alone those about groups and users; the bootstrap token reads
   administrative entries and no call. Nobody reads arguments; their fingerprint is shown only to who
   answers for the call (the mission's creator, an owner of its connection).
 - **Retention** is configured, 90 days by default; no cold archive. It also purges session history
@@ -1141,8 +1163,8 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
     refusal of a multi-risk call, gate opening bounded to the period, erasure of arguments after
     decision;
   - structured refusals: every code, field and `hint`;
-  - credential separation (§6): a mission token on the management surface, a delegated token on the
-    execution surface, either on a request, refused unambiguously;
+  - credential separation (§6): a session at the execution surface, a mission token on a request,
+    refused unambiguously; the self rule of a mission holding a Vaubaan account;
   - local accounts (§6): the memory-hard hash verifies the password only; lockout counts wrong
     passwords per account across restarts; a one-time code accepted once within one step of drift, a
     recovery code once, a link once and before expiry; unknown address and wrong password answered
@@ -1169,8 +1191,8 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
 - **Integration**, on an ephemeral instance with embedded store and simulated IdP: connection,
   share, issuance, claim, approval and replay, revocation, the git remote with the real `git` client
   against a local git server standing in for the provider (multi-ref pushes, claimed ref values,
-  malformed requests), `orphaned` states, OAuth delegation then issuance by an MCP client within the
-  user's authority and refusal beyond it.
+  malformed requests), `orphaned` states, issuance by an MCP client holding a platform mission's key,
+  within the user's authority and refusal beyond it.
 - **End to end, acceptance criterion for the cutover**: connect the providers the team uses, issue
   one mission per code project, run the daily workflow with a coding agent with no unexpected
   refusal ([e2e-tests](../tests/e2e-tests.md)); by hand, outside the automated suite.
@@ -1214,7 +1236,7 @@ Not decided, or a v1 assumption usage may overturn.
 - **Gate in shares**, approved by the connection owner? v1: no, the gate lives in the mission.
 - **Resources in shares.** v1: no; a beneficiary may touch any resource within the shared risks.
 - **Agent label.** How a client transmits it, and whether an orchestrator imposes it on sub-agents.
-- **Scope of the management surface.** Missions only in v1; sharing stays a human gesture.
+- **Scope of the management tools.** Missions only in v1; sharing stays a human gesture.
 - **Per-tool discovery.** Should plugins declare per tool the risks it can touch, so a mission lists
   only what it can call (§4.1)?
 - **Audit export.** Format and scope beyond local retention.

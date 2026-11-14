@@ -10,8 +10,8 @@
  *   3. the instruction block for the agent: whose token it holds (every token
  *      of a mission has one holder), connections, resource refs, accepted
  *      risks, budget, what to do on each structured refusal and when the
- *      token itself stops working, and a short "management door" section — the other MCP door of the instance,
- *      which this token does not open;
+ *      token itself stops working, and a short "missions prepared by an agent" section — what the
+ *      `vaubaan__*` tools do, and that they never lift a refusal;
  *   4. when the mission holds repositories of a provider the instance is a
  *      git remote of (spec §4.1 ter): git's configuration — a credential
  *      helper that reads the variable (never `store` or `cache`, never the
@@ -21,12 +21,11 @@
  *   +  `curl … tools/list`.
  *
  * Pure: the instance URL comes from the configuration (`public_url`), nothing
- * is hard-coded but the paths of the two MCP doors on this instance.
+ * is hard-coded but the path of the MCP door on this instance.
  */
 import { AUTH_FAILURE_REASONS, type AuthFailureReason } from '@vaubaan/gateway-core';
 import { REFUSAL_CODES, type MissionPolicyEntry, type RefusalCode } from '@vaubaan/shared';
 
-import { MANAGEMENT_DOOR_PATH } from '../oauth-as/endpoints';
 import type { DraftPeriod } from '../../lib/missions/model';
 import { expiryPhrase, periodPhrase } from '../../lib/missions/summary';
 import { maskedToken } from './token';
@@ -218,15 +217,16 @@ function setLines(sets: readonly KitResourceSet[]): string[] {
 }
 
 /**
- * The "management door" section of the instruction block: an executing agent
- * must know the other door exists, that its mission token does not open it,
- * and that nothing behind it lifts a refusal.
+ * The "missions prepared by an agent" section of the instruction block (ADR
+ * platform-management-is-a-plugin-on-the-execution-door): an executing agent
+ * must know what the `vaubaan__*` tools are, and that nothing there lifts a
+ * refusal.
  */
-export function managementDoorSection(managementEndpoint: string): string[] {
+export function preparedMissionsSection(): string[] {
   return [
-    '### The management door',
-    `This gateway has a second MCP server, ${managementEndpoint}, for an agent acting on behalf of a person: it reads the person's accounts and missions and creates missions, replaces keys or stops missions in the person's name, within what the person may allow. It is opened by a consent the person gives in a browser, never by this mission key (presenting it there is refused as \`wrong-credential-kind\`).`,
-    "It does not lift a refusal: answering what an agent asks, raising a limit, letting a permission run freely, connecting an account or giving access to it are done by the human in the web interface, and by nobody else. If you are also a connected app there, do not use it to create yourself a wider mission in order to get past a refusal: the mission would appear under the person's name, marked as prepared by you.",
+    '### Missions prepared by an agent',
+    "When this mission holds a Vaubaan account, the `vaubaan__*` tools read the person's accounts and missions and create missions, replace keys or stop missions in the person's name, within what the person may allow and what this mission accepts. A mission you create there never holds a Vaubaan account, and this mission never replaces its own key or stops itself.",
+    "They do not lift a refusal: answering what an agent asks, raising a limit, letting a permission run freely, connecting an account or giving access to it are done by the human in the web interface, and by nobody else. Do not create yourself a wider mission in order to get past a refusal: the mission would appear under the person's name, marked as prepared by this mission.",
   ];
 }
 
@@ -294,11 +294,7 @@ function gitSection(remotes: readonly KitGitRemote[]): string[] {
   ];
 }
 
-function agentInstructions(
-  input: BootstrapKitInput,
-  endpoint: string,
-  managementEndpoint: string,
-): string {
+function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
   const { mission } = input;
   const gitRemotes = servedRemotes(input.git);
   const connections = input.connections.flatMap((c) => {
@@ -354,14 +350,13 @@ function agentInstructions(
     ...stopped,
     '',
     ...(gitRemotes.length > 0 ? [...gitSection(gitRemotes), ''] : []),
-    ...managementDoorSection(managementEndpoint),
+    ...preparedMissionsSection(),
   ].join('\n');
 }
 
 export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
   const instance = input.instanceUrl.replace(/\/+$/, '');
   const endpoint = `${instance}${EXECUTION_DOOR_PATH}`;
-  const managementEndpoint = `${instance}${MANAGEMENT_DOOR_PATH}`;
   const revealsSecret = 'secret' in input.token;
   const tokenValue = 'secret' in input.token ? input.token.secret : maskedToken(input.token.prefix);
   const gitRemotes = servedRemotes(input.git);
@@ -380,7 +375,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     endpoint,
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
-    agent_instructions: agentInstructions(input, endpoint, managementEndpoint),
+    agent_instructions: agentInstructions(input, endpoint),
     git: gitRemotes.length > 0 ? gitSnippet(gitRemotes) : null,
     verify: [
       `curl -sS ${shellQuote(endpoint)} \\`,

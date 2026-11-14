@@ -14,7 +14,6 @@ import {
   type RecordCallResult,
 } from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
-import { mintAccessToken } from '../../../src/server/oauth-as/secrets';
 import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
 import {
   ADDRESSED_TO_CREATOR,
@@ -242,20 +241,6 @@ describe('requests: exhaust and claim over HTTP', () => {
       // The executor did not claim for itself.
       expect((await root.store.requests.getById(claim.id))?.state).toBe('open');
       expect((await call()).outcome).toBe('refused');
-    });
-
-    it('a delegated token is refused the same way, and named for what it is', async () => {
-      const claim = await exhaust();
-      const headers = new Headers({ authorization: `Bearer ${mintAccessToken()}` });
-      const opened = await root.requests.handlers.open(get(claim.url, headers), claim.id);
-      expect(opened.status).toBe(403);
-      expect(await opened.json()).toMatchObject({
-        error: 'wrong-credential-kind',
-        presented: 'delegated-token',
-        expected: 'human-session',
-      });
-      const inbox = await root.requests.handlers.inbox(get(`${PUBLIC_URL}/api/requests`, headers));
-      expect(inbox.status).toBe(403);
     });
 
     it('a bearer of no known shape is refused too, and no kind is invented for it', async () => {

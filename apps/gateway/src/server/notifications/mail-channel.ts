@@ -113,7 +113,6 @@ export class MailChannel {
         object: { type: 'user', id: user.id },
         before: { on: wasOn },
         after: { on },
-        delegated_client_id: null,
       });
     }
     return { ok: true, on };

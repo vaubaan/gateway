@@ -9,27 +9,27 @@ Each part links to its handbook, which names the files to open first. The words 
 (connection, risk, budget, gate); the interface calls the same things account, permission, limits
 and "ask me first" ([README, Words](../README.md#words)).
 
-## One process, three ways in
+## One process, two ways in
 
 ```
- coding agent              agent acting for a person        person
- (mission token)           (delegated OAuth token)          (browser session)
-      │                          │                                │
-      ▼                          ▼                                ▼
- EXECUTION DOOR            MANAGEMENT DOOR                  WEB INTERFACE
- POST /mcp, /mcp/catalog,  POST /mcp/manage                 pages under apps/gateway/src/app
- /git/<provider>/…        prepares and issues missions     answers requests, edits missions
-      │                          │                                │
-      ▼                          └───────────────┬────────────────┘
- CALL PIPELINE (packages/gateway-core)           │
-  1 admission: token, mission state, resource    │
-  2 plugin.classify(call)  ──►  slices           │
-  3 policy engine: slices ──► risks ⊆ accepted?  │
-  4 budget: quota, rate limit, gate              │
-  5 plugin.execute(call, credential)  ──►  provider API
-  6 audit entry, allowed or refused              │
-      │                                          │
-      ▼                                          ▼
+ coding agent                                               person
+ (mission token)                                            (browser session)
+      │                                                           │
+      ▼                                                           ▼
+ EXECUTION DOOR                                             WEB INTERFACE
+ POST /mcp, /mcp/catalog, /git/<provider>/…                 pages under apps/gateway/src/app
+      │                                                     answers requests, edits missions
+      ▼                                                           │
+ CALL PIPELINE (packages/gateway-core)                            │
+  1 admission: token, mission state, resource                     │
+  2 plugin.classify(call)  ──►  slices                            │
+  3 policy engine: slices ──► risks ⊆ accepted?                   │
+  4 budget: quota, rate limit, gate                               │
+  5 plugin.execute(call, credential)  ──►  provider API           │
+    (the `vaubaan` plugin: the host's own mission service)        │
+  6 audit entry, allowed or refused                               │
+      │                                                           │
+      ▼                                                           ▼
  STORE (one SQLite file): connections and encrypted credentials, shares,
  missions, token digests, counters, requests, audit
 ```
@@ -74,14 +74,15 @@ with the credential the gateway hands it. A plugin classifies; it never decides.
 [`plugins/README.md`](../plugins/README.md); handbooks: [plugin-sdk](handbook/plugin-sdk.md),
 [providers](handbook/providers/README.md).
 
-## The management door
+## The gateway's own management tools
 
-`/mcp/manage` serves an agent that a person authorized through OAuth (the instance is its own
-authorization server). Its tools read what that person may delegate, preview a policy and issue a
-mission under the person's name. It executes no provider tool and answers no request: approvals and
-claims are answered in the browser only. Each of the three credentials (mission token, delegated
-token, browser session) is refused by kind at the other two ways in. Handbook:
-[management-door](handbook/management-door.md).
+An agent that prepares missions for other agents does it like any other work: through a mission on
+the person's **Vaubaan account**, a service of its own (`plugins/vaubaan`), whose `vaubaan__*` tools
+read what that person may put in a mission, preview a policy and issue, rotate or revoke missions
+under the person's name. The call passes the same door, budget and audit; the plugin's `execute` is
+bound by the host to the mission service, never through the SDK. It executes no other provider's
+tool and answers no request: approvals and claims are answered in the browser only, and a mission
+never rotates or revokes itself. Handbook: [providers/vaubaan](handbook/providers/vaubaan.md).
 
 ## The store
 

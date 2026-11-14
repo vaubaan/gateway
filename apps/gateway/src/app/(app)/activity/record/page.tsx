@@ -179,10 +179,16 @@ function Who({ entry }: { entry: AuditEntryView }) {
         <Avatar name={entry.actor.label} size="xs" />
         <span className={styles.whoText}>
           <span>{entry.actor.label}</span>
-          {entry.delegated_client_id && (
+          {entry.via_mission ? (
             <span className={styles.sub}>
-              through an app <Mono quiet>{entry.delegated_client_id}</Mono>
+              through mission {entry.via_mission.name ?? <Mono quiet>{entry.via_mission.id}</Mono>}
             </span>
+          ) : (
+            entry.delegated_client_id && (
+              <span className={styles.sub}>
+                through an app <Mono quiet>{entry.delegated_client_id}</Mono>
+              </span>
+            )
           )}
         </span>
       </span>
@@ -481,7 +487,12 @@ function AdminDetail({ entry, names }: { entry: AuditAdminView; names: ChangeNam
           },
           {
             term: 'By',
-            value: entry.delegated_client_id ? (
+            value: entry.via_mission ? (
+              <>
+                {entry.actor.label}, through mission{' '}
+                {entry.via_mission.name ?? <Mono>{entry.via_mission.id}</Mono>}
+              </>
+            ) : entry.delegated_client_id ? (
               <>
                 {entry.actor.label}, through the app <Mono>{entry.delegated_client_id}</Mono>
               </>

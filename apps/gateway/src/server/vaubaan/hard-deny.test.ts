@@ -1,0 +1,218 @@
+/**
+ * The hard deny of the `vaubaan` plugin, as a matter of structure (spec §4.1
+ * bis "what the management tools never do"; ADR
+ * platform-management-is-a-plugin-on-the-execution-door): the host module is
+ * not *given* anything that answers a request, opens a gate, moves a budget,
+ * touches an account, a share or a group, or calls another service's tool.
+ *
+ * Three readings of the same fact:
+ *
+ *   types     the dependency type of the module names two ports and a logger
+ *             and no service; the type assertions below fail `tsc` (the
+ *             `type-check` step of CI) the day a forbidden handle is added
+ *   imports   no source file of the module imports a forbidden module
+ *   surface   the plugin's tools are the seven acts, and none belongs to a
+ *             forbidden family; the ports are those seven and nothing else
+ *
+ * The fourth reading — the object graph of the ports the real composition
+ * root builds — is `tests/integration/vaubaan/hard-deny.test.ts`.
+ */
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { ACT, TOOL, vaubaanTools, VAUBAAN_PORT_NAMES } from '@vaubaan/plugin-vaubaan';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+
+import type { AuthorityModule } from '../authority';
+import type { SessionService } from '../budget';
+import type { ConnectionsModule } from '../connections';
+import type { ExecutionModule } from '../execution';
+import type { GroupsModule } from '../groups';
+import type { MissionService } from '../missions';
+import type { RequestsModule } from '../requests';
+import type { SharesModule } from '../shares';
+import type { Store } from '../store';
+import { VaubaanActs } from './acts';
+import {
+  VAUBAAN_DEPENDENCIES,
+  VAUBAAN_MISSION_METHODS,
+  type VaubaanMissions,
+  type VaubaanModuleDeps,
+} from './ports';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Every type the module is handed, as one union. */
+type Handed = VaubaanModuleDeps[keyof VaubaanModuleDeps];
+
+/** What must never be among them: the services and stores of the forbidden families. */
+type Forbidden =
+  | RequestsModule
+  | RequestsModule['service']
+  | SessionService
+  | ExecutionModule
+  | ExecutionModule[keyof ExecutionModule]
+  | ConnectionsModule
+  | ConnectionsModule['service']
+  | SharesModule
+  | SharesModule['service']
+  | GroupsModule
+  | GroupsModule['service']
+  | AuthorityModule
+  | AuthorityModule[keyof AuthorityModule]
+  | Store
+  | Store[keyof Store]
+  | MissionService
+  | PluginRegistry;
+
+describe('vaubaan plugin — hard deny, by type', () => {
+  it('the module depends on two ports and a logger, and on nothing else', () => {
+    expectTypeOf<keyof VaubaanModuleDeps>().toEqualTypeOf<'missions' | 'catalog' | 'logger'>();
+    expect([...VAUBAAN_DEPENDENCIES].sort()).toEqual(['catalog', 'logger', 'missions']);
+  });
+
+  it('no dependency is a service, a module or a repository of a forbidden family', () => {
+    // `Extract` keeps the members of `Handed` assignable to a forbidden type: there is none.
+    expectTypeOf<Extract<Handed, Forbidden>>().toBeNever();
+    // …and the check can fail: the mission service itself would be caught.
+    expectTypeOf<Extract<Handed | MissionService, Forbidden>>().not.toBeNever();
+    expectTypeOf<Extract<Handed | Store['requests'], Forbidden>>().not.toBeNever();
+  });
+
+  it('of the mission service the plugin holds seven methods: no edit of a mission, its gates or its limits, no duplication, no token check', () => {
+    expectTypeOf<keyof VaubaanMissions>().toEqualTypeOf<
+      'issuanceContext' | 'preview' | 'issue' | 'rotate' | 'revoke' | 'list' | 'get'
+    >();
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('setGate');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('setLimits');
+    // An agent never changes a live mission (ADR mission-editable-after-issuance).
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('edit');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('previewEdit');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('editView');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('changePermissions');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('duplicate');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('draftFrom');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('verifyToken');
+    expect([...VAUBAAN_MISSION_METHODS].sort()).toEqual([
+      'get',
+      'issuanceContext',
+      'issue',
+      'list',
+      'preview',
+      'revoke',
+      'rotate',
+    ]);
+  });
+});
+
+describe('vaubaan plugin — hard deny, by imports', () => {
+  const FORBIDDEN_MODULES = [
+    'requests',
+    'budget',
+    'execution',
+    'connections',
+    'shares',
+    'groups',
+    'authority',
+    'store',
+    'crypto',
+    'auth',
+    'telemetry',
+    'audit',
+  ];
+  const ALLOWED_MODULES = ['logging', 'missions'];
+
+  function importsOf(file: string): string[] {
+    const source = readFileSync(file, 'utf8');
+    return [...source.matchAll(/(?:from|import)\s+'([^']+)'/g)].map((match) => match[1] ?? '');
+  }
+
+  const sources = readdirSync(HERE).filter(
+    (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'),
+  );
+
+  it('the module has its source files', () => {
+    expect(sources.sort()).toEqual(['acts.ts', 'index.ts', 'inputs.ts', 'ports.ts', 'views.ts']);
+  });
+
+  it.each(sources)('%s imports no forbidden module, only the allowed ones', (name) => {
+    const siblings = importsOf(join(HERE, name)).filter((spec) => spec.startsWith('../'));
+    for (const spec of siblings) {
+      const target = spec.slice('../'.length);
+      expect(
+        FORBIDDEN_MODULES.some((module) => target === module || target.startsWith(`${module}/`)),
+        `${name} imports ${spec}`,
+      ).toBe(false);
+      expect(ALLOWED_MODULES, `${name} imports ${spec}`).toContain(target);
+    }
+  });
+
+  it('the wiring narrows the mission service and the registry, and reaches the door by a type only', () => {
+    const wiring = importsOf(join(HERE, '../compose/vaubaan.ts'));
+    const siblings = wiring.filter((spec) => spec.startsWith('../')).map((spec) => spec.slice(3));
+    expect(siblings.sort()).toEqual(['execution', 'logging', 'missions', 'vaubaan']);
+    const source = readFileSync(join(HERE, '../compose/vaubaan.ts'), 'utf8');
+    expect(source).toContain("import type { HostComposedExecute } from '../execution';");
+  });
+});
+
+describe('vaubaan plugin — hard deny, by surface', () => {
+  // Words that name an act of a forbidden family (spec §4.1 bis), as a tool name would carry them.
+  const FORBIDDEN_WORDS = [
+    'request',
+    'claim',
+    'approv',
+    'answer',
+    'decide',
+    'grant',
+    'gate',
+    'budget',
+    'quota',
+    'limit',
+    'extend',
+    'reset',
+    'period',
+    'connect',
+    'share',
+    'transfer',
+    'group',
+    'member',
+    'execute',
+    'call',
+    'invoke',
+    'proxy',
+  ];
+
+  it('the tools are the seven acts, in order, prefixed `vaubaan__`', () => {
+    expect(vaubaanTools.map((tool) => tool.name)).toEqual([
+      'vaubaan__list_my_connections',
+      'vaubaan__get_catalog',
+      'vaubaan__list_my_missions',
+      'vaubaan__preview_policy',
+      'vaubaan__issue_mission',
+      'vaubaan__rotate_mission_token',
+      'vaubaan__revoke_mission',
+    ]);
+    expect(Object.values(TOOL)).toEqual(vaubaanTools.map((tool) => tool.name));
+    expect([...VAUBAAN_PORT_NAMES].sort()).toEqual(Object.keys(ACT).sort());
+  });
+
+  it('no tool is named after an act of a forbidden family', () => {
+    for (const act of Object.values(ACT)) {
+      // `list_my_connections` reads connections; it is the one name that carries such a word.
+      const name = act === 'list_my_connections' ? 'list_my' : act;
+      for (const word of FORBIDDEN_WORDS) {
+        expect(name.includes(word), `${act} contains "${word}"`).toBe(false);
+      }
+    }
+  });
+
+  it('the class behind the ports has one public method per act and no other', () => {
+    const methods = Object.getOwnPropertyNames(VaubaanActs.prototype).filter(
+      (name) => name !== 'constructor',
+    );
+    expect(methods.filter((name) => name !== 'log').sort()).toEqual([...VAUBAAN_PORT_NAMES].sort());
+  });
+});

@@ -6,7 +6,7 @@
  * it the instance keeps everything it holds and only refuses the next addition of
  * that count. The wording of every refusal is here, in one place; each surface
  * carries it in its own error (a `LoginError` code, a `ConnectError`, an issuance
- * result, a management-door refusal code).
+ * result, a `vaubaan__issue_mission` refusal code).
  */
 import type { LimitsConfig } from '../config/types';
 

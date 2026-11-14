@@ -31,7 +31,7 @@ import { INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import { DEFAULT_DOCS_URL } from './docs-default';
 import { DEFAULT_UPDATES_FEED_URL } from './updates-default';
-import { CLIENT_REGISTRATION_POLICIES, LOG_LEVELS, MAIL_TLS_MODES } from './types';
+import { LOG_LEVELS, MAIL_TLS_MODES } from './types';
 
 export type RawTree = Record<string, unknown>;
 
@@ -408,56 +408,6 @@ const KEY_TABLE = [
   // The bearer of `GET /ops/stats` (spec §4.3 bis): absent, the endpoint does not exist.
   { path: 'ops.token', env: 'VAUBAAN_OPS_TOKEN', kind: 'secret', minLength: 32 },
   {
-    path: 'oauth.access_token_ttl',
-    env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
-    kind: 'string',
-    format: 'duration',
-    default: '15m',
-    maxSeconds: 3_600,
-  },
-  {
-    path: 'oauth.refresh_token_ttl',
-    env: 'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL',
-    kind: 'string',
-    format: 'duration',
-    default: '30d',
-  },
-  {
-    path: 'oauth.delegation_max_lifetime',
-    env: 'VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME',
-    kind: 'string',
-    format: 'duration',
-    default: '90d',
-  },
-  {
-    path: 'oauth.refresh_reuse_window_seconds',
-    env: 'VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS',
-    kind: 'int',
-    default: 30,
-    min: 0,
-    max: 60,
-  },
-  {
-    path: 'oauth.client_registration.policy',
-    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
-    kind: 'string',
-    format: 'enum',
-    default: 'operator-approved',
-    oneOf: CLIENT_REGISTRATION_POLICIES,
-  },
-  {
-    path: 'oauth.client_registration.auto_approve_loopback',
-    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK',
-    kind: 'bool',
-    default: true,
-  },
-  {
-    path: 'oauth.client_registration.metadata_documents',
-    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS',
-    kind: 'bool',
-    default: false,
-  },
-  {
     path: 'log.level',
     env: 'VAUBAAN_LOG_LEVEL',
     kind: 'string',
@@ -585,11 +535,48 @@ export const RETIRED_IDP_ENV_PREFIX = 'VAUBAAN_IDP_';
 export const RETIRED_PROVIDERS_KEY = 'providers';
 
 /**
+ * The top-level key of the retired authorization server of the management door
+ * (`oauth.access_token_ttl`, `oauth.client_registration.policy`, …; ADR
+ * platform-management-is-a-plugin-on-the-execution-door), and its variables. Not
+ * `oauth_brokers`, a key of its own.
+ */
+export const RETIRED_MANAGEMENT_KEY = 'oauth';
+export const RETIRED_MANAGEMENT_ENV = [
+  'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
+  'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL',
+  'VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME',
+  'VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS',
+  'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
+  'VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK',
+  'VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS',
+] as const;
+
+/**
  * The retired keys and variables a configuration still sets, sorted: every leaf
  * under the file's `providers` block, and every `VAUBAAN_PROVIDER_*` variable.
  * Never read; listed so the root can say they are ignored.
  */
 export function retiredConfigKeys(tree: RawTree, env: EnvSource): string[] {
+  const out = leavesUnder(tree, RETIRED_PROVIDERS_KEY);
+  for (const name of Object.keys(env)) {
+    if (name.startsWith(RETIRED_PROVIDER_ENV_PREFIX) && env[name] !== undefined) out.push(name);
+  }
+  return out.sort();
+}
+
+/**
+ * The keys of the retired authorization server a configuration still sets, sorted:
+ * every leaf under the file's `oauth` block, and every variable of
+ * `RETIRED_MANAGEMENT_ENV`. Never read; listed so the root can say they are ignored.
+ */
+export function retiredManagementKeys(tree: RawTree, env: EnvSource): string[] {
+  const out = leavesUnder(tree, RETIRED_MANAGEMENT_KEY);
+  for (const name of RETIRED_MANAGEMENT_ENV) if (env[name] !== undefined) out.push(name);
+  return out.sort();
+}
+
+/** Every leaf path under `tree[top]`, written `top.a.b`; none when the key is absent. */
+function leavesUnder(tree: RawTree, top: string): string[] {
   const out: string[] = [];
   const walk = (node: unknown, path: string): void => {
     if (isPlainObject(node) && Object.keys(node).length > 0) {
@@ -598,13 +585,8 @@ export function retiredConfigKeys(tree: RawTree, env: EnvSource): string[] {
     }
     out.push(path);
   };
-  if (tree[RETIRED_PROVIDERS_KEY] !== undefined) {
-    walk(tree[RETIRED_PROVIDERS_KEY], RETIRED_PROVIDERS_KEY);
-  }
-  for (const name of Object.keys(env)) {
-    if (name.startsWith(RETIRED_PROVIDER_ENV_PREFIX) && env[name] !== undefined) out.push(name);
-  }
-  return out.sort();
+  if (tree[top] !== undefined) walk(tree[top], top);
+  return out;
 }
 
 /** `VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`: a hyphen of the provider id becomes an underscore. */

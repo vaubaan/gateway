@@ -167,7 +167,6 @@ export class AddressService {
       object: { type: 'user', id: user.id },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 }

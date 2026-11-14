@@ -367,7 +367,7 @@ export class MissionTeamService {
       // (`member-token.ts`), shared with the creator's `MissionService.rotate`.
       issued = await reissueMemberToken(
         { store: this.deps.store, mint: this.mint, clock: this.deps.clock },
-        { missionId: mission.id, userId: user.id, delegatedClientId: null },
+        { missionId: mission.id, userId: user.id, viaMissionId: null },
       );
     } catch (err) {
       // Removed, deactivated, or the mission revoked, while the hash was computed: the
@@ -669,7 +669,6 @@ export class MissionTeamService {
       object: { type: 'mission', id: missionId },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 

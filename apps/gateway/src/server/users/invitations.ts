@@ -138,7 +138,6 @@ export class InvitationService {
         object: { type: 'instance-config', id: INVITATIONS_OBJECT_ID },
         before,
         after,
-        delegated_client_id: null,
       });
     } catch (err) {
       // The list changed; a missing entry must at least be loud.

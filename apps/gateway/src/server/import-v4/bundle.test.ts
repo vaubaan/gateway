@@ -210,7 +210,6 @@ describe('command line', () => {
       act: 'connection-created' as const,
       object: { type: 'connection' as const, id: 'c1' },
       before: null,
-      delegated_client_id: null,
     };
     await marked.auditWriter.write({ ...admin, after: { provider: 'vercel' } });
     await marker
@@ -263,7 +262,6 @@ describe('command line', () => {
       object: { type: 'mission' as const, id },
       before: null,
       after: { marker: 'imported-from-v4', v4_org: org, v4_source: source },
-      delegated_client_id: null,
     });
     // `audit.list` returns the oldest first.
     const audit = {

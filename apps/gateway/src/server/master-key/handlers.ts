@@ -125,7 +125,6 @@ export function createMasterKeyHandlers(deps: MasterKeyHandlerDeps): MasterKeyHa
         object: { type: 'instance-config', id: MASTER_KEY_OBJECT_ID },
         before: null,
         after: { key_version: state.keyVersion, from },
-        delegated_client_id: null,
       });
       deps.logger.info('master key downloaded by an administrator', {
         actor,
@@ -161,7 +160,6 @@ export function createMasterKeyHandlers(deps: MasterKeyHandlerDeps): MasterKeyHa
           object: { type: 'instance-config', id: MASTER_KEY_OBJECT_ID },
           before: { handed_over_at: null },
           after: { handed_over_at: handedOverAt },
-          delegated_client_id: null,
         });
       } catch (err) {
         // The confirmation is saved; a missing entry must at least be loud.

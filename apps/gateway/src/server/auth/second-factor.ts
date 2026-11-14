@@ -237,7 +237,6 @@ export class SecondFactorService {
       object: { type: 'user', id: user.id },
       before: null,
       after: { email: user.email, change, by: actor === user.id ? 'self' : actor },
-      delegated_client_id: null,
     });
   }
 }

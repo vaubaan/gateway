@@ -394,16 +394,24 @@ export type NewOwner =
 /**
  * Why this connection takes no owner act (share, transfer, reconnect), or `null` when it
  * does (spec §2.3): revocation is final, and nobody acts on a connection without owner
- * until the operator reassigns one. The one statement of the rule: the service's own
- * refusals, the shares service and the pages (through `transferTargets` and
- * `ShareContext.unshareable`) all read it here.
+ * until the operator reassigns one. A `host` account (the Vaubaan account) takes none
+ * either: it is its person's own, never shared nor transferred, and holds nothing to
+ * reconnect (ADR platform-management-is-a-plugin-on-the-execution-door). The one
+ * statement of the rule: the service's own refusals, the shares service and the pages
+ * (through `transferTargets` and `ShareContext.unshareable`) all read it here.
  */
 export function ownerActRefusal(
-  connection: Pick<ConnectionRecord, 'status'>,
-): 'connection-revoked' | 'connection-unowned' | null {
+  connection: Pick<ConnectionRecord, 'status' | 'metadata'>,
+): 'connection-revoked' | 'connection-unowned' | 'connection-personal' | null {
   if (connection.status === 'revoked') return 'connection-revoked';
   if (connection.status === 'unowned') return 'connection-unowned';
+  if (isHostAccount(connection)) return 'connection-personal';
   return null;
+}
+
+/** A `host` account: the kind its connect stored (`metadata.credential_kind`). */
+export function isHostAccount(connection: Pick<ConnectionRecord, 'metadata'>): boolean {
+  return connection.metadata?.credential_kind === 'host';
 }
 
 export interface ConnectionServiceDeps {
@@ -619,7 +627,43 @@ export class ConnectionService {
         return this.connectWithApiKey(flow, spec, input);
       case 'ssh-key':
         return this.connectWithSshKey(flow, spec, input);
+      case 'host':
+        return this.connectHost(flow);
     }
+  }
+
+  /**
+   * A `host` account (the `vaubaan` plugin; ADR
+   * platform-management-is-a-plugin-on-the-execution-door): one button, no
+   * secret, nothing to verify, no resource. It belongs to the person who pressed
+   * it and is never shared. A person holds one: connecting again hands back the
+   * account they already have.
+   */
+  private async connectHost(flow: FlowStart): Promise<StartResult> {
+    const owned = await this.deps.store.connections.listOwnedBy([
+      { kind: 'user', id: flow.actor.user.id },
+    ]);
+    const existing = owned.find(
+      (c) => c.provider === flow.plugin.id && c.status !== 'revoked' && c.id !== flow.reconnectId,
+    );
+    if (existing && !flow.reconnectId) {
+      return {
+        kind: 'connected',
+        connection: existing,
+        discovery: null,
+        reconnected: false,
+        returnTo: flow.returnTo,
+      };
+    }
+    const secret: CredentialSecret = { kind: 'host', metadata: {} };
+    const connected = await this.finalize(flow.actor, flow.plugin, secret, {
+      displayName: flow.displayName,
+      reconnectId: flow.reconnectId,
+      returnTo: flow.returnTo,
+      discovery: 'deferred',
+      metadata: {},
+    });
+    return { kind: 'connected', ...connected };
   }
 
   private async startOAuth2(
@@ -1430,7 +1474,6 @@ export class ConnectionService {
       object: { type: 'connection', id: connection.id },
       before: { default_env: connection.defaultEnv },
       after: { default_env: updated.defaultEnv },
-      delegated_client_id: null,
     });
     this.deps.logger.info('connection default environment set by its owner', {
       connection_id: connection.id,
@@ -1581,6 +1624,8 @@ export class ConnectionService {
     const { connections } = this.deps.store;
     const seen = await connections.getById(connectionId);
     if (!seen) throw new ConnectError('not-found');
+    // A host account is its person's own: it is never handed to anyone else.
+    if (isHostAccount(seen)) throw new ConnectError('connection-personal');
     if (!(await this.looksOwnerless(seen))) throw new ConnectError('not-ownerless');
     const owner = await this.resolveNewOwner(newOwner);
     const watch = await this.deps.grounds.watchConnection(seen.id);
@@ -1894,7 +1939,6 @@ export class ConnectionService {
         owner: connection.owner,
         ...extra,
       },
-      delegated_client_id: null,
     });
   }
 
@@ -1932,7 +1976,6 @@ export class ConnectionService {
           ? { cause: 'after-a-call', ...afterCall }
           : (checkNow ?? { cause: 'by-owner' })),
       },
-      delegated_client_id: null,
     });
   }
 
@@ -1952,7 +1995,6 @@ export class ConnectionService {
       object: { type: 'connection', id: connection.id },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 

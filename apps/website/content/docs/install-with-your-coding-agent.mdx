@@ -63,13 +63,6 @@ Finish by telling me:
 
 ## Afterwards: a mission for the agent
 
-Once you have signed in and connected an account, an agent can prepare its own mission through the [management door](/docs/missions/management-door), in your name and within what you may allow: you authorize it once in the browser, it previews a policy and issues the mission, and the answer carries the mission key and the configuration for the agent that will do the work. Requests the mission raises later — more of a limit, an approval — are answered by you alone, in the interface.
-
-With Claude Code:
-
-```bash
-claude mcp add --transport http vaubaan-manage https://your-domain/mcp/manage
-# then, inside Claude Code: /mcp → vaubaan-manage → Authenticate
-```
+Once you have signed in and connected an account, an agent can prepare its own mission through your Vaubaan account ([platform management](/docs/missions/platform-management)), in your name and within what you may allow: connect the Vaubaan account in one click, create the platform management mission its page offers and give its key to the agent; it previews a policy and issues the mission, asking you first by default, and the answer carries the mission key and the configuration for the agent that will do the work. Requests the mission raises later — more of a limit, an approval — are answered by you alone, in the interface.
 
 Or create the mission yourself in the interface (Missions → New mission) and give the agent its kit: see [missions and agents](/docs/missions).

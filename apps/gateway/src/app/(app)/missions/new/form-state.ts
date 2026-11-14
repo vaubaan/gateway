@@ -475,6 +475,39 @@ export function expiryOf(
   return new Date(now.getTime() + days * MS_PER_DAY).toISOString();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The platform management mission
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The provider id of the gateway's own account (the `vaubaan` plugin). */
+export const PLATFORM_PROVIDER = 'vaubaan';
+export const PLATFORM_MISSION_NAME = 'Platform management';
+/** The macro-action the gateway adds to every catalog for its fallback: never ticked here. */
+const ANYTHING_ELSE = 'anything-else';
+
+/**
+ * The prefill offered after connecting the Vaubaan account (ADR
+ * platform-management-is-a-plugin-on-the-execution-door): that account alone,
+ * every macro-action of its catalog ticked at Careful, the form's default period
+ * and end. A draft the person sees in the creation form and may change before
+ * creating it; nothing is issued from here.
+ */
+export function platformMissionDraft(connection: IssuanceConnection): MissionDraft {
+  const trustLevels = Object.fromEntries(
+    connection.macro_actions
+      .filter((action) => action.id !== ANYTHING_ELSE)
+      .map((action) => [action.id, 'careful']),
+  );
+  return {
+    name: PLATFORM_MISSION_NAME,
+    period: periodOf(DEFAULT_PERIOD),
+    expires_at: null,
+    connections: [
+      { connection_id: connection.id, resources: { scope: 'all' }, trust_levels: trustLevels },
+    ],
+  };
+}
+
 /**
  * The draft the screen stands for: one connection per account, its cards as
  * `resource_sets` in screen order, explicit entries only.

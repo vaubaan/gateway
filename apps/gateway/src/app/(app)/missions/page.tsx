@@ -38,10 +38,12 @@ import {
   capitalize,
   count,
   formatNumber,
+  issuerName,
   MISSION_LIST_FILTERS,
   expiresOn,
   KEY_WORDS,
   MISSION_WORDS,
+  NOW,
   PAGES,
   ROUTES,
   SECTIONS,
@@ -79,7 +81,7 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
           </span>
           {issuedVia && (
             <span className={styles.sub} data-testid={`issued-via-${mission.id}`}>
-              prepared by {issuedVia.client_name} for you
+              {NOW.preparedBy(issuerName(issuedVia))}
             </span>
           )}
         </>

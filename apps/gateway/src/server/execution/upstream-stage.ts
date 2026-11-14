@@ -79,7 +79,7 @@ import {
   UpstreamRefusalError,
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
-import type { ToolResultPartSink } from '@vaubaan/plugin-sdk';
+import type { ExecuteContext, McpToolResult, ToolResultPartSink } from '@vaubaan/plugin-sdk';
 import { isUpstreamAuthError, type UpstreamAuthError } from '@vaubaan/shared';
 
 import {
@@ -95,7 +95,35 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_STATUS_MIN = 100;
 const HTTP_STATUS_MAX = 599;
 
+/**
+ * Who makes a call, as a host-composed `execute` receives it (never a plugin
+ * loaded through the SDK): the calling mission, its creator — in whose name a
+ * host-composed plugin acts — and the person holding the key, `null` for a
+ * machine key.
+ */
+export interface HostCaller {
+  readonly missionId: string;
+  readonly userId: string;
+  readonly holderUserId: string | null;
+}
+
+/**
+ * An `execute` the host composed from its own services, run in place of the
+ * plugin's declared one (ADR platform-management-is-a-plugin-on-the-execution-door):
+ * the SDK's context plus the caller.
+ */
+export type HostComposedExecute = (
+  ctx: ExecuteContext & { readonly caller: HostCaller },
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+) => Promise<McpToolResult>;
+
 export interface UpstreamStageDeps {
+  /**
+   * The `execute` of each plugin the host composes itself, keyed by plugin id
+   * (today `vaubaan`): run instead of `plugin.execute`, with the caller added.
+   */
+  readonly hostExecutes?: ReadonlyMap<string, HostComposedExecute>;
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'refresh' | 'contextOf'>;
   readonly credentialCache: ConnectionCredentialCache;
   readonly logger: Logger;
@@ -303,17 +331,29 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     // The first attempt starts the clock; a retry keeps it.
     const startedAt = reached.get(call)?.startedAt ?? performance.now();
     reached.set(call, { plugin: resolved.plugin, startedAt });
-    const answer = resolved.plugin.execute(
-      {
-        ...deps.credentials.contextOf(resolved, limits.signal),
-        resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
-        agentLabel: call.agent_label,
-        credentialCache: deps.credentialCache.scopeFor(resolved.connection),
-        emitPart: relay.emit,
-      },
-      call.tool,
-      call.args,
-    );
+    const context: ExecuteContext = {
+      ...deps.credentials.contextOf(resolved, limits.signal),
+      resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
+      agentLabel: call.agent_label,
+      credentialCache: deps.credentialCache.scopeFor(resolved.connection),
+      emitPart: relay.emit,
+    };
+    const hostExecute = deps.hostExecutes?.get(resolved.plugin.id);
+    const { holder } = ctx.token;
+    const answer = hostExecute
+      ? hostExecute(
+          {
+            ...context,
+            caller: {
+              missionId: ctx.mission.id,
+              userId: ctx.mission.creator_id,
+              holderUserId: holder.kind === 'member' ? holder.user_id : null,
+            },
+          },
+          call.tool,
+          call.args,
+        )
+      : resolved.plugin.execute(context, call.tool, call.args);
     return untilStopped(answer, limits);
   }
 

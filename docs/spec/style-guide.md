@@ -72,7 +72,7 @@ One word per thing; a person never learns the protocol's word. The word list is
   fields, configuration keys. Quoted, they are printed as spelled, in monospace.
 - **Who reads the sentence decides its words**: text for a person (the setup kit, mission API
   messages, authorization pages, catalog prose about the product) uses the interface's words; text
-  for an agent or a program (refusal hints, preview messages, management-door descriptions) keeps
+  for an agent or a program (refusal hints, preview messages, tool descriptions) keeps
   the protocol's.
 - **Roles are said in sentences** ("you own it with Platform", "waiting for Alice's yes"); never
   "principal" or "beneficiary".

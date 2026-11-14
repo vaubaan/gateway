@@ -214,7 +214,6 @@ export class GroupService {
       object: { type: 'group', id: group.id },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 }

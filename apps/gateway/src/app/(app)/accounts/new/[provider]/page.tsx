@@ -89,6 +89,8 @@ function ledeOf(provider: ConnectableProvider): string {
         : `${name} has no sign-in flow for this: paste a key you created there.`;
     case 'ssh-key':
       return 'The gateway makes a key pair and keeps the private key; you install the public key on the host.';
+    case 'host':
+      return `Your own place on this gateway: one click, nothing to create or paste. A mission on it lets an agent prepare missions in your name, within what you hold; the account is yours alone and is never shared.`;
   }
 }
 
@@ -270,7 +272,8 @@ export default async function ConnectOneAccountPage({
             {reconnect && (
               <input type="hidden" name="connection_id" value={reconnect.connection.id} />
             )}
-            {!reconnect && (
+            {/* A host account is the person's own place on the gateway: one, named after the service. */}
+            {!reconnect && provider.kind !== 'host' && (
               <Field
                 label="Name"
                 shape="how it appears in missions"
@@ -306,9 +309,11 @@ export default async function ConnectOneAccountPage({
                 <span className={styles.formHint}>
                   {redirectFlow
                     ? `You come back here once ${name} has answered.`
-                    : provider.kind === 'ssh-key'
-                      ? 'The private key is encrypted at rest and never shown.'
-                      : TOKEN_CONNECT.submitHint(name)}
+                    : provider.kind === 'host'
+                      ? 'Nothing to paste: the account holds no secret.'
+                      : provider.kind === 'ssh-key'
+                        ? 'The private key is encrypted at rest and never shown.'
+                        : TOKEN_CONNECT.submitHint(name)}
                 </span>
               )}
             </div>
@@ -317,7 +322,7 @@ export default async function ConnectOneAccountPage({
                 <p>{TOKEN_CONNECT.whatWeDo(name)}</p>
                 <p>{TOKEN_CONNECT.sharedAccount}</p>
               </div>
-            ) : (
+            ) : provider.kind === 'host' ? null : (
               <Disclosure
                 id={`account-connect:${provider.kind}`}
                 defaultOpen
@@ -332,7 +337,19 @@ export default async function ConnectOneAccountPage({
         </Guided>
       )}
 
-      {!reconnect && (
+      {!reconnect && provider.kind === 'host' && (
+        <Section title="After connecting">
+          <Hint>
+            The account is yours alone: it cannot be given to a colleague or a team. Create a
+            mission on it — the gateway offers the platform management mission, every macro-action
+            at Careful — and hand its key to the agent that prepares your missions. What that agent
+            can do, permission by permission, is in the{' '}
+            <Link href={providerPath(provider.id)}>{name} reference</Link>.
+          </Hint>
+        </Section>
+      )}
+
+      {!reconnect && provider.kind !== 'host' && (
         <Section title="After connecting">
           <Hint>
             You own it. Give access to a colleague from the account page; a mission can use it right

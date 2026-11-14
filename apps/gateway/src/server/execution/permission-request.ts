@@ -72,7 +72,6 @@ export async function requestPermission(
         risk_ids: request.riskIds,
         tool: request.tool,
       },
-      delegated_client_id: null,
     });
   // After the request and its audit entry are written; the creator hears of a new one only.
   if (asked.created) {

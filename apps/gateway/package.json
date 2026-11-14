@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build && node ../../scripts/build-commands.mjs",
     "start": "next start",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "vaubaan:schemas": "tsx scripts/write-vaubaan-tool-schemas.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
@@ -32,6 +33,7 @@
     "@vaubaan/plugin-stripe": "*",
     "@vaubaan/plugin-supabase": "*",
     "@vaubaan/plugin-upstash-redis": "*",
+    "@vaubaan/plugin-vaubaan": "*",
     "@vaubaan/plugin-vercel": "*",
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",

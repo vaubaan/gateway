@@ -107,7 +107,8 @@ describe('shipped plugins through the generic connect driver', () => {
     // Nothing needs the operator: a key is pasted, an OAuth client is registered by the gateway.
     for (const p of before) {
       expect(p.redirects, p.id).toBe(p.kind === 'oauth2');
-      if (p.kind === 'oauth2') expect(p.fields, p.id).toEqual([]);
+      // A host account (the Vaubaan account) is one click: nothing to paste.
+      if (p.kind === 'oauth2' || p.kind === 'host') expect(p.fields, p.id).toEqual([]);
       else expect(p.fields.length, p.id).toBeGreaterThan(0);
     }
     const ways = before.map((p) => p.kind);

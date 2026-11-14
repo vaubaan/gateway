@@ -256,16 +256,18 @@ export interface IssuanceConnection {
 }
 
 /**
- * The client that issued a mission through the management door, on behalf of
- * its creator (spec §2.4, §7.10 "marked as delegated"). `null` everywhere a
- * mission was issued in the interface.
+ * Who prepared a mission for its creator (spec §2.4, §7.10 "marked as prepared by
+ * an agent"): the mission whose agent issued it through its Vaubaan account, or —
+ * history — the app that issued it by delegation before the management door was
+ * retired. `null` everywhere a person issued the mission in the interface.
  */
 export interface MissionIssuer {
-  readonly delegation_id: string;
-  /** The OAuth client's public id, as the audit names it (`delegated_client_id`). */
-  readonly client_id: string;
-  /** The name the client gave itself: a claim, not verified. */
-  readonly client_name: string;
+  /** The issuing mission; `null` for a mission an app issued by delegation. */
+  readonly mission_id: string | null;
+  /** Its name as it reads now; `null` with no issuing mission. */
+  readonly mission_name: string | null;
+  /** History: the name the app gave itself (a claim, not verified); `null` otherwise. */
+  readonly client_name: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

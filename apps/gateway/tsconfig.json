@@ -20,6 +20,7 @@
     "next-env.d.ts",
     "src/**/*",
     "src/app/.well-known/**/*",
+    "scripts/**/*",
     "tests/**/*",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"

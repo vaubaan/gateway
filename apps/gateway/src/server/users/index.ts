@@ -18,7 +18,6 @@ import type { ConnectionsModule } from '../connections';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { MissionTeamService } from '../missions';
-import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { createUserAdminHandlers, type UserAdminHandlers } from './handlers';
@@ -37,7 +36,6 @@ export interface UsersModuleDeps {
   readonly masterKey: { state(): Promise<{ readonly handoverPending: boolean }> };
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
-  readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
   readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
   readonly connections: Pick<ConnectionsModule, 'notices'>;
   readonly authenticator: Authenticator;
@@ -66,7 +64,6 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
   const service = new UserAdminService({
     store: deps.store,
     membership: deps.membership,
-    delegations: deps.delegations,
     memberTokens: deps.memberTokens,
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,

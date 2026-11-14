@@ -63,6 +63,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 | Stripe          | [`stripe.md`](./stripe.md)                   | `api-key`  | One resource per mode (test / live).                                   |
 | Supabase        | [`supabase.md`](./supabase.md)               | `api-key`  | Management API; `execute_sql` read-only.                               |
 | Upstash Redis   | [`upstash-redis.md`](./upstash-redis.md)     | `api-key`  | Env from the owner's database label.                                   |
+| Vaubaan         | [`vaubaan.md`](./vaubaan.md)                 | `host`     | The gateway's own management tools; one click, bound by the host.      |
 | Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                         |
 
 ## Revoking a connection: what happens at the provider

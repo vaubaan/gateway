@@ -134,53 +134,6 @@ export interface TelemetryConfig {
   readonly collectorUrl: URL;
 }
 
-/**
- * Who may become an OAuth client of the management door (spec §4.1 bis; ADR
- * management-door-authorization-server):
- *
- * - `open`: any client that registers may ask users for a delegation at once;
- * - `operator-approved`: a client waits for an operator's approval, except, when
- *   `autoApproveLoopback` is set, a client that can only redirect to the loopback
- *   interface of the user's own machine;
- * - `closed`: nothing registers; only the clients an operator approved are usable.
- */
-export const CLIENT_REGISTRATION_POLICIES = ['open', 'operator-approved', 'closed'] as const;
-export type ClientRegistrationPolicy = (typeof CLIENT_REGISTRATION_POLICIES)[number];
-
-export function isClientRegistrationPolicy(raw: string): raw is ClientRegistrationPolicy {
-  return (CLIENT_REGISTRATION_POLICIES as readonly string[]).includes(raw);
-}
-
-/** The authorization server of the management door (spec §4.1 bis, §6). */
-export interface OAuthConfig {
-  /** Lifetime of a delegated access token: short (spec §6), at most one hour. */
-  readonly accessTokenTtlSeconds: number;
-  /** Lifetime of a refresh token; each rotation starts it again. */
-  readonly refreshTokenTtlSeconds: number;
-  /**
-   * Absolute lifetime of a delegation, counted from the user's consent (spec §0
-   * "Delegation"): past it no token of the delegation is issued or accepted,
-   * whatever was renewed, and the client must obtain the consent again.
-   */
-  readonly delegationMaxLifetimeSeconds: number;
-  /**
-   * For how long the refresh token that was just rotated may be presented once
-   * more without ending the delegation (two processes sharing one stored token
-   * and renewing together). 0 disables the window; at most 60.
-   */
-  readonly refreshReuseWindowSeconds: number;
-  readonly clientRegistration: {
-    readonly policy: ClientRegistrationPolicy;
-    /** Under `operator-approved`: loopback-only clients need no approval. */
-    readonly autoApproveLoopback: boolean;
-    /**
-     * Accept `client_id`s that are https URLs of Client ID Metadata Documents. The
-     * instance then fetches documents from the internet on a signed-in user's request.
-     */
-    readonly metadataDocuments: boolean;
-  };
-}
-
 /** Where a self resource comes from: the `self_resources` key, or the platform the instance runs on. */
 export type SelfResourceSource = 'config' | 'railway' | 'fly';
 
@@ -357,6 +310,13 @@ export interface InstanceConfig {
    * logs one warning each.
    */
   readonly retiredKeys: readonly string[];
+  /**
+   * The keys and variables of the retired authorization server (`oauth.*`,
+   * `VAUBAAN_OAUTH_ACCESS_TOKEN_TTL`, …) the configuration still sets (ADR
+   * platform-management-is-a-plugin-on-the-execution-door). Never read; the root
+   * says once that they are ignored, and the instance starts.
+   */
+  readonly retiredManagementKeys: readonly string[];
   readonly bootstrapToken: string | null;
   readonly telemetry: TelemetryConfig;
   /** Mail delivery, or `null` when no relay is configured. */
@@ -394,8 +354,6 @@ export interface InstanceConfig {
   readonly updates: UpdatesConfig;
   /** Where the interface's doc links lead. */
   readonly docs: DocsConfig;
-  /** Authorization server of the management door: token lifetimes, who may register. */
-  readonly oauth: OAuthConfig;
   /**
    * The OAuth brokers of `oauth_brokers.<name>.*`, in the order of the tree.
    * Empty: a plugin whose client is a broker's is listed as not configured.

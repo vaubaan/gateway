@@ -23,7 +23,7 @@ The unit of delegation. A mission names the accounts and resources the agent may
 
 ## Key
 
-The secret an agent presents to the gateway, one per mission and per holder. It opens the execution door of that mission and nothing else: not the interface, not the management door. It is shown once; the gateway keeps a digest. Replace it or stop the mission at any time.
+The secret an agent presents to the gateway, one per mission and per holder. It opens the execution door of that mission and nothing else: not the interface. It is shown once; the gateway keeps a digest. Replace it or stop the mission at any time.
 
 ## Permission
 
@@ -52,7 +52,7 @@ The record of every call, allowed or refused, with the permissions it needed, wh
 ## The other words
 
 - **Teammate**: a person added to a mission, with their own key and the mission's shared limits.
-- **Connected app**: an agent a person authorized through OAuth on the [management door](/docs/missions/management-door), which may prepare missions in that person's name.
+- **Vaubaan account**: a person's own account on the gateway, one click, no secret, never shared; a mission on it lets an agent prepare missions in that person's name ([platform management](/docs/missions/platform-management)).
 - **Company app**: your company's own app at a service (a GitHub App, a Supabase OAuth app), registered by an administrator once per instance.
 - **Administrator**: a person matching the instance's admin rule; configures the instance, never answers another person's requests.
 
@@ -70,7 +70,7 @@ The interface speaks to people; tool names, refusal codes, ids, the API and the 
 | key, machine key             | mission token: member token, named token              |
 | Replace key                  | rotate                                                |
 | Waiting for you              | request: a claim (limit reached), an approval request |
-| connected app                | delegation, OAuth client                              |
+| Vaubaan account              | the connection of the `vaubaan` plugin (host account) |
 | Activity                     | audit, session                                        |
 | teammate, team               | mission member, group                                 |
 | administrator                | operator                                              |

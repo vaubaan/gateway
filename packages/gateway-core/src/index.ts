@@ -13,7 +13,6 @@ export type {
   ConnectionLoss,
   ConnectionOwner,
   ConnectionStatus,
-  DelegationContext,
   MissionConnection,
   MissionContext,
   MissionResource,

@@ -242,40 +242,33 @@ Rules of a draft (the field names are the protocol's):
   resource carrying that environment label;
 - ask for the least that does the job. A narrow proposal is accepted faster.
 
-## 7. The management door
+## 7. Preparing missions: the Vaubaan account
 
-An instance has a **second MCP server**, `<instance URL>/mcp/manage`, for an
-agent that acts **on behalf of a person** instead of executing a mission. It
-is how an agent prepares a mission by itself, without the paste of §6. The
-interface calls such an agent a **connected app**.
+An agent can prepare missions **on behalf of a person** instead of only
+proposing them (§6). It does it like any other work: with the key of a
+mission on the person's **Vaubaan account**, the gateway's own service. The
+person connects that account in one click (Accounts → Connect a service →
+Vaubaan), creates the **platform management mission** its page offers, and
+gives you its key. Same endpoint, same header, same refusals as §2 and §5:
+there is no second server.
 
-- **Endpoint**: `<instance URL>/mcp/manage`.
-- **Auth**: OAuth, the standard authorization of MCP servers. Your MCP client
-  discovers the server, registers itself and opens the person's browser; the
-  person signs in and consents.
-- **Token**: a short-lived **delegated token** your client renews by itself.
-  The door is opened by that token and never by a mission key, which it
-  refuses (`wrong-credential-kind`).
+The mission's tools, always within what the person may allow, and within what
+that mission accepts:
 
-In Claude Code: `claude mcp add --transport http vaubaan-manage <instance URL>/mcp/manage`,
-then `/mcp` → `vaubaan-manage` → Authenticate.
-
-Its tools, always within what the person who consented may allow:
-
-| Tool                   | What it does                                                                                  |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, macro-actions |
-| `get_catalog`          | one service's permissions as explicit ids, its macro-actions and its trust levels             |
-| `list_my_missions`     | the person's missions: state, permissions, what is left of each limit                         |
-| `preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow                     |
-| `issue_mission`        | creates the mission; returns its key once, and the setup kit                                  |
-| `rotate_mission_token` | replaces the key of a running mission; the previous key stops working at once                 |
-| `revoke_mission`       | stops a mission for good                                                                      |
+| Tool                            | What it does                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| `vaubaan__list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, macro-actions |
+| `vaubaan__get_catalog`          | one service's permissions as explicit ids, its macro-actions and its trust levels             |
+| `vaubaan__list_my_missions`     | the person's missions: state, permissions, what is left of each limit, who prepared each      |
+| `vaubaan__preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow                     |
+| `vaubaan__issue_mission`        | creates the mission; returns its key once, and the setup kit                                  |
+| `vaubaan__rotate_mission_token` | replaces the key of a mission this mission issued; the previous key stops working at once     |
+| `vaubaan__revoke_mission`       | stops a mission for good                                                                      |
 
 How to compose a draft that passes the first time:
 
-1. `list_my_connections`, then `get_catalog` for each service the task
-   needs.
+1. `vaubaan__list_my_connections`, then `vaubaan__get_catalog` for each
+   service the task needs.
 2. Tick, per account, **the macro-actions the task needs**, each at the
    lowest trust level that lets it run; add or trim single permissions with
    `policy`, naming each by its explicit id: there is no wildcard.
@@ -283,23 +276,29 @@ How to compose a draft that passes the first time:
    levels supply them for what they write).
 4. Take an id held per environment (`supabase[prod].…`) only when a selected
    resource carries that label.
-5. `preview_policy` until it answers `ok: true`, then `issue_mission` with
-   the same draft.
+5. `vaubaan__preview_policy` until it answers `ok: true`, then
+   `vaubaan__issue_mission` with the same draft.
 
-What the door changes and what it does not:
+What these tools change and what they do not:
 
 - the **person is the creator** of every mission created there. It appears
-  under their name, marked as prepared by your client, in their Missions, in
-  Settings → Connected apps and in Activity;
+  under their name, marked as prepared by your mission, in their Missions and
+  in Activity;
+- at Careful, the default of the platform management mission, issuing,
+  replacing a key and stopping a mission ask the person first
+  (`approval-required`, §5): hand them the URL and wait;
 - a draft that exceeds what the person may allow is refused whole, with the
   list of what is not covered. More cannot be obtained here;
-- the door can **never** answer a request (more room after a limit, a yes
+- a mission you create **never holds a Vaubaan account**
+  (`vaubaan-account-not-allowed`), and your own mission is never rotated nor
+  stopped through its own key (`self-not-allowed`);
+- these tools can **never** answer a request (more room after a limit, a yes
   before an action), let a permission run freely, raise a limit, reset a
   count, connect an account, give access to one or disconnect it, or call a
-  tool of a service. These stay with the human, in the web interface;
-- so being a connected app is not a way around a refusal of §5: hand the URL
-  to the human. Creating yourself a wider mission to get past a refusal is
-  visible to the person and will cost you their consent.
+  tool of another service. These stay with the human, in the web interface;
+- so holding a Vaubaan account is not a way around a refusal of §5: hand the
+  URL to the human. Creating yourself a wider mission to get past a refusal is
+  visible to the person and will cost you their trust.
 
 ## 8. Git
 

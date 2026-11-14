@@ -55,6 +55,7 @@ import {
   capitalize,
   count,
   expiresOn,
+  issuerName,
   limitColumn,
   limitsResetEvery,
   listed,
@@ -344,11 +345,21 @@ export default async function MissionPage({ params, searchParams }: Props) {
 
       {issuedVia && (
         <p className={styles.headNote} data-testid="issued-via">
-          Prepared for you by {issuedVia.client_name},{' '}
-          <Link href={`${ROUTES.connectedApps}#${issuedVia.delegation_id}`}>a connected app</Link> (
-          <Mono quiet>{issuedVia.client_id}</Mono>). The name is what the app said about itself; it
-          is not verified. You are the creator of this mission and the only one who answers what its
-          agents ask.
+          {issuedVia.mission_id !== null && issuedVia.mission_name !== null ? (
+            <>
+              Prepared for you by the agent of mission{' '}
+              <Link href={`${ROUTES.missions}/${issuedVia.mission_id}`}>
+                {issuedVia.mission_name}
+              </Link>
+              , through its Vaubaan account.
+            </>
+          ) : (
+            <>
+              Prepared for you by {issuerName(issuedVia)}, an app connected before connected apps
+              were retired. The name is what the app said about itself; it is not verified.
+            </>
+          )}{' '}
+          You are the creator of this mission and the only one who answers what its agents ask.
         </p>
       )}
 

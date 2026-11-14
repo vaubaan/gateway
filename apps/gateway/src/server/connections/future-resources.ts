@@ -116,7 +116,6 @@ export class FutureResources {
           refs: group.map((m) => m.ref),
           reason: first.reason,
         },
-        delegated_client_id: null,
       });
     }
   }

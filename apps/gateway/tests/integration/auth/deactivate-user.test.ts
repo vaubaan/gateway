@@ -3,14 +3,16 @@
  * "creator removed from the IdP"): offboarding on the instance, without the
  * identity provider. Run on the real composition root (`:memory:` store,
  * simulated IdP, the instance's HTTP surface) with a user who holds one of
- * everything: a web session, a delegation with live tokens, a mission issued
- * through it, a local-group membership, a connection of their own.
+ * everything: a web session, a platform management mission on their Vaubaan
+ * account with an agent holding its key, a mission that agent issued, a member
+ * key on a colleague's mission, a local-group membership, a connection of their
+ * own.
  *
  * What must hold afterwards, each read where the product reads it:
- * the session is nobody, the sign-in is refused, the delegated tokens are
- * dead on the management door and at the token endpoint, the mission is
- * refused at the execution door without a word written on it, the connection
- * is the operator's to reassign — and every one of these has its entry.
+ * the session is nobody, the sign-in is refused, both missions — the platform
+ * one included — are refused at the execution door without a word written on
+ * them, the member key is revoked, the connection is the operator's to
+ * reassign — and every one of these has its entry.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -20,29 +22,25 @@ import { UserAdminError, USERS_PAGE } from '../../../src/server/users';
 import {
   ADA,
   BOB,
+  bearer,
   draftOn,
   EXECUTION_URL,
-  MANAGEMENT_URL,
-  openManagementRig,
-  type Agent,
-  type ManagementRig,
-} from '../management/support';
-import {
-  bearer,
+  openVaubaanRig,
   OPS,
   PUBLIC_URL,
-  tokenRequest,
   toolsList,
+  type Agent,
   type Browser,
-} from '../oauth-as/support';
+  type VaubaanRig,
+} from '../vaubaan/support';
 
 const SHARED = ['github.read-code', 'github.read-meta'];
 
 /** The clock is the system's: a session opened in the very millisecond of a deactivation is refused. */
 const nextMillisecond = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-describe('deactivating a user: sessions end, delegations are revoked, missions follow the derived rule', () => {
-  let rig: ManagementRig;
+describe('deactivating a user: sessions end, member keys are revoked, missions follow the derived rule', () => {
+  let rig: VaubaanRig;
   let ops: UserRecord;
   let bob: UserRecord;
   let bobBrowser: Browser;
@@ -50,10 +48,13 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
   let missionId: string;
   let missionToken: string;
   let ownConnectionId: string;
+  /** Ada's mission Bob is a teammate of, and the key he generated there. */
+  let teamMissionId: string;
+  let memberTokenPrefix: string;
   const operator = () => ({ actorId: ops.id, userId: ops.id });
 
   beforeEach(async () => {
-    rig = await openManagementRig();
+    rig = await openVaubaanRig();
     ops = await rig.browser().signIn(OPS);
     bob = rig.seeded.bob;
     // Ada shares her GitHub connection with Bob: the authority his mission rests on.
@@ -62,7 +63,7 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
       rig.seeded.github.connection.id,
       { target: { kind: 'user', email: bob.email }, riskIds: SHARED },
     );
-    // A web session, a delegation, a mission issued through it.
+    // A web session, a platform mission with its agent, a mission that agent issued.
     bobBrowser = rig.browser();
     await bobBrowser.signIn(BOB);
     agent = await rig.agentOf(BOB);
@@ -83,6 +84,20 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
       credential: null,
     });
     ownConnectionId = own.id;
+    // A mission of Ada with Bob as a teammate holding his own key.
+    const adas = await rig.root.missions.service.issue(
+      rig.seeded.ada,
+      draftOn(rig.seeded.github.connection.id, ['github.read-meta']) as never,
+    );
+    if (!adas.ok) throw new Error('Ada’s issuance was refused');
+    teamMissionId = adas.mission.id;
+    const added = await rig.root.missions.team.addMember(rig.seeded.ada, teamMissionId, {
+      email: bob.email,
+    });
+    if (!added.ok) throw new Error('add refused');
+    const generated = await rig.root.missions.team.generateToken(bob, teamMissionId);
+    if (!generated.ok) throw new Error('generate refused');
+    memberTokenPrefix = generated.token.prefix;
   });
   afterEach(async () => {
     await agent.close().catch(() => undefined);
@@ -94,6 +109,11 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
       new Headers({ cookie: `${SESSION_COOKIE}=${browser.cookies.get(SESSION_COOKIE) ?? ''}` }),
     );
 
+  async function memberTokenStatus(): Promise<string | undefined> {
+    const tokens = await rig.root.store.missions.listTokens(teamMissionId);
+    return tokens.find((token) => token.prefix === memberTokenPrefix)?.status;
+  }
+
   async function executionSays(token: string): Promise<string> {
     const response = await toolsList(rig, EXECUTION_URL, bearer(token));
     if (response.status !== 200) return `http-${response.status}`;
@@ -101,43 +121,30 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     return body.error?.data?.code ?? 'ok';
   }
 
-  const refresh = () =>
-    tokenRequest(rig, {
-      grant_type: 'refresh_token',
-      client_id: agent.delegated.clientId,
-      refresh_token: agent.delegated.tokens.refresh_token,
-    });
-
   it('before: everything Bob holds works', async () => {
     expect((await sessionOf(bobBrowser))?.kind).toBe('user');
     expect(await executionSays(missionToken)).toBe('ok');
-    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
-    expect(door.status).toBe(200);
+    expect(await executionSays(agent.token)).toBe('ok');
+    expect(await memberTokenStatus()).toBe('active');
   });
 
-  it('ends the sessions, the delegations and the authority at once, and audits each', async () => {
+  it('ends the sessions, the member keys and the authority at once, and audits each', async () => {
     const done = await rig.root.users.service.deactivate(operator(), bob.id);
     expect(done).toMatchObject({
       user: { id: bob.id, status: 'removed' },
       groupsLeft: ['reviewers'],
-      delegationsRevoked: 1,
-      orphaned: 1,
+      memberTokensRevoked: 1,
+      // The platform mission and the mission its agent issued.
+      orphaned: 2,
       unowned: 1,
     });
 
     // ── The human session is nobody, and its row is gone at the first look ──
     expect(await sessionOf(bobBrowser)).toBeNull();
 
-    // ── The delegated tokens are dead: at the door and at the token endpoint ──
-    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
-    expect(door.status).toBe(401);
-    const renewed = await refresh();
-    expect(renewed.status).toBe(400);
-    expect(await renewed.json()).toMatchObject({ error: 'invalid_grant' });
-    expect(await rig.root.store.delegations.getById(agent.delegated.delegationId)).toMatchObject({
-      status: 'revoked',
-      revokeReason: 'user-deactivated',
-    });
+    // ── The platform agent is stopped: its mission reads orphaned at the door ──
+    expect(await executionSays(agent.token)).toBe('mission-inactive');
+    expect(await memberTokenStatus()).not.toBe('active');
 
     // ── The mission: refused at the execution door, nothing stored on it ──
     expect(await executionSays(missionToken)).toBe('mission-inactive');
@@ -165,25 +172,19 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
         user_id: ops.id,
         object: { type: 'user', id: bob.id },
         before: { status: 'active', email: bob.email },
-        after: { status: 'removed', groups_left: ['reviewers'], delegations_revoked: 1 },
-        delegated_client_id: null,
+        after: { status: 'removed', groups_left: ['reviewers'], member_tokens_revoked: 1 },
       },
     ]);
-    expect(await rig.adminEntries('delegation-revoked')).toMatchObject([
-      {
+    const orphanedEntries = await rig.adminEntries('mission-orphaned');
+    expect(orphanedEntries.map((e) => e.object.id).sort()).toEqual(
+      [missionId, agent.missionId].sort(),
+    );
+    for (const entry of orphanedEntries) {
+      expect(entry).toMatchObject({
         user_id: ops.id,
-        object: { type: 'delegation', id: agent.delegated.delegationId },
-        after: { reason: 'user-deactivated', delegating_user_id: bob.id },
-        delegated_client_id: null,
-      },
-    ]);
-    expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
-      {
-        user_id: ops.id,
-        object: { type: 'mission', id: missionId },
         after: { status: 'orphaned', cause: 'creator-removed' },
-      },
-    ]);
+      });
+    }
     expect(await rig.adminEntries('mission-revoked')).toEqual([]);
   });
 
@@ -197,7 +198,7 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     // Nothing of the attempt was written: status, last sign-in and groups are as they were.
     expect(await rig.root.store.users.getById(bob.id)).toEqual(deactivated);
     expect(rig.logs.some((line) => line.includes('account-deactivated'))).toBe(true);
-    // A new consent is impossible too: it needs a session.
+    // A new platform mission is impossible too: a deactivated person holds nothing.
     await expect(rig.agentOf(BOB)).rejects.toThrow();
   });
 
@@ -205,21 +206,22 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     await rig.root.users.service.deactivate(operator(), bob.id);
     expect(await executionSays(missionToken)).toBe('mission-inactive');
     const back = await rig.root.users.service.reactivate(operator(), bob.id);
-    expect(back).toMatchObject({ user: { id: bob.id, status: 'active' }, restored: 1 });
+    expect(back).toMatchObject({ user: { id: bob.id, status: 'active' }, restored: 2 });
 
-    // The share still stands: the mission serves again, same token.
+    // The share still stands: the mission serves again, same token; so does the platform one.
     expect(await executionSays(missionToken)).toBe('ok');
-    expect(await rig.adminEntries('mission-restored')).toMatchObject([
-      { user_id: ops.id, object: { type: 'mission', id: missionId } },
-    ]);
+    expect(await executionSays(agent.token)).toBe('ok');
+    expect((await rig.adminEntries('mission-restored')).map((e) => e.object.id).sort()).toEqual(
+      [missionId, agent.missionId].sort(),
+    );
     expect(await rig.adminEntries('user-reactivated')).toMatchObject([
       { user_id: ops.id, object: { type: 'user', id: bob.id }, after: { status: 'active' } },
     ]);
 
     // The session opened before the deactivation is not reopened…
     expect(await sessionOf(bobBrowser)).toBeNull();
-    // …the delegation stays revoked…
-    expect((await refresh()).status).toBe(400);
+    // …the member key stays revoked…
+    expect(await memberTokenStatus()).not.toBe('active');
     // …the local group and the connection he owned do not come back by themselves.
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
     expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
@@ -277,79 +279,74 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     });
   });
 
-  it('closes everything it can when one step fails, then reports the failure: the audit entry and the settlement do not depend on the delegations', async () => {
-    const original = rig.root.oauth.delegations.revokeAllOf.bind(rig.root.oauth.delegations);
-    rig.root.oauth.delegations.revokeAllOf = async () => {
-      throw new Error('delegations unavailable');
+  it('closes everything it can when one step fails, then reports the failure: the audit entry and the settlement do not depend on the member keys', async () => {
+    const team = rig.root.missions.team;
+    const original = team.revokeTokensOfDeactivated.bind(team);
+    team.revokeTokensOfDeactivated = async () => {
+      throw new Error('tokens unavailable');
     };
     try {
       await expect(rig.root.users.service.deactivate(operator(), bob.id)).rejects.toThrow(
-        'delegations unavailable',
+        'tokens unavailable',
       );
     } finally {
-      rig.root.oauth.delegations.revokeAllOf = original;
+      team.revokeTokensOfDeactivated = original;
     }
     // The user is deactivated and everything else was closed.
     expect((await rig.root.store.users.getById(bob.id))?.status).toBe('removed');
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
     expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
     expect(await rig.adminEntries('user-deactivated')).toMatchObject([
-      { after: { status: 'removed', groups_left: ['reviewers'], delegations_revoked: 0 } },
+      { after: { status: 'removed', groups_left: ['reviewers'], member_tokens_revoked: 0 } },
     ]);
-    expect(await rig.adminEntries('mission-orphaned')).toHaveLength(1);
-    // The delegation was not revoked — and is dead all the same: its user is not active.
-    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
-    expect(door.status).toBe(401);
-    expect((await refresh()).status).toBe(400);
+    expect(await rig.adminEntries('mission-orphaned')).toHaveLength(2);
+    // The member key was not revoked — and is dead all the same: its holder is not active.
+    expect(await memberTokenStatus()).toBe('active');
+    expect(await executionSays(agent.token)).toBe('mission-inactive');
     expect(rig.logs.some((line) => line.includes('not everything they held was closed'))).toBe(
       true,
     );
   });
 
   it('what a half-failed deactivation left open is closed before the user is active again', async () => {
-    const delegations = rig.root.oauth.delegations;
-    const original = delegations.revokeAllOf.bind(delegations);
-    delegations.revokeAllOf = async () => {
-      throw new Error('delegations unavailable');
+    const team = rig.root.missions.team;
+    const original = team.revokeTokensOfDeactivated.bind(team);
+    team.revokeTokensOfDeactivated = async () => {
+      throw new Error('tokens unavailable');
     };
     try {
       await expect(rig.root.users.service.deactivate(operator(), bob.id)).rejects.toThrow(
-        'delegations unavailable',
+        'tokens unavailable',
       );
     } finally {
-      delegations.revokeAllOf = original;
+      team.revokeTokensOfDeactivated = original;
     }
-    // The delegation is still `active` in the store: dead only because Bob is not.
-    const stored = async () =>
-      (await rig.root.store.delegations.listForUser(bob.id)).map((d) => d.status);
-    expect(await stored()).toContain('active');
+    // The member key is still `active` in the store: dead only because Bob is not.
+    expect(await memberTokenStatus()).toBe('active');
 
     const back = await rig.root.users.service.reactivate(operator(), bob.id);
 
     expect(back.user.status).toBe('active');
-    // Bob is active again and the delegation did not come back with him: he consents again.
-    expect(await stored()).not.toContain('active');
-    expect((await refresh()).status).toBe(400);
-    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
-    expect(door.status).toBe(401);
-    expect(await rig.adminEntries('delegation-revoked')).toMatchObject([
-      { after: { reason: 'user-deactivated' } },
+    // Bob is active again and the member key did not come back with him: he generates a new one.
+    expect(await memberTokenStatus()).not.toBe('active');
+    expect(await rig.adminEntries('mission-token-revoked')).toMatchObject([
+      { after: expect.objectContaining({ reason: 'holder-deactivated' }) as object },
     ]);
   });
 
   it('a reactivation that cannot close what was left open does not happen', async () => {
     await rig.root.users.service.deactivate(operator(), bob.id);
-    const delegations = rig.root.oauth.delegations;
-    const original = delegations.revokeAllOf.bind(delegations);
-    delegations.revokeAllOf = async () => {
-      throw new Error('delegations unavailable');
+    const team = rig.root.missions.team;
+    const original = team.revokeTokensOfDeactivated.bind(team);
+    team.revokeTokensOfDeactivated = async () => {
+      throw new Error('tokens unavailable');
     };
     try {
       await expect(rig.root.users.service.reactivate(operator(), bob.id)).rejects.toThrow(
-        'delegations unavailable',
+        'tokens unavailable',
       );
     } finally {
-      delegations.revokeAllOf = original;
+      team.revokeTokensOfDeactivated = original;
     }
     expect((await rig.root.store.users.getById(bob.id))?.status).toBe('removed');
     expect(await rig.adminEntries('user-reactivated')).toEqual([]);

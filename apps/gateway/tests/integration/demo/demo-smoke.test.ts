@@ -263,9 +263,9 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     ['/waiting', 'Nightly dependency audit'],
     ['/activity/record', 'github__list_pull_requests'],
     ['/activity/timeline', 'github__list_pull_requests'],
-    // What a colleague gave access to is a region of Accounts; connected apps are a page of Settings.
+    // What a colleague gave access to is a region of Accounts; so is her Vaubaan account.
     ['/accounts', 'Acme billing'],
-    ['/settings/connected-apps', 'Claude Code (demo)'],
+    ['/missions', 'Platform management'],
     ['/accounts/new/github', 'Create the token at GitHub'],
     ['/admin/groups', 'GitHub admins'],
   ])('shows seeded data on %s', async (path, seeded) => {

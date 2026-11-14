@@ -53,7 +53,6 @@ import {
   whyValue,
 } from '../../../src/lib/vocabulary';
 import { CONNECT_CALLBACK_PATH, CONNECTIONS_PATH } from '../../../src/server/connections/service';
-import { DELEGATIONS_PAGE } from '../../../src/server/oauth-as/handlers';
 import { PROVIDERS_PATH } from '../../../src/lib/providers/links';
 import { INBOX_PATH } from '../../../src/server/requests/url';
 
@@ -96,7 +95,6 @@ describe('the side navigation', () => {
   it('leads every entry to a page that exists', () => {
     for (const key of NAV_ORDER) expect(served(NAV[key].href), NAV[key].href).toBe(true);
     expect(served(ROUTES.design)).toBe(true);
-    expect(served(ROUTES.connectedApps)).toBe(true);
   });
 
   it('puts every page under exactly one entry', () => {
@@ -108,12 +106,9 @@ describe('the side navigation', () => {
     expect(sectionOf('/shares')).toBe('accounts');
     expect(sectionOf('/activity')).toBe('activity');
     expect(sectionOf('/reference/github')).toBe('reference');
-    for (const path of ['/settings', '/delegations', '/admin', '/admin/users', '/design']) {
+    for (const path of ['/settings', '/admin', '/admin/users', '/design']) {
       expect(sectionOf(path), path).toBe('settings');
     }
-    // Connected apps are a page of Settings, under its path.
-    expect(sectionOf(ROUTES.connectedApps)).toBe('settings');
-    expect(ROUTES.connectedApps.startsWith(`${ROUTES.settings}/`)).toBe(true);
     expect(sectionOf('/login')).toBeNull();
   });
 
@@ -154,7 +149,6 @@ describe('the routes follow the words', () => {
     expect(CONNECTIONS_PATH).toBe(ROUTES.accounts);
     expect(INBOX_PATH).toBe(ROUTES.waiting);
     expect(PROVIDERS_PATH).toBe(ROUTES.reference);
-    expect(DELEGATIONS_PAGE).toBe(ROUTES.connectedApps);
   });
 
   it('redirects every old page path to a page or a route that exists', () => {
@@ -170,9 +164,7 @@ describe('the routes follow the words', () => {
         .replace(/:[a-z]+\*?/g, (param) => concrete[param] ?? 'x');
       // `/accounts/new/github`, `/reference/github`, `/waiting/<id>`…
       const probe = target.startsWith('/waiting/') ? '/waiting/[id]' : target;
-      const path = probe
-        .replace('/reference/github', '/reference/[id]')
-        .replace('/settings/connected-apps/x/revoke', '/settings/connected-apps/[id]/revoke');
+      const path = probe.replace('/reference/github', '/reference/[id]');
       expect(
         served(path.replace('/accounts/new/github', '/accounts/new/[provider]')),
         `${source} → ${destination}`,
@@ -183,11 +175,11 @@ describe('the routes follow the words', () => {
       expect(sources, old).toContain(old);
     }
     // The two pages that were folded into another: what a colleague gave access to is a
-    // region of Accounts, connected apps are a page of Settings.
+    // region of Accounts; connected apps were retired, their addresses lead to Settings.
     const byOld = new Map(LEGACY_REDIRECTS.map((rule) => [rule.source, rule.destination]));
     expect(byOld.get('/shares')).toBe(ROUTES.accounts);
-    expect(byOld.get('/delegations')).toBe(ROUTES.connectedApps);
-    expect(byOld.get('/delegations/:id/revoke')).toBe(`${ROUTES.connectedApps}/:id/revoke`);
+    expect(byOld.get('/delegations/:path*')).toBe(ROUTES.settings);
+    expect(byOld.get('/settings/connected-apps/:path*')).toBe(ROUTES.settings);
     expect(byOld.get('/admin/connections')).toBe(`${ROUTES.accounts}#without-owner`);
   });
 
@@ -213,7 +205,7 @@ describe('the routes follow the words', () => {
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
       expect(source).toMatch(
-        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations)\b/,
+        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations|settings\/connected-apps)\b/,
       );
     }
   });
@@ -253,7 +245,6 @@ describe('the vocabulary', () => {
     expect(TERMS.risk.many).toBe('permissions');
     expect(TERMS.missionToken.one).toBe('key');
     expect(TERMS.namedToken.one).toBe('machine key');
-    expect(TERMS.delegation.many).toBe('connected apps');
     expect(TERMS.member.one).toBe('teammate');
     expect(TERMS.operator.one).toBe('administrator');
     expect(TERMS.mission.one).toBe('mission');

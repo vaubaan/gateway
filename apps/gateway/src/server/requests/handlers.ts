@@ -14,8 +14,8 @@
  *      anonymous flood never holds a creator out of an approval link; per
  *      client address otherwise, one window for all when no address is known)
  *   2. a bearer was presented                    → 403 `wrong-credential-kind`
- *      (a mission token opens the execution door only, a delegated token the
- *      management door only; requests are granted in a human session, so an
+ *      (a mission token opens the execution door only; requests are granted
+ *      in a human session, so an
  *      `Authorization` header is refused whatever it holds, even next to a
  *      valid session cookie)
  *   3. origin check (mutation only)              → 403 `origin-mismatch`
@@ -35,7 +35,6 @@ import {
 import type { RateLimiter } from '../compose/ports';
 import { documentThemeOf, messageDocument } from '../http/document';
 import { prefixOfBearer } from '../missions/token';
-import { isAccessTokenShaped } from '../oauth-as/secrets';
 import type { ApprovalProblemCode } from './approval';
 import type { ClaimProblemCode } from './claim';
 import type { DecideResult, RequestService } from './request-service';
@@ -130,7 +129,6 @@ function wantsForm(request: Request): boolean {
  */
 function bearerKindByShape(bearer: string): BearerKind | null {
   if (prefixOfBearer(bearer)) return 'mission-token';
-  if (isAccessTokenShaped(bearer.trim())) return 'delegated-token';
   return null;
 }
 

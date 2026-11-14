@@ -45,18 +45,6 @@ export interface Group {
 export type Principal =
   { readonly kind: 'user'; readonly id: string } | { readonly kind: 'group'; readonly id: string };
 
-/** A user's standing authorization for an agent to manage missions on their behalf. */
-export interface Delegation {
-  readonly id: string;
-  readonly user_id: string;
-  /** OAuth client the consent was given to (the MCP client). */
-  readonly client_id: string;
-  readonly client_name: string | null;
-  readonly created_at: Iso8601;
-  readonly expires_at: Iso8601 | null;
-  readonly revoked_at: Iso8601 | null;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Connections, resources, shares
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +52,7 @@ export interface Delegation {
 /** How a connection authenticates to its provider. Declared by the plugin.
  *  The constant is the source ; the type derives from it so a new kind cannot
  *  be added to one without the other. */
-export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'ssh-key'] as const;
+export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'ssh-key', 'host'] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 export function isCredentialKind(raw: string): raw is CredentialKind {
@@ -243,8 +231,8 @@ export interface Mission {
   readonly policy: MissionPolicy;
   readonly period: Period;
   readonly expires_at: Iso8601 | null;
-  /** Set when the mission was issued through a delegated token. */
-  readonly issued_by_delegation_id: string | null;
+  /** Set when an agent issued the mission through another mission's `vaubaan` account. */
+  readonly issued_by_mission_id: string | null;
   readonly created_at: Iso8601;
   readonly updated_at: Iso8601;
 }

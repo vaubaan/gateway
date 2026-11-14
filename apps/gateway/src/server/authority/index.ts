@@ -75,7 +75,6 @@ export {
   fullCatalogRiskIds,
   uncoveredRisks,
 } from '../../lib/authority/catalog-authority';
-export { derivedMissionReads, type DerivedMissionReads } from './derived-missions';
 export {
   MembershipSettler,
   type MembershipSettlement,

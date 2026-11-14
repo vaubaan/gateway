@@ -25,6 +25,8 @@ export function howToConnect(provider: ConnectableProvider): string {
       const labels = provider.fields.map((field) => lowerFirst(field.label));
       return labels.length === 0 ? 'a key you paste' : `paste: ${labels.join(' and ')}`;
     }
+    case 'host':
+      return 'one click, nothing to paste';
   }
 }
 

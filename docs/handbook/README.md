@@ -43,7 +43,7 @@ minutes.
 
 - [execution-door](execution-door.md) — `/mcp`: the call pipeline, agent label, streaming, catalog.
 - [git-remote](git-remote.md) — `/git/<provider>/<owner>/<repo>.git`: fetch relayed, push decided ref by ref.
-- [management-door](management-door.md) — the authorization server and the tools of `/mcp/manage`.
+- [providers/vaubaan](providers/vaubaan.md) — the gateway's own management tools: an agent prepares missions through a mission on a Vaubaan account.
 - [budget-and-sessions](budget-and-sessions.md) — how an allowed call is counted against its budget.
 
 ## Engine and plugins

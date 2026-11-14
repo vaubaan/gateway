@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the thirty-four migrations 0001 to 0034 in the default directory', () => {
+  it('ships the thirty-five migrations 0001 to 0035 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -143,7 +143,74 @@ describe('migration runner', () => {
       [32, 'notification_mail'],
       [33, 'resource_set_future_and_env'],
       [34, 'resource_hidden_edited'],
+      [35, 'platform_management_plugin'],
     ]);
+  });
+});
+
+describe('migration 0035: the management door retired, its missions kept', () => {
+  const AT = '2026-11-14T08:00:00.000Z';
+  const clock = new ManualClock();
+  let db: StoreDb;
+
+  beforeEach(() => {
+    db = openDb({ path: MEMORY_PATH });
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 35),
+      clock,
+    );
+    db.prepare(
+      "INSERT INTO users (id, subject, identity_key, email, status, created_at) VALUES ('ada', 's', 'k', 'ada@x', 'active', ?)",
+    ).run(AT);
+    db.prepare(
+      "INSERT INTO oauth_clients (id, client_id, name, created_at) VALUES ('c1', 'vbn_client_x', 'Claude Code', ?)",
+    ).run(AT);
+    db.prepare(
+      "INSERT INTO oauth_client_redirect_uris (client_id, uri) VALUES ('c1', 'http://127.0.0.1/cb')",
+    ).run();
+    db.prepare(
+      "INSERT INTO delegations (id, user_id, client_id, scope, status, created_at) VALUES ('d1', 'ada', 'c1', 'mgmt', 'active', ?)",
+    ).run(AT);
+    const mission = db.prepare(
+      `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, delegation_id, created_at, updated_at)
+       VALUES (?, ?, 'ada', 'active', ?, ?, ?, ?)`,
+    );
+    mission.run('by-app', 'Prepared by an app', AT, 'd1', AT, AT);
+    mission.run('by-hand', 'Issued in the interface', AT, null, AT, AT);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('keeps every mission, names the app that prepared one, and drops the OAuth tables', () => {
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    expect(
+      db
+        .prepare(
+          'SELECT id, delegation_id, issued_by_mission_id, issued_via_client_name FROM missions ORDER BY id',
+        )
+        .all(),
+    ).toEqual([
+      {
+        id: 'by-app',
+        delegation_id: null,
+        issued_by_mission_id: null,
+        issued_via_client_name: 'Claude Code',
+      },
+      {
+        id: 'by-hand',
+        delegation_id: null,
+        issued_by_mission_id: null,
+        issued_via_client_name: null,
+      },
+    ]);
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'oauth%'")
+      .all();
+    expect(tables).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM delegations').get()).toEqual({ n: 0 });
   });
 });
 

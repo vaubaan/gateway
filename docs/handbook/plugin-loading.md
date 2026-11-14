@@ -44,6 +44,7 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 - **The accounts check runs after the store opens** (`root.ts`, before the sealed-keys probe): it counts connections not revoked, so a revoked account of a dropped plugin does not block.
 - **The host reads SDK errors by brand only** (`isUpstreamAuthError`…, [plugin-sdk](plugin-sdk.md)): a pin carries its own SDK copy. `loader.test.ts` proves `instanceof` is false on a real bundle.
 - **`package.json` version = `plugin.version`** for a pin, as for a bundled plugin; a mismatch is refused.
+- **A pin never declares a `host` account**: such a plugin runs on the gateway's own services, which only the image binds (the `vaubaan` plugin, [providers/vaubaan](providers/vaubaan.md)); the loader refuses it and the bundle script skips it (`"vaubaan": { "bundleable": false }`).
 - **Nothing about the instance leaves with the feed request**: `User-Agent: vaubaan-gateway` (no version), no query added, no body. The feed is untrusted: `isVersionsFeed` bounds every string and allows https links only, since Administration will render them.
 
 ## Traps

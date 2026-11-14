@@ -117,6 +117,8 @@ export interface InitialDraft {
   /** What could not be carried over from the source (a permission no longer held, a vanished resource). */
   readonly issues: readonly PreviewIssue[];
   readonly sourceName: string;
+  /** A copy of a mission, or the platform management mission on a Vaubaan account. */
+  readonly origin: 'copy' | 'platform';
 }
 
 /** "Raise this limit" on the mission page: the edit opens on the Custom modal of a macro-action. */
@@ -426,7 +428,17 @@ export function MissionForm({
         </div>
       )}
 
-      {initial && !edit && (
+      {initial && !edit && initial.origin === 'platform' && (
+        <div className={styles.block}>
+          <Callout tone="info" title="The platform management mission" testId="platform-mission">
+            Your {initial.sourceName} account with every macro-action at Careful: the agent reads
+            your setup freely and asks you before it prepares, re-keys or stops a mission. Change
+            anything before you create it. A mission it prepares never holds a Vaubaan account.
+          </Callout>
+        </div>
+      )}
+
+      {initial && !edit && initial.origin === 'copy' && (
         <div className={styles.block}>
           <Callout
             tone={initial.issues.length > 0 ? 'warn' : 'info'}

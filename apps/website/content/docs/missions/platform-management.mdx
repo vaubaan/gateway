@@ -1,0 +1,31 @@
+---
+title: Platform management
+description: Let an agent prepare missions in your name with the key of a mission on your Vaubaan account; it creates missions within your authority, asks you first by default, and never acts on itself.
+---
+
+An agent can prepare missions for other agents the way it does any other work: through a mission. Your **Vaubaan account** is your own place on the gateway — one click to connect, no secret, never shared — and a mission on it lets an agent call the `vaubaan__*` tools on the same endpoint as every service, `https://your-domain/mcp`, with that mission's key.
+
+## Set it up
+
+1. **Accounts → Connect a service → Vaubaan → Connect.** Nothing to create or paste.
+2. On the account page, **Create the platform management mission**: the creation form opens prefilled with your Vaubaan account, every macro-action at Careful. Change anything, then create it.
+3. Give the agent the key and the kit, as for any mission ([missions and agents](/docs/missions)).
+
+At Careful the agent reads your accounts, the catalogs and your missions freely, and asks you before it issues a mission, replaces a key or stops a mission. The permissions, their rows and their limits are on the [Vaubaan plugin page](/plugins/vaubaan), like any service's.
+
+## What the agent can do there
+
+In this order: list the accounts you may put in a mission, read a service's permissions and macro-actions, preview a policy until it is valid, then issue the mission. The answer carries the mission key, shown once, and the kit for the agent that will do the work.
+
+- It accepts explicit permissions only, copied from the catalog; no wildcard, never "everything". `everything_i_hold: true` is the one way to ask for all you hold on an account: the preview writes it out as the explicit list, and that list is what the mission stores.
+- Every accepted permission has a limit per period and a rate.
+- A permission outside your authority is refused, with the list of what is not covered.
+- You are the creator of every mission it issues, and the mission is marked as prepared by the platform mission.
+
+It can also list your missions, stop one, and replace the key of a mission it issued.
+
+## What it cannot do
+
+Answer a request (more of a limit, an approval), open a gate, extend a limit, reset a period, connect an account, give access, or call another service's tool. A mission it issues never holds a Vaubaan account, and it never replaces the key of its own mission nor stops it. Only your own key or a machine key you made calls these tools; a teammate's is refused. Those answers stay with you, in the interface.
+
+Before 2026-11-14 agents used a second endpoint, `/mcp/manage`, authorized through OAuth; it now answers 404 with a hint, and the `oauth.*` configuration keys are ignored. More: the [Vaubaan plugin handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/vaubaan.md).

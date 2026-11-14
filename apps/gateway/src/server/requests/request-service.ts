@@ -600,7 +600,6 @@ export class RequestService {
           object: { type: 'request', id: requestId },
           before: null,
           after: { mission_id: owned.mission.id, risk_ids: owned.request.riskIds },
-          delegated_client_id: null,
         });
         return {
           ok: true,
@@ -694,7 +693,6 @@ export class RequestService {
         fingerprint: request.fingerprint,
         ...outcome.after,
       },
-      delegated_client_id: null,
     });
     this.deps.logger.info('approval request decided', {
       request_id: request.id,
@@ -780,7 +778,6 @@ export class RequestService {
       object: { type: 'request', id: request.id },
       before: outcome.before,
       after: { mission_id: mission.id, risk_id: request.riskId, ...outcome.after },
-      delegated_client_id: null,
     });
     this.deps.logger.info('claim decided', {
       request_id: request.id,

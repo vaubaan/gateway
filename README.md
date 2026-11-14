@@ -47,8 +47,10 @@ instance: anybody who reaches it signs in as anybody. Guided tour:
   or refused.
 - A refusal is structured (`risk-not-accepted`, `budget-exhausted`, `approval-required`…) and
   says what to do; an action that asks first carries the URL where the mission's creator answers.
-- A second MCP door lets an agent that a person authorized through OAuth prepare missions for that
-  person. It executes nothing and answers nothing: requests are answered in the browser only.
+- An agent can prepare missions for a person the same way: the person connects their Vaubaan
+  account (one click) and gives the agent the key of a mission on it; its `vaubaan__*` tools issue,
+  rotate and stop missions in the person's name, never on itself. They answer nothing: requests are
+  answered in the browser only.
 
 The path of a request through the doors, the policy engine, the plugins and the store:
 [architecture](docs/architecture.md).
@@ -82,7 +84,7 @@ domain — keeps the names it had. The same things, under both:
 | key, machine key                   | mission token: member token, named token              |
 | Replace key                        | rotate                                                |
 | Waiting for you                    | request: a claim (limit reached), an approval request |
-| connected app                      | delegation, OAuth client                              |
+| Vaubaan account                    | the connection of the `vaubaan` plugin (host account) |
 | Activity                           | audit, session                                        |
 | teammate, team                     | mission member, group                                 |
 | administrator                      | operator                                              |

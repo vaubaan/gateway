@@ -20,7 +20,7 @@ import { createBackupModule, type BackupService, type BackupTimers } from '../ba
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
 import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
 import { createLinkMailer } from '../mail';
-import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
+import { createAuthorityModule, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import {
   createConnectionsModule,
@@ -36,11 +36,7 @@ import {
   secretValues,
 } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
-import {
-  createExecutionModule,
-  type DelegatedTokenResolver,
-  type ExecutionModule,
-} from '../execution';
+import { createExecutionModule, type ExecutionModule } from '../execution';
 import { createGitModule, type GitModule } from '../git';
 import { createGroupsModule, type GroupsModule } from '../groups';
 import { createInstanceModule, type InstanceModule } from '../instance';
@@ -57,7 +53,6 @@ import {
   type PushTransport,
 } from '../notifications';
 import { toolTitleOf } from '../providers/tool-titles';
-import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } from '../oauth-as';
 import {
   bundledInventory,
   checkAccountsServed,
@@ -82,14 +77,19 @@ import {
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { checkBrokeredPlugins, checkSelfResources, RegistryCatalogIndex } from './registry';
+import {
+  checkBrokeredPlugins,
+  checkHostToolNames,
+  checkSelfResources,
+  RegistryCatalogIndex,
+} from './registry';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
   PROCESS_MOUNT_FACTS,
   type MountFacts,
 } from './key-placement';
-import { wireManagementDoor, type ManagementDoorModule } from './management';
+import { wireVaubaanPlugin, type VaubaanPluginModule } from './vaubaan';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
@@ -148,14 +148,12 @@ export interface GatewayRoot {
   readonly masterKey: MasterKeyModule;
   /** The scheduled, encrypted, self-checked backup to object storage (off unless configured). */
   readonly backup: BackupService;
-  /** Authorization server of the management door: clients, consent, delegated tokens. */
-  readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
   readonly users: UsersModule;
   /** A person's channels (devices, addresses, mail), the events that notify them, the transports. */
   readonly notifications: NotificationsModule;
-  /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools. */
-  readonly management: ManagementDoorModule;
+  /** The `vaubaan` plugin's ports and the `execute` the door runs for it (`compose/vaubaan.ts`). */
+  readonly vaubaan: VaubaanPluginModule;
   /** The ceilings of the configuration over the counts of the store (spec §4.3 bis). */
   readonly limits: InstanceLimits;
   /** What `GET /ops/stats` answers with: the token that opens it and its counts. */
@@ -192,12 +190,8 @@ export interface RootDeps {
   readonly oidc?: OidcOptions;
   /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock provider). */
   readonly providerFetch?: typeof fetch;
-  /** Replaces the authorization server's verifier at the execution door (tests of the door alone). */
-  readonly delegatedTokens?: DelegatedTokenResolver;
   /** Outbound HTTP to the telemetry collector (tests assert on it; default: the global `fetch`). */
   readonly telemetryFetch?: typeof fetch;
-  /** Outbound fetch of Client ID Metadata Documents (tests inject a fake; unused unless enabled). */
-  readonly clientDocumentFetch?: ClientDocumentFetcher;
   /** Outbound HTTP to the backup's object storage (tests inject an in-process fake). */
   readonly backupFetch?: typeof fetch;
   /** The scheduled backup's timers (tests drive them by hand). */
@@ -254,6 +248,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   logRetiredKeys(config, logger);
   checkSelfResources(config, registry);
   checkBrokeredPlugins(registry);
+  checkHostToolNames(registry);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
     config,
@@ -425,7 +420,7 @@ function logConfigurationSummary(
  * that proxy: with `trusted_proxies` empty no client address is believed, and every
  * limit keyed on the address is one window shared by all callers. Nothing is bypassed
  * (a forged `X-Forwarded-For` is ignored), but one caller can then hold the others at
- * 429: anybody signed out on the request page, sign-in, the authorization server.
+ * 429: anybody signed out on the request page and sign-in.
  * Said once at boot, naming the key.
  */
 export const NO_TRUSTED_PROXY_WARNING =
@@ -452,7 +447,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     env: 'VAUBAAN_TRUSTED_PROXIES',
     affected: [
       'request page: one per-IP window for everybody',
-      'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
+      'sign-in and bootstrap: one window for everybody (one caller can hold the others at 429)',
       'audit: client_ip is not recorded',
     ],
     remedy:
@@ -521,10 +516,9 @@ type RootModules = Pick<
   | 'instance'
   | 'masterKey'
   | 'backup'
-  | 'oauth'
   | 'users'
   | 'notifications'
-  | 'management'
+  | 'vaubaan'
   | 'limits'
   | 'opsStats'
 >;
@@ -746,27 +740,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
   opened.push(() => backup.stop());
   await backup.start();
-  // The authorization server comes before the doors: the execution door refuses
-  // a delegated token by kind, the management door admits nothing else.
-  const oauth = createOAuthAsModule({
-    config,
-    // The Delegations page shows the status of the missions a delegation issued:
-    // it lists them with the derived status (`orphaned` is never stored).
-    store: {
-      ...store,
-      missions: {
-        ...store.missions,
-        ...derivedMissionReads(store.missions, authority.grounds),
-      },
-    },
-    sessions,
-    authenticator: auth.authenticator,
-    rateLimiter,
-    logger,
-    fetchClientDocument: deps.clientDocumentFetch,
-    build,
-  });
-  // After the authorization server: deactivating a user revokes their delegations.
   const users = createUsersModule({
     config,
     administrators: auth.administrators,
@@ -775,7 +748,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     masterKey: masterKey.service,
     store,
     membership: authority.membership,
-    delegations: oauth.delegations,
     memberTokens: missions.team,
     connections,
     authenticator: auth.authenticator,
@@ -786,6 +758,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     ceilings: limits,
   });
+  // The gateway's own management tools, bound to the mission service through ports
+  // (`compose/vaubaan.ts`); the execution door runs them like any plugin's.
+  const vaubaan = wireVaubaanPlugin({ missions: missions.service, registry, logger });
   const execution = createExecutionModule({
     config,
     store,
@@ -799,8 +774,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     rateLimiter,
     logger,
     build,
-    delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
+    hostExecutes: vaubaan.hostExecutes,
     notifications: notifications.events,
   });
   // A discovery the door scheduled after a creating call finishes before the store closes.
@@ -815,17 +790,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
   });
   opened.push(() => git.sweeper.stop());
-  // The door is handed ports, not modules: see `compose/management.ts`.
-  const management = wireManagementDoor({
-    config,
-    gate: { oauth, missionTokens: execution.tokens, webSessions: auth.sessions },
-    missions: missions.service,
-    registry,
-    rateLimiter,
-    build,
-    logger,
-  });
-
   return {
     rateLimiter,
     cache,
@@ -845,10 +809,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     instance,
     masterKey,
     backup,
-    oauth,
     users,
     notifications,
-    management,
+    vaubaan,
     limits,
     opsStats: {
       token: config.ops.token,
@@ -976,11 +939,22 @@ export async function resetRoot(): Promise<void> {
  * an app password (ADR gmail-over-imap-with-an-app-password). The instance
  * starts; the value is never logged.
  */
-export function logRetiredKeys(config: Pick<InstanceConfig, 'retiredKeys'>, logger: Logger): void {
+export function logRetiredKeys(
+  config: Pick<InstanceConfig, 'retiredKeys' | 'retiredManagementKeys'>,
+  logger: Logger,
+): void {
   for (const key of config.retiredKeys) {
     logger.warn(
       'configuration key no longer read: the gateway takes no OAuth client declared by an administrator (Gmail connects with an app password); remove it',
       { key },
     );
   }
+  // One line for the whole retired block (ADR platform-management-is-a-plugin-on-the-execution-door).
+  if (config.retiredManagementKeys.length > 0) {
+    logger.warn(RETIRED_MANAGEMENT_KEYS_WARNING, { keys: [...config.retiredManagementKeys] });
+  }
 }
+
+/** Said once at boot when the configuration still sets keys of the retired authorization server. */
+export const RETIRED_MANAGEMENT_KEYS_WARNING =
+  'configuration keys no longer read: the gateway runs no OAuth authorization server any more (agents prepare missions through the Vaubaan account and a mission key); remove them';

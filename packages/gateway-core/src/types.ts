@@ -56,20 +56,22 @@ export type {
 // Doors and bearers (spec §4.1, §4.1 bis, §6)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The two MCP doors of an instance. The human surface is not a door: it is
- *  authenticated by a session cookie and never receives a bearer. */
-export type Door = 'execution' | 'management';
+/** The MCP door of an instance (the git remote shares its admission). The
+ *  human surface is not a door: it is authenticated by a session cookie and
+ *  never receives a bearer. The management door was retired on 2026-11-14 (ADR
+ *  platform-management-is-a-plugin-on-the-execution-door). */
+export type Door = 'execution';
 
 /**
- * The three kinds of bearers the instance recognizes (spec §6 "Separation
- * of the three credentials"). None crosses over: a mismatch at a door is the
- * `wrong-credential-kind` refusal.
+ * The two kinds of bearers the instance recognizes (spec §6 "Separation
+ * of the credentials"). Neither crosses over: a session presented at the
+ * door is the `wrong-credential-kind` refusal.
  *
  * Not to be confused with `CredentialKind` in `@vaubaan/shared`, which is
  * how a *connection* authenticates to its provider (`api-key`, `oauth2`,
  * `ssh-key`) and belongs to the plugin contract.
  */
-export type BearerKind = 'mission-token' | 'delegated-token' | 'human-session';
+export type BearerKind = 'mission-token' | 'human-session';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mission context — what the pipeline reads at call time
@@ -195,18 +197,4 @@ export interface MissionContext {
    *  `accepted_risks` beside it. */
   readonly policy: MissionPolicy;
   readonly session: SessionHandle | null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Delegated tokens (management door) — the parts the door check needs
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** A delegated token resolved at the management door (spec §0
- *  "Delegation"). Its shape beyond identity is the authorization server's. */
-export interface DelegationContext {
-  readonly delegation_id: string;
-  readonly user_id: string;
-  readonly client_id: string;
-  readonly scopes: readonly string[];
-  readonly expires_at: string;
 }

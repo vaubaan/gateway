@@ -5,8 +5,7 @@
  * The instance stores no directory: a user exists once they have signed in,
  * and the identity provider decides who may sign in. That leaves offboarding
  * to the IdP alone, and to its delays: a person removed there keeps their
- * web session until it expires, their delegations for as long as a client
- * renews them, and their missions for ever. Deactivation is the operator's
+ * web session until it expires, and their missions for ever. Deactivation is the operator's
  * answer on the instance itself, without the IdP:
  *
  *   status        `users.status = 'removed'`: every authority check answers
@@ -15,8 +14,6 @@
  *   sessions      every web session of the user is over at their next request
  *                 (`users.sessions_ended_at`), and stays over after a
  *                 reactivation
- *   delegations   every active one is revoked with its tokens (reason
- *                 `user-deactivated`); a reactivated user consents again
  *   member tokens the tokens they generated on missions shared with them are
  *                 revoked (`mission-token-revoked`, reason `holder-deactivated`);
  *                 the execution door refuses them from the deactivation itself,
@@ -36,7 +33,7 @@
  * missions whose authority still stands (a share made to the user, a
  * connection they still own) serve again by the same derived rule, with their
  * `mission-restored` entry; IdP groups return at the next sign-in; local
- * groups, delegations and reassigned connections do not come back by
+ * groups and reassigned connections do not come back by
  * themselves.
  *
  * This service does not authorize: its callers do
@@ -48,7 +45,6 @@ import type { MembershipSettlement, MembershipSettler } from '../authority';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { MissionTeamService } from '../missions';
-import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
@@ -72,7 +68,6 @@ export interface Deactivation {
   readonly user: UserRecord;
   /** Names of the groups the user was removed from. */
   readonly groupsLeft: readonly string[];
-  readonly delegationsRevoked: number;
   /** Tokens the user held as a member of other people's missions, now revoked. */
   readonly memberTokensRevoked: number;
   /** Missions of the user that read `orphaned` from now on. */
@@ -90,7 +85,6 @@ export interface Reactivation {
 export interface UserAdminServiceDeps {
   readonly store: Pick<Store, 'users' | 'groups'>;
   readonly membership: Pick<MembershipSettler, 'watch'>;
-  readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
   /** Revokes the tokens the user holds as a member of missions they did not create. */
   readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
   readonly audit: AuditWriter;
@@ -145,7 +139,7 @@ export class UserAdminService {
   }
 
   async deactivate(actor: UserAdminActor, userId: string): Promise<Deactivation> {
-    const { store, membership, delegations, memberTokens } = this.deps;
+    const { store, membership, memberTokens } = this.deps;
     const user = await store.users.getById(userId);
     if (!user) throw new UserAdminError('not-found');
     if (user.status !== 'active') throw new UserAdminError('already-deactivated');
@@ -155,7 +149,7 @@ export class UserAdminService {
     const removed = await store.users.markRemoved(user.id);
     // From here on the user holds nothing. What follows closes what they still held.
     // Each step is attempted whatever happened to the one before — a failure to
-    // revoke a delegation must not leave the memberships, nor a failed entry the
+    // revoke a member token must not leave the memberships, nor a failed entry the
     // settlement — and the first failure reaches the caller once all have run:
     // `unowned` is a stored state and must not depend on another write succeeding.
     const failures: unknown[] = [];
@@ -170,14 +164,6 @@ export class UserAdminService {
     const groupsLeft = await attempt<string[]>([], async () =>
       (await store.groups.removeAllMemberships(user.id)).map((group) => group.name),
     );
-    const delegationsRevoked = await attempt(0, async () => {
-      const ended = await delegations.revokeAllOf(user.id, {
-        reason: 'user-deactivated',
-        actorId: actor.actorId,
-        viaClient: false,
-      });
-      return ended.length;
-    });
     // The door already refuses these tokens (it reads the holder's status on every
     // call, and the status was written above); revoking them makes it durable.
     const memberTokensRevoked = await attempt(0, () =>
@@ -194,10 +180,8 @@ export class UserAdminService {
         after: {
           status: 'removed',
           groups_left: groupsLeft,
-          delegations_revoked: delegationsRevoked,
           member_tokens_revoked: memberTokensRevoked,
         },
-        delegated_client_id: null,
       }),
     );
     const settlement = await attempt<MembershipSettlement>(
@@ -217,7 +201,6 @@ export class UserAdminService {
       user_id: user.id,
       actor_id: actor.actorId,
       groups_left: groupsLeft.length,
-      delegations_revoked: delegationsRevoked,
       member_tokens_revoked: memberTokensRevoked,
       missions_orphaned: settlement.orphaned.length,
       connections_unowned: settlement.unowned.length,
@@ -225,7 +208,6 @@ export class UserAdminService {
     return {
       user: removed,
       groupsLeft,
-      delegationsRevoked,
       memberTokensRevoked,
       orphaned: settlement.orphaned.length,
       unowned: settlement.unowned.length,
@@ -233,17 +215,11 @@ export class UserAdminService {
   }
 
   /**
-   * Closes what a user holds that outlives their status: their delegations (with
-   * their tokens), the member tokens they hold on other people's missions, their
-   * group memberships. Idempotent; throws on the first step that fails.
+   * Closes what a user holds that outlives their status: the member tokens they
+   * hold on other people's missions, their group memberships. Idempotent; throws on the first step that fails.
    */
   private async closeHeldBy(actor: UserAdminActor, userId: string): Promise<void> {
-    const { store, delegations, memberTokens } = this.deps;
-    await delegations.revokeAllOf(userId, {
-      reason: 'user-deactivated',
-      actorId: actor.actorId,
-      viaClient: false,
-    });
+    const { store, memberTokens } = this.deps;
     await memberTokens.revokeTokensOfDeactivated(actor.actorId, userId);
     await store.groups.removeAllMemberships(userId);
   }
@@ -257,7 +233,7 @@ export class UserAdminService {
     await this.refuseNewUser();
 
     // A deactivation whose closing steps half-failed left things open that only the
-    // user's status keeps dead (a delegation not revoked, a member token, a membership).
+    // user's status keeps dead (a member token, a membership).
     // They are closed again here, BEFORE the status returns: each step is a no-op when
     // the deactivation completed, and a step that fails stops the reactivation — the
     // user stays deactivated and the operator tries again.
@@ -276,7 +252,6 @@ export class UserAdminService {
         object: { type: 'user', id: user.id },
         before: { status: 'removed', removed_at: user.removedAt },
         after: { status: 'active', email: user.email },
-        delegated_client_id: null,
       });
     } finally {
       settlement = await watch.settle(actor.actorId);
@@ -307,7 +282,6 @@ export class UserAdminService {
       object: { type: 'user', id: user.id },
       before: null,
       after: { email: user.email, by: actor.userId === user.id ? 'self' : 'operator' },
-      delegated_client_id: null,
     });
     this.deps.logger.info('user sessions ended', { user_id: user.id, actor_id: actor.actorId });
     return user;

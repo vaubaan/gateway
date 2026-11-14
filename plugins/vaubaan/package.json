@@ -1,0 +1,22 @@
+{
+  "name": "@vaubaan/plugin-vaubaan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway provider plugin for the gateway itself — prepare, rotate and revoke missions from a mission (host account, bundled only)",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./identity": "./src/identity.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "vaubaan": {
+    "bundleable": false,
+    "reason": "host account: its execute is bound by the gateway to its own services, never loaded from a pin"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  }
+}

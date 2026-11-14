@@ -417,16 +417,6 @@ describe('audit search: visibility, filters, paging', () => {
       restriction: [READ],
       createdByUserId: rig.seeded.ada.id,
     });
-    const client = await store.delegations.registerClient({
-      clientId: 'client-public-id',
-      name: 'Desk Agent',
-      redirectUris: ['http://127.0.0.1/callback'],
-    });
-    const delegation = await store.delegations.create({
-      userId: rig.seeded.ada.id,
-      clientId: client.id,
-      scope: 'missions',
-    });
     for (let i = 0; i < 2; i++) await seedCall(rig, mission, { risks: [PR] });
     const claim = await seedCall(rig, mission, { risks: [PR] });
     const approval = await seedCall(rig, mission, {
@@ -444,8 +434,10 @@ describe('audit search: visibility, filters, paging', () => {
       ['share-created', 'share', toUser.id],
       ['share-revoked', 'share', toGroup.id],
       ['group-created', 'group', group.id],
-      ['oauth-client-approved', 'oauth-client', client.id],
-      ['delegation-revoked', 'delegation', delegation.id],
+      // History: the clients and delegations of the retired management door are gone
+      // with their tables (migration 0035); their entries keep the id, with no label.
+      ['oauth-client-approved', 'oauth-client', 'client-of-the-retired-door'],
+      ['delegation-revoked', 'delegation', 'delegation-of-the-retired-door'],
       ['request-refused', 'request', claim.result.request_id ?? ''],
       ['approval-granted', 'request', approval.result.request_id ?? ''],
       ['config-changed', 'instance-config', 'telemetry'],
@@ -486,8 +478,8 @@ describe('audit search: visibility, filters, paging', () => {
       ['share', `${connection.displayName} → bob@example.com`],
       ['share', `${connection.displayName} → Platform`],
       ['group', 'Platform'],
-      ['oauth-client', 'Desk Agent'],
-      ['delegation', 'Desk Agent'],
+      ['oauth-client', null],
+      ['delegation', null],
       ['request', 'the limit of Ship the billing page'],
       ['request', 'a call of Ship the billing page'],
       ['instance-config', null],

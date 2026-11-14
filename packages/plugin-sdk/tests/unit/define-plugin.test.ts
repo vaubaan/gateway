@@ -543,6 +543,17 @@ describe('definePlugin', () => {
     };
     expect(pluginIssues(ssh)).toEqual([]);
 
+    // A host account declares its kind and nothing else: no field, no guide, no check.
+    const host: ProviderPlugin = { ...acmePlugin, credential: { kind: 'host' } };
+    expect(pluginIssues(host)).toEqual([]);
+    const hostWithField = {
+      ...acmePlugin,
+      credential: { kind: 'host', fields: [{ name: 'token', label: 'Token', secret: true }] },
+    } as unknown as ProviderPlugin;
+    expect(pluginIssues(hostWithField)).toEqual([
+      'credential: a host account declares nothing but its kind (fields)',
+    ]);
+
     const unknownKind = {
       ...acmePlugin,
       credential: { kind: 'magic' },
@@ -577,5 +588,10 @@ describe('expectCredentialKind', () => {
     expect(() => expectCredentialKind('acme', apiKey, 'oauth2')).toThrow(
       /expects a 'oauth2' credential, got 'api-key'/,
     );
+  });
+  test('a host secret carries its kind and no material', () => {
+    const host = { kind: 'host', metadata: {} } as const;
+    expect(expectCredentialKind('acme', host, 'host')).toEqual({ kind: 'host', metadata: {} });
+    expect(() => expectCredentialKind('acme', host, 'api-key')).toThrow(CredentialKindMismatch);
   });
 });

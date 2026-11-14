@@ -24,6 +24,7 @@ export const CONNECT_ERROR_CODES = [
   'not-found',
   'connection-revoked',
   'connection-unowned',
+  'connection-personal',
   'provider-mismatch',
   'label-read-only',
   'transfer-not-member',
@@ -56,6 +57,8 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
   'connection-revoked': 'This account is disconnected, for good. Connect a new one.',
   'connection-unowned':
     'This account has no owner any more. It keeps serving its missions, but it cannot be reconnected until an administrator names a new owner.',
+  'connection-personal':
+    'This account is your own place on the gateway: it holds no secret, cannot be given to a team and has nothing to reconnect.',
   'provider-mismatch': 'This account belongs to another service.',
   'label-read-only': 'The environment of this resource is set by the service and cannot be edited.',
   'transfer-not-member':
@@ -86,6 +89,7 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'not-found': 404,
   'connection-revoked': 409,
   'connection-unowned': 409,
+  'connection-personal': 409,
   'provider-mismatch': 409,
   'label-read-only': 409,
   'transfer-not-member': 403,

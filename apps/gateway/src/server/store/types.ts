@@ -312,8 +312,13 @@ export interface MissionRecord {
   /** Period length; null for a one-off mission with a single period. */
   readonly periodSeconds: number | null;
   readonly expiresAt: Iso | null;
-  /** Set when the mission was issued through the management door. */
-  readonly delegationId: string | null;
+  /** The mission whose agent issued this one through its `vaubaan` account; `null` otherwise. */
+  readonly issuedByMissionId: string | null;
+  /**
+   * History: the app that issued it by delegation before the management door was
+   * retired (migration 0035); `null` for every mission issued since.
+   */
+  readonly issuedViaClientName: string | null;
   readonly createdAt: Iso;
   readonly updatedAt: Iso;
   readonly closedAt: Iso | null;
@@ -322,18 +327,19 @@ export interface MissionRecord {
 }
 
 /**
- * Who issued a mission through the management door (spec §2.4 "every mission
- * issued this way is visible to the user and marked as delegated"): the
- * delegation the mission row names, and the client that held it. Derived from
- * `missions.delegation_id` at every read; nothing is copied onto the mission.
+ * Who prepared a mission for its creator (spec §2.4 "every mission issued this
+ * way is visible to the user and marked as prepared by an agent"): the mission
+ * whose agent issued it through its `vaubaan` account, or — history — the app
+ * that issued it by delegation before migration 0035.
  */
 export interface MissionIssuerRecord {
   readonly missionId: string;
-  readonly delegationId: string;
-  /** The client's public id (`oauth_clients.client_id`), as the audit names it. */
-  readonly clientId: string;
-  /** The name the client gave itself; a claim, never verified. */
-  readonly clientName: string;
+  /** The issuing mission; `null` for a mission an app issued by delegation. */
+  readonly issuedByMissionId: string | null;
+  /** Its name, read now; `null` with no issuing mission. */
+  readonly issuedByMissionName: string | null;
+  /** History: the name the app gave itself (a claim, never verified); `null` otherwise. */
+  readonly clientName: string | null;
 }
 
 /** The store distinguishes a token retired by rotation from a revoked one; the shared
@@ -492,112 +498,4 @@ export interface ApprovalRecord {
   readonly createdAt: Iso;
   readonly expiresAt: Iso;
   readonly consumedAt: Iso | null;
-}
-
-// --- delegations --------------------------------------------------------------------
-
-/** How a client came to exist: RFC 7591 registration, or a Client ID Metadata Document. */
-export const CLIENT_REGISTRATIONS = ['dynamic', 'metadata-document'] as const;
-export type ClientRegistration = (typeof CLIENT_REGISTRATIONS)[number];
-
-/** How a client authenticates at the token endpoint. `none`: a public client (PKCE only). */
-export const TOKEN_ENDPOINT_AUTH_METHODS = [
-  'none',
-  'client_secret_basic',
-  'client_secret_post',
-] as const;
-export type TokenEndpointAuthMethod = (typeof TOKEN_ENDPOINT_AUTH_METHODS)[number];
-
-/** What an operator decided about a client; `null` while the registration policy decides. */
-export const CLIENT_OPERATOR_DECISIONS = ['approved', 'disabled'] as const;
-export type ClientOperatorDecision = (typeof CLIENT_OPERATOR_DECISIONS)[number];
-
-export interface OAuthClientRecord {
-  readonly id: string;
-  readonly clientId: string;
-  readonly name: string;
-  /** Null for public (PKCE-only) clients. */
-  readonly clientSecretHash: string | null;
-  readonly redirectUris: readonly string[];
-  readonly registration: ClientRegistration;
-  readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod;
-  readonly clientUri: string | null;
-  /** Metadata-document clients only: when the document must be fetched again. */
-  readonly metadataExpiresAt: Iso | null;
-  readonly operatorDecision: ClientOperatorDecision | null;
-  readonly decidedAt: Iso | null;
-  /** The operator who decided: a user id, or the bootstrap actor. */
-  readonly decidedBy: string | null;
-  readonly createdAt: Iso;
-}
-
-export const DELEGATION_STATUSES = ['active', 'revoked'] as const;
-export type DelegationStatus = (typeof DELEGATION_STATUSES)[number];
-
-/**
- * Who ended a delegation. `operator`: an operator disabled the client.
- * `user-deactivated`: an operator deactivated the user who gave it.
- * `refresh-token-replay` and `authorization-code-replay` are the instance itself: a
- * single-use credential came back, so the whole family goes (RFC 9700).
- */
-export const DELEGATION_REVOKE_REASONS = [
-  'user',
-  'client',
-  'operator',
-  'user-deactivated',
-  'refresh-token-replay',
-  'authorization-code-replay',
-] as const;
-export type DelegationRevokeReason = (typeof DELEGATION_REVOKE_REASONS)[number];
-
-export interface DelegationRecord {
-  readonly id: string;
-  readonly userId: string;
-  /** `oauth_clients.id`, not the public `client_id`. */
-  readonly clientId: string;
-  readonly scope: string;
-  readonly status: DelegationStatus;
-  readonly createdAt: Iso;
-  readonly revokedAt: Iso | null;
-  /** Null while active, and for a delegation revoked before the reason was recorded. */
-  readonly revokeReason: DelegationRevokeReason | null;
-}
-
-/** When a delegation last received a token, and until when one of its tokens is live. */
-export interface DelegationActivity {
-  /** Creation time of its most recent refresh or access token; null when it has none. */
-  readonly lastTokenAt: Iso | null;
-  /** Latest expiry among its unrevoked tokens; null when none is left. */
-  readonly liveUntil: Iso | null;
-}
-
-export const CODE_CHALLENGE_METHODS = ['S256'] as const;
-export type CodeChallengeMethod = (typeof CODE_CHALLENGE_METHODS)[number];
-
-export interface OAuthCodeRecord {
-  readonly id: string;
-  readonly delegationId: string;
-  readonly redirectUri: string;
-  readonly codeChallenge: string;
-  readonly codeChallengeMethod: CodeChallengeMethod;
-  readonly createdAt: Iso;
-  readonly expiresAt: Iso;
-  readonly consumedAt: Iso | null;
-}
-
-export interface RefreshTokenRecord {
-  readonly id: string;
-  readonly delegationId: string;
-  readonly createdAt: Iso;
-  readonly expiresAt: Iso;
-  readonly revokedAt: Iso | null;
-  readonly replacedById: string | null;
-}
-
-export interface AccessTokenRecord {
-  readonly id: string;
-  readonly delegationId: string;
-  readonly createdAt: Iso;
-  readonly expiresAt: Iso;
-  readonly revokedAt: Iso | null;
 }

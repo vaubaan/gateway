@@ -14,7 +14,8 @@
  *                     the first GitHub connection to Bob; missions in every
  *                     state: active with a session of calls under two agent
  *                     labels, quota spent with an open claim, an open approval
- *                     request, expired, revoked, issued by a delegated client;
+ *                     request, expired, revoked, prepared by her platform agent
+ *                     (her Vaubaan account and its platform management mission);
  *                     a fresh mission with a small limit for the tour.
  *   Bob               the share received and a mission issued within it.
  *   Carol             member of "GitHub admins"; a Stripe account of her own
@@ -24,7 +25,6 @@
  * (`Request → Response`): no browser and no HTTP round trip to the pages.
  */
 import { isSecondFactorStep, passSecondFactor } from '../support/auth/testing';
-import { randomBytes } from 'node:crypto';
 
 import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
@@ -32,13 +32,6 @@ import { LOGIN_COOKIE, SESSION_COOKIE } from '../../src/server/auth';
 import type { GatewayRoot } from '../../src/server/compose/root';
 import type { Actor } from '../../src/server/connections';
 import type { MissionDraft } from '../../src/server/missions';
-import {
-  challengeOf,
-  CONSENT_DECISION_PATH,
-  CONSENT_FIELD,
-  DECISION_FIELD,
-  type TokenResponse,
-} from '../../src/server/oauth-as';
 import type { ConnectionRecord, UserRecord } from '../../src/server/store/types';
 import type { DemoIdp } from './demo-idp';
 import {
@@ -61,8 +54,7 @@ import {
 const DAY_SECONDS = 86_400;
 /** Quota of the tour's "exhaust it yourself" mission, and of the seeded exhausted one. */
 export const SMALL_QUOTA = 3;
-/** The loopback redirect of the seeded delegated client (an agent on the user's machine). */
-const AGENT_REDIRECT = 'http://127.0.0.1:43210/callback';
+/** The user agent of the seeded agents' calls. */
 const AGENT_USER_AGENT = 'claude-code/2.1 (demo seed)';
 /** The named token of the seeded team mission: a machine with no account. */
 export const CI_TOKEN_NAME = 'CI runner';
@@ -275,91 +267,46 @@ class Seeder {
   }
 
   /**
-   * An MCP client on the user's machine obtains a delegation through the real
-   * OAuth flow (dynamic registration, the consent screen answered with the
-   * user's session, the code exchange), then issues a mission on the
-   * management door.
+   * The user connects their Vaubaan account (one click) and issues the platform
+   * management mission on it; an agent holding its key then issues a mission
+   * through `vaubaan__issue_mission` on the execution door (ADR
+   * platform-management-is-a-plugin-on-the-execution-door). The new mission
+   * names the platform mission as the one that prepared it.
    */
-  async issueByDelegation(human: SignedIn, clientName: string, draft: MissionDraft) {
-    const { handlers } = this.ctx.root.oauth;
-    const registered = await handlers.register(
-      new Request(`${this.origin}/oauth/register`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          client_name: clientName,
-          redirect_uris: [AGENT_REDIRECT],
-          token_endpoint_auth_method: 'none',
-          grant_types: ['authorization_code', 'refresh_token'],
-          response_types: ['code'],
-        }),
-      }),
-    );
-    if (registered.status !== 201) fail('client registration', await registered.text());
-    const { client_id: clientId } = (await registered.json()) as { client_id: string };
-
-    const verifier = randomBytes(32).toString('base64url');
-    const authorization = new URL(`${this.origin}/oauth/authorize`);
-    for (const [name, value] of Object.entries({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: AGENT_REDIRECT,
-      code_challenge: challengeOf(verifier),
-      code_challenge_method: 'S256',
-      state: randomBytes(8).toString('hex'),
-      scope: 'mgmt',
-      resource: `${this.origin}/mcp/manage`,
-    })) {
-      authorization.searchParams.set(name, value);
-    }
-    const consentScreen = await handlers.authorize(
-      new Request(authorization, { headers: { cookie: human.cookie } }),
-    );
-    const html = await consentScreen.text();
-    const consentId = new RegExp(`name="${CONSENT_FIELD}" value="([^"]+)"`).exec(html)?.[1];
-    if (consentScreen.status !== 200 || !consentId) fail('no consent screen', consentScreen.status);
-    const decided = await handlers.decide(
-      new Request(`${this.origin}${CONSENT_DECISION_PATH}`, {
-        method: 'POST',
-        headers: {
-          cookie: human.cookie,
-          origin: this.ctx.root.config.publicUrl.origin,
-          'content-type': 'application/x-www-form-urlencoded',
+  async issueThroughPlatform(human: SignedIn, draft: MissionDraft) {
+    const actor = await this.actor(human.user);
+    const started = await this.ctx.root.connections.service.start(actor, 'vaubaan');
+    if (started.kind !== 'connected') fail('the Vaubaan account', started);
+    const platform = await this.issue(human.user, {
+      name: 'Platform management',
+      connections: [
+        {
+          connection_id: started.connection.id,
+          trust_levels: {
+            read: 'trusting',
+            prepare: 'trusting',
+            rotate: 'trusting',
+            stop: 'careful',
+          },
         },
-        body: new URLSearchParams({ [CONSENT_FIELD]: consentId, [DECISION_FIELD]: 'approve' }),
-      }),
-    );
-    const code = new URL(decided.headers.get('location') ?? AGENT_REDIRECT).searchParams.get(
-      'code',
-    );
-    if (!code) fail('consent not approved', decided.status);
-    const exchanged = await handlers.token(
-      new Request(`${this.origin}/oauth/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          client_id: clientId,
-          code,
-          code_verifier: verifier,
-          redirect_uri: AGENT_REDIRECT,
-        }),
-      }),
-    );
-    if (exchanged.status !== 200) fail('code exchange', await exchanged.text());
-    const tokens = (await exchanged.json()) as TokenResponse;
-
-    const answered = await this.ctx.root.management.handlers.mcp(
-      this.rpc(`${this.origin}/mcp/manage`, tokens.access_token, 'tools/call', {
-        name: 'issue_mission',
-        arguments: draft,
-      }),
+      ],
+      period: { kind: 'recurring', length_seconds: DAY_SECONDS },
+      expires_at: null,
+    });
+    const answered = await this.ctx.root.execution.handlers.mcp(
+      this.rpc(
+        `${this.origin}/mcp`,
+        platform.token,
+        'tools/call',
+        { name: 'vaubaan__issue_mission', arguments: draft },
+        { 'x-vaubaan-agent': 'planner' },
+      ),
     );
     const body = (await answered.json()) as {
       result?: { isError?: boolean; structuredContent?: unknown };
       error?: unknown;
     };
-    if (body.error || body.result?.isError) fail('issue_mission by delegation', body);
+    if (body.error || body.result?.isError) fail('vaubaan__issue_mission', body);
   }
 }
 
@@ -629,8 +576,8 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     fail('the gated merge did not ask for approval', approval);
   }
 
-  // ── A mission issued by an MCP client holding a delegation of Alice ───────
-  await seeder.issueByDelegation(alice, 'Claude Code (demo)', {
+  // ── A mission prepared by Alice's platform agent, through her Vaubaan account ─
+  await seeder.issueThroughPlatform(alice, {
     name: 'Fix the flaky checkout test',
     connections: [
       {

@@ -95,7 +95,6 @@ export function createInstanceNameHandlers(deps: InstanceNameHandlerDeps): Insta
           object: { type: 'instance-config', id: INSTANCE_NAME_OBJECT_ID },
           before,
           after,
-          delegated_client_id: null,
         });
       } catch (err) {
         // The name is saved; a missing entry must at least be loud.

@@ -181,15 +181,16 @@ describe('buildBootstrapKit', () => {
     }
   });
 
-  it('3 — names the management door, says the mission token does not open it and that it lifts no refusal', () => {
+  it('3 — says what the `vaubaan__*` tools do, that they never act on this mission and lift no refusal', () => {
     const text = kit.agent_instructions;
-    expect(text).toContain('### The management door');
-    expect(text).toContain(`${INPUT.instanceUrl.replace(/\/+$/, '')}/mcp/manage`);
-    expect(text).toContain('never by this mission key');
-    expect(text).toContain('`wrong-credential-kind`');
-    expect(text).toContain('It does not lift a refusal');
+    expect(text).toContain('### Missions prepared by an agent');
+    expect(text).toContain('`vaubaan__*` tools');
+    expect(text).toContain('never replaces its own key or stops itself');
+    expect(text).toContain('They do not lift a refusal');
+    // No second door any more.
+    expect(text).not.toContain('/mcp/manage');
     // The section comes last: the refusal guidance is read first.
-    expect(text.indexOf('### The management door')).toBeGreaterThan(
+    expect(text.indexOf('### Missions prepared by an agent')).toBeGreaterThan(
       text.indexOf('### When a call is refused'),
     );
   });
@@ -294,9 +295,9 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain('`approval_url`');
   });
 
-  it('describes the management door: OAuth, its tools, what it never does', () => {
-    expect(page).toContain('## 7. The management door');
-    expect(page).toContain('`<instance URL>/mcp/manage`');
+  it('describes the Vaubaan account: its tools, the self rule, what it never does', () => {
+    expect(page).toContain('## 7. Preparing missions: the Vaubaan account');
+    expect(page).not.toContain('/mcp/manage');
     for (const tool of [
       'list_my_connections',
       'get_catalog',
@@ -306,9 +307,10 @@ describe('/agent-bootstrap.md', () => {
       'rotate_mission_token',
       'revoke_mission',
     ]) {
-      expect(page).toContain(`\`${tool}\``);
+      expect(page).toContain(`\`vaubaan__${tool}\``);
     }
-    expect(page).toContain('never by a mission key');
+    expect(page).toContain('`vaubaan-account-not-allowed`');
+    expect(page).toContain('`self-not-allowed`');
     expect(page).toContain('**never** answer a request');
   });
 

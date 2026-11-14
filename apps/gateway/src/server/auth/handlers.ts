@@ -190,7 +190,6 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         object: { type: 'instance-config', id: objectId },
         before,
         after,
-        delegated_client_id: null,
       });
     } catch (err) {
       // The change is committed; a missing entry must at least be loud.
@@ -609,7 +608,6 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           object: { type: 'instance-config', id: signInAuditObjectId(provider.id) },
           before: { waiver: before },
           after: { waiver },
-          delegated_client_id: null,
         });
         logger.warn('second factor waiver changed', { provider: provider.id, waiver });
         return redirect(`${IDP_PAGE}?waiver=${encodeURIComponent(provider.id)}`);
@@ -685,7 +683,6 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       object: { type: 'instance-config', id: signInAuditObjectId(providerId) },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 

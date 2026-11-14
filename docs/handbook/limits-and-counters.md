@@ -36,7 +36,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
   - connections — `ConnectionService.start` before any provider is reached, and `persist`
     before `connections.create`; never with a `reconnectId` (`ConnectError`
     `connection-limit-reached`);
-  - active missions — `MissionService.issue` (so the duplicate, the management door and the v4
+  - active missions — `MissionService.issue` (so the duplicate, the `vaubaan` plugin and the v4
     import too: `IssueResult` `limit-reached`; door code `instance-limit-reached`), an edit and
     a granted `extend-expiry` that give an ended mission a new end (`revivesEndedMission`).
 - Nothing at or above a ceiling is cut: no code path reads a ceiling except before an addition.

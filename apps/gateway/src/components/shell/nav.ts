@@ -5,7 +5,7 @@
  * Seven entries (`lib/vocabulary`: `NAV_ORDER`). Every page of the
  * application sits under exactly one of them, including the pages that have
  * no entry of their own: the access received (`/shares`) is part of Accounts;
- * connected apps (`/delegations`), Administration (`/admin/**`) and the
+ * Administration (`/admin/**`) and the
  * interface reference (`/design`) are part of Settings.
  */
 import { NAV, NAV_ORDER, type NavKey } from '@/lib/vocabulary';
@@ -26,7 +26,7 @@ export const PHONE_BAR: readonly NavKey[] = ['now', 'waiting', 'missions', 'acco
 /** The paths of a section besides the entry's own. */
 const ALSO_UNDER: Readonly<Partial<Record<NavKey, readonly string[]>>> = {
   accounts: ['/shares'],
-  settings: ['/delegations', '/admin', '/design'],
+  settings: ['/admin', '/design'],
 };
 
 /** The section a path is in, or `null` outside the application (sign-in). */
