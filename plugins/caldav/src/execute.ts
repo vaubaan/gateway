@@ -35,7 +35,7 @@ import {
   undeclaredArgumentDenial,
   declaredArgumentsOf,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type ExecuteContext,
   type McpToolResult,
@@ -157,7 +157,7 @@ function calendarUrl(resource: Resource, account: DavAccount): URL {
     typeof href === 'string' ? resolveHomeHref(href, account.server, account.server) : null;
   if (url === null || !refsOf(url).includes(resource.ref)) {
     return refuse(
-      `calendar '${resource.ref}' has no address on ${account.server.host}: refresh the resources of the connection.`,
+      `calendar '${resource.ref}' has no address on ${account.server.host}: refresh the resources of the account.`,
     );
   }
   return asCollection(url);
@@ -216,7 +216,7 @@ const outside = (account: DavAccount): CredentialRefusal =>
     `the server sends the account to a host outside ${account.server.host}: give the CalDAV address that server documents instead.`,
   );
 
-type Ctx = Pick<ConnectionContext, 'fetch' | 'signal'>;
+type Ctx = Pick<AccountContext, 'fetch' | 'signal'>;
 
 /** The principal found from one starting URL, redirects followed ; `null` when there is none there. */
 async function principalFrom(ctx: Ctx, account: DavAccount, start: URL): Promise<URL | null> {
@@ -667,8 +667,8 @@ export interface CaldavRuntime {
     tool: string,
     args: Readonly<Record<string, unknown>>,
   ): Promise<McpToolResult>;
-  discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
-  verify(ctx: ConnectionContext): Promise<CredentialCheck>;
+  discoverResources(ctx: AccountContext): Promise<readonly Resource[]>;
+  verify(ctx: AccountContext): Promise<CredentialCheck>;
   /** The credential spec, `verify` bound. */
   readonly credential: ApiKeyCredentialSpec;
 }
@@ -680,7 +680,7 @@ export function createCaldavRuntime(options: CaldavRuntimeOptions = {}): CaldavR
   };
 
   const signIn = async (
-    ctx: ConnectionContext,
+    ctx: AccountContext,
   ): Promise<{ account: DavAccount; info: AccountInfo }> => {
     const account = caldavAccount(ctx.credential);
     return connecting(account, async () => {
@@ -689,7 +689,7 @@ export function createCaldavRuntime(options: CaldavRuntimeOptions = {}): CaldavR
     });
   };
 
-  const verify = async (ctx: ConnectionContext): Promise<CredentialCheck> => {
+  const verify = async (ctx: AccountContext): Promise<CredentialCheck> => {
     const { account, info } = await signIn(ctx);
     return { account: info.addresses[0] ?? account.username, expiresAt: null };
   };

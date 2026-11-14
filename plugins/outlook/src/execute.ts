@@ -29,7 +29,7 @@ import {
   declining,
   expectCredentialKind,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -107,7 +107,7 @@ function printable(text: string): string {
 }
 
 /** Refuses, before any request, a token Microsoft issued with fewer permissions than asked. */
-function expectRequiredScopes(ctx: ConnectionContext): void {
+function expectRequiredScopes(ctx: AccountContext): void {
   const { scopes } = expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2');
   const missing = missingScopes(scopes);
   if (missing.length > 0) throw new CredentialRefusal(scopesNotGrantedMessage(missing), 403);
@@ -143,9 +143,7 @@ const isMe: Guard<Me> = (x): x is Me => isRecord(x);
  * consumer one. A token granted fewer permissions than asked is refused
  * first, in the gateway's words.
  */
-export async function discoverOutlookResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverOutlookResources(ctx: AccountContext): Promise<readonly Resource[]> {
   expectRequiredScopes(ctx);
   let me: Me | null;
   try {

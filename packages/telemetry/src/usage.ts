@@ -37,11 +37,32 @@ export const DECISION_REPORT_KEYS = [
  * is not a mission token (`wrong-credential-kind`) names no plugin and is
  * not a decision about a call.
  */
-export const DECISION_OUTCOMES = [
+/**
+ * The collector's names of the refusal codes renamed since its schema was written (ADR
+ * one-word-per-thing-account-service-plugin): the payload keeps the word `connection` on
+ * purpose, the collector's `decision_reports_decision_known` check being an external
+ * schema. Every other code travels as the gateway spells it.
+ */
+export const WIRE_REFUSAL_NAMES = {
+  'account-unavailable': 'connection-unavailable',
+  'account-revoked': 'connection-revoked',
+} as const satisfies Partial<Record<RefusalCode, string>>;
+type WireName<C extends RefusalCode> = C extends keyof typeof WIRE_REFUSAL_NAMES
+  ? (typeof WIRE_REFUSAL_NAMES)[C]
+  : C;
+
+/** The name a decision travels under: `allowed`, or the refusal code as the collector knows it. */
+export function wireDecisionOf(decision: string): string {
+  return (WIRE_REFUSAL_NAMES as Readonly<Record<string, string>>)[decision] ?? decision;
+}
+
+export type DecisionOutcome = 'allowed' | WireName<Exclude<RefusalCode, 'wrong-credential-kind'>>;
+export const DECISION_OUTCOMES: readonly DecisionOutcome[] = [
   'allowed',
-  ...REFUSAL_CODES.filter((code) => code !== 'wrong-credential-kind'),
-] as const satisfies readonly ('allowed' | RefusalCode)[];
-export type DecisionOutcome = 'allowed' | Exclude<RefusalCode, 'wrong-credential-kind'>;
+  ...REFUSAL_CODES.filter((code) => code !== 'wrong-credential-kind').map(
+    (code) => wireDecisionOf(code) as DecisionOutcome,
+  ),
+];
 
 /** Whether an "ask me first" gate applied to the call. */
 export const DECISION_GATES = ['approval', 'none'] as const;
@@ -91,7 +112,8 @@ export function createDecisionReport(input: DecisionReportInput): DecisionReport
     return null;
   }
   if (!isGatewayVersion(input.gateway_version)) return null;
-  if (!isOneOf<DecisionOutcome>(DECISION_OUTCOMES, input.decision)) return null;
+  const decision = wireDecisionOf(input.decision);
+  if (!isOneOf<DecisionOutcome>(DECISION_OUTCOMES, decision)) return null;
   if (!isOneOf(DECISION_GATES, input.gate)) return null;
   if (!Array.isArray(input.risks) || input.risks.length > MAX_RISKS_PER_DECISION) return null;
   if (!input.risks.every((risk) => isReportableRiskId(input.plugin, risk))) return null;
@@ -100,7 +122,7 @@ export function createDecisionReport(input: DecisionReportInput): DecisionReport
     plugin: input.plugin,
     tool,
     gateway_version: input.gateway_version,
-    decision: input.decision,
+    decision,
     risks,
     gate: input.gate,
   });

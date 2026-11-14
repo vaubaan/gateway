@@ -11,7 +11,7 @@ import {
   UpstreamProtocolError,
   parseSlice,
   serializeSlice,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type ApiKeySecret,
   type Resource,
@@ -93,8 +93,8 @@ const secret = (over: Partial<ApiKeySecret> = {}): ApiKeySecret => ({
 
 const connCtx = (
   fetch: typeof globalThis.fetch,
-  over: Partial<ConnectionContext> = {},
-): ConnectionContext => ({
+  over: Partial<AccountContext> = {},
+): AccountContext => ({
   credential: secret(),
   fetch,
   ...over,
@@ -658,7 +658,7 @@ describe('discoverRailwayResources', () => {
             id: p.id,
             name: p.name,
             environments: { edges: p.envs.map(([id, name]) => ({ node: { id, name } })) },
-            // The second project answers without the connection at all : read as "no service".
+            // The second project answers without the account at all : read as "no service".
             ...(p.services
               ? { services: { edges: p.services.map(([id, name]) => ({ node: { id, name } })) } }
               : {}),
@@ -679,7 +679,7 @@ describe('discoverRailwayResources', () => {
             query: string;
             variables: { after: string | null; first: number };
           };
-          // A token connection asks the account's workspaces after its own projects.
+          // A token account asks the account's workspaces after its own projects.
           if (sent.query.includes('vaubaanWorkspaces')) return { data: { me: { workspaces: [] } } };
           const vars = sent.variables;
           expect(vars.first).toBe(100);

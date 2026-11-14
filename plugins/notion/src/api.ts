@@ -10,7 +10,7 @@
  *   - every answer is read through a type guard : one that is not JSON, or
  *     not the shape asked for, is an `UpstreamProtocolError` ;
  *   - a failed status is thrown : 401 → `UpstreamAuthError` (the credential),
- *     403 (`restricted_resource`, a capability the connection lacks) →
+ *     403 (`restricted_resource`, a capability the account lacks) →
  *     `UpstreamAuthError`, anything else → `UpstreamHttpError`, with the
  *     `Retry-After` of a 429 / 529 in the message. No retry : Notion's 503
  *     may follow a write that was saved, so nothing is ever replayed.
@@ -21,7 +21,7 @@ import {
   UpstreamProtocolError,
   expectCredentialKind,
   httpJson,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
@@ -38,7 +38,7 @@ export interface RequestOptions {
   readonly query?: URLSearchParams;
 }
 
-function tokenOf(ctx: ConnectionContext): string {
+function tokenOf(ctx: AccountContext): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const token = secret.fields[API_TOKEN_FIELD];
   if (!token) throw new Error(`${PROVIDER_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
@@ -47,7 +47,7 @@ function tokenOf(ctx: ConnectionContext): string {
 
 /** One request whose failure is thrown ; its answer through `guard`. A network failure propagates. */
 export async function request<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: Method,
   path: string,
   guard: Guard<T>,
@@ -91,7 +91,7 @@ export async function request<T>(
  * The ancestry walk and discovery read that answer themselves.
  */
 export async function readOrMissing<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   path: string,
   guard: Guard<T>,
 ): Promise<T | null> {

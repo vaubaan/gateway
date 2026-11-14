@@ -39,7 +39,7 @@ export const outlookDataModel: DataModel = {
           parent: null,
           cardinalities: ['one', 'unbounded'],
           description:
-            'The resource a connection exposes: the mailbox of the account. Its identifier is the ref (alice~contoso.com); an address the slice grammar cannot carry is written [*].',
+            'The resource an account exposes: the mailbox of the account. Its identifier is the ref (alice~contoso.com); an address the slice grammar cannot carry is written [*].',
         },
         {
           name: 'folder',

@@ -33,14 +33,14 @@ export const notionDataModel: DataModel = {
     {
       slug: 'content',
       description:
-        'The pages and databases shared with the connection, their content, entries and comments.',
+        'The pages and databases shared with the account, their content, entries and comments.',
       entities: [
         {
           name: 'root',
           parent: null,
           cardinalities: ['one'],
           description:
-            'The resource : one top-level page or database shared with the connection, and everything under it.',
+            'The resource : one top-level page or database shared with the account, and everything under it.',
         },
         {
           name: 'page',

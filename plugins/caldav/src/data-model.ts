@@ -4,7 +4,7 @@
  * Spec     : docs/spec/gateway-risk-model.md §2.
  * Handbook : docs/handbook/providers/caldav.md.
  *
- * One connection is one CalDAV account (a server, a username, an app
+ * One account is one CalDAV account (a server, a username, an app
  * password). Its principal has one calendar home holding the calendars ; each
  * calendar that stores events is one **resource**, labelled by its owner. An
  * event is one calendar object resource (an `.ics` file) of a calendar.
@@ -37,7 +37,7 @@ export const caldavDataModel: DataModel = {
           cardinalities: ['one'],
           description:
             'The CalDAV principal the app password signs in as (RFC 5397 ' +
-            '`current-user-principal`). One per connection ; its calendar home holds the calendars.',
+            '`current-user-principal`). One per account ; its calendar home holds the calendars.',
         },
         {
           name: 'calendar',

@@ -33,7 +33,7 @@ export const EXAMPLE_PROD_APP = exampleApp('acme-gw', 'prod', 'app-acme');
 /** A canary instance. */
 export const EXAMPLE_CANARY_APP = exampleApp('canary-gw', 'staging', 'app-canary');
 
-/** An image pinned by digest, under the connection's allowed prefix. */
+/** An image pinned by digest, under the account's allowed prefix. */
 const IMAGE = `ghcr.io/vaubaan/gateway:1.4.0@sha256:${'a'.repeat(64)}`;
 
 const config = (image: string = IMAGE) => ({

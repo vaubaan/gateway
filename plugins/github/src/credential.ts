@@ -2,14 +2,14 @@
  * Credential of the `github` provider : a fine-grained personal access token
  * pasted by hand (`api-key` kind), the one way of connecting GitHub.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADR
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADR
  *        one-place-to-authorize-services-token-first.
  *
  * A person creates a token at GitHub — often on a shared service account —
  * over the repositories the missions will use (ADR amendment 2026-11-13), with
  * every permission the tools use, and pastes it : this gateway decides, mission by mission, what
  * an agent may do with it. The token is the
- * connection's secret ; every API tool and the git remote send it as the
+ * account's secret ; every API tool and the git remote send it as the
  * bearer. GitHub enforces what it may do : the permissions its owner ticked.
  *
  * Fine-grained tokens only. A classic token (`ghp_`) reaches every
@@ -29,7 +29,7 @@ import {
   httpJson,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
@@ -104,8 +104,8 @@ export const githubCredential: ApiKeyCredentialSpec = {
   verify: verifyGithubToken,
 };
 
-/** The pasted token of a token connection. */
-export function githubTokenOf(ctx: ConnectionContext): string {
+/** The pasted token of a token account. */
+export function githubTokenOf(ctx: AccountContext): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const token = secret.fields[GITHUB_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
@@ -119,7 +119,7 @@ export function githubTokenOf(ctx: ConnectionContext): string {
  * may read its own user) and the expiration header. A 401 or a 403 is a
  * rejected token (`UpstreamAuthError`) ; any other failure is GitHub's.
  */
-export async function verifyGithubToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyGithubToken(ctx: AccountContext): Promise<CredentialCheck> {
   // `httpJson` reads the body ; the expiry is a header of the same answer,
   // kept by the fetch it is given.
   let expiration: string | null = null;

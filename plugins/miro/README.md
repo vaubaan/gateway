@@ -40,7 +40,7 @@ Kind `oauth2`, against the authorization server of Miro's MCP server
 of the token (`resource=https://mcp.miro.com/`). The client is **registered
 by the gateway itself** at `https://mcp.miro.com/register` the first time
 someone connects, named "Vaubaan Gateway (<your gateway's host>)", and
-reused for every connection: no administrator declares anything. Access
+reused for every account: no administrator declares anything. Access
 tokens are short-lived and refreshed by the gateway.
 
 On Miro's consent page the person **chooses one team**: the account reaches

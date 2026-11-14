@@ -2,7 +2,7 @@
 
 Bash over SSH as a Vaubaan Gateway provider plugin on the plugin SDK
 (`@vaubaan/plugin-sdk`). One tool, `ssh__exec`, runs a shell command line on a
-host the connection reaches with its own ed25519 key pair and a **pinned host
+host the account reaches with its own ed25519 key pair and a **pinned host
 key**. Inspection commands on a read allow-list are low-risk; everything else
 is a write, and the classes that hurt (recursive deletes, package changes,
 service control, sudo) carry their own risk so a trust level can gate them with
@@ -84,16 +84,16 @@ There is no company-registered app for SSH: the key pair _is_ the app. The
 private key is stored encrypted by the host and never leaves the instance. A
 host that presents another key is refused with `SshHostKeyMismatchError`
 during the key exchange, before the key pair is offered — if the host was
-legitimately re-keyed, the owner updates the connection. A target without a
+legitimately re-keyed, the owner updates the account. A target without a
 well-formed pin never opens a socket (`SshHostKeyNotPinnedError`); `sshTarget()`
 refuses to build one in the first place. An authentication failure is an
-`UpstreamAuthError`: the host marks the connection `expired` and the owner
+`UpstreamAuthError`: the host marks the account `expired` and the owner
 reconnects (a new key pair).
 
 ## Resources
 
 `discoverResources` connects once — which verifies the pinned host key and the
-key pair — runs `uname -n -s -r -m`, and returns the host as the connection's
+key pair — runs `uname -n -s -r -m`, and returns the host as the account's
 single resource:
 
 ```ts
@@ -107,7 +107,7 @@ what qualifies the write risks** (`ssh[prod].exec-write`): the default
 `resourceEnvResolver` reads it from the `host[<ref>]` segment of every slice,
 so no plugin hook is needed. An unlabelled host cannot be written to through
 a macro-action — label it. One credential is one host; a second host is a second
-connection.
+account.
 
 ## Catalog and macro-actions
 
@@ -191,7 +191,7 @@ fuzzer.
 ## Execution
 
 `execute` re-validates the arguments with the function the classifier used,
-refuses a `host` that is not the connection's host, clamps `timeout_s` to 300,
+refuses a `host` that is not the account's host, clamps `timeout_s` to 300,
 and runs the line through the transport. The result carries stdout, a
 `[stderr]` block when any, and an `[exit N · T ms]` trailer; the same facts
 are in `structuredContent`. A non-zero exit is a normal result, not an error.

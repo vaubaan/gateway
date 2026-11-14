@@ -114,7 +114,7 @@ function under(repository: string, prefix: string): boolean {
 /**
  * The image guard (handbook, Invariants, "Image guard") : an image runs with the app's secrets and
  * volume, so a machine may only run an image pinned by digest and under one
- * of the connection's prefixes. `null` when the image passes ; otherwise the
+ * of the account's prefixes. `null` when the image passes ; otherwise the
  * refusal the agent reads.
  */
 export function imageRefusal(image: unknown, prefixes: readonly string[]): string | null {
@@ -127,7 +127,7 @@ export function imageRefusal(image: unknown, prefixes: readonly string[]): strin
   }
   const repository = match[1]!;
   if (!prefixes.some((prefix) => under(repository, prefix))) {
-    return `image: '${repository}' is not an image this connection may run (allowed: ${prefixes.join(', ')})`;
+    return `image: '${repository}' is not an image this account may run (allowed: ${prefixes.join(', ')})`;
   }
   return null;
 }

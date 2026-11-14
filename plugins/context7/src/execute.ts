@@ -25,7 +25,7 @@
  * the call went through — and its text is not parsed to decide anything :
  * the executor asks the usage endpoint about the key (free) and throws
  *   - `UpstreamAuthError` with the status when the key is refused there
- *     (401 or 403) ; on a 401 only, the host marks the connection expired ;
+ *     (401 or 403) ; on a 401 only, the host marks the account expired ;
  *   - `UpstreamHttpError(429)` when the usage endpoint answers 429, or
  *     answers 200 with a quota provably spent (`isQuotaSpent` : a Free plan
  *     past its included requests, or a spending limit reached) ;
@@ -47,7 +47,7 @@ import {
   anyJson,
   callUpstreamTool,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
@@ -59,7 +59,7 @@ import { context7KeyOf, isQuotaSpent, readPlan, requestUsage } from './usage.ts'
 
 const HTTP_TOO_MANY_REQUESTS = 429;
 
-/** Display name of the one resource of a connection. */
+/** Display name of the one resource of an account. */
 export const INDEX_DISPLAY_NAME = 'Context7 library index';
 
 export async function executeContext7(
@@ -88,13 +88,11 @@ export async function executeContext7(
 }
 
 /**
- * The one resource of a connection : the library index its key can query,
+ * The one resource of an account : the library index its key can query,
  * with the plan of its teamspace. `GET /v2/usage` checks the key on the way
  * and is not counted on its quota.
  */
-export async function discoverContext7Resources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverContext7Resources(ctx: AccountContext): Promise<readonly Resource[]> {
   const plan = await readPlan(ctx);
   return [
     { provider: PROVIDER_ID, ref: INDEX_REF, displayName: INDEX_DISPLAY_NAME, metadata: { plan } },

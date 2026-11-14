@@ -13,7 +13,7 @@ import {
   UpstreamAuthError,
   UpstreamHttpError,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -36,7 +36,7 @@ const DATA = projectUrl(REF);
 
 const project: Resource = { provider: PROVIDER_ID, ref: REF, env: 'staging', displayName: 'app' };
 
-function connCtx(fetch: typeof globalThis.fetch): ConnectionContext {
+function connCtx(fetch: typeof globalThis.fetch): AccountContext {
   return {
     credential: { kind: 'api-key', fields: { access_token: 'sbp_x' }, metadata: {} },
     fetch,

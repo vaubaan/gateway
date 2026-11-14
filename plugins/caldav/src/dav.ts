@@ -28,7 +28,7 @@
 
 import { DOMParser, onErrorStopParsing, type Element, type Node } from '@xmldom/xmldom';
 
-import { UpstreamAuthError, UpstreamHttpError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, UpstreamHttpError, type AccountContext } from '@vaubaan/plugin-sdk';
 
 export const DAV_NS = 'DAV:';
 export const CALDAV_NS = 'urn:ietf:params:xml:ns:caldav';
@@ -179,7 +179,7 @@ export function basicAuthorization(account: DavAccount): string {
  * Throws when the URL is not one the account may reach.
  */
 export async function davSend(
-  ctx: Pick<ConnectionContext, 'fetch' | 'signal'>,
+  ctx: Pick<AccountContext, 'fetch' | 'signal'>,
   account: DavAccount,
   request: DavRequest,
 ): Promise<DavResponse> {

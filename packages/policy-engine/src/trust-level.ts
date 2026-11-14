@@ -136,7 +136,7 @@ export const ANYTHING_ELSE_BASE_BUDGET: Budget = {
 /**
  * The catalog's macro-actions, then "Anything else" holding the catalog's
  * fallback entries when it has any, each at `ANYTHING_ELSE_BASE_BUDGET`: the
- * macro-actions a mission ticks on a connection, as the creation form, the
+ * macro-actions a mission ticks on an account, as the creation form, the
  * management door and the public site list them.
  */
 export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {

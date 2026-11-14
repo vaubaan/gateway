@@ -367,14 +367,14 @@ function readService(
     return {
       denied:
         `serviceId: the services of railway project '${project.ref}' are unknown ; ` +
-        `ask the connection owner to refresh the resources of the connection.`,
+        `ask the account owner to refresh the resources of the account.`,
     };
   }
   if (!known.some((service) => service.id === serviceId)) {
     return {
       denied:
         `serviceId: not a service of railway project '${project.ref}' as last discovered ; ` +
-        `a service created since then appears once the connection owner refreshes the resources.`,
+        `a service created since then appears once the account owner refreshes the resources.`,
     };
   }
   return { id: serviceId };
@@ -432,7 +432,7 @@ function readEnvironment(
     return {
       denied:
         `environmentId: the environments of railway project '${project.ref}' are unknown ; ` +
-        `ask the connection owner to refresh the resources of the connection.`,
+        `ask the account owner to refresh the resources of the account.`,
     };
   }
   if (!known.some((e) => e.id === environmentId)) {

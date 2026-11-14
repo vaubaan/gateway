@@ -207,7 +207,7 @@ export function domainIdOf(resource: Resource): ResolvedDomainId {
   const raw = resource.metadata?.domain_id;
   if (typeof raw !== 'string' || raw.length === 0) {
     return {
-      denied: `resource '${resource.ref}' carries no domain_id — refresh the connection's resources`,
+      denied: `resource '${resource.ref}' carries no domain_id — refresh the account's resources`,
     };
   }
   const id = pathIdent(raw);

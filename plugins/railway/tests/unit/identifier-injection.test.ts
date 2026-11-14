@@ -480,7 +480,7 @@ describe('railway identifiers — execute runs on the target the classifier reso
 });
 
 describe('railway discovery — a project id the classifier would refuse', () => {
-  test('is reported at connection time', async () => {
+  test('is reported when the account is connected', async () => {
     const fetch = mockFetch([
       {
         url: RAILWAY_GRAPHQL_URL,
@@ -494,8 +494,8 @@ describe('railway discovery — a project id the classifier would refuse', () =>
         },
       },
     ]);
-    const { resources: _resources, ...connection } = execCtx(fetch);
-    await expect(railwayPlugin.discoverResources(connection)).rejects.toThrow(
+    const { resources: _resources, ...account } = execCtx(fetch);
+    await expect(railwayPlugin.discoverResources(account)).rejects.toThrow(
       /not a Railway identifier/,
     );
   });
@@ -541,7 +541,7 @@ describe('railway arguments — a tool takes what its schema declares, nothing e
 
 describe('railway serviceId — bound to the project the mission holds (threat model A18)', () => {
   const FOREIGN_SERVICE = '00000000-0000-4000-8000-0000000000bb';
-  const NOT_A_SERVICE = `serviceId: not a service of railway project '${PROJECT}' as last discovered ; a service created since then appears once the connection owner refreshes the resources.`;
+  const NOT_A_SERVICE = `serviceId: not a service of railway project '${PROJECT}' as last discovered ; a service created since then appears once the account owner refreshes the resources.`;
 
   // Every tool that takes a `serviceId`, with the other arguments it needs.
   const WITH_SERVICE: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
@@ -595,7 +595,7 @@ describe('railway serviceId — bound to the project the mission holds (threat m
     const call = { ...base, serviceId: SERVICE };
     const outcome = classifyRailway('railway__redeploy', call, [undiscovered]);
     expect(outcome).toEqual({
-      denied: `serviceId: the services of railway project '${PROJECT}' are unknown ; ask the connection owner to refresh the resources of the connection.`,
+      denied: `serviceId: the services of railway project '${PROJECT}' are unknown ; ask the account owner to refresh the resources of the account.`,
     });
     await expectRefusedWithoutCall('railway__redeploy', call, [undiscovered]);
     // A call that names no service is not concerned.

@@ -12,7 +12,7 @@ import { PROVIDER_ID, TOOL } from './identity.ts';
 
 /** The account of the mission. */
 export const ACCOUNT = '4242';
-/** Another account of the connection, outside the mission. */
+/** Another account of the account, outside the mission. */
 export const OTHER_ACCOUNT = '777';
 
 /** The account the samples run on unless they name other resources. */

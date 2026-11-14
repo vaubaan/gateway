@@ -472,7 +472,7 @@ describe('supabase identifiers — the project ref is a host label', () => {
         ],
       },
     ]);
-    const { resources: _resources, ...connection } = execCtx(fetch);
-    await expect(supabasePlugin.discoverResources(connection)).rejects.toThrow(/not a project ref/);
+    const { resources: _resources, ...account } = execCtx(fetch);
+    await expect(supabasePlugin.discoverResources(account)).rejects.toThrow(/not a project ref/);
   });
 });

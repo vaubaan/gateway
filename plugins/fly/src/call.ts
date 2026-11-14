@@ -10,7 +10,7 @@ import {
   declaredArgumentsOf,
   isRecord,
   undeclaredArgumentDenial,
-  type ClassifyConnection,
+  type ClassifyAccount,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
@@ -46,7 +46,7 @@ export const META = {
 export interface FlyCall {
   readonly tool: string;
   /**
-   * The org slug the call is cited under : the connection's (its form field),
+   * The org slug the call is cited under : the account's (its form field),
    * else the one the mission's apps share ; `null` when neither says it (the
    * slice then says `org[*]`).
    */
@@ -162,9 +162,9 @@ export function orgOf(resources: readonly Resource[]): string | null {
   return only ?? null;
 }
 
-/** The org slug the connection was made for (a public form field), or `null`. */
-export function orgOfConnection(connection: ClassifyConnection | undefined): string | null {
-  return slug(connection?.fields[ORG_SLUG_FIELD]);
+/** The org slug the account was made for (a public form field), or `null`. */
+export function orgOfAccount(account: ClassifyAccount | undefined): string | null {
+  return slug(account?.fields[ORG_SLUG_FIELD]);
 }
 
 /** The allowed image prefixes discovery stored on an app, or the refusal. */
@@ -219,11 +219,11 @@ export function readFlyCall(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
-  connection?: ClassifyConnection,
+  account?: ClassifyAccount,
 ): FlyCall | Denial {
   if (!TOOLS.has(tool)) return deny(`unknown tool '${tool}'`);
-  const connectionOrg = orgOfConnection(connection);
-  const org = connectionOrg ?? orgOf(resources);
+  const accountOrg = orgOfAccount(account);
+  const org = accountOrg ?? orgOf(resources);
   const values: Values = {};
 
   if (ORG_TOOLS.has(tool)) {
@@ -248,8 +248,8 @@ export function readFlyCall(
   if (isDenial(app)) return app;
   const undeclared = undeclaredArgumentDenial(DECLARED, tool, args);
   if (undeclared) return deny(undeclared);
-  // The connection's org is the one `execute` sends and checks the app against.
-  const appOrg = connectionOrg ?? slug(app.metadata?.[META.orgSlug]) ?? org;
+  // The account's org is the one `execute` sends and checks the app against.
+  const appOrg = accountOrg ?? slug(app.metadata?.[META.orgSlug]) ?? org;
   const base = { tool, org: appOrg, app };
 
   let machineId: string | undefined;

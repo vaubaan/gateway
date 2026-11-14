@@ -1,7 +1,7 @@
 /**
  * The credential of the GitHub git remote (ADR gateway-as-git-remote D10):
  * what is presented to GitHub for one repository, derived in memory from the
- * connection and never returned to the agent — the connection's token
+ * account and never returned to the agent — the account's token
  * (`githubTokenOf`). GitHub narrows nothing further : the mission's decision
  * is what narrows a push, and the token's permissions are GitHub's to
  * enforce (a push that changes `.github/workflows/` needs `Workflows`).

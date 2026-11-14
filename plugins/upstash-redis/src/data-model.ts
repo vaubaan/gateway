@@ -6,7 +6,7 @@
  *
  * Upstash Redis exposes a single plane, `cache`. Every entity lives under
  * the `account` the Management API key belongs to, and every data operation
- * is scoped to a `database`. The **database** is the resource a connection
+ * is scoped to a `database`. The **database** is the resource an account
  * exposes and a mission selects (`ref` = Upstash database id) ; it carries
  * the environment label the owner sets, hence `envScopable`.
  *
@@ -37,7 +37,7 @@ export const upstashRedisDataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Upstash account behind the Management API key of a connection. One per connection.',
+            'The Upstash account behind the Management API key of an account. One per account.',
         },
         {
           name: 'database',
@@ -45,7 +45,7 @@ export const upstashRedisDataModel: DataModel = {
           cardinalities: ['bounded'],
           envScopable: true,
           description:
-            'An Upstash Redis database — the resource discovered at connection time (database id ' +
+            'An Upstash Redis database — the resource discovered when the account is connected (database id ' +
             'ref), labelled with an environment by the owner, selected by a mission.',
         },
         {

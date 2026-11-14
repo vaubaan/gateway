@@ -7,11 +7,11 @@
  *
  * The classifier prices a call on `root[<R>]` without being able to know
  * where a page, a block, a database or a data source lives : nothing in a
- * Notion id says it, and the connection's token reaches every root shared
+ * Notion id says it, and the account's token reaches every root shared
  * with it. Before anything is written or returned, `execute` walks the
  * `parent` chain of every id the call acts on, one `GET` per level, until it
  * meets `R`. Refused (an `ExecutorRefusal`) when the chain reaches the
- * workspace, an agent, a parent the connection cannot read (`404` on an
+ * workspace, an agent, a parent the account cannot read (`404` on an
  * ancestor), a parent kind it does not know, an id outside the grammar, an id
  * twice, or more than `MAX_ANCESTRY_DEPTH` levels. A target answered by an
  * object other than the one asked for is Notion's failure, not a decline
@@ -26,7 +26,7 @@ import {
   UpstreamProtocolError,
   anyJson,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
 } from '@vaubaan/plugin-sdk';
 
 import { readOrMissing, request } from './api.ts';
@@ -86,7 +86,7 @@ export class Ancestry {
   requests = 0;
 
   constructor(
-    private readonly ctx: ConnectionContext,
+    private readonly ctx: AccountContext,
     readonly root: string,
   ) {
     this.inside.add(root);

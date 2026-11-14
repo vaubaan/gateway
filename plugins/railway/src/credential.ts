@@ -2,7 +2,7 @@
  * Credential of the `railway` provider : a token pasted by hand (`api-key`
  * kind), the one way of connecting.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADRs
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADRs
  *        one-place-to-authorize-services-token-first.
  *
  * Which token (all three are created under Account settings, Tokens) :
@@ -16,7 +16,7 @@
  *     the MCP server (Railway documents that server for OAuth and its CLI's
  *     sign-in only) — accepted as the second choice ;
  *   - project token : one environment of one project, sent as
- *     `Project-Access-Token` ; one connection per environment would not match
+ *     `Project-Access-Token` ; one account per environment would not match
  *     the plugin's resources (projects) ; not accepted.
  *
  * Both kinds run every tool. The form takes either ; the check at paste tells
@@ -24,7 +24,7 @@
  * a workspace token answers the projects of its workspace. When the MCP
  * server refuses a token that the API still accepts (an account token, if
  * Railway's MCP server turns out not to take them), the call fails as "not
- * permitted" (403) naming the token kind, so a healthy connection is not
+ * permitted" (403) naming the token kind, so a healthy account is not
  * expired for every tool ; a token the API refuses too is a rejected
  * credential (401), the existing "needs reconnecting" path.
  *
@@ -38,7 +38,7 @@ import {
   expectCredentialKind,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
   type UpstreamIo,
@@ -106,7 +106,7 @@ export const railwayCredential: ApiKeyCredentialSpec = {
   verify: verifyRailwayToken,
 };
 
-/** The bearer of a Railway connection : the pasted token. */
+/** The bearer of a Railway account : the pasted token. */
 export function railwayBearerOf(credential: CredentialSecret): string {
   const token = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[
     RAILWAY_TOKEN_FIELD
@@ -227,7 +227,7 @@ async function workspaceNameOf(io: UpstreamIo, token: string): Promise<string | 
  * The check at paste : a workspace or an account token, and whom it acts as.
  * A token Railway's API refuses either way throws `UpstreamAuthError`.
  */
-export async function verifyRailwayToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyRailwayToken(ctx: AccountContext): Promise<CredentialCheck> {
   const probe = await probeRailwayToken(ctx, railwayBearerOf(ctx.credential));
   if (probe.kind === 'rejected') {
     throw new UpstreamAuthError(
@@ -244,7 +244,7 @@ export async function verifyRailwayToken(ctx: ConnectionContext): Promise<Creden
  *   - the API refuses it too → the token is dead : 401, the host's
  *     rejected-credential path ("needs reconnecting") ;
  *   - the API still accepts it → the MCP server does not take this kind of
- *     token : 403 (not permitted), the connection stays usable for the
+ *     token : 403 (not permitted), the account stays usable for the
  *     variable tools, and the message names the kind and the way out.
  * A probe that cannot reach Railway leaves the original refusal as it was.
  */

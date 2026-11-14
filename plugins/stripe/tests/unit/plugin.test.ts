@@ -11,7 +11,7 @@ import {
   UpstreamProtocolError,
   parseSlice,
   serializeSlice,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type ProviderPlugin,
   type Resource,
@@ -356,10 +356,7 @@ describe('executeStripe with mockFetch', () => {
 });
 
 describe('discoverStripeResources with mockFetch', () => {
-  const ctx = (
-    fetch: typeof globalThis.fetch,
-    fields: Record<string, string>,
-  ): ConnectionContext => ({
+  const ctx = (fetch: typeof globalThis.fetch, fields: Record<string, string>): AccountContext => ({
     credential: { kind: 'api-key', fields, metadata: {} },
     fetch,
   });
@@ -448,7 +445,7 @@ describe('discoverStripeResources with mockFetch', () => {
 
   test('refuses a secret of another kind', async () => {
     const fetch = mockFetch([]);
-    const oauth: ConnectionContext = {
+    const oauth: AccountContext = {
       credential: {
         kind: 'oauth2',
         accessToken: 't',

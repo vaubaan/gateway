@@ -7,7 +7,7 @@
  * Handbook : docs/handbook/providers/context7.md ; guide : plugins/README.md.
  *
  * Why : "everything goes through our gateway, zero env". The Context7 key is
- * a gateway connection only, and agents reach Context7's two documentation
+ * a gateway account only, and agents reach Context7's two documentation
  * tools through the execution door under a mission token.
  *
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the

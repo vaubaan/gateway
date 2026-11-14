@@ -1,6 +1,6 @@
 /**
  * Upstream calls of the github plugin against `mockFetch` : Octokit dispatch
- * with the injected fetch and the connection's token as bearer,
+ * with the injected fetch and the account's token as bearer,
  * `UpstreamAuthError`, and resource discovery. No test ever reaches GitHub.
  */
 import { describe, expect, test } from 'vitest';
@@ -10,12 +10,12 @@ import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { DISCOVERY_PAGE_SIZE } from '../../src/execute.ts';
 import { TOOL, githubPlugin } from '../../src/index.ts';
-import { PAT, connectionCtx, executeCtx } from './fixtures.ts';
+import { PAT, accountCtx, executeCtx } from './fixtures.ts';
 
 const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
 
 describe('execute — Octokit over the injected fetch', () => {
-  test('calls the REST API with the connection token as bearer', async () => {
+  test('calls the REST API with the account token as bearer', async () => {
     const fetch = mockFetch([
       {
         method: 'GET',
@@ -333,7 +333,7 @@ describe('discoverResources — the repositories the token reaches, paged', () =
     const fetch = mockFetch([
       { method: 'GET', url: pageUrl(1), body: [repoDto(1), { full_name: 'acme/bare' }] },
     ]);
-    const resources = await githubPlugin.discoverResources(connectionCtx(fetch));
+    const resources = await githubPlugin.discoverResources(accountCtx(fetch));
     expect(resources).toEqual([
       {
         provider: 'github',
@@ -373,7 +373,7 @@ describe('discoverResources — the repositories the token reaches, paged', () =
         ],
       },
     ]);
-    expect(hiddenOf(await githubPlugin.discoverResources(connectionCtx(fetch)))).toEqual({
+    expect(hiddenOf(await githubPlugin.discoverResources(accountCtx(fetch)))).toEqual({
       'acme/granted': false,
       'acme/site': true,
       'octo/docs': true,
@@ -399,7 +399,7 @@ describe('discoverResources — the repositories the token reaches, paged', () =
       },
     ]);
     expect(
-      hiddenOf(await githubPlugin.discoverResources(connectionCtx(fetch, { credential: classic }))),
+      hiddenOf(await githubPlugin.discoverResources(accountCtx(fetch, { credential: classic }))),
     ).toEqual({
       'acme/private': false,
       'acme/site': false,
@@ -414,7 +414,7 @@ describe('discoverResources — the repositories the token reaches, paged', () =
       { method: 'GET', url: pageUrl(1), body: first, times: 1 },
       { method: 'GET', url: pageUrl(2), body: [repoDto(999)], times: 1 },
     ]);
-    const resources = await githubPlugin.discoverResources(connectionCtx(fetch));
+    const resources = await githubPlugin.discoverResources(accountCtx(fetch));
     expect(resources).toHaveLength(DISCOVERY_PAGE_SIZE + 1);
     expect(resources.at(-1)!.ref).toBe('acme/repo-999');
     expect(fetch.pending()).toEqual([]);
@@ -432,21 +432,21 @@ describe('discoverResources — the repositories the token reaches, paged', () =
         ],
       },
     ]);
-    expect(await githubPlugin.discoverResources(connectionCtx(fetch))).toEqual([
+    expect(await githubPlugin.discoverResources(accountCtx(fetch))).toEqual([
       { provider: 'github', ref: 'acme/app', displayName: 'acme/app', metadata: {} },
     ]);
   });
 
   test('an answer that is not a list is GitHub failing, not an account without repositories', async () => {
     const fetch = mockFetch([{ method: 'GET', url: pageUrl(1), body: { message: 'moved' } }]);
-    await expect(githubPlugin.discoverResources(connectionCtx(fetch))).rejects.toBeInstanceOf(
+    await expect(githubPlugin.discoverResources(accountCtx(fetch))).rejects.toBeInstanceOf(
       UpstreamProtocolError,
     );
   });
 
   test('401 on the listing becomes UpstreamAuthError', async () => {
     const fetch = mockFetch([{ method: 'GET', url: pageUrl(1), status: 401, body: {} }]);
-    await expect(githubPlugin.discoverResources(connectionCtx(fetch))).rejects.toMatchObject({
+    await expect(githubPlugin.discoverResources(accountCtx(fetch))).rejects.toMatchObject({
       name: 'UpstreamAuthError',
       upstreamStatus: 401,
     });

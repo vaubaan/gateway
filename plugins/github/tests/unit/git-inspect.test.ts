@@ -21,7 +21,7 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import { inspectPack, WORKFLOWS_UNVERIFIED } from '../../src/git-inspect.ts';
-import { connectionCtx, appRepo } from './fixtures.ts';
+import { accountCtx, appRepo } from './fixtures.ts';
 
 let root: string;
 let home: string;
@@ -164,7 +164,7 @@ async function inspect(
   updates: readonly GitRefUpdate[],
   objects: GitPackObjects,
 ): Promise<readonly (readonly string[])[]> {
-  const ctx = { ...connectionCtx(githubFetch as never), resources: [appRepo] };
+  const ctx = { ...accountCtx(githubFetch as never), resources: [appRepo] };
   const found = await inspectPack(ctx, 'acme/app', updates, objects);
   expect(found.map((f) => f.ref)).toEqual(updates.map((u) => u.ref));
   return found.map((f) => f.workflow_files);

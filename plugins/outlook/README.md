@@ -45,7 +45,7 @@ Two planes of one account. `mail` is rooted at `mailbox[<ref>]` (the resource): 
 `offline_access`, `User.Read`, `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`. An
 administrator enrolls the instance with a broker that serves `microsoft`
 (`oauth_brokers.<name>`, handbook configuration); without one, the plugin is listed as not
-configured. Discovery (`GET /me`, not paginated) yields **one resource per connection**, the
+configured. Discovery (`GET /me`, not paginated) yields **one resource per account**, the
 account's mailbox: ref `alice~contoso.com` (the address with `@` written `~`), metadata
 `account_email`, `internal_domains` (seeded with the account's domain unless it is a consumer one),
 `allowlist_domains`, `allowlist_addresses` — the lists the owner edits and the zones are read from.

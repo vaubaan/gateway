@@ -420,7 +420,7 @@ describe('vercel credential spec', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('executeVercel with mockFetch', () => {
-  test('forwards a rewrapped tool as JSON-RPC with the bearer and the connection team, passes the MCP result through', async () => {
+  test('forwards a rewrapped tool as JSON-RPC with the bearer and the account team, passes the MCP result through', async () => {
     const fetch = mockFetch([
       {
         method: 'POST',
@@ -470,14 +470,14 @@ describe('executeVercel with mockFetch', () => {
     });
   });
 
-  test('refuses a teamId that is not the connection team before any network call', async () => {
+  test('refuses a teamId that is not the account team before any network call', async () => {
     const fetch = mockFetch([]);
     const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', {
       teamId: 'team_other',
     });
     expect(result.isError).toBe(true);
     expect((result.content[0] as { text: string }).text).toMatch(
-      /teamId is fixed by the connection \('team_abc'\)/,
+      /teamId is fixed by the account \('team_abc'\)/,
     );
     expect(fetch.calls).toHaveLength(0);
   });
@@ -646,7 +646,7 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
     expect(names).not.toContain('vercel__update_deployment_protection');
   });
 
-  test('accepts an explicit teamId equal to the connection team', async () => {
+  test('accepts an explicit teamId equal to the account team', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, { content: [] }) },
     ]);

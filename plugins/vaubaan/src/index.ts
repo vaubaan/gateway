@@ -36,7 +36,7 @@ export const vaubaanPlugin = definePlugin({
   icon: VAUBAAN_ICON,
   iconColor: VAUBAAN_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.0',
+  version: '0.2.0',
   description:
     'Let an agent prepare missions for other agents: read your accounts and the catalogs, preview, issue, rotate and revoke missions in your name.',
   summary:

@@ -8,7 +8,7 @@
  * unless stated in its description.
  *
  * Naming : `axonaut__<verb>_<noun>`, built once in `identity.ts` (`TOOL`).
- * Every tool takes `account`, the ref of the connection's one resource; it may
+ * Every tool takes `account`, the ref of the account's one resource; it may
  * be left out when the mission holds exactly one Axonaut account.
  *
  * Each tool is declared once here (`AXONAUT_TOOL_SPECS`): its schema for

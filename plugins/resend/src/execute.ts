@@ -41,7 +41,7 @@ import {
   isRecord,
   jsonResult,
   readShape,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
   type ExecuteContext,
   type McpToolResult,
@@ -305,9 +305,7 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
  * (ref = segment id). Requires a full-access key : a `sending_access` key is
  * refused by `GET /domains` and surfaces as `UpstreamAuthError`.
  */
-export async function discoverResendResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverResendResources(ctx: AccountContext): Promise<readonly Resource[]> {
   expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const domains = await listAll(ctx, '/domains', isDomainDto);
   const segments = await listAll(ctx, '/segments', isSegmentDto);
@@ -435,7 +433,7 @@ export function fromDomainOf(from: unknown, resources: readonly Resource[]): Res
 // ─── HTTP ─────────────────────────────────────────────────────────────────────
 
 async function listAll<T extends { readonly id: string }>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   path: string,
   item: Guard<T>,
 ): Promise<T[]> {
@@ -466,8 +464,8 @@ function toQueryString(query: Args): string {
   return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
-/** The `authorization` header of a Resend connection. */
-export function authorizationOf(ctx: ConnectionContext): Readonly<Record<string, string>> {
+/** The `authorization` header of a Resend account. */
+export function authorizationOf(ctx: AccountContext): Readonly<Record<string, string>> {
   const key = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key').fields.api_key;
   if (!key) throw new Error('resend: the credential carries no api_key');
   return { authorization: `Bearer ${key}` };
@@ -490,7 +488,7 @@ const VALIDATION_ERROR = 'validation_error';
  * agent reads a confirmation.
  */
 async function request(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: HttpMethod,
   path: string,
   body?: unknown,

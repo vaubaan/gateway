@@ -1,5 +1,5 @@
 /**
- * The Fly connection : an organization token pasted by hand (`api-key`).
+ * The Fly account : an organization token pasted by hand (`api-key`).
  *
  * Handbook : docs/handbook/providers/fly.md.
  *
@@ -12,7 +12,7 @@
  * as `Authorization: FlyV1 <token>` (Fly's metrics documentation ; the
  * Machines API pages show `Bearer` for the older `fly auth token`).
  *
- * The connection also names the one organization it works in, checked
+ * The account also names the one organization it works in, checked
  * against the token at paste, and the image prefixes a machine may run.
  */
 
@@ -24,7 +24,7 @@ import {
   isList,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
@@ -116,7 +116,7 @@ export const flyCredential: ApiKeyCredentialSpec = {
   verify: verifyFlyToken,
 };
 
-/** The `Authorization` header of a connection. */
+/** The `Authorization` header of an account. */
 export function authorizationOf(credential: CredentialSecret): string {
   const token = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[API_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
@@ -125,7 +125,7 @@ export function authorizationOf(credential: CredentialSecret): string {
   return token.startsWith(FLYV1) ? token : `${FLYV1}${token}`;
 }
 
-/** The organization slug of a connection, as its form recorded it. */
+/** The organization slug of an account, as its form recorded it. */
 export function orgSlugOf(credential: CredentialSecret): string {
   const value = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[ORG_SLUG_FIELD];
   const org = slug(value);
@@ -134,7 +134,7 @@ export function orgSlugOf(credential: CredentialSecret): string {
   return org;
 }
 
-/** The image prefixes of a connection ; `null` when the field is malformed. */
+/** The image prefixes of an account ; `null` when the field is malformed. */
 export function imagePrefixesOfCredential(credential: CredentialSecret): readonly string[] | null {
   return imagePrefixesOf(
     expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[IMAGE_PREFIXES_FIELD],
@@ -146,7 +146,7 @@ export function imagePrefixesOfCredential(credential: CredentialSecret): readonl
  * and every macaroon it carries must be for the organization the form
  * names. A token that reaches another organization, or none, is refused.
  */
-export async function verifyFlyToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyFlyToken(ctx: AccountContext): Promise<CredentialCheck> {
   const org = orgSlugOf(ctx.credential);
   if (!imagePrefixesOfCredential(ctx.credential)) {
     throw new CredentialRefusal(

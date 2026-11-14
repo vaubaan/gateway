@@ -17,9 +17,11 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 6 (2026-11-14) : wording only, one word per thing (ADR
+#   one-word-per-thing-account-service-plugin).
 provider: fly
-catalog_version: 5
-catalog_date: 2026-11-13
+catalog_version: 6
+catalog_date: 2026-11-14
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────────
@@ -149,7 +151,7 @@ risks:
     reason: >-
       The machine restarts on the new image, which runs with the app's
       secrets and volume. Only images pinned by digest under the
-      connection's allowed prefixes are accepted, and a mounted volume needs
+      account's allowed prefixes are accepted, and a mounted volume needs
       a fresh snapshot first.
     matches:
       - 'fly.org[*].app[*].machine.image.W'
@@ -391,7 +393,7 @@ macro_actions:
     narrative: >-
       Running what exists: deploying an image, starting, stopping and resizing machines,
       snapshots, certificates and a shell on a machine. Only images pinned by digest under the
-      connection's prefixes deploy, and a mounted volume is snapshotted first. The shell is kept
+      account's prefixes deploy, and a mounted volume is snapshotted first. The shell is kept
       apart because any command runs there with the app's secrets and volume, the master key of
       a Vaubaan instance included.
     entries:

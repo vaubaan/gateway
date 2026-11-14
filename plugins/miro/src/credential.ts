@@ -1,5 +1,5 @@
 /**
- * How a Miro connection is made : the person signs in at Miro and allows
+ * How a Miro account is made : the person signs in at Miro and allows
  * this gateway (`oauth2`), through the OAuth 2.1 authorization server of
  * Miro's MCP server. The gateway registers its own client there the first
  * time someone connects (RFC 7591 dynamic client registration) : no Miro app

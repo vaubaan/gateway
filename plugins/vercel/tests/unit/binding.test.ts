@@ -4,7 +4,7 @@
  * so `execute` must prove the target belongs to that project before the
  * upstream call — or refuse the tool when it cannot.
  *
- * Every lookup goes to the REST API with the connection's pinned team. No
+ * Every lookup goes to the REST API with the account's pinned team. No
  * test reaches the network : an unmatched request rejects.
  */
 import { describe, expect, test } from 'vitest';
@@ -127,7 +127,7 @@ describe('executeVercel — a deployment-addressed tool runs only on a deploymen
     }
   });
 
-  test('a 403 on the lookup is a refusal, not an expired connection ; a 401 still is', async () => {
+  test('a 403 on the lookup is a refusal, not an expired account ; a 401 still is', async () => {
     const lookup = /\/v13\/deployments\/dpl_x\?/;
     const forbidden = mockFetch([{ method: 'GET', url: lookup, status: 403, body: {} }, mcpRoute]);
     const result = await vercelPlugin.execute(ctx(forbidden), 'vercel__get_deployment', {

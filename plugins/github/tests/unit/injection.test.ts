@@ -1,5 +1,5 @@
 /**
- * Identifier injection : every value of the arguments (or of the connection)
+ * Identifier injection : every value of the arguments (or of the account)
  * that reaches a request path, a query string or a request body is fed the
  * same hostile values, to `classify` AND to `execute`.
  *
@@ -20,7 +20,7 @@ import { mockFetch, type MockFetch, refusalText } from '@vaubaan/plugin-sdk/test
 
 import { classifyGithub } from '../../src/classify.ts';
 import { githubPlugin } from '../../src/index.ts';
-import { appRepo, connectionCtx, executeCtx } from './fixtures.ts';
+import { appRepo, accountCtx, executeCtx } from './fixtures.ts';
 
 const API = 'https://api.github.com';
 const R = '/repos/acme/app';
@@ -651,7 +651,7 @@ describe('identifier positions — more refusals, by classify and by execute ali
   });
 });
 
-describe('identifier positions — the connection', () => {
+describe('identifier positions — the account', () => {
   test('discovery lists only repositories a call can name', async () => {
     const fetch = mockFetch([
       {
@@ -673,7 +673,7 @@ describe('identifier positions — the connection', () => {
       warn: (message: string) => void warnings.push(message),
       error: () => undefined,
     };
-    const resources = await githubPlugin.discoverResources(connectionCtx(fetch, { logger }));
+    const resources = await githubPlugin.discoverResources(accountCtx(fetch, { logger }));
     expect(resources.map((r) => r.ref)).toEqual(['acme/app', 'acme/.github']);
     expect(warnings).toHaveLength(3);
   });

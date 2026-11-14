@@ -1,6 +1,6 @@
 /**
  * Shared fixtures of the `vercel` plugin tests : a mission resource, the
- * connection credential, an `ExecuteContext` builder and the SSE framing of
+ * account credential, an `ExecuteContext` builder and the SSE framing of
  * the upstream MCP server. No fixture reaches the network.
  */
 import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';

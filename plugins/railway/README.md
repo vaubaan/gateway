@@ -19,7 +19,7 @@ account → project → environment → service → deployment → {logs, status
 account → agent-session                                     (the railway-agent meta-tool)
 ```
 
-The **resource** a connection exposes is the Railway **project** (UUID).
+The **resource** an account exposes is the Railway **project** (UUID).
 `discoverResources` lists the projects the connected workspace member can
 see, with their environments in `metadata.environments` and their services
 in `metadata.services` (`[{ id, name }]` each, empty lists included).
@@ -58,7 +58,7 @@ carries only `environmentId`, which the classifier maps back to the project
 whose discovered environments contain it. In every case an `environmentId`
 argument must be one of the discovered environments of the resolved
 project, and a `serviceId` argument one of its discovered services, or the
-call is refused — refresh the connection's resources after creating an
+call is refused — refresh the account's resources after creating an
 environment or a service. A project discovered before services were
 recorded carries no service list and refuses every `serviceId` until its
 resources are refreshed once.
@@ -144,7 +144,7 @@ ends the list.
 the API about the same token (`explainMcpRefusal`): refused there too → a
 rejected credential (401, the account "Needs reconnecting"); still accepted →
 the MCP server does not take this kind of token: a 403 naming it ("refused
-this account token … reconnect with a workspace token"), and the connection
+this account token … reconnect with a workspace token"), and the account
 stays usable for the variable tools. `railway__whoami` may say little with a
 workspace token, which has no user behind it.
 

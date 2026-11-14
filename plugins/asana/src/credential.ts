@@ -18,7 +18,7 @@
 import {
   CredentialRefusal,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
@@ -30,7 +30,7 @@ import { PAT_FIELD } from './identity.ts';
 export const ASANA_DEVELOPER_CONSOLE = 'https://app.asana.com/0/my-apps';
 
 /** Who a pasted token is : its name (and email), or a refusal. */
-export async function verifyAsanaToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyAsanaToken(ctx: AccountContext): Promise<CredentialCheck> {
   const me = await getObject(ctx, '/users/me', ['name', 'email', 'workspaces.name']);
   if (workspacesOf(me).length === 0) {
     throw new CredentialRefusal(

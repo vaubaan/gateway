@@ -136,7 +136,7 @@ export function readCall(
 /**
  * The index a call reads : the mission's single Context7 resource. The
  * tools take no resource argument (the upstream schemas have none) ; a
- * mission holds at most one Context7 connection, and a connection has one
+ * mission holds at most one Context7 account, and an account has one
  * resource, so several are refused as ambiguous all the same.
  */
 export function resolveIndex(

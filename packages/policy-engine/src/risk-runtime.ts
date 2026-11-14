@@ -133,7 +133,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       risks_touched.filter((r) => refused.has(r) || !accepted(r)),
       risks_touched.filter((r) => !refused.has(r) && accepted(r)),
       `${not_acceptable_here.map(describeOutsideItsEnvs).join(' ; ')}. ` +
-        `No mission can accept such a risk there: ask the connection owner to label the resource ` +
+        `No mission can accept such a risk there: ask the account owner to label the resource ` +
         `with one of the listed environments if that is what it is, or restrict the operation.`,
     );
   }

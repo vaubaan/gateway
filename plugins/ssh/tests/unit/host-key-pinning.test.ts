@@ -26,7 +26,7 @@ import { Server, utils, type Connection } from 'ssh2';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import type {
-  ConnectionContext,
+  AccountContext,
   CredentialSecret,
   ExecuteContext,
   Resource,
@@ -343,7 +343,7 @@ describe('plugin.execute / discoverResources — a credential without a pin neve
   test.each(UNPINNED)('discoverResources refuses a credential with %s', async (_label, fields) => {
     const transport = recordingTransport();
     const plugin = createSshPlugin({ transport });
-    const ctx: ConnectionContext = {
+    const ctx: AccountContext = {
       credential: credentialWith(fields),
       fetch: noFetch,
     };

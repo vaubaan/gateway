@@ -3,8 +3,8 @@
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/axonaut.md §3.
 #
-# Every slice is rooted at `axonaut.account[<id>]`, the one resource of a
-# connection. Axonaut's API is flat, so every entity is a direct child of the
+# Every slice is rooted at `axonaut.account[<id>]`, the one resource of an
+# account. Axonaut's API is flat, so every entity is a direct child of the
 # account. Writes on one record use `[*]` (not `[**]`): the verb leaves
 # `delete` and `outcome` are matched by their own entries only, and a deletion
 # is classified on both the record write and its `delete` leaf (layered).

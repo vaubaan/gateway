@@ -34,7 +34,7 @@ plugins/supabase/
 ## Data model
 
 A **project** (`project_ref`, the 20-character id in `xxx.supabase.co`) is the
-resource the connection owner labels with an environment. One project per
+resource the account owner labels with an environment. One project per
 environment : staging and prod are distinct projects. Four planes hang under
 it :
 

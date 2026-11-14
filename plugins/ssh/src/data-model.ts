@@ -23,7 +23,7 @@ export const sshDataModel: DataModel = {
     {
       slug: 'host',
       description:
-        'One remote host reached over SSH with the key pair of the connection. The host is a black box : every operation is a shell command, and the security boundary on the host side (sudoers, file ACLs, the login user) still applies.',
+        'One remote host reached over SSH with the key pair of the account. The host is a black box : every operation is a shell command, and the security boundary on the host side (sudoers, file ACLs, the login user) still applies.',
       entities: [
         {
           name: 'host',
@@ -31,7 +31,7 @@ export const sshDataModel: DataModel = {
           cardinalities: ['one'],
           envScopable: true,
           description:
-            'The resource : the host of the connection, referenced by its hostname or IP (`host[vps-1.example.com]`). Labelled dev / staging / prod by its owner ; the label qualifies the write risks.',
+            'The resource : the host of the account, referenced by its hostname or IP (`host[vps-1.example.com]`). Labelled dev / staging / prod by its owner ; the label qualifies the write risks.',
         },
         {
           name: 'command',

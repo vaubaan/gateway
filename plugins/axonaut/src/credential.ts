@@ -23,7 +23,7 @@
 import {
   CredentialRefusal,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
@@ -84,7 +84,7 @@ export const axonautCredential: ApiKeyCredentialSpec = {
  * `Claire Rousseau · Acme SAS`. A key that opens no account is refused in the
  * plugin's words; a rejected key is the `UpstreamAuthError` the transport throws.
  */
-export async function verifyAxonautKey(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyAxonautKey(ctx: AccountContext): Promise<CredentialCheck> {
   const me = await readMe(ctx);
   if (me.account === null) {
     throw new CredentialRefusal('This Axonaut key opens no company account.');

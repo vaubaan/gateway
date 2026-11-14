@@ -16,7 +16,7 @@ import {
   isRecord,
   readBoundedText,
   upstreamFailure,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
   type RawRequestBody,
   type UpstreamIo,
@@ -53,8 +53,8 @@ export function envelopeOf<T>(isResult: Guard<T>): Guard<CloudflareEnvelope<T>> 
     isRecord(value) && isResult(value.result);
 }
 
-/** The pasted API token of a connection. */
-export function tokenOf(ctx: ConnectionContext): string {
+/** The pasted API token of an account. */
+export function tokenOf(ctx: AccountContext): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const token = secret.fields[API_TOKEN_FIELD];
   // A host bug, not a refusal : the credential spec requires the field.

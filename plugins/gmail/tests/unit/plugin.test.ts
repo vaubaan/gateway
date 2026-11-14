@@ -13,7 +13,7 @@ import {
   definePlugin,
   serializeSlice,
   type ApiKeySecret,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -53,7 +53,7 @@ const secret = (fields: Record<string, string> = {}): ApiKeySecret => ({
   metadata: {},
 });
 
-const connCtx = (overrides: Partial<ConnectionContext> = {}): ConnectionContext => ({
+const connCtx = (overrides: Partial<AccountContext> = {}): AccountContext => ({
   credential: secret(),
   fetch: mockFetch([]),
   ...overrides,

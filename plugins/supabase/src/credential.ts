@@ -2,7 +2,7 @@
  * Credential of the `supabase` provider : a personal access token for the
  * Management API, pasted by hand (`api-key` kind), the one way of connecting.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADR
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADR
  *        one-place-to-authorize-services-token-first.
  *
  * Supabase documents two flavours (personal-access-tokens guide, read through
@@ -28,7 +28,7 @@ import {
   isList,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
@@ -148,7 +148,7 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
   verify: verifySupabaseToken,
 };
 
-/** The bearer of a Supabase connection : the pasted personal access token. */
+/** The bearer of a Supabase account : the pasted personal access token. */
 export function supabaseBearerOf(pluginId: string, credential: CredentialSecret): string {
   const token = expectCredentialKind(pluginId, credential, 'api-key').fields[SUPABASE_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
@@ -162,7 +162,7 @@ export function supabaseBearerOf(pluginId: string, credential: CredentialSecret)
  * rejected token (`UpstreamAuthError`) ; any other failure is Supabase's,
  * typed by `httpJson`, and so is an answer that is not a list.
  */
-export async function verifySupabaseToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifySupabaseToken(ctx: AccountContext): Promise<CredentialCheck> {
   const organizations = await httpJson(
     ctx,
     {

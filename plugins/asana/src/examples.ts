@@ -12,7 +12,7 @@ import { PROVIDER_ID, TOOL } from './identity.ts';
 export const WORKSPACE = '1100000000000001';
 /** The project of the mission. */
 export const PROJECT = '1200000000000001';
-/** Another project of the connection, outside the mission. */
+/** Another project of the account, outside the mission. */
 export const OTHER_PROJECT = '1200000000000002';
 export const SECTION = '1300000000000001';
 export const TASK = '1400000000000001';

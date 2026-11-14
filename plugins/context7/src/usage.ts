@@ -22,7 +22,7 @@ import {
   expectCredentialKind,
   httpJson,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialSecret,
   type Guard,
 } from '@vaubaan/plugin-sdk';
@@ -40,7 +40,7 @@ export type Context7Plan = (typeof CONTEXT7_PLANS)[number];
 /** How messages name the usage request. */
 const USAGE_REQUEST = 'Context7 GET /v2/usage';
 
-/** The key of a Context7 connection. Thrown when the stored credential has none. */
+/** The key of a Context7 account. Thrown when the stored credential has none. */
 export function context7KeyOf(credential: CredentialSecret): string {
   const key = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[API_KEY_FIELD];
   if (typeof key !== 'string' || key.length === 0) {
@@ -56,7 +56,7 @@ export function context7KeyOf(credential: CredentialSecret): string {
  * `UpstreamProtocolError`.
  */
 export async function requestUsage<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   key: string,
   guard: Guard<T>,
 ): Promise<T> {
@@ -76,7 +76,7 @@ export async function requestUsage<T>(
  * another failed status `UpstreamHttpError`, an answer that is not the
  * documented one `UpstreamProtocolError`.
  */
-export async function readPlan(ctx: ConnectionContext): Promise<Context7Plan> {
+export async function readPlan(ctx: AccountContext): Promise<Context7Plan> {
   const answer = await requestUsage(ctx, context7KeyOf(ctx.credential), isUsageAnswer);
   return answer.plan;
 }

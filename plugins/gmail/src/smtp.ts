@@ -40,7 +40,7 @@ export const SMTP_SOCKET_TIMEOUT_MS = 30_000;
 
 /** One message to relay : the envelope apart, the message as it will be delivered. */
 export interface SmtpMail {
-  /** `MAIL FROM` : the mailbox of the connection. */
+  /** `MAIL FROM` : the mailbox of the account. */
   readonly from: string;
   /** `RCPT TO` : every recipient, Bcc included, each one bare `local@domain`. */
   readonly to: readonly string[];

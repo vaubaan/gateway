@@ -4,7 +4,7 @@
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
- * Unless a sample names its own, it runs on the one resource of a connection,
+ * Unless a sample names its own, it runs on the one resource of an account,
  * the library index.
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';

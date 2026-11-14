@@ -246,7 +246,7 @@ export interface MacroActionEntry extends Budget {
 }
 
 /**
- * What a mission creator ticks on a connection, in the connector's own words
+ * What a mission creator ticks on an account, in the connector's own words
  * (ADR macro-actions-and-trust-levels-prefill-the-policy). Every entry but the
  * fallback belongs to exactly one macro-action ; a trust level turns its
  * entries into explicit policy lines. Never a grant by itself.

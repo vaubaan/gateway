@@ -8,7 +8,7 @@ import {
   UpstreamAuthError,
   UpstreamHttpError,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
 } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
@@ -447,7 +447,7 @@ describe('executeContext7 — provider failures are thrown', () => {
 });
 
 describe('discoverResources and verify — GET /v2/usage', () => {
-  const connection = (fetch: ReturnType<typeof mockFetch>): ConnectionContext => {
+  const account = (fetch: ReturnType<typeof mockFetch>): AccountContext => {
     const { resources: _resources, ...rest } = ctx(fetch);
     return rest;
   };
@@ -457,7 +457,7 @@ describe('discoverResources and verify — GET /v2/usage', () => {
       const fetch = mockFetch([
         usageAnswers(200, { plan, member: { requests: 1, includedInPlan: 1000 } }),
       ]);
-      expect(await context7Plugin.discoverResources(connection(fetch))).toEqual([
+      expect(await context7Plugin.discoverResources(account(fetch))).toEqual([
         {
           provider: PROVIDER_ID,
           ref: 'docs',
@@ -466,25 +466,23 @@ describe('discoverResources and verify — GET /v2/usage', () => {
         },
       ]);
       expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${KEY}`);
-      expect(await verifyContext7Key(connection(mockFetch([usageAnswers(200, { plan })])))).toEqual(
-        {
-          account: `Context7 ${plan} plan`,
-          expiresAt: null,
-        },
-      );
+      expect(await verifyContext7Key(account(mockFetch([usageAnswers(200, { plan })])))).toEqual({
+        account: `Context7 ${plan} plan`,
+        expiresAt: null,
+      });
     }
   });
 
   test('a refused key throws UpstreamAuthError, another status UpstreamHttpError', async () => {
     for (const run of [verifyContext7Key, context7Plugin.discoverResources]) {
       await expect(
-        run(connection(mockFetch([usageAnswers(401, { error: 'unauthorized' })]))),
+        run(account(mockFetch([usageAnswers(401, { error: 'unauthorized' })]))),
       ).rejects.toMatchObject({
         name: 'UpstreamAuthError',
         upstreamStatus: 401,
       });
       await expect(
-        run(connection(mockFetch([usageAnswers(503, { error: 'down' })]))),
+        run(account(mockFetch([usageAnswers(503, { error: 'down' })]))),
       ).rejects.toMatchObject({
         name: 'UpstreamHttpError',
         status: 503,
@@ -495,7 +493,7 @@ describe('discoverResources and verify — GET /v2/usage', () => {
   test('an answer that is not the documented one → UpstreamProtocolError', async () => {
     for (const body of [{ plan: 'gold' }, { member: {} }, ['free'], 'free', 'not json']) {
       const discovery = context7Plugin.discoverResources(
-        connection(mockFetch([usageAnswers(200, body)])),
+        account(mockFetch([usageAnswers(200, body)])),
       );
       await expect(discovery).rejects.toBeInstanceOf(UpstreamProtocolError);
       await expect(discovery).rejects.toThrow('Context7 GET /v2/usage: ');

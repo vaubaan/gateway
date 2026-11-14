@@ -62,7 +62,7 @@ export type VaubaanPorts = { readonly [A in VaubaanActName]: VaubaanAct };
 
 /** The keys of `VaubaanPorts`: the whole of what the plugin is given. */
 export const VAUBAAN_PORT_NAMES = [
-  'listMyConnections',
+  'listMyAccounts',
   'getCatalog',
   'listMyMissions',
   'previewPolicy',

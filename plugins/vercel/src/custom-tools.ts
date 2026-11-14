@@ -11,7 +11,7 @@
  *
  * Every custom tool takes the project ref (`projectId`) explicitly ; the
  * classifier falls back to the mission's single project when it is absent.
- * `teamId` is always the connection's team : an explicit different value is
+ * `teamId` is always the account's team : an explicit different value is
  * refused by `execute`.
  */
 
@@ -30,7 +30,7 @@ const teamIdArg = {
   teamId: {
     type: 'string',
     description:
-      "Team id (`team_xxx`). Optional : the connection's team is used ; a different value is refused.",
+      "Team id (`team_xxx`). Optional : the account's team is used ; a different value is refused.",
   },
 } as const;
 

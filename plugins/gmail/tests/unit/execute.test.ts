@@ -405,7 +405,7 @@ describe('label and unlabel', () => {
 });
 
 describe('the mission’s mailbox and the credential', () => {
-  test('describe_zones answers from the resource, without any connection', async () => {
+  test('describe_zones answers from the resource, without any account', async () => {
     const t = seeded();
     const r = await run(t, 'gmail__describe_zones', {});
     expect(body(r)).toMatchObject({
@@ -422,7 +422,7 @@ describe('the mission’s mailbox and the credential', () => {
     expect(t.calls).toEqual([]);
   });
 
-  test('an unknown tool, no mailbox or two mailboxes : refused without a connection', async () => {
+  test('an unknown tool, no mailbox or two mailboxes : refused without an account', async () => {
     const t = seeded();
     expect((await run(t, 'gmail__send_message', {})).isError).toBe(true);
     expect((await run(t, 'gmail__list_labels', {}, ctx([]))).isError).toBe(true);

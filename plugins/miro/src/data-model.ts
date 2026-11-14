@@ -35,7 +35,7 @@ export const miroDataModel: DataModel = {
           parent: null,
           // `bounded` : `list_boards` names the boards it reads as a list.
           cardinalities: ['one', 'bounded'],
-          description: 'The resource a connection exposes : one Miro board.',
+          description: 'The resource an account exposes : one Miro board.',
         },
         {
           name: 'item',

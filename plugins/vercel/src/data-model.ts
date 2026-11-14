@@ -6,7 +6,7 @@
  *
  * Vercel exposes a single plane, `runtime`. Every entity lives under a
  * `team` (itself under the `account` the credential belongs to) and almost
- * everything is project-scoped. The **project** is the resource a connection
+ * everything is project-scoped. The **project** is the resource an account
  * exposes and a mission selects. The environment axis is the closed Vercel
  * triad `env ∈ {prod, preview, development}` : it is not a separate resource
  * but a segment of the slice, derived from the call arguments (`target`).
@@ -43,15 +43,14 @@ export const vercelDataModel: DataModel = {
           name: 'account',
           parent: null,
           cardinalities: ['one'],
-          description:
-            'The Vercel account behind the access token of a connection. One per connection.',
+          description: 'The Vercel account behind the access token of an account. One per account.',
         },
         {
           name: 'team',
           parent: 'account',
           cardinalities: ['bounded'],
           description:
-            'A Vercel team. A connection is pinned to one team (`team_id` credential field) ; ' +
+            'A Vercel team. An account is pinned to one team (`team_id` credential field) ; ' +
             '`list_teams` may still enumerate the others the token can see.',
         },
         {
@@ -59,7 +58,7 @@ export const vercelDataModel: DataModel = {
           parent: 'team',
           cardinalities: ['bounded'],
           description:
-            'A Vercel project — the resource discovered at connection time (`prj_xxx` ref) and ' +
+            'A Vercel project — the resource discovered when the account is connected (`prj_xxx` ref) and ' +
             'selected by a mission.',
         },
         {

@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/gateway-risk-model.md §2. Handbook : docs/handbook/providers/fly.md.
  *
- * One plane, `apps`. The organization is the root (one per connection) ; the
+ * One plane, `apps`. The organization is the root (one per account) ; the
  * app is the resource the owner labels `staging` or `prod`. Operations that
  * deserve their own decision are verb leaves with names of their own
  * (`app-destroy`, `machine-destroy`, `image`, `exec`…), so that every leaf
@@ -28,7 +28,7 @@ export const flyDataModel: DataModel = {
           name: 'org',
           parent: null,
           cardinalities: one,
-          description: 'The organization of the connection ; never a mission resource.',
+          description: 'The organization of the account ; never a mission resource.',
         },
         {
           name: 'region',

@@ -7,7 +7,7 @@
  * Pure: no IO, no clock. The account carries no resource, so no call names
  * one; every slice is placed on the plugin's own data model:
  *
- *   list_my_connections    vaubaan.account[*].R
+ *   list_my_accounts    vaubaan.account[*].R
  *   preview_policy         vaubaan.account[*].R          (reads the authority, writes nothing)
  *   get_catalog            vaubaan.catalog[<provider>].R
  *   list_my_missions       vaubaan.mission[<id> | *].R
@@ -33,7 +33,7 @@ import {
 import { actOf, PROVIDER_ID } from './identity.ts';
 import { vaubaanTools } from './tools.ts';
 
-/** The longest id the host accepts (`mission_id`, `provider`, `connection_id`). */
+/** The longest id the host accepts (`mission_id`, `provider`, `account_id`). */
 export const MAX_ID_LENGTH = 300;
 
 const DECLARED_ARGUMENTS = declaredArgumentsOf(vaubaanTools);
@@ -64,7 +64,7 @@ export function classifyVaubaan(
   if (undeclared !== null) return { denied: undeclared };
 
   switch (act) {
-    case 'listMyConnections':
+    case 'listMyAccounts':
     case 'previewPolicy':
       return { slices: [slice([name('account'), ANY_IDENT], 'R')] };
     case 'getCatalog': {

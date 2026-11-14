@@ -15,7 +15,7 @@ Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-co
 One plane, `apps`:
 
 ```
-org[<slug>]                         the organization of the connection
+org[<slug>]                         the organization of the account
   ├─ region[*]                      platform regions (read)
   └─ app[<app name>]                the resource; labelled staging / prod by its owner
        ├─ app-destroy               verb leaf
@@ -32,11 +32,11 @@ org[<slug>]                         the organization of the connection
 
 Kind `api-key`, three fields:
 
-| Field            | Secret | Purpose                                                                                                                                            |
-| ---------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api_token`      | yes    | An organization token (dashboard Tokens page, or `fly tokens create org`). Sent as `Authorization: FlyV1 …`. Never `fly auth token`.               |
-| `org_slug`       | no     | The one organization the connection works in. Checked at paste against `GET /v1/tokens/current`: a token reaching another organization is refused. |
-| `image_prefixes` | no     | Repository prefixes machines may run, comma-separated; empty means `ghcr.io/vaubaan/gateway`.                                                      |
+| Field            | Secret | Purpose                                                                                                                                         |
+| ---------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api_token`      | yes    | An organization token (dashboard Tokens page, or `fly tokens create org`). Sent as `Authorization: FlyV1 …`. Never `fly auth token`.            |
+| `org_slug`       | no     | The one organization the account works in. Checked at paste against `GET /v1/tokens/current`: a token reaching another organization is refused. |
+| `image_prefixes` | no     | Repository prefixes machines may run, comma-separated; empty means `ghcr.io/vaubaan/gateway`.                                                   |
 
 Fly offers OAuth to extension partners only (scope `read`), so a token is
 the only way. `discoverResources` lists the organization's apps

@@ -44,7 +44,7 @@ account ─ team ─ project ─┬─ project-settings
                                                                               └─ toolbar-thread[*] ─ toolbar-message[*]
 ```
 
-The **project** (`prj_xxx`) is the resource a connection exposes and a mission
+The **project** (`prj_xxx`) is the resource an account exposes and a mission
 selects. The **environment** is not a resource: it is the closed Vercel triad,
 emitted as the `env[<label>]` segment of the slice. It is read from `target`
 for `upsert_env_var` (an unreadable `target` is refused); `deploy_to_vercel`
@@ -92,8 +92,8 @@ token and the chosen alternative's ID. The host keeps only that one.
 | Field        | Secret | Alternative | Value                                                                                                 |
 | ------------ | ------ | ----------- | ----------------------------------------------------------------------------------------------------- |
 | `token`      | yes    | both        | A Vercel access token (Account Settings → Tokens), Scope: one project, or the team with All Projects. |
-| `project_id` | no     | One project | The project id (`prj_…`, Project Settings → General). The connection reaches that project only.       |
-| `team_id`    | no     | Team        | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.   |
+| `project_id` | no     | One project | The project id (`prj_…`, Project Settings → General). The account reaches that project only.          |
+| `team_id`    | no     | Team        | The team id (`team_…`, Team Settings → General). Every call of the account acts on behalf of it.      |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
 reached with a personal access token, which is what works. The guide lists
@@ -102,7 +102,7 @@ leak or a mistake inside that project, while one key for the whole team makes
 every mission depend on it; the team with All Projects comes second, for
 missions that span its projects (ADR `one-place-to-authorize-services-token-first`,
 amendments 2026-11-11 and 2026-11-14).
-`vercelAuth` reads the mode from the field there, so a connection made with
+`vercelAuth` reads the mode from the field there, so an account made with
 `team_id` before the alternatives keeps working.
 
 The check at paste (`verifyVercelToken`) reads `GET /v5/user/tokens/current`
@@ -114,7 +114,7 @@ absent); the account page shows its expiry and the person reconnects before
 it.
 
 Team mode pins the team to the credential: a `teamId` argument that is not
-exactly the connection's team (another string, or any non-string) is refused
+exactly the account's team (another string, or any non-string) is refused
 before any network call, and the value sent to Vercel is always written from
 the credential. The four rewrapped tools that cannot carry a team are listed
 with their reason in `TEAMLESS_UPSTREAM_TOOLS` (`src/execute.ts`). Project
@@ -184,7 +184,7 @@ shapes of the custom REST tools). `classify.test.ts` pins the slices of each
 tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
 `team-pin.test.ts` proves, over every declared tool, that each request
 carries the credential's team and that no team id comes from the arguments,
-and, for a project-scoped connection, that REST names no team, the MCP server
+and, for a project-scoped account, that REST names no team, the MCP server
 gets the project's, and every `teamId` argument and other project is refused;
 `binding.test.ts` covers the deployment binding and the refused thread tools;
 `identifier-injection.test.ts` feeds dot segments, separators and encoded

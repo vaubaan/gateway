@@ -17,7 +17,7 @@ import {
   UpstreamProtocolError,
   isList,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
@@ -25,7 +25,7 @@ import { getObject, isDataList, nextOffsetOf, request, type Json } from './api.t
 import { asanaGid, offsetToken } from './ids.ts';
 import { PROVIDER_ID } from './identity.ts';
 
-/** Most projects one connection exposes, all workspaces together. */
+/** Most projects one account exposes, all workspaces together. */
 export const MAX_PROJECTS = 500;
 
 function unexpected(message: string): never {
@@ -67,7 +67,7 @@ function projectResource(project: unknown, workspace: Workspace): Resource | nul
   };
 }
 
-export async function discoverAsanaResources(ctx: ConnectionContext): Promise<readonly Resource[]> {
+export async function discoverAsanaResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const me = await getObject(ctx, '/users/me', ['workspaces.name']);
   const found: Resource[] = [];
   for (const workspace of workspacesOf(me)) {

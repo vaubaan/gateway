@@ -25,7 +25,7 @@ export const sshTools: readonly McpToolDeclaration[] = [
         host: {
           type: 'string',
           description:
-            'Resource ref of the host (hostname or IP as discovered on the connection). Optional when the mission holds exactly one SSH host.',
+            'Resource ref of the host (hostname or IP as discovered on the account). Optional when the mission holds exactly one SSH host.',
         },
         cmd: { type: 'string', description: 'Shell command line to run on the host.' },
         timeout_s: {

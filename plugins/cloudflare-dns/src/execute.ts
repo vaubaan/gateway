@@ -40,7 +40,7 @@ import {
   jsonResult,
   refusalResult,
   textResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
@@ -232,7 +232,7 @@ const isZonePage = envelopeOf(isZoneList);
  * cover zones of several accounts ; the account travels in the metadata.
  */
 export async function discoverCloudflareDnsResources(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
 ): Promise<readonly Resource[]> {
   const token = tokenOf(ctx);
   const resources: Resource[] = [];

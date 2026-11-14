@@ -2,7 +2,7 @@
 
 Context7 for Vaubaan Gateway: agents look up current library documentation
 through the gateway, under a mission. The Context7 API key is a gateway
-connection, kept encrypted by the gateway; it is never in an environment
+account, kept encrypted by the gateway; it is never in an environment
 variable or in an MCP client's configuration.
 
 The plugin **rewraps the official Context7 MCP server**
@@ -44,7 +44,7 @@ not count as a request. A refused key (401) is reported at once and nothing
 is stored. Discovery returns **one resource**: `ref` `docs`, "Context7
 library index", with the teamspace's `plan` (`free`, `pro`, `enterprise`,
 `payg`) in its metadata. The endpoint is not paginated. The ref is a constant
-because no answer of Context7 identifies the teamspace; each connection has
+because no answer of Context7 identifies the teamspace; each account has
 its own resource.
 
 Revoking: in the Context7 dashboard, API Keys. Revocation is immediate and

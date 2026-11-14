@@ -44,7 +44,7 @@ import {
   isRecord,
   jsonResult,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
@@ -268,9 +268,7 @@ async function callMcpTool(
  * the owner can label the project and the classifier can resolve
  * `environmentId` back to a project.
  */
-export async function discoverRailwayResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverRailwayResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const token = railwayBearerOf(ctx.credential);
   // The projects the token reaches (a workspace token: its workspace's ;
   // an account token: its personal ones), then, for an account token only, each
@@ -293,7 +291,7 @@ export async function discoverRailwayResources(
 
 /** Every project a projects query answers, page by page up to `RAILWAY_MAX_PROJECT_PAGES`. */
 async function listProjects(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   token: string,
   query: Omit<GraphqlRequest, 'variables'>,
   variables: Readonly<Record<string, unknown>>,
@@ -308,7 +306,7 @@ async function listProjects(
     const data: ProjectsPage = await railwayGraphql(ctx, token, request, isProjectsPage);
     for (const { node } of data.projects.edges) {
       // A ref the classifier would refuse is of no use to a mission : say so
-      // at connection time instead of listing a resource no call can name.
+      // when the account is connected instead of listing a resource no call can name.
       if (railwayId(node.id) === null) {
         throw new UpstreamProtocolError(
           `Railway GraphQL ${query.operation}: project id ${JSON.stringify(node.id)} is not a Railway identifier`,
@@ -332,7 +330,7 @@ async function listProjects(
   return out;
 }
 
-/** The `{ id, name }` nodes of a connection ; a node without both as strings is skipped. */
+/** The `{ id, name }` nodes of a GraphQL connection ; a node without both as strings is skipped. */
 function namedNodesOf(connection: unknown): Array<{ id: string; name: string }> {
   const out: Array<{ id: string; name: string }> = [];
   for (const { id, name } of nodesOf(connection)) {

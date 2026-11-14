@@ -13,7 +13,7 @@ export const PROVIDER_ID = 'fly';
 /** Secret field of the `api-key` credential : a token printed by `fly tokens create org`. */
 export const API_TOKEN_FIELD = 'api_token';
 
-/** Non-secret field : the slug of the one Fly organization the connection works in. */
+/** Non-secret field : the slug of the one Fly organization the account works in. */
 export const ORG_SLUG_FIELD = 'org_slug';
 
 /**
@@ -22,7 +22,7 @@ export const ORG_SLUG_FIELD = 'org_slug';
  */
 export const IMAGE_PREFIXES_FIELD = 'image_prefixes';
 
-/** The images a connection may deploy when its owner names none. */
+/** The images an account may deploy when its owner names none. */
 export const DEFAULT_IMAGE_PREFIXES: readonly string[] = ['ghcr.io/vaubaan/gateway'];
 
 const prefix = toolPrefixFor(PROVIDER_ID);

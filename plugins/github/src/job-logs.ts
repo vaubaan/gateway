@@ -4,7 +4,7 @@
  * `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` answers a redirect
  * (302) to a short-lived download URL. The redirect is not followed by
  * `fetch` (`redirect: 'manual'`) : the download is a second request, sent
- * **without** the connection's token — the URL carries its own short-lived
+ * **without** the account's token — the URL carries its own short-lived
  * signature, and the token never leaves for another host.
  *
  * The body is read as a stream and at most `maxBytes` of it is kept : the

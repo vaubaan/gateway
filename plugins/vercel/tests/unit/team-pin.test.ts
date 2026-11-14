@@ -1,6 +1,6 @@
 /**
  * The team pin : every call the plugin makes to Vercel acts for the team of
- * the connection's credential (`team_id`), and that team never comes from the
+ * the account's credential (`team_id`), and that team never comes from the
  * tool arguments.
  *
  * The suite is table-driven over **every declared tool**, so a tool added
@@ -222,7 +222,7 @@ describe('team pin — the tools that cannot carry a team are reviewed one by on
  * discovery read it, every `teamId` argument is refused, and so is another
  * project.
  */
-describe('project pin — a connection scoped to one project', () => {
+describe('project pin — an account scoped to one project', () => {
   const owned: Resource = { ...app, metadata: { team_id: TEAM } };
   const projectCtx = (
     fetch: typeof globalThis.fetch,
@@ -275,9 +275,7 @@ describe('project pin — a connection scoped to one project', () => {
       { projectId: 'prj_site' },
     );
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      'not the project this connection is scoped to',
-    );
+    expect(JSON.stringify(result.content)).toContain('not the project this account is scoped to');
     expect(fetch.calls).toHaveLength(0);
   });
 

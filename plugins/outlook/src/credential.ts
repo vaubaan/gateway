@@ -1,5 +1,5 @@
 /**
- * How an Outlook connection is made: the person signs in at Microsoft through
+ * How an Outlook account is made: the person signs in at Microsoft through
  * the OAuth broker this instance is enrolled with (`oauth2`, client source
  * `broker`; ADR outlook-through-the-oauth-broker-microsoft-provider).
  * Microsoft offers no app password for Exchange Online since basic

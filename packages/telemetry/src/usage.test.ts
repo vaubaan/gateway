@@ -55,6 +55,18 @@ describe('DecisionReport', () => {
     expect(DECISION_OUTCOMES).not.toContain('wrong-credential-kind');
   });
 
+  it('sends a renamed refusal code under the name the collector knows (ADR one-word-per-thing-account-service-plugin)', () => {
+    expect(DECISION_OUTCOMES).toContain('connection-revoked');
+    expect(DECISION_OUTCOMES).toContain('connection-unavailable');
+    expect(DECISION_OUTCOMES).not.toContain('account-revoked');
+    expect(createDecisionReport({ ...DECISION, decision: 'account-revoked' })?.decision).toBe(
+      'connection-revoked',
+    );
+    expect(createDecisionReport({ ...DECISION, decision: 'account-unavailable' })?.decision).toBe(
+      'connection-unavailable',
+    );
+  });
+
   it('accepts a null tool, for a name the plugin does not declare', () => {
     expect(createDecisionReport({ ...DECISION, tool: null })?.tool).toBeNull();
   });

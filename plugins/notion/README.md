@@ -4,7 +4,7 @@ Notion as a Vaubaan Gateway provider plugin on the v5 SDK
 (`@vaubaan/plugin-sdk`). Pages, page content (blocks), databases (data
 sources and their entries) and comments, over Notion's REST API with
 `Notion-Version: 2026-03-11` — with **one resource per top-level page or
-database shared with the connection**, and every id a call names proven to
+database shared with the account**, and every id a call names proven to
 be under that resource before anything is read or written.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
@@ -17,7 +17,7 @@ One plane, `content`, **flat under the resource**: a slice names the root
 and the object, whatever its real depth; the depth is proven at run time.
 
 ```
-root[<root id>]                  the resource: a top-level page or database shared with the connection
+root[<root id>]                  the resource: a top-level page or database shared with the account
 ├─ page[<page id>]   ─ subpage · properties · trash · restore   (verb leaves)
 ├─ block[<block id>] ─ children · delete                        (verb leaves; a write on the block rewrites it)
 │    └─ comment[<discussion id>]
@@ -31,15 +31,15 @@ env-scoped. Destructive operations are gated by their row instead.
 
 ## Credential and resources
 
-Kind `api-key`, an **internal connection** token:
+Kind `api-key`, an **internal account** token:
 
-| Field       | Pattern        | Purpose                                                                                                                      |
-| ----------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `api_token` | `^\S{20,512}$` | The token of an internal connection (`ntn_…`; older `secret_…` tokens work). Not a format check: Notion advises against one. |
+| Field       | Pattern        | Purpose                                                                                                                   |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `api_token` | `^\S{20,512}$` | The token of an internal account (`ntn_…`; older `secret_…` tokens work). Not a format check: Notion advises against one. |
 
-A Workspace Owner creates the connection at
-`https://app.notion.com/developers/connections` (Build → Internal
-connections), ticks the capabilities the agents need (Read content, Insert
+A Workspace Owner creates the account at
+`https://app.notion.com/developers/accounts` (Build → Internal
+accounts), ticks the capabilities the agents need (Read content, Insert
 content, Update content, Read comments, Insert comments) and shares the
 top-level pages and databases with it. `verify` calls `GET /v1/users/me`
 and refuses a token whose bot is not owned by the workspace: a **personal

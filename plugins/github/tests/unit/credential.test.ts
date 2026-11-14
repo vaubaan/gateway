@@ -9,7 +9,7 @@ import { UpstreamAuthError, UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import githubPlugin, { expiryOf, githubCredential, verifyGithubToken } from '../../src/index.ts';
-import { PAT, appRepo, connectionCtx, executeCtx, tokenCredential } from './fixtures.ts';
+import { PAT, appRepo, accountCtx, executeCtx, tokenCredential } from './fixtures.ts';
 
 describe('github token — the declaration', () => {
   test('the plugin connects with a fine-grained token, the one way', () => {
@@ -35,7 +35,7 @@ describe('github token — verify at paste', () => {
         body: { login: 'acme-bot' },
       },
     ]);
-    const check = await verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential }));
+    const check = await verifyGithubToken(accountCtx(fetch, { credential: tokenCredential }));
     expect(check).toEqual({ account: 'acme-bot', expiresAt: '2026-12-31T00:00:00.000Z' });
     expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${PAT}`);
   });
@@ -44,7 +44,7 @@ describe('github token — verify at paste', () => {
     const fetch = mockFetch([
       { method: 'GET', url: 'https://api.github.com/user', body: { login: 'acme-bot' } },
     ]);
-    const check = await verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential }));
+    const check = await verifyGithubToken(accountCtx(fetch, { credential: tokenCredential }));
     expect(check.expiresAt).toBeNull();
   });
 
@@ -58,7 +58,7 @@ describe('github token — verify at paste', () => {
       },
     ]);
     await expect(
-      verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
+      verifyGithubToken(accountCtx(fetch, { credential: tokenCredential })),
     ).rejects.toBeInstanceOf(UpstreamAuthError);
   });
 
@@ -67,7 +67,7 @@ describe('github token — verify at paste', () => {
       { method: 'GET', url: 'https://api.github.com/user', status: 403, body: { message: 'no' } },
     ]);
     await expect(
-      verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
+      verifyGithubToken(accountCtx(fetch, { credential: tokenCredential })),
     ).rejects.toBeInstanceOf(UpstreamAuthError);
   });
 
@@ -75,7 +75,7 @@ describe('github token — verify at paste', () => {
     for (const body of ['<html>maintenance</html>', [{ login: 'acme-bot' }]]) {
       const fetch = mockFetch([{ method: 'GET', url: 'https://api.github.com/user', body }]);
       await expect(
-        verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
+        verifyGithubToken(accountCtx(fetch, { credential: tokenCredential })),
       ).rejects.toBeInstanceOf(UpstreamProtocolError);
     }
   });
@@ -100,7 +100,7 @@ describe('github token — discovery and execution', () => {
       },
     ]);
     const resources = await githubPlugin.discoverResources(
-      connectionCtx(fetch, { credential: tokenCredential }),
+      accountCtx(fetch, { credential: tokenCredential }),
     );
     expect(resources.map((r) => r.ref)).toEqual(['acme/app', 'acme/lib']);
     expect(fetch.calls).toHaveLength(1);

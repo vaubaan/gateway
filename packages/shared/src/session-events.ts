@@ -227,8 +227,8 @@ export interface MissionChangedEventDetails {
   readonly expiry_changed: boolean;
   /** The expiry after the edit, when it moved (`null`: never). */
   readonly expires_at?: Iso8601 | null;
-  readonly connections_added: number;
-  readonly connections_removed: number;
+  readonly accounts_added: number;
+  readonly accounts_removed: number;
   /** Resource sets added to, or removed from, an account the edit kept (risk model §4.7). */
   readonly resource_sets_added?: number;
   readonly resource_sets_removed?: number;
@@ -275,13 +275,13 @@ export interface RevocationEventDetails {
 }
 
 /**
- * The mission created resources of one of its connections through a creating call
+ * The mission created resources of one of its accounts through a creating call
  * and reaches them from now on (ADR created-resources-join-the-mission). `refs` are
- * the resources' refs on the connection; `tool` the call that created them.
+ * the resources' refs on the account; `tool` the call that created them.
  */
 export interface ResourcesCreatedEventDetails {
   readonly tool: string;
-  readonly connection_id: string;
+  readonly account_id: string;
   readonly refs: readonly string[];
 }
 
@@ -493,8 +493,8 @@ function isMissionChanged(d: Fields): d is Fields & MissionChangedEventDetails {
     typeof d.name_changed === 'boolean' &&
     typeof d.expiry_changed === 'boolean' &&
     isOptionalText(d.expires_at) &&
-    isCount(d.connections_added) &&
-    isCount(d.connections_removed) &&
+    isCount(d.accounts_added) &&
+    isCount(d.accounts_removed) &&
     (d.resource_sets_added === undefined || isCount(d.resource_sets_added)) &&
     (d.resource_sets_removed === undefined || isCount(d.resource_sets_removed)) &&
     isCount(d.resources_added) &&
@@ -511,7 +511,7 @@ function isMissionChanged(d: Fields): d is Fields & MissionChangedEventDetails {
 }
 
 function isResourcesCreated(d: Fields): d is Fields & ResourcesCreatedEventDetails {
-  return isText(d.tool) && isText(d.connection_id) && isTextList(d.refs);
+  return isText(d.tool) && isText(d.account_id) && isTextList(d.refs);
 }
 
 function isRotation(d: Fields): d is Fields & RotationEventDetails {

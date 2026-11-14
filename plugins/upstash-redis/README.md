@@ -40,7 +40,7 @@ account ─ database[<id>] ─┬─ key-space[<key>] ─┬─ delete     (DEL,
                           └─ backup                          (declared, no tool yet)
 ```
 
-The **database** (Upstash database id) is the resource a connection exposes
+The **database** (Upstash database id) is the resource an account exposes
 and a mission selects. The **environment** is the owner's label on that
 resource (`development`, `staging`, `prod`): every slice carries
 `database[<id>]`, which the host's default `resourceEnvResolver` maps to the
@@ -91,7 +91,7 @@ HTTP Basic auth (`email:api_key`). The guide asks for a Read/Write key (a Read
 Only key cannot run the write tools; the missions narrow what an agent may
 do) and an expiration the person picks; Upstash does not say it back, so the
 account page cannot warn before it. The check at paste (`verifyUpstashKey`)
-asks `GET /v2/teams`. Revoke the key in the console to end the connection.
+asks `GET /v2/teams`. Revoke the key in the console to end the account.
 
 The per-database REST tokens (Data API) are **not** part of the credential:
 `execute` reads them from `GET /v2/redis/database/{id}` at call time and
@@ -100,7 +100,7 @@ never returns them — Management API answers are redacted of `rest_token`,
 is posted to `https://<label>.upstash.io` only: the endpoint the Management
 API names (`rest_url`, or `endpoint`) is reduced to its label and rebuilt
 (`restEndpointOf`), and a database answer naming any other host, scheme,
-port or path makes the call fail before anything is sent. A connection
+port or path makes the call fail before anything is sent. An account
 made of per-database REST tokens was considered and rejected: it could
 neither discover its databases nor reach the management tools.
 

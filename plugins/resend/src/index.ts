@@ -47,7 +47,7 @@ export const resendPlugin = definePlugin({
   tools: resendTools,
   toolTitles: resendToolTitles,
   examples: resendExamples,
-  // Domains and segments are what a Resend connection lists : a created one is
+  // Domains and segments are what a Resend account lists : a created one is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createDomain, TOOL.createSegment],
   // Read from the call's answer: the mission that created it reaches it at once

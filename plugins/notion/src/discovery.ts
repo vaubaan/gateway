@@ -1,11 +1,11 @@
 /**
  * Resource discovery of the `notion` provider : one resource per top-level
- * page or database shared with the connection.
+ * page or database shared with the account.
  *
  * Handbook : docs/handbook/providers/notion.md.
  *
- * Search cannot enumerate everything a connection reaches, but "any pages
- * or databases that are directly shared with a connection are guaranteed to
+ * Search cannot enumerate everything an account reaches, but "any pages
+ * or databases that are directly shared with an account are guaranteed to
  * be returned" — and a root is directly shared by definition. Discovery
  * pages through search for pages, then for data sources (a database is
  * found through its data sources), and keeps an object whose parent is the
@@ -21,7 +21,7 @@ import {
   anyJson,
   isList,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
@@ -33,10 +33,10 @@ import { ENDPOINT, parentRef } from './parents.ts';
 
 /** Search pages read per kind of object (100 objects each). */
 export const MAX_SEARCH_PAGES = 20;
-/** Most roots one connection exposes. */
+/** Most roots one account exposes. */
 export const MAX_DISCOVERED_ROOTS = 200;
 
-/** A ceiling of discovery reached : the connection shares more than one discovery reads. */
+/** A ceiling of discovery reached : the account shares more than one discovery reads. */
 function tooMany(message: string): never {
   throw new Error(`${PROVIDER_ID}: ${message}`);
 }
@@ -55,7 +55,7 @@ function isSearchPage(value: unknown): value is SearchPage {
   return isResultList(value) && typeof value.has_more === 'boolean';
 }
 
-async function searchAll(ctx: ConnectionContext, value: 'page' | 'data_source'): Promise<Json[]> {
+async function searchAll(ctx: AccountContext, value: 'page' | 'data_source'): Promise<Json[]> {
   const found: Json[] = [];
   let next: string | null = null;
   for (let page = 0; page < MAX_SEARCH_PAGES; page += 1) {
@@ -77,13 +77,13 @@ async function searchAll(ctx: ConnectionContext, value: 'page' | 'data_source'):
     next = cursor(answer.next_cursor) ?? unexpected('unexpected next_cursor in the search answer');
   }
   return tooMany(
-    `search returned more than ${MAX_SEARCH_PAGES * 100} ${value === 'page' ? 'pages' : 'data sources'}: share fewer top-level pages with the connection`,
+    `search returned more than ${MAX_SEARCH_PAGES * 100} ${value === 'page' ? 'pages' : 'data sources'}: share fewer top-level pages with the account`,
   );
 }
 
 /** True when an object with this parent is a root : the workspace, or a parent this token neither found nor reads. */
 async function isTopLevel(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   parent: unknown,
   found: ReadonlySet<string>,
 ): Promise<boolean> {
@@ -113,9 +113,7 @@ function pageTitle(page: Json): string {
   return (isRecord(title) && plainText(title.title)) || 'Untitled';
 }
 
-export async function discoverNotionResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverNotionResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const pages = await searchAll(ctx, 'page');
   const sources = await searchAll(ctx, 'data_source');
   const databases = new Map<string, { readonly source: Json; readonly databaseParent: unknown }>();
@@ -157,14 +155,14 @@ export async function discoverNotionResources(
   }
   if (roots.length > MAX_DISCOVERED_ROOTS) {
     return tooMany(
-      `more than ${MAX_DISCOVERED_ROOTS} top-level pages and databases are shared with the connection`,
+      `more than ${MAX_DISCOVERED_ROOTS} top-level pages and databases are shared with the account`,
     );
   }
   return roots;
 }
 
 /** A database's own parent, when its data source did not carry it. */
-async function databaseParentOf(ctx: ConnectionContext, database: string): Promise<unknown> {
+async function databaseParentOf(ctx: AccountContext, database: string): Promise<unknown> {
   const answer = await request(ctx, 'GET', `/databases/${database}`, isRecord);
   if (notionId(answer.id) !== database) return unexpected('unexpected database answer');
   return answer.parent;

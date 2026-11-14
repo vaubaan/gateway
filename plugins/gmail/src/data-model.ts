@@ -48,7 +48,7 @@ export const gmailDataModel: DataModel = {
           cardinalities: ['one'],
           description:
             'The Gmail or Google Workspace account whose app password Vaubaan signs in ' +
-            'with over IMAP. Singleton per connection (one connection = one Gmail account ; a mission ' +
+            'with over IMAP. Singleton per account (one account = one Gmail mailbox ; a mission ' +
             'with several mailboxes is denied until multi-account is decided).',
         },
         {
@@ -59,7 +59,7 @@ export const gmailDataModel: DataModel = {
           description:
             'Singleton implicit per account — Gmail does not expose multiple "mailboxes" ' +
             'per account. Carries the env label of the resource (e.g. a company may want ' +
-            'separate connections for the legal team mailbox vs the support inbox).',
+            'separate accounts for the legal team mailbox vs the support inbox).',
         },
         {
           name: 'label',
