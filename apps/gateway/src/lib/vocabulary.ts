@@ -1808,12 +1808,24 @@ export type DocPageId = keyof typeof DOC_PAGES;
 /** How an account of a service is plugged in (the plugin's `CredentialKind`). */
 export type ConnectWay = 'oauth2' | 'api-key' | 'ssh-key' | 'host';
 
+/**
+ * "a" or "an" before `noun`, by its first sound: a vowel letter, except the
+ * words that start with a "you" or "w" sound ("a user token", "a one-time
+ * key") or a silent h ("an hourly key"). Never "a(n)".
+ */
+export function articleFor(noun: string): 'a' | 'an' {
+  const word = noun.trim().toLowerCase();
+  if (/^(uni|use|usu|uti|eu|one\b|once\b)/.test(word)) return 'a';
+  if (/^(hour|honest|honou?r|heir)/.test(word)) return 'an';
+  return /^[aeiou]/.test(word) ? 'an' : 'a';
+}
+
 /** What connecting an account of `service` involves, in the hint of its connect page. */
 export function connectHint(service: string, way: ConnectWay, keyName?: string | null): string {
   switch (way) {
     case 'api-key': {
       const key = keyName ?? 'key';
-      return `You create ${/^[aeiou]/i.test(key) ? 'an' : 'a'} ${key} at ${service} and paste it once. It is checked, stored encrypted and never shown to an agent; each mission narrows what it reaches.`;
+      return `You create ${articleFor(key)} ${key} at ${service} and paste it once. It is checked, stored encrypted and never shown to an agent; each mission narrows what it reaches.`;
     }
     case 'oauth2':
       return `You sign in at ${service} and allow this gateway: nothing to create or paste. Each mission narrows what the account reaches.`;

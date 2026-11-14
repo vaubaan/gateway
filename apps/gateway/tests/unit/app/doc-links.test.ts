@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import { docHref } from '@/lib/docs-links';
 import {
+  articleFor,
   clampHint,
   connectHint,
   DOC_HINT_MAX,
@@ -240,6 +241,37 @@ describe('doc hints: every target says where one is, in a few words', () => {
     }
     expect(connectHint('Vercel', 'api-key', 'access token')).toMatch(
       /^You create an access token at Vercel and paste it once\./,
+    );
+  });
+
+  it('chooses a or an from the key’s name, never “a(n)”', () => {
+    // The names the shipped plugins give their keys, and the exceptions of the first sound.
+    const cases: Record<string, 'a' | 'an'> = {
+      'API key': 'an',
+      'API token': 'an',
+      'access token': 'an',
+      'app password': 'an',
+      'internal account token': 'an',
+      'personal access token': 'a',
+      'fine-grained personal access token': 'a',
+      'secret key': 'a',
+      'workspace token': 'a',
+      'Developer API key': 'a',
+      'user token': 'a',
+      'one-time key': 'a',
+      'hourly key': 'an',
+    };
+    for (const [noun, article] of Object.entries(cases))
+      expect(articleFor(noun), noun).toBe(article);
+    const hints = [
+      ...Object.values(DOC_PAGES).map((t) => t.hint),
+      ...Object.keys(cases).map((noun) => connectHint('Vercel', 'api-key', noun)),
+      ...(['api-key', 'oauth2', 'ssh-key', 'host'] as const).map((way) => connectHint('X', way)),
+    ];
+    for (const hint of hints) expect(hint).not.toMatch(/\ba\(n\)/i);
+    expect(connectHint('Vercel', 'api-key', 'access token')).toMatch(/^You create an access token/);
+    expect(connectHint('GitHub', 'api-key', 'fine-grained personal access token')).toMatch(
+      /^You create a fine-grained/,
     );
   });
 
