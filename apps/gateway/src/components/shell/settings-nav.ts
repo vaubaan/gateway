@@ -4,7 +4,7 @@
  * it, and a unit test pins that every entry leads to a page that exists.
  *
  * Until the settings pages are redesigned the entries lead to the pages that
- * exist today (`/delegations`, `/admin/**`), under the words of the redesign:
+ * exist today (`/settings/**`, `/admin/**`), under the words of the redesign:
  * no label is used for two things (the audit found "Connections" twice).
  * The accounts without owner are not an entry: they are the last region of
  * Accounts, for an administrator (docs/handbook/web-app.md).
@@ -18,7 +18,6 @@ export const ADMIN_PAGES = {
   people: '/admin/users',
   teams: '/admin/groups',
   telemetry: '/admin/telemetry',
-  registeredApps: '/admin/oauth-clients',
   encryption: '/admin/encryption',
   plugins: '/admin/plugins',
 } as const;
@@ -30,7 +29,6 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
       items: [
         { label: 'Preferences', href: ROUTES.settings, exact: true },
         { label: SECTIONS.notifications, href: ROUTES.notifications },
-        { label: SECTIONS.connectedApps, href: ROUTES.connectedApps },
       ],
     },
   ];
@@ -44,7 +42,6 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
         { label: capitalize(TERMS.user.many), href: ADMIN_PAGES.people },
         { label: capitalize(TERMS.group.many), href: ADMIN_PAGES.teams },
         { label: 'Telemetry', href: ADMIN_PAGES.telemetry },
-        { label: 'Registered apps', href: ADMIN_PAGES.registeredApps },
         { label: 'Encryption', href: ADMIN_PAGES.encryption },
         { label: SETTINGS_PAGES.plugins.title, href: ADMIN_PAGES.plugins },
       ],

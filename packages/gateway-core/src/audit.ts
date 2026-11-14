@@ -194,8 +194,9 @@ export type AdminAct =
   | 'mission-changed'
   | 'approval-granted'
   | 'request-refused'
+  /** History (the management door was retired on 2026-11-14): a user authorized an app. */
   | 'delegation-granted'
-  /** A delegation ended: by its user, by its client, by an operator disabling
+  /** History. A delegation ended: by its user, by its client, by an operator disabling
    *  the client or deactivating the user, or by the instance on a replayed
    *  refresh token or authorization code (`after.reason` says which; after a
    *  replay `after.missions_to_review` names the missions it issued that still
@@ -205,14 +206,13 @@ export type AdminAct =
   | 'group-created'
   | 'group-member-added'
   | 'group-member-removed'
-  /** An operator allowed a registered OAuth client of the management door to
+  /** History. An operator allowed a registered OAuth client of the management door to
    *  ask users for a delegation. Object: the client. */
   | 'oauth-client-approved'
-  /** An operator barred an OAuth client; its delegations are revoked with it. */
+  /** History. An operator barred an OAuth client; its delegations are revoked with it. */
   | 'oauth-client-disabled'
   /** An operator deactivated a user: no sign-in, no session, no authority; their
-   *  delegations are revoked and their group memberships removed (`after` lists
-   *  both). Their missions get their own `mission-orphaned` entries. Object: the user. */
+   *  group memberships are removed (`after` lists them). Their missions get their own `mission-orphaned` entries. Object: the user. */
   | 'user-deactivated'
   /** An operator let a deactivated user sign in again. Object: the user. */
   | 'user-reactivated'
@@ -353,16 +353,25 @@ export const DISCOVERY_ACTOR_LABEL = 'The gateway’s discovery';
 export interface AdminAuditEntry {
   readonly kind: 'admin';
   readonly ts: string;
-  /** The human behind the act: a user id (a delegated client acts on behalf
-   *  of one), or `BOOTSTRAP_ACTOR_ID` for the bootstrap operator. */
+  /** The human behind the act: a user id (an agent acting through the
+   *  `vaubaan` plugin acts on behalf of its mission's creator), or
+   *  `BOOTSTRAP_ACTOR_ID` for the bootstrap operator. */
   readonly user_id: string;
   readonly act: AdminAct;
   readonly object: { readonly type: AdminObjectType; readonly id: string };
   /** Previous and new state, when meaningful; `null` when not. Never a secret. */
   readonly before: unknown;
   readonly after: unknown;
-  /** Set when the act came through the management door (spec §4.1 bis). */
-  readonly delegated_client_id: string | null;
+  /**
+   * Set when the act came through the `vaubaan` plugin (spec §4.1 bis, §8): the
+   * mission whose key made the call. Stored in the entry's `mission_id`.
+   */
+  readonly via_mission_id?: string | null;
+  /**
+   * History: the OAuth client that acted through the retired management door.
+   * Nothing writes it any more; entries written before 2026-11-14 still carry it.
+   */
+  readonly delegated_client_id?: string | null;
 }
 
 export type AuditEntry = CallAuditEntry | AdminAuditEntry;

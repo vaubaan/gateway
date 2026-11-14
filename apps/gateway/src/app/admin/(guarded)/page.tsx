@@ -46,7 +46,6 @@ import {
   CONFIG_WORDS,
   CEILING_WORDS,
   count,
-  formatNumber,
   SECTIONS,
   SETTINGS_ACTIONS,
   SETTINGS_PAGES,
@@ -176,36 +175,24 @@ export default async function SetupPage({ searchParams }: Props) {
   const notice = await takeNotice(root, principal.sessionId, params);
   const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
   const keyProblem = isKeyProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
-  const [
-    providers,
-    rule,
-    bootstrap,
-    ownerless,
-    clients,
-    telemetry,
-    users,
-    identity,
-    key,
-    ceilings,
-  ] = await Promise.all([
-    root.auth.providers.views(),
-    root.auth.administrators.current(),
-    root.auth.bootstrap.state(),
-    root.connections.service.listOwnerless(),
-    root.oauth.clients.list(),
-    root.telemetry.overview(),
-    root.users.service.list(),
-    root.instance.name.identity(),
-    root.masterKey.service.state(),
-    root.limits.usage(),
-  ]);
+  const [providers, rule, bootstrap, ownerless, telemetry, users, identity, key, ceilings] =
+    await Promise.all([
+      root.auth.providers.views(),
+      root.auth.administrators.current(),
+      root.auth.bootstrap.state(),
+      root.connections.service.listOwnerless(),
+      root.telemetry.overview(),
+      root.users.service.list(),
+      root.instance.name.identity(),
+      root.masterKey.service.state(),
+      root.limits.usage(),
+    ]);
   // The handover step (below) is the one thing to do while it is pending: every other
   // action of the checklist waits for it (ADR master-key-generated-and-handed-over-by-the-instance).
   const handover = key.handoverPending;
   const fresh =
     handover && (await signedInFreshly(root.auth.sessions, await headers(), new Date()));
 
-  const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
     (view) =>
       view.user.status === 'active' &&
@@ -333,18 +320,6 @@ export default async function SetupPage({ searchParams }: Props) {
             title: SETTINGS_PAGES.ownerless.title,
             description: `${count(ownerless.length, TERMS.connection)} ${ownerless.length === 1 ? 'has' : 'have'} no owner left: nobody can reconnect ${ownerless.length === 1 ? 'it' : 'them'} or give access.`,
             action: { label: SETTINGS_ACTIONS.nameOwner, href: OWNERLESS_CONNECTIONS_PAGE },
-          },
-        ]
-      : []),
-    ...(waiting.length > 0
-      ? [
-          {
-            key: 'registered-apps',
-            counted: false,
-            state: 'todo' as const,
-            title: SETTINGS_PAGES.registeredApps.title,
-            description: `${formatNumber(waiting.length)} ${waiting.length === 1 ? 'app waits' : 'apps wait'} for your approval before ${waiting.length === 1 ? 'it' : 'they'} can ask anyone.`,
-            action: { label: 'Review', href: ADMIN_PAGES.registeredApps },
           },
         ]
       : []),

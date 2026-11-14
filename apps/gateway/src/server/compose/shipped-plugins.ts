@@ -36,6 +36,7 @@ import sshPlugin from '@vaubaan/plugin-ssh';
 import stripePlugin from '@vaubaan/plugin-stripe';
 import supabasePlugin from '@vaubaan/plugin-supabase';
 import upstashRedisPlugin from '@vaubaan/plugin-upstash-redis';
+import vaubaanPlugin from '@vaubaan/plugin-vaubaan';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 
 export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
@@ -58,6 +59,9 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   asanaPlugin,
   axonautPlugin,
   outlookPlugin,
+  // The gateway's own management tools: a host account, bound by the root to the
+  // mission service (`compose/vaubaan.ts`; ADR platform-management-is-a-plugin-on-the-execution-door).
+  vaubaanPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

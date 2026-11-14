@@ -1,0 +1,649 @@
+{
+  "list_my_connections": {
+    "type": "object",
+    "properties": {
+      "include_experimental": {
+        "description": "Deprecated and ignored: every connection is listed.",
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  },
+  "get_catalog": {
+    "type": "object",
+    "properties": {
+      "provider": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "description": "Provider id, as `list_my_connections` shows it, e.g. `github`."
+      },
+      "connection_id": {
+        "description": "One of the user’s connections of that provider.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300
+      }
+    },
+    "required": ["provider"],
+    "additionalProperties": false
+  },
+  "list_my_missions": {
+    "type": "object",
+    "properties": {
+      "mission_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300,
+        "description": "Id of one of the user’s missions, as `list_my_missions` returns it."
+      },
+      "include_closed": {
+        "description": "Also list revoked and expired missions (left out by default).",
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false
+  },
+  "preview_policy": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "What the mission is for, as the user will read it."
+      },
+      "connections": {
+        "maxItems": 32,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "connection_id": {
+              "description": "Id of one of the user’s connections (`list_my_connections`).",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "provider": {
+              "description": "Instead of `connection_id`, when the user holds exactly one usable connection of that provider.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "resources": {
+              "description": "The resources the mission may touch. Default: `all` (every resource known now). A resource set holds the resources of one environment.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": { "scope": { "type": "string", "const": "all" } },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                },
+                {
+                  "type": "object",
+                  "properties": { "scope": { "type": "string", "const": "connection" } },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "scope": { "type": "string", "const": "selected" },
+                    "resource_ids": {
+                      "maxItems": 5000,
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                    },
+                    "resource_refs": {
+                      "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                      "maxItems": 5000,
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                    }
+                  },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                }
+              ]
+            },
+            "future": {
+              "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+              "type": "boolean"
+            },
+            "env": {
+              "description": "The set’s environment label, needed only when it lists no resource yet (a set of future resources); `null` for no label. Every listed resource must carry it.",
+              "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
+            },
+            "everything_i_hold": {
+              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+              "type": "boolean"
+            },
+            "policy": {
+              "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+              "maxItems": 2000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "risk_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                  },
+                  "quota": {
+                    "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                    "type": "number"
+                  },
+                  "rate_limit": {
+                    "type": "object",
+                    "properties": {
+                      "max": { "type": "number", "description": "Actions allowed per window." },
+                      "window_seconds": {
+                        "type": "number",
+                        "description": "Length of the window, in seconds."
+                      }
+                    },
+                    "required": ["max", "window_seconds"],
+                    "additionalProperties": false,
+                    "description": "Short-window cap on one risk, inside its quota."
+                  },
+                  "gate": {
+                    "description": "`auto` (default): calls pass within the budget. `approval`: every call waits for the mission creator to approve it in the interface.",
+                    "type": "string",
+                    "enum": ["auto", "approval"]
+                  }
+                },
+                "required": ["risk_id"],
+                "additionalProperties": false
+              }
+            },
+            "trust_levels": {
+              "description": "The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s row, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.",
+              "type": "object",
+              "propertyNames": { "type": "string", "maxLength": 64 },
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["careful", "trusting", "autonomous"]
+              }
+            },
+            "resource_sets": {
+              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.",
+              "minItems": 1,
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "The stored set an edit of the mission keeps; ignored when a mission is issued.",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "resources": {
+                    "description": "The resources the mission may touch. Default: `all` (every resource known now). A resource set holds the resources of one environment.",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": { "scope": { "type": "string", "const": "all" } },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                      },
+                      {
+                        "type": "object",
+                        "properties": { "scope": { "type": "string", "const": "connection" } },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "scope": { "type": "string", "const": "selected" },
+                          "resource_ids": {
+                            "maxItems": 5000,
+                            "type": "array",
+                            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                          },
+                          "resource_refs": {
+                            "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                            "maxItems": 5000,
+                            "type": "array",
+                            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                          }
+                        },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                      }
+                    ]
+                  },
+                  "future": {
+                    "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "description": "The set’s environment label, needed only when it lists no resource yet (a set of future resources); `null` for no label. Every listed resource must carry it.",
+                    "anyOf": [
+                      { "type": "string", "minLength": 1, "maxLength": 64 },
+                      { "type": "null" }
+                    ]
+                  },
+                  "everything_i_hold": {
+                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+                    "type": "boolean"
+                  },
+                  "policy": {
+                    "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "risk_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                        },
+                        "quota": {
+                          "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                          "type": "number"
+                        },
+                        "rate_limit": {
+                          "type": "object",
+                          "properties": {
+                            "max": {
+                              "type": "number",
+                              "description": "Actions allowed per window."
+                            },
+                            "window_seconds": {
+                              "type": "number",
+                              "description": "Length of the window, in seconds."
+                            }
+                          },
+                          "required": ["max", "window_seconds"],
+                          "additionalProperties": false,
+                          "description": "Short-window cap on one risk, inside its quota."
+                        },
+                        "gate": {
+                          "description": "`auto` (default): calls pass within the budget. `approval`: every call waits for the mission creator to approve it in the interface.",
+                          "type": "string",
+                          "enum": ["auto", "approval"]
+                        }
+                      },
+                      "required": ["risk_id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "trust_levels": {
+                    "description": "The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s row, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.",
+                    "type": "object",
+                    "propertyNames": { "type": "string", "maxLength": 64 },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["careful", "trusting", "autonomous"]
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "description": "One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget."
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "At least one connection; at most one connection per provider."
+      },
+      "period": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": { "kind": { "type": "string", "const": "one-off" } },
+            "required": ["kind"],
+            "additionalProperties": false,
+            "description": "One budget for the life of the mission."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "const": "recurring" },
+              "length_seconds": {
+                "type": "number",
+                "description": "Period length in seconds, e.g. 86400 for a day."
+              }
+            },
+            "required": ["kind", "length_seconds"],
+            "additionalProperties": false,
+            "description": "Quotas reload at every period."
+          }
+        ]
+      },
+      "expires_at": {
+        "anyOf": [{ "type": "string", "maxLength": 64 }, { "type": "null" }],
+        "description": "ISO-8601 instant in the future, or null for a mission that does not expire."
+      }
+    },
+    "required": ["name", "connections", "period", "expires_at"],
+    "additionalProperties": false
+  },
+  "issue_mission": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "maxLength": 1000,
+        "description": "What the mission is for, as the user will read it."
+      },
+      "connections": {
+        "maxItems": 32,
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "connection_id": {
+              "description": "Id of one of the user’s connections (`list_my_connections`).",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "provider": {
+              "description": "Instead of `connection_id`, when the user holds exactly one usable connection of that provider.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "resources": {
+              "description": "The resources the mission may touch. Default: `all` (every resource known now). A resource set holds the resources of one environment.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": { "scope": { "type": "string", "const": "all" } },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                },
+                {
+                  "type": "object",
+                  "properties": { "scope": { "type": "string", "const": "connection" } },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "scope": { "type": "string", "const": "selected" },
+                    "resource_ids": {
+                      "maxItems": 5000,
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                    },
+                    "resource_refs": {
+                      "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                      "maxItems": 5000,
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                    }
+                  },
+                  "required": ["scope"],
+                  "additionalProperties": false,
+                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                }
+              ]
+            },
+            "future": {
+              "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+              "type": "boolean"
+            },
+            "env": {
+              "description": "The set’s environment label, needed only when it lists no resource yet (a set of future resources); `null` for no label. Every listed resource must carry it.",
+              "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
+            },
+            "everything_i_hold": {
+              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+              "type": "boolean"
+            },
+            "policy": {
+              "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+              "maxItems": 2000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "risk_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                  },
+                  "quota": {
+                    "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                    "type": "number"
+                  },
+                  "rate_limit": {
+                    "type": "object",
+                    "properties": {
+                      "max": { "type": "number", "description": "Actions allowed per window." },
+                      "window_seconds": {
+                        "type": "number",
+                        "description": "Length of the window, in seconds."
+                      }
+                    },
+                    "required": ["max", "window_seconds"],
+                    "additionalProperties": false,
+                    "description": "Short-window cap on one risk, inside its quota."
+                  },
+                  "gate": {
+                    "description": "`auto` (default): calls pass within the budget. `approval`: every call waits for the mission creator to approve it in the interface.",
+                    "type": "string",
+                    "enum": ["auto", "approval"]
+                  }
+                },
+                "required": ["risk_id"],
+                "additionalProperties": false
+              }
+            },
+            "trust_levels": {
+              "description": "The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s row, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.",
+              "type": "object",
+              "propertyNames": { "type": "string", "maxLength": 64 },
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["careful", "trusting", "autonomous"]
+              }
+            },
+            "resource_sets": {
+              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.",
+              "minItems": 1,
+              "maxItems": 32,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "The stored set an edit of the mission keeps; ignored when a mission is issued.",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "resources": {
+                    "description": "The resources the mission may touch. Default: `all` (every resource known now). A resource set holds the resources of one environment.",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": { "scope": { "type": "string", "const": "all" } },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                      },
+                      {
+                        "type": "object",
+                        "properties": { "scope": { "type": "string", "const": "connection" } },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "scope": { "type": "string", "const": "selected" },
+                          "resource_ids": {
+                            "maxItems": 5000,
+                            "type": "array",
+                            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                          },
+                          "resource_refs": {
+                            "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                            "maxItems": 5000,
+                            "type": "array",
+                            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+                          }
+                        },
+                        "required": ["scope"],
+                        "additionalProperties": false,
+                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                      }
+                    ]
+                  },
+                  "future": {
+                    "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+                    "type": "boolean"
+                  },
+                  "env": {
+                    "description": "The set’s environment label, needed only when it lists no resource yet (a set of future resources); `null` for no label. Every listed resource must carry it.",
+                    "anyOf": [
+                      { "type": "string", "minLength": 1, "maxLength": 64 },
+                      { "type": "null" }
+                    ]
+                  },
+                  "everything_i_hold": {
+                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+                    "type": "boolean"
+                  },
+                  "policy": {
+                    "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "risk_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300,
+                          "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                        },
+                        "quota": {
+                          "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                          "type": "number"
+                        },
+                        "rate_limit": {
+                          "type": "object",
+                          "properties": {
+                            "max": {
+                              "type": "number",
+                              "description": "Actions allowed per window."
+                            },
+                            "window_seconds": {
+                              "type": "number",
+                              "description": "Length of the window, in seconds."
+                            }
+                          },
+                          "required": ["max", "window_seconds"],
+                          "additionalProperties": false,
+                          "description": "Short-window cap on one risk, inside its quota."
+                        },
+                        "gate": {
+                          "description": "`auto` (default): calls pass within the budget. `approval`: every call waits for the mission creator to approve it in the interface.",
+                          "type": "string",
+                          "enum": ["auto", "approval"]
+                        }
+                      },
+                      "required": ["risk_id"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "trust_levels": {
+                    "description": "The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s row, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.",
+                    "type": "object",
+                    "propertyNames": { "type": "string", "maxLength": 64 },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["careful", "trusting", "autonomous"]
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "description": "One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget."
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "At least one connection; at most one connection per provider."
+      },
+      "period": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": { "kind": { "type": "string", "const": "one-off" } },
+            "required": ["kind"],
+            "additionalProperties": false,
+            "description": "One budget for the life of the mission."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "const": "recurring" },
+              "length_seconds": {
+                "type": "number",
+                "description": "Period length in seconds, e.g. 86400 for a day."
+              }
+            },
+            "required": ["kind", "length_seconds"],
+            "additionalProperties": false,
+            "description": "Quotas reload at every period."
+          }
+        ]
+      },
+      "expires_at": {
+        "anyOf": [{ "type": "string", "maxLength": 64 }, { "type": "null" }],
+        "description": "ISO-8601 instant in the future, or null for a mission that does not expire."
+      }
+    },
+    "required": ["name", "connections", "period", "expires_at"],
+    "additionalProperties": false
+  },
+  "rotate_mission_token": {
+    "type": "object",
+    "properties": {
+      "mission_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300,
+        "description": "Id of one of the user’s missions, as `list_my_missions` returns it."
+      }
+    },
+    "required": ["mission_id"],
+    "additionalProperties": false
+  },
+  "revoke_mission": {
+    "type": "object",
+    "properties": {
+      "mission_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 300,
+        "description": "Id of one of the user’s missions, as `list_my_missions` returns it."
+      }
+    },
+    "required": ["mission_id"],
+    "additionalProperties": false
+  }
+}

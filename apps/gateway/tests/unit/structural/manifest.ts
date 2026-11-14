@@ -328,7 +328,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'every-mutation-audited',
     statement:
-      'Every public method of every service that changes something leaves the administrative entry of its act, naming the human behind it (and the delegated client when there is one).',
+      'Every public method of every service that changes something leaves the administrative entry of its act, naming the human behind it (and the calling mission when the act came through the `vaubaan` plugin).',
     source: 'spec §8',
     proofs: [
       {
@@ -371,18 +371,19 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
-    id: 'three-credentials-never-cross',
+    id: 'two-credentials-never-cross',
     statement:
-      'A mission token opens the execution door only, a delegated token the management door only, a human session the interface only; a request is granted in a human session and nowhere else.',
-    source: 'spec §2.4, §6 "Separation of the three credentials", §10',
+      'A mission token opens the execution surface only, a human session the interface only; a request is granted in a human session and nowhere else; the retired management door opens to neither.',
+    source:
+      'spec §2.4, §6 "Separation of the two credentials", §10; ADR platform-management-is-a-plugin-on-the-execution-door',
     proofs: [
       {
-        file: `${INTEGRATION}/oauth-as/credential-separation.test.ts`,
+        file: `${INTEGRATION}/execution/credential-separation.test.ts`,
         tests: [
-          'the three credentials never cross over',
-          'each credential opens its own door',
-          'refuses every kind of mission token alike: a member’s own and a named one open the execution door only',
-          'requests are granted only in a human session',
+          'the two credentials never cross over',
+          'refuses a web session at the execution door',
+          'refuses every kind of mission token alike on the request surface',
+          'the retired management door opens to no credential',
         ],
       },
     ],
@@ -440,21 +441,25 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
-    id: 'management-door-hard-deny',
+    id: 'vaubaan-plugin-hard-deny',
     statement:
-      'The management door cannot answer a request, open a gate, touch a connection or a share, or execute a tool: nothing of the instance but seven mission methods, static catalogs and its own rate-limit keys is reachable from it. Rotation reaches only the missions the calling delegation issued.',
-    source: 'spec §4.1 bis; ADR management-door-authorization-server',
+      'The `vaubaan` plugin cannot answer a request, open a gate, touch a connection or a share, or execute another tool: nothing of the instance but seven mission methods and static catalogs is reachable from its ports. A mission never rotates nor revokes itself, a mission it issues never holds a Vaubaan account, and rotation reaches only the missions the calling mission issued.',
+    source: 'spec §4.1 bis, §6; ADR platform-management-is-a-plugin-on-the-execution-door',
     proofs: [
       {
-        file: `${INTEGRATION}/management/hard-deny.test.ts`,
+        file: `${INTEGRATION}/vaubaan/hard-deny.test.ts`,
         tests: [
-          'nothing of the instance is reachable from the door, its tools or its handler',
+          'nothing of the instance is reachable from the ports or the bound execute',
           'the mission port is a frozen object of exactly the seven methods, bound to the service',
         ],
       },
       {
-        file: `${INTEGRATION}/management/management-door.test.ts`,
-        tests: ['rotates only what its own delegation issued'],
+        file: `${INTEGRATION}/vaubaan/vaubaan-plugin.test.ts`,
+        tests: [
+          'rotates only what this mission issued',
+          'never rotates nor revokes itself, whatever its policy allows',
+          'a mission issued here never carries a Vaubaan account (the self rule)',
+        ],
       },
     ],
   },
@@ -628,7 +633,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'surface-rate-limits',
     statement:
-      'Every surface an unauthenticated or automated caller reaches is rate-limited on the key the spec names: the execution door per mission, connect flows per user, the request page per client address, the token and registration endpoints per client address, the management door per delegation.',
+      'Every surface an unauthenticated or automated caller reaches is rate-limited on the key the spec names: the execution door per mission, connect flows per user, the request page per client address.',
     source: 'spec §6 "Surface rate limits"',
     proofs: [
       {
@@ -647,16 +652,6 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'answers 429 with Retry-After once the window is spent, before looking at anything',
           'keys a signed-in creator on their session: an anonymous flood never holds them out',
-        ],
-      },
-      {
-        file: `${INTEGRATION}/oauth-as/http-surface.test.ts`,
-        tests: ['is rate-limited per client address'],
-      },
-      {
-        file: `${INTEGRATION}/management/management-door.test.ts`,
-        tests: [
-          'the surface limit is per delegation, through the RateLimiter port, on keys of the door',
         ],
       },
     ],

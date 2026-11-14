@@ -240,9 +240,6 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       oidc: { fetch: toLoopback, allowInsecureIssuer: true },
       providerFetch: providers.fetch,
       telemetryFetch: refuseOutbound('telemetry'),
-      clientDocumentFetch: async (url) => {
-        throw new Error(`demo mode: client metadata documents are disabled — refused ${url.href}`);
-      },
       rateLimiter,
       // The instance log goes to a file next to the store, not over the tour.
       logWrite: (_level, line) => appendFileSync(logPath, line),

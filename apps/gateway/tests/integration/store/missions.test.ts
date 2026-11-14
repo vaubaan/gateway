@@ -94,7 +94,8 @@ describe('missions repository', () => {
       periodAnchor: '2026-10-13T09:00:00.000Z',
       periodSeconds: 604_800,
       expiresAt: '2026-12-31T00:00:00.000Z',
-      delegationId: null,
+      issuedByMissionId: null,
+      issuedViaClientName: null,
     });
     expect(flatConnections(m)).toEqual([{ connectionId: connection, resourceIds: [] }]);
     expect(flatPolicy(m)).toEqual(POLICY);

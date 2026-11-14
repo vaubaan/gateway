@@ -225,6 +225,11 @@ interface ResourceRow {
   first_seen_at: string | null;
 }
 
+/** A `host` account (the Vaubaan account): the kind its connect stored. */
+function isHostRecord(record: Pick<ConnectionRecord, 'metadata'>): boolean {
+  return record.metadata?.credential_kind === 'host';
+}
+
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
   provider_grant, default_env`;
@@ -657,13 +662,19 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       return withImmediateTransaction(db, () => {
         const changed: ConnectionRecord[] = [];
         for (const row of ownerlessActive.all()) {
+          // A host account follows its person: never handed to anyone else (ADR
+          // platform-management-is-a-plugin-on-the-execution-door).
+          if (isHostRecord(toRecord(row))) continue;
           if (markUnownedStmt.run(now, row.id).changes > 0) changed.push(requireConnection(row.id));
         }
         return changed;
       });
     },
     async listOwnerless() {
-      return ownerless.all().map(toRecord);
+      return ownerless
+        .all()
+        .map(toRecord)
+        .filter((record) => !isHostRecord(record));
     },
     async revoke(id) {
       const now = nowIso(ctx);

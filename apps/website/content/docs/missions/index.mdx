@@ -3,7 +3,7 @@ title: Missions and agents
 description: Create a mission, give its key to an agent with the kit the instance prints, and what the agent reads when a call is refused.
 ---
 
-A mission is created by a person, in the interface or through a connected app, and handed to an agent as a key plus a kit: the MCP client configuration, the instructions for the agent and a command to check it.
+A mission is created by a person, in the interface or by an agent holding their platform management mission, and handed to an agent as a key plus a kit: the MCP client configuration, the instructions for the agent and a command to check it.
 
 ## Create a mission
 
@@ -37,7 +37,7 @@ The key is shown once, followed by the kit:
 }
 ```
 
-- **Instructions for the agent**, in Markdown: whose key it is, the accounts and resources it may touch, each permission with its limits, what each refusal means and what to do, the management door's address.
+- **Instructions for the agent**, in Markdown: whose key it is, the accounts and resources it may touch, each permission with its limits, what each refusal means and what to do, and what the `vaubaan__*` tools never do.
 - **The git configuration**, when the mission holds repositories: see [git remote](/docs/missions/git-remote).
 - **A check**, a `curl` that lists the tools the key opens.
 

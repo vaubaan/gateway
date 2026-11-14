@@ -394,38 +394,6 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       expect(asBearer.body.error?.data).toMatchObject(expected);
     });
 
-    it('refuses a delegated token with wrong-credential-kind, naming the door that accepts it', async () => {
-      const delegated = await executionInstance({
-        deps: {
-          delegatedTokens: {
-            resolve: async (bearer) =>
-              bearer === 'delegated-access-token'
-                ? {
-                    delegation_id: 'del-1',
-                    user_id: 'user-1',
-                    client_id: 'claude-code',
-                    scopes: ['mgmt:missions'],
-                    expires_at: new Date(Date.now() + 60_000).toISOString(),
-                  }
-                : null,
-          },
-        },
-      });
-      try {
-        const { status, body } = await delegated.rpc('delegated-access-token', LIST);
-        expect(status).toBe(403);
-        expect(body.error?.data).toMatchObject({
-          code: 'wrong-credential-kind',
-          door: 'execution',
-          presented: 'delegated-token',
-          expected: 'mission-token',
-        });
-        expect(body.error?.data?.hint).toContain('management');
-      } finally {
-        await delegated.close();
-      }
-    });
-
     it('refuses a browser origin other than the instance', async () => {
       const mission = await instance.issueGithub();
       const foreign = await instance.rpc(mission.token, LIST, { origin: 'https://evil.example' });

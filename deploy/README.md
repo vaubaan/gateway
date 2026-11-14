@@ -433,14 +433,12 @@ apps/gateway/restore.mjs …`.
   (`refs/vaubaan/*`) appear in the repositories for the length of a push, or
   of a pending approval; the instance removes them, and a sweep every five
   minutes takes those a crash left behind.
-- **Management door**: the instance is also the OAuth authorization server of
-  `/mcp/manage` (handbook
-  [management-door](../docs/handbook/management-door.md)). Defaults: access
-  tokens 15 minutes, refresh tokens 30 days, client registration
-  `operator-approved` with loopback-only clients (CLI agents) approved
-  automatically, Client ID Metadata Documents off. The `oauth.*` keys
-  (`VAUBAAN_OAUTH_*`) change them; an administrator approves or disables clients on
-  Settings → Administration → Registered apps. Nothing to configure on the proxy.
+- **Agents that prepare missions**: there is no second MCP door any more. A
+  person connects their Vaubaan account (one click) and gives the agent the key
+  of a mission on it; the agent calls the `vaubaan__*` tools on `/mcp` (handbook
+  [providers/vaubaan](../docs/handbook/providers/vaubaan.md)). The former
+  `oauth.*` keys (`VAUBAAN_OAUTH_*`) are ignored, with one warning at start:
+  remove them. Nothing to configure on the proxy.
 
 ## Community telemetry (optional)
 

@@ -577,108 +577,45 @@ describe('KEYS and the example files stay in sync', () => {
   });
 });
 
-describe('loadInstanceConfig — authorization server of the management door', () => {
-  it('defaults to short tokens and operator-approved registration with the loopback exception', () => {
-    const { config } = loadInstanceConfig({ env: validEnv() });
-    expect(config.oauth).toEqual({
-      accessTokenTtlSeconds: 900,
-      refreshTokenTtlSeconds: 30 * 86_400,
-      delegationMaxLifetimeSeconds: 90 * 86_400,
-      refreshReuseWindowSeconds: 30,
-      clientRegistration: {
-        policy: 'operator-approved',
-        autoApproveLoopback: true,
-        metadataDocuments: false,
-      },
-    });
-  });
-
-  it('reads every key from the environment', () => {
-    const { config } = loadInstanceConfig({
-      env: validEnv({
-        VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '5m',
-        VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: '7d',
-        VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME: '30d',
-        VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '0',
-        VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'closed',
-        VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK: 'false',
-        VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS: 'true',
-      }),
-    });
-    expect(config.oauth).toEqual({
-      accessTokenTtlSeconds: 300,
-      refreshTokenTtlSeconds: 7 * 86_400,
-      delegationMaxLifetimeSeconds: 30 * 86_400,
-      refreshReuseWindowSeconds: 0,
-      clientRegistration: { policy: 'closed', autoApproveLoopback: false, metadataDocuments: true },
-    });
-  });
-
-  it('reads the same keys from the YAML file, which wins', () => {
+describe('loadInstanceConfig — the retired authorization server', () => {
+  it('lists the oauth.* keys and variables a configuration still sets, and reads none', () => {
     const path = '/config/gateway.yaml';
     const { config } = loadInstanceConfig({
       env: validEnv({
         [CONFIG_FILE_ENV]: path,
-        VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'closed',
+        VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '5m',
       }),
       readFile: fakeFiles({
         [path]: [
           'oauth:',
-          '  access_token_ttl: 10m',
+          '  refresh_token_ttl: 10m',
           '  client_registration:',
           '    policy: open',
           '    auto_approve_loopback: false',
         ].join('\n'),
       }),
     });
-    expect(config.oauth.accessTokenTtlSeconds).toBe(600);
-    expect(config.oauth.clientRegistration).toEqual({
-      policy: 'open',
-      autoApproveLoopback: false,
-      metadataDocuments: false,
-    });
-  });
-
-  it('refuses an access token that is not short-lived', () => {
-    const err = failure(validEnv({ VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '2h' }));
-    expect(paths(err)).toEqual(['oauth.access_token_ttl']);
-    expect(err.message).toContain('at most 1h');
-    expect(err.message).toContain('VAUBAAN_OAUTH_ACCESS_TOKEN_TTL');
-  });
-
-  it('refuses a refresh token that does not outlive the access token', () => {
-    const err = failure(
-      validEnv({ VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '30m', VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: '30m' }),
-    );
-    expect(paths(err)).toEqual(['oauth.refresh_token_ttl']);
-  });
-
-  it('caps the reuse window of a rotated refresh token at one minute', () => {
-    const { config } = loadInstanceConfig({
-      env: validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '60' }),
-    });
-    expect(config.oauth.refreshReuseWindowSeconds).toBe(60);
-    const err = failure(validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '61' }));
-    expect(paths(err)).toEqual(['oauth.refresh_reuse_window_seconds']);
-    expect(err.message).toContain('at most 60');
-    expect(err.message).toContain('VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS');
-    expect(paths(failure(validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '-1' })))).toEqual([
-      'oauth.refresh_reuse_window_seconds',
-    ]);
-  });
-
-  it('refuses an unknown policy and a malformed duration, naming each key', () => {
-    const err = failure(
-      validEnv({
-        VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'everyone',
-        VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: 'a month',
-      }),
-    );
-    expect(paths(err).sort()).toEqual([
+    expect(config.retiredManagementKeys).toEqual([
+      'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
+      'oauth.client_registration.auto_approve_loopback',
       'oauth.client_registration.policy',
       'oauth.refresh_token_ttl',
     ]);
-    expect(err.message).toContain('open, operator-approved, closed');
+    expect(config.retiredKeys).toEqual([]);
+    expect('oauth' in config).toBe(false);
+  });
+
+  it('a value that the authorization server refused no longer stops the boot', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({
+        VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '2h',
+        VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'everyone',
+      }),
+    });
+    expect(config.retiredManagementKeys).toEqual([
+      'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',
+      'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
+    ]);
   });
 });
 

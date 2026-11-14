@@ -13,7 +13,9 @@
  *   - `checkSelfResources` compares the configured self resources with the
  *     registered ids;
  *   - `checkBrokeredPlugins` compares each brokered plugin with the OAuth
- *     provider table the broker compiles in (`@vaubaan/oauth-providers`).
+ *     provider table the broker compiles in (`@vaubaan/oauth-providers`);
+ *   - `checkHostToolNames` refuses a plugin tool named like one of the host's
+ *     own tools (`vaubaan__request_permission`), which the door routes first.
  */
 import { PROVIDERS, type ProviderTable } from '@vaubaan/oauth-providers';
 import {
@@ -26,6 +28,7 @@ import { findRiskEntry, isAcceptableInEnv, isEnvScopedEntry } from '@vaubaan/pol
 import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
 
 import { ConfigError, type InstanceConfig } from '../config';
+import { permissionRequestTool } from '../execution/permission-request';
 import type { CatalogIndex } from '../store';
 
 /** A registry with no plugin — tests of the root that need no provider. */
@@ -106,6 +109,38 @@ export function brokeredPluginProblems(
     }
   }
   return problems;
+}
+
+/**
+ * The tools the host itself answers on the execution door, by exact name, before
+ * the registry (ADR platform-management-is-a-plugin-on-the-execution-door): they
+ * share the prefix `vaubaan__` with the `vaubaan` plugin's tools.
+ */
+export const HOST_TOOL_NAMES: readonly string[] = [permissionRequestTool.name];
+
+/**
+ * The plugin tools named like a host tool: the door would answer the host's and
+ * the plugin's would never run, so a plugin may not take one of those names.
+ */
+export function hostToolNameProblems(
+  plugins: readonly ProviderPlugin[],
+  hostTools: readonly string[] = HOST_TOOL_NAMES,
+): string[] {
+  const taken = new Set(hostTools);
+  return plugins.flatMap((plugin) =>
+    plugin.tools
+      .filter((tool) => taken.has(tool.name))
+      .map(
+        (tool) =>
+          `plugin '${plugin.id}' declares the tool '${tool.name}', which the gateway itself answers: rename it`,
+      ),
+  );
+}
+
+/** Stops the boot on a plugin tool named like a host tool (`hostToolNameProblems`). */
+export function checkHostToolNames(registry: PluginRegistry): void {
+  const problems = hostToolNameProblems(registry.all().map((r) => r.plugin));
+  if (problems.length > 0) throw new PluginRegistryError(problems);
 }
 
 /**

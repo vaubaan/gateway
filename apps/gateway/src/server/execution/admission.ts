@@ -9,8 +9,8 @@
  *   origin        a browser origin other than the instance's is refused
  *   bearer        the mission key; missing or unknown → unauthenticated; a key
  *                 that authenticated once and no longer does → unauthenticated
- *                 with its reason (`AUTH_FAILURE_REASONS`); a web session or a
- *                 delegated token → `wrong-credential-kind`
+ *                 with its reason (`AUTH_FAILURE_REASONS`); a web session →
+ *                 `wrong-credential-kind`
  *   grounds       the creator's authority, re-read on every request; a mission
  *                 whose grounds are gone reads `orphaned` for this request, and
  *                 a connection whose part is lost is marked `lost` in it
@@ -28,7 +28,6 @@ import {
   type AuthFailureReason,
   type ClientOrigin,
   type CredentialResolver,
-  type DelegationContext,
   type MissionContext,
   type Refusal,
   type ResolvedCredential,
@@ -52,11 +51,6 @@ export const TOKEN_LAST_USED_GRANULARITY_SECONDS = 60;
 
 const SESSION_ID_SHAPE = /^[A-Za-z0-9_-]{16,}$/;
 
-/** Identifies a delegated token (management door). Absent until then. */
-export interface DelegatedTokenResolver {
-  resolve(bearer: string): Promise<DelegationContext | null>;
-}
-
 /** `MissionsRepo.markTokenUsed`: the doors' only write outside the pipeline. */
 export interface TokenUseRecorder {
   markTokenUsed(key: MissionTokenKey, granularitySeconds: number): Promise<boolean>;
@@ -74,7 +68,6 @@ export interface MissionAdmissionDeps {
   readonly webSessions: Pick<WebSessionService, 'read'>;
   readonly rateLimiter: RateLimiter;
   readonly logger: Logger;
-  readonly delegations?: DelegatedTokenResolver;
 }
 
 /**
@@ -265,8 +258,7 @@ export class MissionAdmission {
             };
           }
         }
-        const delegation = await this.deps.delegations?.resolve(bearer);
-        return delegation ? { kind: 'delegated-token', delegation } : null;
+        return null;
       },
     };
   }

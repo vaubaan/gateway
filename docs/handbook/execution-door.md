@@ -63,7 +63,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 ## Debug
 
 - **401 with a fresh token** → `error.data.reason` is set only when the secret is right; no reason: truncated bearer or another instance. No `Authorization` reaching the instance: the TLS terminator strips it.
-- **403 `wrong-credential-kind`** → a session cookie or a delegated token instead of a mission key. **403 on everything from a browser client** → it sends `Origin`; there is no CORS.
+- **403 `wrong-credential-kind`** → a session cookie instead of a mission key. **403 on everything from a browser client** → it sends `Origin`; there is no CORS.
 - **429 `-32002`** → the mission's surface limit (`mcp.rate_limit_per_minute`, per mission).
 - **401 for a token issued before the SHA-256 digest and never used since** → migration 0028 revoked it (`hash_alg = 'argon2id'`): issue or rotate a token.
 - **`-32602` `Vaubaan rejected the call`** → unknown tool, no connection of that provider, the classifier could not place the arguments, or `could not decide this call: the <stage> stage failed` (see the `error` log line).

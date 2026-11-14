@@ -465,7 +465,21 @@ export interface SshKeyCredentialSpec {
   readonly fields: readonly CredentialField[];
 }
 
-export type CredentialSpec = ApiKeyCredentialSpec | OAuth2CredentialSpec | SshKeyCredentialSpec;
+/**
+ * An account the gateway itself holds, with no secret at all: nothing to
+ * paste, nothing to verify, nothing to refresh or revoke at a provider. The
+ * connect page is one button; the account belongs to the person who pressed
+ * it and is never shared. Only the host creates such an account, and a plugin
+ * declaring this kind loads only when the host composes it (bundled, never
+ * pinned): its `execute` is bound by the host to the host's own services
+ * (ADR platform-management-is-a-plugin-on-the-execution-door).
+ */
+export interface HostCredentialSpec {
+  readonly kind: 'host';
+}
+
+export type CredentialSpec =
+  ApiKeyCredentialSpec | OAuth2CredentialSpec | SshKeyCredentialSpec | HostCredentialSpec;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CredentialSecret — the decrypted material (memory only)
@@ -499,7 +513,12 @@ export interface SshKeySecret extends SecretBase {
   readonly fields: Readonly<Record<string, string>>;
 }
 
-export type CredentialSecret = ApiKeySecret | OAuth2Secret | SshKeySecret;
+/** The material of a `host` account: none. The kind alone says what the account is. */
+export interface HostSecret extends SecretBase {
+  readonly kind: 'host';
+}
+
+export type CredentialSecret = ApiKeySecret | OAuth2Secret | SshKeySecret | HostSecret;
 
 /** Thrown when a plugin is handed a secret of another kind than its spec declares. */
 export class CredentialKindMismatch extends Error {

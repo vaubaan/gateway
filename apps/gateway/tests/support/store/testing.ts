@@ -10,14 +10,12 @@ import { ManualClock } from '../../../src/server/store/clock.ts';
 import type { EncryptedBlob, Encryptor } from '../../../src/server/store/encryptor.ts';
 import { InvariantError } from '../../../src/server/store/errors.ts';
 import { openMemoryStore, type Store } from '../../../src/server/store/index.ts';
-import type { TokenToIssue } from '../../../src/server/store/repositories/delegations.ts';
 import type {
   ApprovalRecord,
   GroupRecord,
   MissionPolicyEntry,
   MissionRecord,
   MissionResourceSetRecord,
-  RefreshTokenRecord,
   RequestRecord,
   RiskId,
 } from '../../../src/server/store/types.ts';
@@ -139,38 +137,6 @@ export async function refuseRequest(
     throw new InvariantError(`request ${requestId} was not open: nothing was refused`);
   }
   return result.request;
-}
-
-/**
- * The first refresh token of a delegation, issued the way production does: the
- * authorization-code grant (`createCode`, then `redeemCode`), which also spends a code
- * and writes the first access token. The code is `code:<refresh hash>`; the access token
- * is `access` or, by default, `access:<refresh hash>` with the refresh token's expiry.
- */
-export async function issueFirstRefreshToken(
-  store: Pick<Store, 'delegations'>,
-  delegationId: string,
-  refresh: TokenToIssue,
-  access: TokenToIssue = {
-    tokenHash: `access:${refresh.tokenHash}`,
-    expiresAt: refresh.expiresAt,
-  },
-): Promise<RefreshTokenRecord> {
-  const codeHash = `code:${refresh.tokenHash}`;
-  await store.delegations.createCode({
-    delegationId,
-    codeHash,
-    redirectUri: 'http://127.0.0.1/callback',
-    codeChallenge: 'challenge',
-    codeChallengeMethod: 'S256',
-    expiresAt: refresh.expiresAt,
-  });
-  const redeemed = await store.delegations.redeemCode(codeHash, () => null, { refresh, access });
-  const found = await store.delegations.findRefreshToken(refresh.tokenHash);
-  if (redeemed.outcome !== 'issued' || !found) {
-    throw new InvariantError(`the code grant of ${delegationId} ended '${redeemed.outcome}'`);
-  }
-  return found.token;
 }
 
 /**

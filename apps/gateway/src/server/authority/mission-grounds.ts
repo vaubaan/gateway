@@ -401,7 +401,6 @@ export class MissionGrounds {
         object: { type: 'mission', id: mission.id },
         before: entry.before,
         after: entry.after,
-        delegated_client_id: null,
       },
       { among, since: watchedSince },
     );

@@ -31,7 +31,6 @@ import { createAuditRepo, type AuditRepo } from './repositories/audit.ts';
 import { createConfigRepo, type ConfigRepo } from './repositories/config.ts';
 import { createConnectionsRepo, type ConnectionsRepo } from './repositories/connections.ts';
 import type { RepoContext } from './repositories/context.ts';
-import { createDelegationsRepo, type DelegationsRepo } from './repositories/delegations.ts';
 import { createGroupsRepo, type GroupsRepo } from './repositories/groups.ts';
 import { createInvitationsRepo, type InvitationsRepo } from './repositories/invitations.ts';
 import { createLocalAccountsRepo, type LocalAccountsRepo } from './repositories/local-accounts.ts';
@@ -98,7 +97,6 @@ export interface Store {
   readonly sessions: SessionsRepo;
   readonly requests: RequestsRepo;
   readonly approvals: ApprovalsRepo;
-  readonly delegations: DelegationsRepo;
   readonly audit: AuditRepo;
   readonly config: ConfigRepo;
   /** Web sessions keyed by the digest of their id; satisfies the root's `SessionStore` port. */
@@ -160,7 +158,6 @@ export function openStore(options: StoreOptions): Store {
     sessions: createSessionsRepo(ctx),
     requests: createRequestsRepo(ctx),
     approvals: createApprovalsRepo(ctx),
-    delegations: createDelegationsRepo(ctx),
     audit,
     config: createConfigRepo(ctx),
     webSessions: createWebSessionsRepo(ctx),
@@ -336,15 +333,6 @@ export type {
   RequestsRepo,
 } from './repositories/requests.ts';
 export type { ApprovalsRepo, ApprovedCall, CreateApprovalInput } from './repositories/approvals.ts';
-export type {
-  ClientDocumentUpdate,
-  CreateCodeInput,
-  CreateDelegationInput,
-  CreateTokenInput,
-  DelegationsRepo,
-  RegisterClientInput,
-  WithDelegation,
-} from './repositories/delegations.ts';
 export { DEFAULT_AUDIT_RETENTION_DAYS } from './repositories/audit.ts';
 export type {
   AgentLabelActivity,

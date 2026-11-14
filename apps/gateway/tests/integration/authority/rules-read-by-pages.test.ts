@@ -35,7 +35,7 @@ const CONNECTION_STATUSES = Object.keys(EVERY_CONNECTION_STATUS) as ConnectionSt
 describe('the predicates, on every status', () => {
   it('a connection takes no owner act once revoked or unowned, and only then', () => {
     const refused = Object.fromEntries(
-      CONNECTION_STATUSES.map((status) => [status, ownerActRefusal({ status })]),
+      CONNECTION_STATUSES.map((status) => [status, ownerActRefusal({ status, metadata: null })]),
     );
     expect(refused).toEqual({
       active: null,
@@ -45,8 +45,18 @@ describe('the predicates, on every status', () => {
     });
     // The share codes are the connection's own.
     for (const status of CONNECTION_STATUSES) {
-      expect(unshareableReason({ status })).toBe(ownerActRefusal({ status }));
+      expect(unshareableReason({ status, metadata: null })).toBe(
+        ownerActRefusal({ status, metadata: null }),
+      );
     }
+  });
+
+  it('a host account (the Vaubaan account) takes no owner act while it serves: it is its person’s own', () => {
+    const host = { credential_kind: 'host' };
+    expect(ownerActRefusal({ status: 'active', metadata: host })).toBe('connection-personal');
+    expect(unshareableReason({ status: 'active', metadata: host })).toBe('connection-personal');
+    // Revoked is final first.
+    expect(ownerActRefusal({ status: 'revoked', metadata: host })).toBe('connection-revoked');
   });
 
   it('the gates of a mission are not edited once it is revoked or orphaned, and only then', () => {

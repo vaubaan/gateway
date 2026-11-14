@@ -89,6 +89,10 @@ export function parseSecret(text: string): CredentialSecret {
         fields: stringRecord(raw.fields, 'fields'),
         metadata,
       };
+    case 'host':
+      // A `host` account holds no material: the kind alone (ADR
+      // platform-management-is-a-plugin-on-the-execution-door).
+      return { kind: 'host', metadata };
   }
 }
 

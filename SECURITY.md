@@ -30,8 +30,8 @@ The project has no other reporting channel.
 Include what lets us reproduce it:
 
 - the version or commit (`git rev-parse --short HEAD`, or the image tag);
-- what an attacker needs to start from (a mission token, a user session, a
-  delegated token, network access to the instance, nothing);
+- what an attacker needs to start from (a mission token, a user session,
+  network access to the instance, nothing);
 - the steps, or a failing test, and what you observed;
 - the impact you believe it has;
 - for a plugin: the provider, the tool, the arguments, and the slice or risk
@@ -66,8 +66,10 @@ In scope — anything that breaks what the gateway promises:
 - an agent, or a plugin's result, reading or exfiltrating a provider
   credential, the master key or another secret;
 - one credential opening a surface that is not its own (a mission token on
-  the management door or the interface, a delegated token on the execution
-  door, either one granting a request);
+  the interface or granting a request, a session on the execution door);
+- a mission acting on itself through its Vaubaan account (rotating or
+  revoking itself, issuing a mission that holds a Vaubaan account), or acting
+  beyond its creator's authority;
 - acting as another user, or keeping an authority after it was revoked or
   after leaving a group;
 - changing or deleting audit entries from the application;
@@ -149,9 +151,10 @@ findings without a demonstrated impact are out of scope).
 3. **The gateway decides from the plugin's classification.** A call is
    allowed when every risk it touches was accepted by the mission, within its
    budget and gate. A wrong classification is therefore a vulnerability.
-4. **Three credentials that never cross**: the mission token executes, the
-   delegated token manages missions, the human session uses the interface.
-   Only a human session grants a request or an approval.
+4. **Two credentials that never cross**: the mission token executes (an
+   agent preparing missions does it with a mission on its person's Vaubaan
+   account, which never acts on itself), the human session uses the
+   interface. Only a human session grants a request or an approval.
 5. **Identity comes from your identity provider; authorization is local.**
    Credentials are encrypted at rest with a key derived per connection from a
    master key kept outside the store, the audit log is append-only, and TLS
@@ -165,7 +168,7 @@ How each of these is implemented is described in the handbooks under
 [`docs/handbook/`](docs/handbook/): [authentication](docs/handbook/authentication.md),
 [connections](docs/handbook/connections.md),
 [execution-door](docs/handbook/execution-door.md),
-[management-door](docs/handbook/management-door.md) and
+[providers/vaubaan](docs/handbook/providers/vaubaan.md) and
 [audit](docs/handbook/audit.md). Who can attempt what on each surface, the
 control that answers it, the test that proves it and the risks that are
 accepted are in the [threat model](docs/handbook/threat-model.md).

@@ -56,6 +56,7 @@ import {
   readEnvSource,
   readFileSource,
   retiredConfigKeys,
+  retiredManagementKeys,
   RETIRED_IDP_ENV_PREFIX,
   RETIRED_IDP_KEY,
   secretEnvVariables,
@@ -68,8 +69,6 @@ import {
   type AdminRule,
   type RestoreConfig,
   type SetupConfig,
-  CLIENT_REGISTRATION_POLICIES,
-  type ClientRegistrationPolicy,
   type EncryptionConfig,
   type InstanceConfig,
   LOG_LEVELS,
@@ -79,8 +78,6 @@ import {
   type DocsConfig,
   type LogLevel,
   type OAuthBrokerConfig,
-  type OAuthConfig,
-  isClientRegistrationPolicy,
   isLogLevel,
   isMailTlsMode,
   MAIL_TLS_MODES,
@@ -478,7 +475,6 @@ function validate(
   const callTimeoutSeconds = r.int(keySpec('execution.call_timeout_seconds'));
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
   const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
-  const oauth = readOAuth(r);
   const oauthBrokers = readOAuthBrokers(r);
   const level = readLogLevel(r);
 
@@ -499,6 +495,7 @@ function validate(
     signIn,
     admin,
     retiredKeys: retiredConfigKeys(raw, env),
+    retiredManagementKeys: retiredManagementKeys(raw, env),
     bootstrapToken,
     telemetry: {
       enabled: telemetryEnabled,
@@ -523,7 +520,6 @@ function validate(
     plugins,
     updates,
     docs,
-    oauth,
     oauthBrokers,
     log: { level },
   };
@@ -751,18 +747,6 @@ function readOpsToken(r: Reader): string | null {
   return token;
 }
 
-/** A delegated token is short-lived (spec §6): the access token never outlives this. */
-export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = keySpec('oauth.access_token_ttl').maxSeconds;
-
-/**
- * Longest reuse window of a rotated refresh token: the window tolerates two
- * honest processes renewing together, and is exactly what a thief has to
- * replay a stolen token unnoticed, so it stays a matter of seconds.
- */
-export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = keySpec(
-  'oauth.refresh_reuse_window_seconds',
-).max;
-
 /**
  * `oauth_brokers.<name>.*` (ADR google-calendar-through-an-oauth-broker D1): one
  * broker per name, in the order of the tree; `url` and `key` required,
@@ -824,70 +808,6 @@ function readOAuthBrokers(r: Reader): OAuthBrokerConfig[] {
     r.issues.add(problem.path, problem.message, envNamesFor(problem.path));
   }
   return out;
-}
-
-/**
- * The authorization server of the management door. The access token is capped
- * (a longer one is not "short-lived"), and a refresh token that expired before
- * the access token it renews would be useless.
- */
-function readOAuth(r: Reader): OAuthConfig {
-  const accessTokenTtlSeconds = r.duration(keySpec('oauth.access_token_ttl'));
-  const refreshTokenTtlSeconds = r.duration(keySpec('oauth.refresh_token_ttl'));
-  if (accessTokenTtlSeconds > MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS) {
-    r.issues.add(
-      'oauth.access_token_ttl',
-      'must be at most 1h: a delegated token is short-lived and renewed with its refresh token',
-      envNamesFor('oauth.access_token_ttl'),
-    );
-  }
-  if (refreshTokenTtlSeconds <= accessTokenTtlSeconds) {
-    r.issues.add(
-      'oauth.refresh_token_ttl',
-      'must be longer than oauth.access_token_ttl',
-      envNamesFor('oauth.refresh_token_ttl'),
-    );
-  }
-  const delegationMaxLifetimeSeconds = r.duration(keySpec('oauth.delegation_max_lifetime'));
-  if (delegationMaxLifetimeSeconds <= accessTokenTtlSeconds) {
-    r.issues.add(
-      'oauth.delegation_max_lifetime',
-      'must be longer than oauth.access_token_ttl: a delegation that ends before its first token is useless',
-      envNamesFor('oauth.delegation_max_lifetime'),
-    );
-  }
-  const refreshReuseWindowSeconds = r.int(keySpec('oauth.refresh_reuse_window_seconds'));
-  if (refreshReuseWindowSeconds > MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS) {
-    r.issues.add(
-      'oauth.refresh_reuse_window_seconds',
-      `must be at most ${MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS}: beyond that a replayed refresh token is treated as stolen`,
-      envNamesFor('oauth.refresh_reuse_window_seconds'),
-    );
-  }
-  return {
-    accessTokenTtlSeconds,
-    refreshTokenTtlSeconds,
-    delegationMaxLifetimeSeconds,
-    refreshReuseWindowSeconds,
-    clientRegistration: {
-      policy: readClientRegistrationPolicy(r),
-      autoApproveLoopback: r.bool(keySpec('oauth.client_registration.auto_approve_loopback')),
-      metadataDocuments: r.bool(keySpec('oauth.client_registration.metadata_documents')),
-    },
-  };
-}
-
-function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
-  const path = 'oauth.client_registration.policy';
-  const fallback: ClientRegistrationPolicy = keySpec(path).default;
-  const policy = r.string(path, { fallback }) ?? fallback;
-  if (isClientRegistrationPolicy(policy)) return policy;
-  r.issues.add(
-    path,
-    `expected one of ${CLIENT_REGISTRATION_POLICIES.join(', ')}, got "${policy}"`,
-    envNamesFor(path),
-  );
-  return fallback;
 }
 
 /**

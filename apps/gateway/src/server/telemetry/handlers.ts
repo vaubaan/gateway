@@ -79,7 +79,6 @@ export function createTelemetryHandlers(deps: TelemetryHandlerDeps): TelemetryHa
         object: { type: 'instance-config', id: objectId },
         before,
         after,
-        delegated_client_id: null,
       });
     } catch (err) {
       // The change is committed; a missing entry must at least be loud.

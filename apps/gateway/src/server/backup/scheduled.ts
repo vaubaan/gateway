@@ -442,7 +442,6 @@ export class BackupService {
         object: { type: 'instance-config', id: 'backup' },
         before: null,
         after,
-        delegated_client_id: null,
       });
     } catch (err) {
       this.deps.logger.error('scheduled backup: the activity entry could not be written', { err });

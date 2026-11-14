@@ -257,7 +257,6 @@ describe('authority is recomputed, never snapshotted', () => {
      */
     const MISSION_READERS: Readonly<Record<string, string>> = {
       'authority/mission-grounds.ts': 'is the derivation: lists the missions it checks',
-      'authority/derived-missions.ts': 'derives: wraps the listing with `grounds.derive`',
       'missions/mission-service.ts':
         'derives: `access`, `ownInspected` and `list` go through `grounds.inspect`; `verifyToken` hands the record to the door, which derives',
       'missions/token-issuer.ts':
@@ -275,8 +274,6 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads the period anchor only; the status it decides on is the context’s, derived by the door',
       'budget/retention.ts':
         'reads the period anchor and length only, to know which period is the current one',
-      'oauth-as/delegations.ts':
-        'lists through the reads the composition root hands it (`derivedMissionReads`)',
       'connections/service.ts':
         'reads the creator and the connections of a mission only, to authorize "check now" (`checkForMission`); never the status: a discovery of a connection is the owner’s act whatever the mission’s state',
       'import-v4/importer.ts':
@@ -303,10 +300,6 @@ describe('authority is recomputed, never snapshotted', () => {
           `${path} must call grounds.inspect or grounds.derive`,
         ).toBe(true);
       }
-      // The one module that lists without deriving gets derived reads from the root.
-      expect(text('compose/root.ts')).toMatch(
-        /createOAuthAsModule\(\{[\s\S]{0,400}derivedMissionReads\(store\.missions, authority\.grounds\)/,
-      );
     });
 
     it('the readers that do not derive really do not read the status', () => {

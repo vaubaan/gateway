@@ -186,7 +186,6 @@ export class RecoveryService {
       object: { type: 'instance-config', id: ADMINISTRATORS_OBJECT_ID },
       before: null,
       after: named,
-      delegated_client_id: null,
     });
     const record: RecoveryRecord = { at, named };
     await this.deps.store.config.set(RECOVERY_LAST_KEY, JSON.stringify(record));

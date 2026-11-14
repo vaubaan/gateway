@@ -195,7 +195,6 @@ export class DeviceService {
       object: { type: 'user', id: ownerId },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 }

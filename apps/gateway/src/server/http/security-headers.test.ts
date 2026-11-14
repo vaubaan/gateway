@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   contentSecurityPolicy,
-  ownsItsPolicy,
   publishedHttps,
   publishHttps,
   securityHeaders,
@@ -60,13 +59,6 @@ describe('security headers set by the application', () => {
     expect(csp.get('manifest-src')).toBe("'self'");
   });
 
-  it('leaves the OAuth consent documents to their own, stricter policy', () => {
-    expect(ownsItsPolicy('/oauth/authorize')).toBe(true);
-    expect(ownsItsPolicy('/oauth/authorize/decision')).toBe(true);
-    expect(ownsItsPolicy('/oauth/authorizer')).toBe(false);
-    expect(ownsItsPolicy('/login')).toBe(false);
-  });
-
   it('carries the https flag the root publishes', () => {
     publishHttps(true);
     expect(publishedHttps()).toBe(true);
@@ -88,7 +80,7 @@ describe('structural: one source for the security headers', () => {
     }
   }
 
-  it('only this module and the OAuth documents write a Content-Security-Policy', () => {
+  it('only this module and the proxy write a Content-Security-Policy', () => {
     const files: string[] = [];
     walk(resolve(REPO, 'apps/gateway/src'), files);
     const writers = files
@@ -99,7 +91,6 @@ describe('structural: one source for the security headers', () => {
     expect(writers).toEqual([
       'apps/gateway/src/proxy.ts',
       'apps/gateway/src/server/http/security-headers.ts',
-      'apps/gateway/src/server/oauth-as/pages.ts',
     ]);
   });
 

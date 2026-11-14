@@ -5,6 +5,7 @@ tracks:
   - package.json
   - packages/plugin-sdk/src/testing/
   - apps/gateway/tests/integration/missions/support.ts
+  - apps/gateway/tests/integration/vaubaan/support.ts
   - apps/gateway/tests/integration/auth/fake-idp.ts
   - apps/gateway/tests/integration/auth/fake-github.ts
   - apps/gateway/tests/integration/git/fake-github-host.ts
@@ -15,7 +16,7 @@ tracks:
   - apps/gateway/tests/demo/
   - apps/gateway/tests/unit/structural/manifest.ts
   - apps/gateway/tests/unit/structural/index.test.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-14
 ---
 
 # Integration test plan
@@ -45,15 +46,14 @@ last_reviewed: 2026-10-27
 - Every plugin directory carries an identifier suite running hostile literals through classifier and executor (`assertIdentifiersRefused` of the testing kit), enforced structurally.
 - Demo mode stays out of the application: its IdP, fake providers and seed live in `apps/gateway/tests/demo/` only; `demo-safety.test.ts` checks that no route, no file under `src/` and nothing in the standalone build names `/__demo`, and that `assertDemoAllowed` refuses a production configuration. Tests of `tests/integration/demo/` that spawn the demo need a build.
 - Structural invariants are indexed in `apps/gateway/tests/unit/structural/manifest.ts` (id, statement, source, proofs: file + test titles). `index.test.ts` fails when an invariant has no proof, a proof file or title is gone or would not run (`it.skip`, a comment), a test file of the folder belongs to no invariant, a spec §10 "Structural" bullet has no invariant or the reverse, or [threat-model](../handbook/threat-model.md) cites a missing invariant or file. A new structural test is added to the manifest in the same change.
-- Tests that read docs parse exact shapes: the configuration keys table, the management door refusal table, spec §10 bullets, threat-model `[inv: id]` markers, the base-image refresh procedure. Restructure those docs with their tests running.
+- Tests that read docs parse exact shapes: the configuration keys table, the refusal table of the `vaubaan` plugin's handbook, spec §10 bullets, threat-model `[inv: id]` markers, the base-image refresh procedure. Restructure those docs with their tests running.
 
 ## Known gaps
 
 - ⚠️ **Miro, Google Calendar, CalDAV, Gmail against real accounts** (spec [§5](../spec/vaubaan-gateway.md#5-composition)) — fakes and captured or modelled tool lists only (Google Calendar: a mock of the REST API v3); Miro's `board_create` ran live once (its answer is the fixture), "create a board then draw on it" through a mission is still to run live.
 - ⚠️ **Telemetry classes of the shipped plugins** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — the reduction is tested on a fixture, not on each plugin's failures.
 - ⚠️ **The collector's SQL against PostgREST** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — `schema.sql` is checked as text and was applied by hand once; the `PT429` → 429 mapping comes from documentation.
-- ⚠️ **Group shares through the management door** (spec [§4.1 bis](../spec/vaubaan-gateway.md#41-bis-management-surface-over-mcp)) — tested in `AuthorityService`, not again over MCP.
-- ⚠️ **Client ID Metadata Documents over real TLS** (spec [§4.1 bis](../spec/vaubaan-gateway.md#41-bis-management-surface-over-mcp)) — filter and rules tested, a successful public fetch is not (off by default).
+- ⚠️ **Group shares through the `vaubaan` plugin** (spec [§4.1 bis](../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin)) — tested in `AuthorityService`, not again over MCP.
 - ⚠️ **A ref the connection never discovered** (spec [§3.1](../spec/vaubaan-gateway.md#31-the-chain)) — rejected with the classifier's sentence rather than `resource-not-in-mission`; only the rejection is tested.
 - ⚠️ **A user removed from the IdP** (spec [§6](../spec/vaubaan-gateway.md#6-security)) — no deprovisioning feed; only an operator's deactivation sets `removed`.
 - ⚠️ **Entra ID above the group limit** (spec [§4.2](../spec/vaubaan-gateway.md#42-human-surface)) — overage markers replayed by `FakeIdp`, never against Entra.

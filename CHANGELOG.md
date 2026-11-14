@@ -29,7 +29,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (handbook providers/github, "Repositories outside the grant"). A resource the owner hid or
   showed keeps that choice across refreshes (store migration 0034, `hidden_edited`).
 
+- **Agents prepare missions through a plugin, `vaubaan`, on the execution door; the
+  management door, its OAuth authorization server, delegations and Settings › Connected
+  apps are retired** (ADR platform-management-is-a-plugin-on-the-execution-door). A
+  person connects their Vaubaan account in one click, creates the platform management
+  mission the account page offers (every macro-action at Careful) and gives its key to
+  the agent, which calls `vaubaan__list_my_connections`, `vaubaan__issue_mission` and the
+  five others on `/mcp` — same arguments and answers as before, but for `issued_via`,
+  which names the issuing mission. A mission never rotates nor revokes itself, and a
+  mission it issues never holds a Vaubaan account. `/mcp/manage` answers 404 with a
+  hint. Migration 0035 drops the OAuth tables and keeps every mission and its key; the
+  `oauth.*` keys are ignored with one warning at start.
+
 ### Plugin SDK
+
+- **0.9.2 — the credential kind `host`**: no field, nothing to paste or verify; only the
+  gateway creates such an account, and a plugin declaring it is loaded bundled only (a
+  pin declaring it is refused at boot). Nothing changes for a plugin that does not
+  declare it.
 
 - **0.9.1 — `Resource.hiddenByDefault?`**: a discovery's hint that the credential most likely
   cannot act on a resource; the host lists it hidden until its owner chooses (ADR

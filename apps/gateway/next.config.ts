@@ -129,9 +129,11 @@ export const LEGACY_REDIRECTS: readonly {
   { source: '/providers/:path*', destination: '/reference/:path*' },
   // What a colleague gave access to is the second region of Accounts ("Shared with you").
   { source: '/shares', destination: '/accounts' },
-  // Connected apps ("delegations") are a page of Settings.
-  { source: '/delegations', destination: '/settings/connected-apps' },
-  { source: '/delegations/:id/revoke', destination: '/settings/connected-apps/:id/revoke' },
+  // Connected apps ("delegations") were retired with the management door (ADR
+  // platform-management-is-a-plugin-on-the-execution-door): their old addresses lead to
+  // Settings.
+  { source: '/delegations/:path*', destination: '/settings' },
+  { source: '/settings/connected-apps/:path*', destination: '/settings' },
   // The accounts without owner are the last region of Accounts (see
   // docs/handbook/web-app.md); the reassign action stays under /admin.
   { source: '/admin/connections', destination: '/accounts#without-owner' },

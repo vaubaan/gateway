@@ -345,6 +345,16 @@ function kindSpecIssues(spec: CredentialSpec): string[] {
       if (!Array.isArray(spec.fields))
         issues.push('credential.fields: expected a list (host, port, user)');
       break;
+    case 'host': {
+      // Nothing to ask, nothing to check: a field would be a secret the host never holds.
+      const extra = Object.keys(spec).filter((key) => key !== 'kind');
+      if (extra.length > 0) {
+        issues.push(
+          `credential: a host account declares nothing but its kind (${extra.join(', ')})`,
+        );
+      }
+      break;
+    }
   }
   return issues;
 }

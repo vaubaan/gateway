@@ -87,9 +87,9 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
     refuse.missionInactive({ status: 'orphaned', reason: 'the share grounding it was revoked' }),
   'wrong-credential-kind': () =>
     refuse.wrongCredentialKind({
-      door: 'management',
-      presented: 'mission-token',
-      expected: 'delegated-token',
+      door: 'execution',
+      presented: 'human-session',
+      expected: 'mission-token',
     }),
 };
 
@@ -279,11 +279,11 @@ describe('refusal fields', () => {
   test('wrong-credential-kind: door, presented, expected', () => {
     const r = SAMPLES['wrong-credential-kind']();
     if (r.code !== 'wrong-credential-kind') throw new Error('wrong code');
-    expect(r.door).toBe('management');
-    expect(r.presented).toBe('mission-token');
-    expect(r.expected).toBe('delegated-token');
-    expect(r.hint).toContain('management door');
-    expect(r.hint).toContain('delegated-token');
+    expect(r.door).toBe('execution');
+    expect(r.presented).toBe('human-session');
+    expect(r.expected).toBe('mission-token');
+    expect(r.hint).toContain('execution door');
+    expect(r.hint).toContain('web interface only');
   });
 });
 

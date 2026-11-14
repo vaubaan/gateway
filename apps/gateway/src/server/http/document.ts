@@ -1,9 +1,7 @@
 /**
  * A self-contained HTML document: the pages a handler answers itself, before
  * any application shell exists and under a policy that loads nothing — the
- * consent screen of the authorization endpoint and its messages
- * (`oauth-as/pages.ts`), the refusals of the forwarded request URL
- * (`requests/handlers.ts`).
+ * refusals of the forwarded request URL (`requests/handlers.ts`).
  *
  * They cannot read the style sheet of the application, so the few tokens they
  * need are repeated here, value for value (`DOCUMENT_TOKENS`); a test keeps

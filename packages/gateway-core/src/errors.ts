@@ -189,7 +189,6 @@ const INACTIVE_MISSION_NEXT_STEP: Readonly<Record<Exclude<MissionStatus, 'active
  *  would accept it"). Keyed by kind, so a new kind fails to compile until it has its line. */
 const ACCEPTED_AT: Readonly<Record<BearerKind, string>> = {
   'mission-token': 'A mission-token opens the execution door only.',
-  'delegated-token': 'A delegated-token opens the management door only.',
   'human-session': 'A human-session opens the web interface only, never an MCP door.',
 };
 

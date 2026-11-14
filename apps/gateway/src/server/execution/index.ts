@@ -29,13 +29,12 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { ConnectionCredentialCache } from './credential-cache';
 import { CreatedResources } from './created-resources';
-import type { DelegatedTokenResolver } from './admission';
 import { ExecutionDoor } from './door';
 import { createResourceStage } from './resource-stage';
 import { withDecisionTelemetry, type TelemetrySink } from './telemetry-sink';
 import { createRiskStage } from './risk-stage';
 import { TokenVerifier } from './token-verifier';
-import { createUpstreamStage } from './upstream-stage';
+import { createUpstreamStage, type HostComposedExecute } from './upstream-stage';
 
 export interface ExecutionModuleDeps {
   readonly config: Pick<
@@ -66,10 +65,10 @@ export interface ExecutionModuleDeps {
   readonly logger: Logger;
   readonly build: BuildInfo;
   readonly clock?: Clock;
-  /** Recognises delegated tokens so they are refused by kind (the authorization server provides it). */
-  readonly delegations?: DelegatedTokenResolver;
   /** Receives each `plugin.execute` outcome (community telemetry); default: nothing. */
   readonly telemetry?: TelemetrySink;
+  /** The `execute` of each plugin the host composes itself (`compose/vaubaan.ts`), by plugin id. */
+  readonly hostExecutes?: ReadonlyMap<string, HostComposedExecute>;
   /** Told of a permission request the agent opened (spec §4.2 bis); default: nobody. */
   readonly notifications?: Pick<NotificationEvents, 'requestOpened'>;
 }
@@ -120,6 +119,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     risks: createRiskStage({ registry: deps.registry }),
     budget: createBudgetStage({ service: deps.budget, missions: deps.store.missions }),
     upstream: createUpstreamStage({
+      hostExecutes: deps.hostExecutes,
       credentials: deps.connections.credentials,
       credentialCache,
       logger,
@@ -182,7 +182,6 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     logger,
     build: deps.build,
     clock,
-    delegations: deps.delegations,
     ...(deps.registry.gitRemotes().length > 0
       ? { gitRemote: { publicUrl: deps.config.publicUrl } }
       : {}),
@@ -221,7 +220,6 @@ export {
   TOKEN_LAST_USED_GRANULARITY_SECONDS,
   type AdmissionDenial,
   type Admitted,
-  type DelegatedTokenResolver,
   type MissionAdmissionDeps,
   type TokenUseRecorder,
 } from './admission';
@@ -262,4 +260,4 @@ export {
   type PluginOutcome,
   type TelemetrySink,
 } from './telemetry-sink';
-export { createUpstreamStage } from './upstream-stage';
+export { createUpstreamStage, type HostCaller, type HostComposedExecute } from './upstream-stage';

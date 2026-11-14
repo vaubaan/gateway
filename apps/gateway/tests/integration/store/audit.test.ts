@@ -61,6 +61,7 @@ const adminEntry: AdminAuditEntry = {
   object: { type: 'share', id: 'sh1' },
   before: null,
   after: { restriction: [READ] },
+  via_mission_id: null,
   delegated_client_id: null,
 };
 

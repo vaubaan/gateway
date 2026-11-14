@@ -91,7 +91,7 @@ export interface ShareContext {
 /** The two refusals of `share` that depend on the connection alone. */
 export type UnshareableReason = Extract<
   ShareErrorCode,
-  'connection-revoked' | 'connection-unowned'
+  'connection-revoked' | 'connection-unowned' | 'connection-personal'
 >;
 
 /**
@@ -100,7 +100,7 @@ export type UnshareableReason = Extract<
  * dialog reads it from `ShareContext.unshareable`.
  */
 export function unshareableReason(
-  connection: Pick<ConnectionRecord, 'status'>,
+  connection: Pick<ConnectionRecord, 'status' | 'metadata'>,
 ): UnshareableReason | null {
   return ownerActRefusal(connection);
 }
@@ -313,7 +313,6 @@ export class ShareService {
           target: created.target,
           restriction: created.restriction,
         },
-        delegated_client_id: null,
       });
     } finally {
       settled = await watch.settle(actor.user.id);
@@ -583,7 +582,6 @@ export class ShareService {
         restriction: share.restriction,
       },
       after: { status: 'revoked', ...extra },
-      delegated_client_id: null,
     });
   }
 

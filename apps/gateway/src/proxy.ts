@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { ownsItsPolicy, publishedHttps, securityHeaders } from './server/http/security-headers';
+import { publishedHttps, securityHeaders } from './server/http/security-headers';
 import { currentSetup, servedInSetupMode, SETUP_PAGE } from './server/setup/state';
 
 const NONCE_BYTES = 16;
@@ -33,7 +33,6 @@ export function proxy(request: NextRequest): NextResponse {
   if (setup && !servedInSetupMode(request.nextUrl.pathname)) {
     return NextResponse.redirect(new URL(SETUP_PAGE, setup.config.publicUrl));
   }
-  if (ownsItsPolicy(request.nextUrl.pathname)) return NextResponse.next();
   const nonce = randomBytes(NONCE_BYTES).toString('base64');
   const headers = securityHeaders({
     https: publishedHttps() === true,

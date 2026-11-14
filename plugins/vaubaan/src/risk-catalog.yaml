@@ -1,0 +1,169 @@
+# Risk catalog of the `vaubaan` provider: the gateway's own management tools.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
+# Handbook : docs/handbook/providers/vaubaan.md (why each row is where it is).
+# ADR      : docs/decisions/platform-management-is-a-plugin-on-the-execution-door.md.
+#
+# Rules the loader enforces at boot :
+#   - `provider` is the plugin id ; every risk id starts with it ;
+#   - every `matches` pattern parses as a slice of this provider ;
+#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
+#   - every risk but the fallback in exactly one macro-action, with an
+#     explicit base budget (quota and rate limit) — never a wildcard, no gate.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor, so existing missions keep working.
+#
+# 5 risks + 1 fallback, one per act a person tells apart. Every act is done in the
+# name of the mission's creator and never beyond their authority: a mission issued
+# here can accept only what they hold, and the host refuses a mission that would
+# carry a Vaubaan account, or act on the calling mission itself. No environment :
+# the gateway has none, no risk is env-scoped.
+#
+#   read-setup          row 1  names, ids and policies; no secret leaves (keys are masked)
+#   read-missions       row 1  same
+#   mission-issue       row 2  the answer carries a new mission key (`data: secret`)
+#   mission-key-rotate  row 2  the answer carries the new key (`data: secret`)
+#   mission-revoke      row 3  the mission cannot come back; a new one is issued at a price
+#                              (the agent stops, a person hands the new key over)
+#
+# catalog_version 1 (2026-11-14) : first catalog, from the seven tools of the retired
+# management door (ADR platform-management-is-a-plugin-on-the-execution-door).
+provider: vaubaan
+catalog_version: 1
+catalog_date: 2026-11-14
+
+risks:
+  - id: vaubaan.read-setup
+    label: 'Read my accounts and the catalogs'
+    reason: >-
+      Shows the agent which accounts the person may build a mission from, their
+      resources and permissions, a service's risk catalog, and what a draft mission
+      would allow. Names and ids only: no key or secret of an account is ever shown.
+    matches:
+      - 'vaubaan.account[**].R'
+      - 'vaubaan.catalog[**].R'
+    vector:
+      reversibility: reversible # a read changes nothing
+      blast: single
+      data: metadata #            names, ids, permissions
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.read-missions
+    label: 'Read my missions'
+    reason: >-
+      Shows the agent the person's missions: their permissions, what is left of
+      each limit, their state and who prepared them. A key is shown by its masked
+      prefix only.
+    matches: 'vaubaan.mission[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.mission-issue
+    label: 'Issue a mission in my name'
+    reason: >-
+      Creates a mission under the person's name, within their authority and never
+      beyond it, and hands its key to the agent, which can give it to another
+      agent. The mission can be revoked at any time; it never carries a Vaubaan
+      account.
+    matches: 'vaubaan.mission[**].issue.W'
+    vector:
+      reversibility: reversible # revoked in one click
+      blast: single
+      data: secret #              the answer carries the new mission key
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.mission-key-rotate
+    label: 'Replace the key of a mission this mission issued'
+    reason: >-
+      Replaces the key of a mission this very mission issued: the old key is
+      refused at once and the new one is handed to the agent. The mission itself,
+      its permissions and its limits are unchanged.
+    matches: 'vaubaan.mission[**].token.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: secret #              the answer carries the new key
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.mission-revoke
+    label: 'Stop one of my missions for good'
+    reason: >-
+      Stops one of the person's missions: its keys are refused from now on and it
+      cannot be restarted. The work goes on only after a new mission is issued and
+      its key handed over. A mission cannot stop itself here.
+    matches: 'vaubaan.mission[**].revoke.W'
+    vector:
+      reversibility: costly #     a new mission, a new key to hand over
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team #          the agent that worked on it stops
+
+  # Fallback — must exist, exactly once. No tool of this plugin classifies to it.
+  - id: vaubaan.uncategorized-write
+    label: 'Uncategorized write'
+    reason: 'Catch-all for writes without a dedicated entry. Every tool of this plugin has one.'
+    matches: 'vaubaan.**.W'
+    fallback: true
+    vector: { reversibility: costly, blast: account, data: secret, cost: free, visibility: team }
+
+# Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
+# mission creator ticks, each at a trust level. Every entry but the fallback
+# belongs to exactly one, with its base budget (the trust level multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: read
+    label: 'Read my setup'
+    description: 'List my accounts, the catalogs and my missions; preview a mission.'
+    narrative: >-
+      Finding out what a mission could be made of: the accounts the person holds, the
+      permissions of each service and the missions already running, and checking a draft
+      before it is issued. Nothing is written, and no key leaves the gateway.
+    entries:
+      - risk_id: vaubaan.read-setup
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: vaubaan.read-missions
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+  - id: prepare
+    label: 'Prepare missions'
+    description: 'Issue a mission in my name.'
+    narrative: >-
+      Issuing a mission for another agent: the person is its creator, it holds only what
+      they hold, and they answer its requests. The answer carries the mission's key, which
+      is why the person sees each issuance before it happens at the careful level.
+    entries:
+      - risk_id: vaubaan.mission-issue
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: rotate
+    label: 'Rotate a key'
+    description: 'Replace the key of a mission this mission issued.'
+    narrative: >-
+      Replacing the key of a mission this mission prepared, when the key leaked or was
+      lost. Kept apart from issuing because it cuts off the agent holding the old key, and
+      it reaches only the missions this mission issued.
+    entries:
+      - risk_id: vaubaan.mission-key-rotate
+        quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: stop
+    label: 'Stop missions'
+    description: 'Revoke one of my missions for good.'
+    narrative: >-
+      Stopping a mission whose task is done or whose key leaked. It cannot be undone: the
+      work resumes only on a new mission. A mission never stops itself here.
+    entries:
+      - risk_id: vaubaan.mission-revoke
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }

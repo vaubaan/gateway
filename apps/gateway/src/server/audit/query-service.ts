@@ -124,6 +124,12 @@ export interface AuditAdminView {
   };
   readonly before: unknown;
   readonly after: unknown;
+  /**
+   * The mission whose key made the act through the `vaubaan` plugin, with its name
+   * while it exists; `null` for an act done in the interface.
+   */
+  readonly via_mission: { readonly id: string; readonly name: string | null } | null;
+  /** History: the app that acted through the retired management door. */
   readonly delegated_client_id: string | null;
 }
 
@@ -145,14 +151,7 @@ export interface AuditFilterOptions {
 export interface AuditQueryDeps {
   readonly store: Pick<
     Store,
-    | 'audit'
-    | 'missions'
-    | 'connections'
-    | 'users'
-    | 'shares'
-    | 'groups'
-    | 'delegations'
-    | 'requests'
+    'audit' | 'missions' | 'connections' | 'users' | 'shares' | 'groups' | 'requests'
   >;
 }
 
@@ -456,15 +455,6 @@ class NameCache {
     });
   }
 
-  /** The declared name of an OAuth client, by its row id (`oauth_clients.id`). */
-  client(id: string): Promise<string | null> {
-    return memo(
-      this.labels,
-      `oauth-client:${id}`,
-      async () => (await this.store.delegations.getClient(id))?.name ?? null,
-    );
-  }
-
   /** "<connection> → <the user's email or the group's name>". */
   share(key: ShareKey): Promise<string | null> {
     return memo(this.labels, `share:${key.connectionId}:${key.shareId}`, async () => {
@@ -497,14 +487,6 @@ class NameCache {
             : 'the limit of';
       const mission = (await this.mission(request.missionId)).name;
       return `${what} ${mission ?? request.missionId}`;
-    });
-  }
-
-  /** The name of the client the delegation was given to. */
-  delegation(id: string): Promise<string | null> {
-    return memo(this.labels, `delegation:${id}`, async () => {
-      const delegation = await this.store.delegations.getById(id);
-      return delegation ? this.client(delegation.clientId) : null;
     });
   }
 }
@@ -586,7 +568,10 @@ async function toView(
     },
     before: withoutArguments(record.before, standing),
     after: withoutArguments(record.after, standing),
-    delegated_client_id: record.delegated_client_id,
+    via_mission: record.via_mission_id
+      ? { id: record.via_mission_id, name: (await names.mission(record.via_mission_id)).name }
+      : null,
+    delegated_client_id: record.delegated_client_id ?? null,
   };
 }
 
@@ -638,14 +623,14 @@ async function objectLabel(
     }
     case 'group':
       return names.group(object.id);
-    case 'oauth-client':
-      return names.client(object.id);
     case 'user':
       return names.email(object.id);
     case 'request':
       return names.request(object.id);
+    // History: the clients and delegations of the retired management door are gone
+    // with their tables (migration 0035); their entries show the id.
+    case 'oauth-client':
     case 'delegation':
-      return names.delegation(object.id);
     case 'instance-config':
       // The id is the name: `idp`, `telemetry`, `bootstrap`; `provider-app:<id>` in entries of earlier builds.
       return null;

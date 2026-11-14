@@ -704,7 +704,10 @@ export const ALTERNATIVES_LEGEND = 'Choose one';
  * An `ssh-key` way is the first kind, its key pair said by `connectSentences`.
  */
 export const CONNECT_KINDS: Readonly<
-  Record<CredentialInfo['clientSource'], { readonly n: 1 | 2 | 3; readonly words: string }>
+  Record<
+    Exclude<CredentialInfo['clientSource'], 'host'>,
+    { readonly n: 1 | 2 | 3; readonly words: string }
+  >
 > = {
   'pasted-key': { n: 1, words: 'a key you create and paste' },
   'gateway-registered': { n: 2, words: 'you sign in and allow the gateway (its own client)' },
@@ -713,6 +716,8 @@ export const CONNECT_KINDS: Readonly<
 
 /** "1 of 3 · a key you create and paste". */
 export function connectKindBadge(c: Pick<CredentialInfo, 'clientSource'>): string {
+  // The gateway's own account is none of the three: nothing comes from a service.
+  if (c.clientSource === 'host') return 'One click · your own account on the gateway';
   const kind = CONNECT_KINDS[c.clientSource];
   return `${kind.n} of 3 · ${kind.words}`;
 }
@@ -720,6 +725,8 @@ export function connectKindBadge(c: Pick<CredentialInfo, 'clientSource'>): strin
 /** The declaration in code words, beside the badge: `api-key · fine-grained personal access token`. */
 export function connectKindCode(c: CredentialInfo): string {
   switch (c.clientSource) {
+    case 'host':
+      return 'host';
     case 'broker':
       return `oauth2 · broker · ${c.brokerProvider ?? ''}`;
     case 'gateway-registered':
@@ -732,6 +739,10 @@ export function connectKindCode(c: CredentialInfo): string {
 /** The sentences that open the connect block: what the person does, by where the credential comes from. */
 export function connectSentences(c: CredentialInfo, service: string): string[] {
   switch (c.clientSource) {
+    case 'host':
+      return [
+        `Nothing to create or paste: one click, “Connect”, on the connect screen of ${service}. The account is the person's own place on the gateway; it holds no secret and is never shared.`,
+      ];
     case 'broker':
       return [
         `${service} signs in through the client of an OAuth broker: nothing is created or pasted, the person signs in at ${service} and allows the gateway.`,

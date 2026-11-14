@@ -72,7 +72,6 @@ import type { CallVerdict } from './risk-gateway.ts';
 import {
   tokenAttributionOf,
   type BearerKind,
-  type DelegationContext,
   type Door,
   type MissionConnection,
   type MissionContext,
@@ -86,13 +85,11 @@ import {
 /** Which bearer each door accepts. A human session opens no door. */
 export const EXPECTED_CREDENTIAL_BY_DOOR: Readonly<Record<Door, BearerKind>> = {
   execution: 'mission-token',
-  management: 'delegated-token',
 };
 
 /** A bearer the resolver identified, whatever door it was presented at. */
 export type ResolvedCredential =
   | { readonly kind: 'mission-token'; readonly context: MissionContext }
-  | { readonly kind: 'delegated-token'; readonly delegation: DelegationContext }
   | { readonly kind: 'human-session'; readonly user_id: string };
 
 /**
@@ -130,8 +127,7 @@ export class DoorAuthenticator {
    * - Unknown or malformed bearer → throws `AuthError` (401). Not a refusal:
    *   nothing was identified.
    * - Identified bearer of the wrong kind → `wrong-credential-kind` refusal,
-   *   whatever the kind: a mission token at the management door, a delegated
-   *   token at the execution door, a session at either.
+   *   a session at the door.
    * - Otherwise the credential, whose kind matches the door.
    */
   async authenticate(

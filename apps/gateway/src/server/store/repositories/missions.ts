@@ -42,7 +42,8 @@ export interface CreateMissionInput {
   /** Period length in seconds; null for a one-off mission. */
   readonly periodSeconds: number | null;
   readonly expiresAt?: Iso | null;
-  readonly delegationId?: string | null;
+  /** The mission whose agent issued this one through its `vaubaan` account. */
+  readonly issuedByMissionId?: string | null;
   /**
    * Every connection with its sets and their lines (`resourceSets`), or with its
    * selection directly: it then has one set, whose lines are the `policy` lines of its
@@ -435,7 +436,8 @@ interface MissionRow {
   period_anchor: string;
   period_seconds: number | null;
   expires_at: string | null;
-  delegation_id: string | null;
+  issued_by_mission_id: string | null;
+  issued_via_client_name: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
@@ -443,9 +445,9 @@ interface MissionRow {
 
 interface IssuerRow {
   mission_id: string;
-  delegation_id: string;
-  client_id: string;
-  name: string;
+  issued_by_mission_id: string | null;
+  issuer_name: string | null;
+  issued_via_client_name: string | null;
 }
 
 interface PolicyRow {
@@ -506,7 +508,7 @@ interface MemberRow {
 const MS_PER_SECOND = 1000;
 
 const COLUMNS = `id, name, creator_user_id, status, period_anchor, period_seconds, expires_at,
-  delegation_id, created_at, updated_at, closed_at`;
+  issued_by_mission_id, issued_via_client_name, created_at, updated_at, closed_at`;
 const TOKEN_COLUMNS = `id, mission_id, prefix, hash, hash_alg, status, kind, holder_user_id, name,
   created_by, created_at, retired_at, last_used_at`;
 const MEMBER_COLUMNS = 'mission_id, user_id, added_by, added_at, removed_at';
@@ -841,13 +843,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   );
   const byMember = db.prepare<[string], MissionRow>(
     `SELECT m.id, m.name, m.creator_user_id, m.status, m.period_anchor, m.period_seconds,
-       m.expires_at, m.delegation_id, m.created_at, m.updated_at, m.closed_at
+       m.expires_at, m.issued_by_mission_id, m.issued_via_client_name, m.created_at,
+       m.updated_at, m.closed_at
      FROM missions m JOIN mission_members mm ON mm.mission_id = m.id
      WHERE mm.user_id = ? AND mm.removed_at IS NULL ORDER BY m.created_at`,
   );
   const byConnection = db.prepare<[string], MissionRow>(
     `SELECT m.id, m.name, m.creator_user_id, m.status, m.period_anchor, m.period_seconds,
-       m.expires_at, m.delegation_id, m.created_at, m.updated_at, m.closed_at
+       m.expires_at, m.issued_by_mission_id, m.issued_via_client_name, m.created_at,
+       m.updated_at, m.closed_at
      FROM missions m JOIN mission_connections mc ON mc.mission_id = m.id
      WHERE mc.connection_id = ? ORDER BY m.created_at`,
   );
@@ -855,7 +859,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     [string, string, string, string, number | null, string | null, string | null, string, string]
   >(
     `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, period_seconds,
-       expires_at, delegation_id, created_at, updated_at)
+       expires_at, issued_by_mission_id, created_at, updated_at)
      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
   );
   const insertConnection = db.prepare<[string, string]>(
@@ -1053,7 +1057,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       periodAnchor: row.period_anchor,
       periodSeconds: row.period_seconds,
       expiresAt: row.expires_at,
-      delegationId: row.delegation_id,
+      issuedByMissionId: row.issued_by_mission_id,
+      issuedViaClientName: row.issued_via_client_name,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       closedAt: row.closed_at,
@@ -1488,19 +1493,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       if (ids.length === 0) return issuers;
       const rows = db
         .prepare<string[], IssuerRow>(
-          `SELECT m.id AS mission_id, d.id AS delegation_id, c.client_id, c.name
-           FROM missions m
-             JOIN delegations d ON d.id = m.delegation_id
-             JOIN oauth_clients c ON c.id = d.client_id
-           WHERE m.id IN (${ids.map(() => '?').join(', ')})`,
+          `SELECT m.id AS mission_id, m.issued_by_mission_id, i.name AS issuer_name,
+                  m.issued_via_client_name
+           FROM missions m LEFT JOIN missions i ON i.id = m.issued_by_mission_id
+           WHERE m.id IN (${ids.map(() => '?').join(', ')})
+             AND (m.issued_by_mission_id IS NOT NULL OR m.issued_via_client_name IS NOT NULL)`,
         )
         .all(...ids);
       for (const row of rows) {
         issuers.set(row.mission_id, {
           missionId: row.mission_id,
-          delegationId: row.delegation_id,
-          clientId: row.client_id,
-          clientName: row.name,
+          issuedByMissionId: row.issued_by_mission_id,
+          issuedByMissionName: row.issuer_name,
+          clientName: row.issued_via_client_name,
         });
       }
       return issuers;
@@ -1519,7 +1524,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           input.periodAnchor ?? now,
           input.periodSeconds,
           input.expiresAt ?? null,
-          input.delegationId ?? null,
+          input.issuedByMissionId ?? null,
           now,
           now,
         );

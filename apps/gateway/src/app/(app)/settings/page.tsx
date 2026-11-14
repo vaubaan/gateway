@@ -2,8 +2,8 @@
  * `/settings` — the person's own settings, and the door to the gateway's
  * administration for those who administer it.
  *
- * It holds the theme and leads to the other pages of Settings: connected apps
- * (`/settings/connected-apps`) and, for an administrator, the administration
+ * It holds the theme and leads to the other pages of Settings: notifications,
+ * security and, for an administrator, the administration
  * (`/admin/**`) and the interface reference (`/design`, a component gallery:
  * reachable by its address for anyone signed in, listed here for
  * administrators only). Open to every session: whoever installs the gateway
@@ -53,19 +53,10 @@ export default async function SettingsPage() {
               testId="settings-security"
             />
           )}
-          <Row
-            title={SECTIONS.connectedApps}
-            description="The apps you allowed to prepare missions in your name. They can never execute a call or answer for you."
-            end={
-              <ButtonLink href={ROUTES.connectedApps} size="sm">
-                Open
-              </ButtonLink>
-            }
-          />
           {principal.kind === 'user' && (
             <Row
               title={ACTIONS.signOutEverywhere}
-              description="Ends every session you have open, in every browser, this one included. Your keys, connected apps and missions are not touched. A session also ends after an hour without use."
+              description="Ends every session you have open, in every browser, this one included. Your keys and missions are not touched. A session also ends after an hour without use."
               end={
                 <form method="post" action="/logout/everywhere">
                   <Button type="submit" size="sm" variant="secondary">
@@ -87,7 +78,7 @@ export default async function SettingsPage() {
           <Rows>
             <Row
               title={SECTIONS.setup}
-              description="Sign-in, OAuth clients, people and teams, telemetry: what a gateway needs, and what is left to do."
+              description="Sign-in, people and teams, telemetry: what a gateway needs, and what is left to do."
               end={
                 <ButtonLink href={ADMIN_PAGES.setup} size="sm">
                   Open

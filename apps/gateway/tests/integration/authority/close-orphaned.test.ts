@@ -145,10 +145,10 @@ describe('closing an orphaned mission', () => {
     expect(await rig.adminEntries('mission-revoked')).toHaveLength(1);
   });
 
-  it('a delegated client acts for the creator only, never as an owner of the connection', async () => {
+  it('a mission acting through the `vaubaan` plugin acts for its creator only, never as an owner of the connection', async () => {
     const mission = await orphaned();
     const result = await rig.root.missions.service.revoke(rig.ada, mission.mission.id, {
-      delegation: { id: 'delegation-1', clientId: 'client-1' },
+      issuedBy: { missionId: 'mission-calling' },
     });
     expect(result).toEqual({ ok: false, reason: 'not-found' });
     expect(await rig.storedStatusOf(mission)).toBe('active');

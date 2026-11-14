@@ -399,7 +399,9 @@ function adminParams(id: string, e: AdminAuditEntry): SqlParams {
     object_id: e.object.id,
     before_json: toJson(e.before ?? null),
     after_json: toJson(e.after ?? null),
-    delegated_client_id: e.delegated_client_id,
+    // An act through the `vaubaan` plugin: the mission whose key made the call.
+    mission_id: e.via_mission_id ?? null,
+    delegated_client_id: e.delegated_client_id ?? null,
   });
 }
 
@@ -501,7 +503,7 @@ const EVERYTHING: SqlPiece = { sql: '1 = 1', params: [] };
  *            or is a current member of, or its connection is one they own;
  *   admin  — the scope holds every administrative entry, or its object is such a
  *            mission, a request of such a mission, a connection they own, a share
- *            of such a connection, or a delegation they gave.
+ *            of such a connection.
  *
  * A dimension the scope does not hold is an always-false piece, never a placeholder
  * value that happens to match nothing. Each piece carries its own values, so adding
@@ -528,14 +530,6 @@ function scopePredicate(scope: AuditScope): SqlPiece {
     sql: `SELECT id FROM connections WHERE ${owners.sql}`,
     params: owners.params,
   };
-  // The delegations the viewer gave: granted and revoked under their name (spec §4.1 bis).
-  const ownDelegations: SqlPiece =
-    scope.missionCreatorUserId === null
-      ? { sql: 'SELECT id FROM delegations WHERE 1 = 0', params: [] }
-      : {
-          sql: 'SELECT id FROM delegations WHERE user_id = ?',
-          params: [scope.missionCreatorUserId],
-        };
   const requestsOf = (missions: SqlPiece): SqlPiece => ({
     sql: `${REQUESTS_OF_MISSION} IN (${missions.sql})`,
     params: missions.params,
@@ -563,7 +557,6 @@ function scopePredicate(scope: AuditScope): SqlPiece {
     about('request', requestsOf(memberOf)),
     about('connection', ownConnections),
     about('share', sharesOf(ownConnections)),
-    about('delegation', ownDelegations),
   ]);
   return {
     sql: `((kind = 'call' AND ${calls.sql}) OR (kind = 'admin' AND ${admin.sql}))`,
@@ -795,6 +788,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       },
       before: parseJson(row.before_json),
       after: parseJson(row.after_json),
+      via_mission_id: row.mission_id,
       delegated_client_id: row.delegated_client_id,
     };
   }

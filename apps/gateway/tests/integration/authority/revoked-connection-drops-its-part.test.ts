@@ -22,7 +22,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
 } from '../../support/execution/testing';
-import { missionView } from '../../../src/server/management/views';
+import { missionView } from '../../../src/server/vaubaan/views';
 import type { ConnectionRecord, UserRecord } from '../../../src/server/store/types';
 
 const DEPOT_READ = 'depot.read';
@@ -156,7 +156,7 @@ describe('a revoked connection removes only its part of a mission', () => {
     expect(detail?.kit?.agent_instructions).toContain('Acme main');
     expect(detail?.kit?.agent_instructions).not.toContain('Depot main');
 
-    const view = missionView(detail!, { clientId: 'c', delegationId: 'd' }, (prefix) => prefix);
+    const view = missionView(detail!, { missionId: 'calling-mission' }, (prefix) => prefix);
     expect(view.state).toBe('active');
     expect(view.lost_connections).toEqual([
       { connection_id: instance.connection.id, cause: 'connection-revoked', final: true },

@@ -598,7 +598,6 @@ export class AdministratorsService {
       object: { type: 'instance-config', id: ADMINISTRATORS_OBJECT_ID },
       before,
       after,
-      delegated_client_id: null,
     });
   }
 }

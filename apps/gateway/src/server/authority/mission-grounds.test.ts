@@ -10,13 +10,7 @@ import { openMemoryStore, type Store } from '../store';
 import { ManualClock } from '../store/clock';
 import { StubEncryptor } from '../../../tests/support/store/testing';
 import type { ConnectionRecord, MissionRecord, Principal, UserRecord } from '../store/types';
-import {
-  createAuthorityModule,
-  derivedMissionReads,
-  MissionGrounds,
-  partitionOf,
-  type AuthorityModule,
-} from './index';
+import { createAuthorityModule, MissionGrounds, partitionOf, type AuthorityModule } from './index';
 
 const READ = 'acme.read-things';
 const WRITE_STAGING = 'acme[staging].thing-write';
@@ -421,25 +415,6 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       });
       const expired = await store.missions.setStatus(m.id, 'expired');
       expect(await authority.grounds.derive(expired)).toBe(expired);
-    });
-  });
-
-  describe('derivedMissionReads — a listing that shows statuses', () => {
-    it('lists the missions of a creator with the status of this instant', async () => {
-      const connection = await connect(user(ada));
-      const granted = await share(connection, user(bob), [READ]);
-      const lost = await mission(bob, [connection], [READ]);
-      const closed = await mission(bob, [connection], [READ]);
-      await store.missions.setStatus(closed.id, 'revoked');
-      const reads = derivedMissionReads(store.missions, authority.grounds);
-      const statuses = async () => (await reads.listForCreator(bob.id)).map((m) => m.status);
-
-      expect(await statuses()).toEqual(['active', 'revoked']);
-      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
-      expect(await statuses()).toEqual(['orphaned', 'revoked']);
-      await share(connection, user(bob), [READ]);
-      expect(await statuses()).toEqual(['active', 'revoked']);
-      expect((await reads.listForCreator(bob.id))[0]).toEqual(await reread(lost));
     });
   });
 

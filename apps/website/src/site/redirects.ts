@@ -22,4 +22,10 @@ export const SITE_REDIRECTS: readonly SiteRedirect[] = [
     destination: '/plugins/:id#connect',
     permanent: true,
   },
+  // The management door was retired (ADR platform-management-is-a-plugin-on-the-execution-door).
+  {
+    source: '/docs/missions/management-door',
+    destination: '/docs/missions/platform-management',
+    permanent: true,
+  },
 ];

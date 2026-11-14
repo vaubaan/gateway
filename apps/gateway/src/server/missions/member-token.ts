@@ -29,8 +29,8 @@ export interface MemberTokenInput {
   readonly missionId: string;
   /** The member the token is for, who is also the one asking: nobody mints for someone else. */
   readonly userId: string;
-  /** The client behind the act when it comes through the management door. */
-  readonly delegatedClientId: string | null;
+  /** The mission whose key made the call, when the act comes through the `vaubaan` plugin. */
+  readonly viaMissionId: string | null;
 }
 
 /**
@@ -42,7 +42,7 @@ export async function reissueMemberToken(
   deps: MemberTokenDeps,
   input: MemberTokenInput,
 ): Promise<IssuedSecret> {
-  const { missionId, userId, delegatedClientId } = input;
+  const { missionId, userId, viaMissionId } = input;
   const issued = await issueTokenTo(
     { missions: deps.store.missions, mint: deps.mint },
     { missionId, holder: { kind: 'member', userId }, createdBy: userId },
@@ -57,7 +57,7 @@ export async function reissueMemberToken(
     object: { type: 'mission', id: missionId },
     before: previous ? { token_prefix: previous.prefix } : null,
     after: { token_prefix: issued.prefix, token_kind: 'member', holder: userId },
-    delegated_client_id: delegatedClientId,
+    via_mission_id: viaMissionId,
   });
   const session = await deps.store.sessions.getByMission(missionId);
   if (session) {

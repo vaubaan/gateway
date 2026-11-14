@@ -474,7 +474,6 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
               object: { type: 'instance-config', id: 'bootstrap' },
               before: { status: 'active' },
               after: { status: revoked.status },
-              delegated_client_id: null,
             });
             deps.logger.info('setup finished: the install token is revoked');
             notice = {
@@ -521,11 +520,6 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         const lines = [
           'They can no longer sign in, their open sessions are over, and they hold nothing on any account.',
         ];
-        if (done.delegationsRevoked > 0) {
-          lines.push(
-            `${done.delegationsRevoked} ${plural(done.delegationsRevoked, 'connected app was', 'connected apps were')} disconnected: the apps acting for them lost their access.`,
-          );
-        }
         if (done.groupsLeft.length > 0) {
           lines.push(`Removed from ${done.groupsLeft.map((name) => `“${name}”`).join(', ')}.`);
         }

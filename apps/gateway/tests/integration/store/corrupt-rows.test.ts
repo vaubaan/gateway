@@ -163,34 +163,6 @@ describe('store rows with a value outside a closed set', () => {
     await expectLoudFailure(() => store.requests.getById(byState.id), 'requests.state');
   });
 
-  it('refuses an unknown delegations.status and an unknown code challenge method', async () => {
-    const client = await store.delegations.registerClient({
-      clientId: 'c',
-      name: 'c',
-      redirectUris: ['http://127.0.0.1/cb'],
-    });
-    const delegation = await store.delegations.create({ userId, clientId: client.id, scope: 's' });
-    const code = await store.delegations.createCode({
-      delegationId: delegation.id,
-      codeHash: 'code-hash',
-      redirectUri: 'http://127.0.0.1/cb',
-      codeChallenge: 'challenge',
-      codeChallengeMethod: 'S256',
-      expiresAt: LATER,
-    });
-    corrupt('oauth_codes', 'code_challenge_method', 'id', code.id);
-    await expectLoudFailure(
-      () =>
-        store.delegations.redeemCode('code-hash', () => null, {
-          refresh: { tokenHash: 'r1', expiresAt: LATER },
-          access: { tokenHash: 'a1', expiresAt: LATER },
-        }),
-      'oauth_codes.code_challenge_method',
-    );
-    corrupt('delegations', 'status', 'id', delegation.id);
-    await expectLoudFailure(() => store.delegations.getById(delegation.id), 'delegations.status');
-  });
-
   // `audit` is append-only (triggers refuse UPDATE), and `act` / `object_type` carry no
   // CHECK: a foreign row is inserted directly.
   function insertAdminRow(id: string, column: 'kind' | 'act' | 'object_type'): void {

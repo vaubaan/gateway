@@ -359,55 +359,6 @@
 #   max_pack_mb: 200
 #   request_timeout: 10m
 
-# Authorization server of the management MCP door (/mcp/manage, spec §4.1 bis):
-# an MCP client such as Claude Code obtains a delegated token for a user
-# through the standard OAuth flow (discovery, registration, consent).
-# oauth:
-#   # Lifetime of a delegated access token. Short on purpose, at most 1h; the
-#   # client renews it with its refresh token.
-#   # env: VAUBAAN_OAUTH_ACCESS_TOKEN_TTL
-#   access_token_ttl: 15m
-#   # Lifetime of a refresh token; every renewal starts it again. A delegation
-#   # left unused for this long ends by itself. Must be longer than access_token_ttl.
-#   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
-#   refresh_token_ttl: 30d
-#   # Absolute lifetime of a delegation, counted from the day the user gave
-#   # their consent. Past it the client must ask for the consent again,
-#   # however recently it renewed its token: no agent keeps a standing
-#   # authorization forever. Must be longer than access_token_ttl.
-#   # env: VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME
-#   delegation_max_lifetime: 90d
-#   # For how many seconds the refresh token that was just rotated may be
-#   # presented once more without ending the delegation: two sessions of one
-#   # agent sharing a stored token and renewing at the same moment. Any other
-#   # replay still revokes the delegation. 0 disables the window; at most 60.
-#   # env: VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS
-#   refresh_reuse_window_seconds: 30
-#   client_registration:
-#     # Who may become a client:
-#     #   open               any client that registers is usable at once
-#     #   operator-approved  a client waits for an operator (Administration →
-#     #                      OAuth clients), with the exception below
-#     #   closed             nothing registers; only clients already approved
-#     #                      by an operator are usable
-#     # Whatever the policy, a user still signs in and consents on a screen
-#     # naming the client before anything is granted.
-#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY
-#     policy: operator-approved
-#     # Under operator-approved: a client that can only redirect to the
-#     # loopback interface of the user's own machine (a CLI or desktop agent,
-#     # e.g. Claude Code) needs no approval. Set to false to approve every
-#     # client by hand.
-#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK
-#     auto_approve_loopback: true
-#     # Accept client ids that are https URLs of Client ID Metadata Documents
-#     # (the successor of dynamic registration). When true, the instance
-#     # fetches such a document from the internet when a signed-in user starts
-#     # an authorization: it needs outbound https, and never follows a
-#     # redirect nor reaches a private address.
-#     # env: VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS
-#     metadata_documents: false
-
 # Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
 # mission token secrets are redacted.
 # env: VAUBAAN_LOG_LEVEL

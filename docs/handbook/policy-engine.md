@@ -43,7 +43,7 @@ last_reviewed: 2026-11-13
   re-exports them, the public site imports them; `sources-agree.test.ts` (website) fails when
   either holds a copy. `ROW_GATE_SENTENCES` is literal: a test checks it against
   `TRUST_LEVEL_GATES`. `macroActionsOf` adds "Anything else" for the creation form, the
-  management door and the site alike.
+  `vaubaan` plugin and the site alike.
 - One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK macro-action
   checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `macroActionIssues`,
   issuance preview). Never re-implement them.
@@ -63,7 +63,7 @@ last_reviewed: 2026-11-13
 ## Traps
 
 - The in-bracket glob is never compiled to a regex (`matchWildcard`, linear): a regex would
-  backtrack exponentially and a policy can arrive through the management door.
+  backtrack exponentially and a policy can arrive through an agent's `vaubaan__issue_mission`.
 - Glob × glob `intersects` is exact for one `*` per side and answers `true` (fails closed) beyond.
 - `resourceEnvResolver` compares every identifier of the slice with resource refs, so a table or
   branch named like another resource counts; disagreeing labels resolve to `null`, never the first

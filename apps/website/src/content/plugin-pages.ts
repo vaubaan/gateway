@@ -326,7 +326,7 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
     );
   }
   lines.push(...connectSentences(c, plugin.name).flatMap((s) => [s, '']));
-  if (c.clientSource === 'broker') return lines;
+  if (c.clientSource === 'broker' || c.clientSource === 'host') return lines;
   if (c.clientSource === 'gateway-registered') {
     if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
     return lines;

@@ -337,7 +337,6 @@ export class LocalAccountsService {
         object: { type: 'instance-config', id: localAccountsObjectId(providerId) },
         before,
         after,
-        delegated_client_id: null,
       });
     } catch (err) {
       this.deps.logger.error('local accounts: audit write failed', { act, err });

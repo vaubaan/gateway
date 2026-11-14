@@ -204,13 +204,14 @@ export function withAssumedEnvs(
 }
 
 /**
- * Set when the act comes through the management door (spec §4.1 bis): the
- * delegation the agent acts under. The user stays the actor and, for an
- * issuance, the creator; the mission records the delegation (`issued_via`) and
- * the audit entry names the client (`delegated_client_id`, spec §8).
+ * Set when the act comes through the `vaubaan` plugin (spec §4.1 bis): the
+ * mission whose key made the call. The user — that mission's creator — stays
+ * the actor and, for an issuance, the creator; the new mission records the
+ * issuing one (`issued_via`) and the audit entry names it (`via_mission_id`,
+ * spec §8).
  */
 export interface IssueOptions {
-  readonly delegation?: { readonly id: string; readonly clientId: string };
+  readonly issuedBy?: { readonly missionId: string };
 }
 
 export interface RevealedToken {
@@ -249,8 +250,8 @@ export type RotateResult =
       readonly kit: BootstrapKit;
     }
   | { readonly ok: false; readonly reason: 'not-found' }
-  /** A delegated client asked for a mission its delegation did not issue. */
-  | { readonly ok: false; readonly reason: 'not-issued-by-delegation' }
+  /** A mission asked to rotate a mission it did not issue. */
+  | { readonly ok: false; readonly reason: 'not-issued-by-mission' }
   | { readonly ok: false; readonly reason: 'inactive'; readonly state: MissionState['kind'] };
 
 export type RevokeResult =
@@ -553,7 +554,7 @@ export interface MissionOverview {
    * when they have none (a member who has not generated theirs, a revoked token).
    */
   readonly token: { readonly prefix: string; readonly created_at: string } | null;
-  /** The client that issued it by delegation; `null` for a mission issued in the interface. */
+  /** Who prepared it for its creator; `null` for a mission issued in the interface. */
   readonly issued_via: MissionIssuer | null;
 }
 
@@ -855,7 +856,7 @@ export class MissionService {
       creatorUserId: user.id,
       periodSeconds: draft.period.kind === 'recurring' ? draft.period.length_seconds : null,
       expiresAt: draft.expires_at === null ? null : new Date(draft.expires_at).toISOString(),
-      delegationId: options.delegation?.id ?? null,
+      issuedByMissionId: options.issuedBy?.missionId ?? null,
       connections: preview.resolved.map(connectionInputOf),
     });
     // The creator is a member by construction: the mission is born with their own token.
@@ -869,7 +870,7 @@ export class MissionService {
       object: { type: 'mission', id: mission.id },
       before: null,
       after: issuedAuditOf(mission, token.prefix),
-      delegated_client_id: options.delegation?.clientId ?? null,
+      via_mission_id: options.issuedBy?.missionId ?? null,
     });
     this.deps.logger.info('mission issued', {
       mission_id: mission.id,
@@ -877,7 +878,7 @@ export class MissionService {
       connections: mission.connections.length,
       risks: mission.policy.length,
       token_prefix: token.prefix,
-      delegated_client_id: options.delegation?.clientId ?? null,
+      issued_by_mission_id: options.issuedBy?.missionId ?? null,
     });
 
     return {
@@ -1021,12 +1022,12 @@ export class MissionService {
    * holder's token is untouched. A member rotates their own token through
    * `MissionTeamService.generateToken`, which the creator may use as well.
    *
-   * Through a delegation (`options.delegation`, the management door) only a
-   * mission that very delegation issued is rotated: the new token is handed to
-   * the caller, so rotating a mission the human issued — wider, perhaps with a
-   * gate they opened — would hand a delegated client an authority nobody
-   * issued to it (docs/spec/vaubaan-gateway.md). The
-   * human rotates any of their missions in the interface.
+   * Through the `vaubaan` plugin (`options.issuedBy`) only a mission that very
+   * mission issued is rotated: the new token is handed to the caller, so
+   * rotating a mission the human issued — wider, perhaps with a gate they
+   * opened — would hand an agent an authority nobody issued to it
+   * (docs/spec/vaubaan-gateway.md §6). The human rotates any of their missions
+   * in the interface.
    */
   async rotate(
     user: Subject,
@@ -1035,8 +1036,8 @@ export class MissionService {
   ): Promise<RotateResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
-    if (options.delegation && mission.delegationId !== options.delegation.id) {
-      return { ok: false, reason: 'not-issued-by-delegation' };
+    if (options.issuedBy && mission.issuedByMissionId !== options.issuedBy.missionId) {
+      return { ok: false, reason: 'not-issued-by-mission' };
     }
     const state = await this.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
@@ -1050,7 +1051,7 @@ export class MissionService {
         {
           missionId: mission.id,
           userId: user.id,
-          delegatedClientId: options.delegation?.clientId ?? null,
+          viaMissionId: options.issuedBy?.missionId ?? null,
         },
       );
     } catch (err) {
@@ -1061,7 +1062,7 @@ export class MissionService {
     this.deps.logger.info('mission token rotated', {
       mission_id: mission.id,
       token_prefix: token.prefix,
-      delegated_client_id: options.delegation?.clientId ?? null,
+      issued_by_mission_id: options.issuedBy?.missionId ?? null,
     });
     return {
       ok: true,
@@ -1144,8 +1145,8 @@ export class MissionService {
    * Who may (spec §2.3): the creator, always; and, **only while the mission is
    * orphaned**, an owner of one of its connections — the authority that grounded it is
    * gone, and it would serve again, with the token its agent holds, the day a share is
-   * made again. A mission that serves is its creator's alone. A delegated client acts
-   * for the creator only.
+   * made again. A mission that serves is its creator's alone. A mission acting through
+   * the `vaubaan` plugin acts for its creator only.
    */
   async revoke(
     user: Subject,
@@ -1174,7 +1175,7 @@ export class MissionService {
           ? { closed_as: closer.as, connection_id: closer.connectionId }
           : {}),
       },
-      delegated_client_id: options.delegation?.clientId ?? null,
+      via_mission_id: options.issuedBy?.missionId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
       kind: 'revocation',
@@ -1183,7 +1184,7 @@ export class MissionService {
     this.deps.logger.info('mission revoked', {
       mission_id: mission.id,
       closed_as: closer.as,
-      delegated_client_id: options.delegation?.clientId ?? null,
+      via_mission_id: options.issuedBy?.missionId ?? null,
     });
     this.deps.notifications?.missionRevoked(mission.id, user.id);
     return { ok: true, mission: revoked, tokensRevoked };
@@ -1203,8 +1204,8 @@ export class MissionService {
     if (!stored) return null;
     const { mission } = await this.deps.grounds.inspect(stored);
     if (stored.creatorUserId === user.id) return { mission, closer: { as: 'creator' } };
-    // A delegation acts for the creator of the missions it issued, never as an owner.
-    if (options.delegation) return null;
+    // A mission acts for its creator through the `vaubaan` plugin, never as an owner.
+    if (options.issuedBy) return null;
     // Orphaned now; or already closed, which is answered the same to who could close it.
     if (mission.status !== 'orphaned' && mission.status !== 'revoked') return null;
     for (const { connectionId } of stored.connections) {
@@ -1283,7 +1284,6 @@ export class MissionService {
           gate,
           ...(openingClosed ? { open_for_period: false } : {}),
         },
-        delegated_client_id: null,
       });
       this.deps.logger.info('mission gate changed', {
         mission_id: mission.id,
@@ -1412,7 +1412,6 @@ export class MissionService {
         object: { type: 'mission', id: mission.id },
         before: { limits: changed.map((c) => ({ risk_id: c.risk_id, ...c.before })) },
         after: { limits: changed.map((c) => ({ risk_id: c.risk_id, ...c.after })) },
-        delegated_client_id: null,
       });
       this.deps.logger.info('mission limits changed', {
         mission_id: mission.id,
@@ -1535,7 +1534,6 @@ export class MissionService {
       object: { type: 'mission', id: mission.id },
       before: { policy: before },
       after: { policy, request_id: edit.request_id ?? null },
-      delegated_client_id: null,
     });
     return { ok: true as const, mission: written };
   }
@@ -1695,7 +1693,6 @@ export class MissionService {
       object: { type: 'mission', id: mission.id },
       before: audit.before,
       after: { ...audit.after, requests_closed: closed },
-      delegated_client_id: null,
     });
     this.deps.logger.info('mission edited', {
       mission_id: mission.id,
@@ -2081,18 +2078,20 @@ export class MissionService {
   }
 
   /**
-   * The clients behind the missions issued by delegation, read from the store
-   * (the mission names its delegation, the delegation its client): one read,
-   * and none at all when no mission of the list was delegated.
+   * Who prepared the missions of the list: the issuing mission (its name read
+   * now) or, for a mission issued before migration 0035, the app. One read, and
+   * none at all when every mission of the list was issued by a person.
    */
   private async issuersOf(missions: readonly MissionRecord[]): Promise<Map<string, MissionIssuer>> {
-    const delegated = missions.filter((m) => m.delegationId !== null).map((m) => m.id);
+    const prepared = missions
+      .filter((m) => m.issuedByMissionId !== null || m.issuedViaClientName !== null)
+      .map((m) => m.id);
     const issuers = new Map<string, MissionIssuer>();
-    if (delegated.length === 0) return issuers;
-    for (const [missionId, issuer] of await this.deps.store.missions.issuersOf(delegated)) {
+    if (prepared.length === 0) return issuers;
+    for (const [missionId, issuer] of await this.deps.store.missions.issuersOf(prepared)) {
       issuers.set(missionId, {
-        delegation_id: issuer.delegationId,
-        client_id: issuer.clientId,
+        mission_id: issuer.issuedByMissionId,
+        mission_name: issuer.issuedByMissionName,
         client_name: issuer.clientName,
       });
     }

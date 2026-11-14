@@ -7,7 +7,14 @@ import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { RegistryCatalogIndex } from './registry';
-import { buildRoot, getRoot, NO_TRUSTED_PROXY_WARNING, resetRoot, type RootDeps } from './root';
+import {
+  buildRoot,
+  getRoot,
+  NO_TRUSTED_PROXY_WARNING,
+  resetRoot,
+  RETIRED_MANAGEMENT_KEYS_WARNING,
+  type RootDeps,
+} from './root';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
 
@@ -28,7 +35,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(34);
+    expect(root.store.schemaVersion).toBe(35);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
@@ -97,6 +104,27 @@ describe('buildRoot', () => {
     expect(retired.join('\n')).toContain('VAUBAAN_PROVIDER_GMAIL_CLIENT_ID');
     expect(lines.join('\n')).not.toContain('csecret-0123456789');
     expect(lines.join('\n')).not.toContain('cid-0123456789');
+    await root.close();
+  });
+
+  it('starts with the retired authorization server keys still set, and warns once for them all, without a value', async () => {
+    // ADR platform-management-is-a-plugin-on-the-execution-door: `oauth.*` is no longer read.
+    const lines: string[] = [];
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({
+            VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '15m',
+            VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'open',
+          }),
+        }),
+      logWrite: (_lvl, line) => lines.push(line),
+    });
+    const retired = lines.filter((l) => l.includes(RETIRED_MANAGEMENT_KEYS_WARNING));
+    expect(retired).toHaveLength(1);
+    expect(retired[0]).toContain('VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY');
+    expect(retired[0]).not.toContain('"open"');
     await root.close();
   });
 

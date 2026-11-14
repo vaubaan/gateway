@@ -232,9 +232,10 @@ export interface CredentialFieldInfo {
  * (website spec §2.3 item 9): a key the person creates at the service and
  * pastes (`api-key`, `ssh-key`), a client the gateway registers itself at the
  * service (`oauth2` with `clientRegistration`), or an OAuth broker's client
- * (`oauth2` with `broker`).
+ * (`oauth2` with `broker`) — and, apart from the three, the gateway's own
+ * account (`host`, the Vaubaan plugin): one click, nothing created or pasted.
  */
-export type ClientSource = 'pasted-key' | 'gateway-registered' | 'broker';
+export type ClientSource = 'pasted-key' | 'gateway-registered' | 'broker' | 'host';
 
 /**
  * A screenshot of the connect guide as the site shows it: copied at build beside the
@@ -596,6 +597,7 @@ function touchesByTool(
 }
 
 function clientSourceOf(spec: CredentialSpec): ClientSource {
+  if (spec.kind === 'host') return 'host';
   if (spec.kind !== 'oauth2') return 'pasted-key';
   return isBrokeredSpec(spec) ? 'broker' : 'gateway-registered';
 }

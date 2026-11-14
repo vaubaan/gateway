@@ -26,14 +26,15 @@ const SDK = '0.6.0';
 let root: string;
 let bundle: string;
 
-/** The acme fixture as a self-contained ESM bundle at `version`. */
-async function bundleAcme(version: string): Promise<string> {
+/** The acme fixture as a self-contained ESM bundle at `version`, its credential replaced by `credential` (a JS expression). */
+async function bundleAcme(version: string, credential?: string): Promise<string> {
+  const overrides = credential === undefined ? '' : `, credential: ${credential}`;
   const result = await build({
     stdin: {
       contents: [
         `import { acmePlugin } from ${JSON.stringify(join(ACME, 'acme-plugin.ts'))};`,
         `import { definePlugin, UpstreamAuthError } from '@vaubaan/plugin-sdk';`,
-        `export default definePlugin({ ...acmePlugin, version: ${JSON.stringify(version)} });`,
+        `export default definePlugin({ ...acmePlugin, version: ${JSON.stringify(version)}${overrides} });`,
         `export const throwAuth = async () => { throw new UpstreamAuthError('no', 401); };`,
       ].join('\n'),
       resolveDir: REPO,
@@ -158,6 +159,14 @@ describe('readPinnedPlugins', () => {
     });
     const message = await refusal(() => readPinnedPlugins(dir, { sdkVersion: SDK }));
     expect(message).toContain(`${path}: refused:`);
+  });
+
+  it('refuses a plugin that declares a host account: only the image binds one', async () => {
+    const dir = freshDir('host-kind');
+    pin(dir, 'acme', { code: await bundleAcme('1.2.4', "{ kind: 'host' }") });
+    expect(await refusal(() => readPinnedPlugins(dir, { sdkVersion: SDK }))).toContain(
+      "plugin 'acme' declares a host account, which only a plugin bundled with the gateway may declare",
+    );
   });
 
   it('refuses a plugin whose import throws', async () => {

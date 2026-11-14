@@ -224,6 +224,14 @@ async function readPin(path: string, options: PinReadOptions): Promise<PinnedPlu
     throw new ConfigError(issues.map((issue) => issueAt(path, `refused: ${issue}`)));
   }
   const accepted = plugin as ProviderPlugin;
+  // A `host` account runs on the gateway's own services, which only the image
+  // binds (ADR platform-management-is-a-plugin-on-the-execution-door): never a pin.
+  if (accepted.credential.kind === 'host') {
+    refuse(
+      path,
+      `plugin '${accepted.id}' declares a host account, which only a plugin bundled with the gateway may declare: remove the directory`,
+    );
+  }
   if (accepted.version !== manifest.version) {
     refuse(
       path,

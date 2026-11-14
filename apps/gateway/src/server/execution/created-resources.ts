@@ -120,7 +120,6 @@ export class CreatedResources {
           resource_set_ids: [...new Set(joined.placed.map((p) => p.resourceSetId))],
           added_to_selection: rows.filter((r) => joined.added.includes(r.id)).map((r) => r.ref),
         },
-        delegated_client_id: null,
       });
       if (before) {
         await this.deps.futureResources?.settle(connectionId, before, callerUserId(ctx));

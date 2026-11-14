@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * missions,auth,requests,telemetry,instance,authority,shares,groups,users,oauth-as,management}` are
+ * missions,auth,requests,telemetry,instance,authority,shares,groups,users,vaubaan}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { AdminAct, AdminObjectType } from '@vaubaan/gateway-core';
 import { createRegistry } from '@vaubaan/plugin-sdk';
+import vaubaanPlugin, { type VaubaanCaller } from '@vaubaan/plugin-vaubaan';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,16 +41,13 @@ import {
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import type { LocalAccountRecord } from '../../../src/server/store';
-import type { ManagementActor } from '../../../src/server/management';
-import type { TokenResponse } from '../../../src/server/oauth-as';
-import { pkcePair } from '../../support/oauth-as/testing';
+import { VaubaanActs } from '../../../src/server/vaubaan';
 import { saveTestOidcProvider } from '../../support/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   ConnectionRecord,
   GroupRecord,
   MissionRecord,
-  OAuthClientRecord,
   UserRecord,
 } from '../../../src/server/store/types';
 
@@ -65,12 +63,10 @@ const SCANNED = [
   'shares',
   'groups',
   'users',
-  'oauth-as',
-  'management',
+  'vaubaan',
 ];
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
-const OAUTH_REDIRECT = 'http://127.0.0.1:43210/callback';
 
 // ── The enumeration: public methods of every class, from the source ─────────
 
@@ -140,12 +136,11 @@ interface Rig {
   groupGrounded(): Promise<{ mission: MissionRecord; group: GroupRecord }>;
   /** A connection of Alice, transferred to a local group that then lost its only member. */
   ownerless(): Promise<ConnectionRecord>;
-  /** An OAuth client of the management door, redirecting to `redirectUri`. */
-  oauthClient(redirectUri?: string): Promise<OAuthClientRecord>;
-  /** A consent screen shown to Alice for `client`, not answered yet. */
-  consent(client: OAuthClientRecord): Promise<{ consentId: string; verifier: string }>;
-  /** A delegation of Alice to a fresh client, with its first tokens. */
-  delegation(): Promise<{ client: OAuthClientRecord; id: string; tokens: TokenResponse }>;
+  /**
+   * Alice's platform management mission on her Vaubaan account, as the `vaubaan`
+   * plugin's ports receive its calls (ADR platform-management-is-a-plugin-on-the-execution-door).
+   */
+  platformCaller(): Promise<VaubaanCaller>;
 }
 
 async function openRig(): Promise<Rig> {
@@ -180,6 +175,7 @@ async function openRig(): Promise<Rig> {
           ],
         }),
         fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
+        vaubaanPlugin,
       ]),
     providerFetch: provider,
     // The identity-provider form checks the issuer's discovery document before saving.
@@ -313,37 +309,27 @@ async function openRig(): Promise<Rig> {
       if (!unowned) throw new Error('expected the connection to lose its owner');
       return unowned;
     },
-    async oauthClient(redirectUri = OAUTH_REDIRECT) {
-      const registered = await root.oauth.clients.register({
-        client_name: 'Test agent',
-        redirect_uris: [redirectUri],
-        token_endpoint_auth_method: 'none',
+    async platformCaller() {
+      const started = await root.connections.service.start(alice, 'vaubaan');
+      if (started.kind !== 'connected') throw new Error('expected a host account at once');
+      const issued = await root.missions.service.issue(alice.user, {
+        name: 'Platform management',
+        connections: [
+          {
+            connection_id: started.connection.id,
+            trust_levels: {
+              read: 'careful',
+              prepare: 'careful',
+              rotate: 'careful',
+              stop: 'careful',
+            },
+          },
+        ],
+        period: { kind: 'one-off' },
+        expires_at: null,
       });
-      return registered.client;
-    },
-    async consent(client) {
-      const pkce = pkcePair();
-      const consentId = await root.oauth.authorization.createPending(alice.user, {
-        client,
-        redirectUri: client.redirectUris[0] ?? OAUTH_REDIRECT,
-        state: null,
-        codeChallenge: pkce.challenge,
-      });
-      return { consentId, verifier: pkce.verifier };
-    },
-    async delegation() {
-      const client = await rig.oauthClient();
-      const { consentId, verifier } = await rig.consent(client);
-      const outcome = await root.oauth.authorization.decide(alice.user, consentId, 'approve');
-      if (outcome.outcome !== 'redirect' || !outcome.delegationId) {
-        throw new Error('expected the consent to be granted');
-      }
-      const code = new URL(outcome.location).searchParams.get('code') ?? '';
-      const tokens = await root.oauth.tokens.exchangeCode(
-        client,
-        new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: verifier }),
-      );
-      return { client, id: outcome.delegationId, tokens };
+      if (!issued.ok) throw new Error(`platform mission refused: ${issued.reason}`);
+      return { missionId: issued.mission.id, userId: aliceUser.id, holderUserId: aliceUser.id };
     },
   };
   return rig;
@@ -359,10 +345,10 @@ interface ExpectedEntry {
   /** Who the entry names: the acting user. */
   readonly actor: 'alice' | 'operator';
   /**
-   * The act comes from the management surface: the entry also names the
-   * delegated client (spec §8). Absent: the entry names none.
+   * The act comes through the `vaubaan` plugin: the entry also names the
+   * calling mission (spec §8). Absent: the entry names none.
    */
-  readonly delegated?: true;
+  readonly viaMission?: true;
 }
 
 type Rule =
@@ -385,9 +371,6 @@ const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
 const SYSTEM_REFRESH =
   'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
-
-const OAUTH_PROTOCOL =
-  'performed by an OAuth client at a protocol endpoint, with no human actor: registering a client or exchanging a code grants nothing a user did not already consent to (`delegation-granted`); a replayed code or refresh token revokes the delegation and writes `delegation-revoked` (src/server/oauth-as/token-service.test.ts)';
 
 const connections = (root: GatewayRoot) => root.connections.service;
 const accounts = (root: GatewayRoot) => root.auth.accounts;
@@ -422,7 +405,8 @@ async function localAccount(rig: Rig): Promise<LocalAccountRecord> {
   });
 }
 const missions = (root: GatewayRoot) => root.missions.service;
-const managementTools = (root: GatewayRoot) => root.management.tools;
+/** The acts behind the ports: the instance the root built shares this prototype. */
+const vaubaanActs = () => VaubaanActs.prototype;
 const team = (root: GatewayRoot) => root.missions.team;
 
 /** A mission of Alice with Bob as a member (he has generated no token yet). */
@@ -434,12 +418,6 @@ async function sharedWithBob(rig: Rig): Promise<{ mission: MissionRecord; bob: U
   });
   if (!added.ok) throw new Error(`add refused: ${added.reason}`);
   return { mission, bob };
-}
-
-/** Alice's delegation to a fresh client, as the management door hands it to its tools. */
-async function delegatedActor(rig: Rig): Promise<ManagementActor> {
-  const held = await rig.delegation();
-  return { userId: rig.alice.user.id, delegationId: held.id, clientId: held.client.clientId };
 }
 
 const RULES: Readonly<Record<string, Rule>> = {
@@ -1649,129 +1627,57 @@ const RULES: Readonly<Record<string, Rule>> = {
     'counts, in memory, the calls decided since the last telemetry profile: nothing of the instance is stored, changed or revoked',
   ),
   'InstanceProfiler.profile': READ,
-  // ── authorization server of the management door ───────────────────────────
-  'ClientRegistry.statusOf': READ,
-  'ClientRegistry.view': READ,
-  'ClientRegistry.find': READ,
-  'ClientRegistry.get': READ,
-  'ClientRegistry.list': READ,
-  'ClientRegistry.register': exempt(OAUTH_PROTOCOL),
-  'ClientRegistry.resolveDocumentClient': exempt(
-    'stores what a public Client ID Metadata Document says of its client; whether that client may ask users for anything stays the policy’s and the operator’s decision',
-  ),
-  'ClientRegistry.decide': {
+  // ── the `vaubaan` plugin: an agent acting for the user, through a mission ──
+  'VaubaanActs.listMyConnections': READ,
+  'VaubaanActs.getCatalog': READ,
+  'VaubaanActs.listMyMissions': READ,
+  'VaubaanActs.previewPolicy': READ,
+  'VaubaanActs.issueMission': {
     kind: 'mutation',
-    target: (root) => root.oauth.clients,
-    // A client that redirects to a server waits for the operator.
-    prepare: (rig) => rig.oauthClient('https://agent.example.net/oauth/callback'),
-    drive: async (rig, client: OAuthClientRecord) =>
-      rig.root.oauth.handlers.decideClient(
-        await rig.operatorPost(`/admin/oauth-clients/${client.id}`, { action: 'approve' }),
-        client.id,
-      ),
-    writes: { act: 'oauth-client-approved', object: 'oauth-client', actor: 'operator' },
-  },
-  'AuthorizationService.needsDocument': READ,
-  'AuthorizationService.resolveClient': READ,
-  'AuthorizationService.validate': READ,
-  'AuthorizationService.createPending': exempt(SESSION_STATE),
-  'AuthorizationService.decide': {
-    kind: 'mutation',
-    target: (root) => root.oauth.authorization,
-    prepare: async (rig) => rig.consent(await rig.oauthClient()),
-    drive: (rig, shown: { consentId: string }) =>
-      rig.root.oauth.authorization.decide(rig.alice.user, shown.consentId, 'approve'),
-    writes: { act: 'delegation-granted', object: 'delegation', actor: 'alice' },
-  },
-  'TokenService.authenticateClient': READ,
-  'TokenService.exchangeCode': exempt(OAUTH_PROTOCOL),
-  'TokenService.refresh': exempt(OAUTH_PROTOCOL),
-  'TokenService.revoke': {
-    kind: 'mutation',
-    target: (root) => root.oauth.tokens,
-    prepare: (rig) => rig.delegation(),
-    // The client signs out: its refresh token ends the delegation, in the user's name.
-    drive: (rig, held: { client: OAuthClientRecord; tokens: TokenResponse }) =>
-      rig.root.oauth.tokens.revoke(
-        held.client,
-        new URLSearchParams({ token: held.tokens.refresh_token }),
-      ),
-    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
-  },
-  'DelegationService.listFor': READ,
-  'DelegationService.revoke': {
-    kind: 'mutation',
-    target: (root) => root.oauth.delegations,
-    prepare: (rig) => rig.delegation(),
-    drive: (rig, held: { id: string }) =>
-      rig.root.oauth.delegations.revoke(rig.alice.user, held.id),
-    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
-  },
-  'DelegationService.revokeAllOf': {
-    kind: 'mutation',
-    target: (root) => root.oauth.delegations,
-    prepare: (rig) => rig.delegation(),
-    // Reached through the one act that ends every delegation of a user: their deactivation.
-    drive: (rig) =>
-      rig.root.users.service.deactivate(
-        { actorId: rig.operator.id, userId: rig.operator.id },
-        rig.alice.user.id,
-      ),
-    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'operator' },
-  },
-  'DelegatedTokenVerifier.resolve': READ,
-  'ManagementGate.admit': READ,
-  // ── management door: an agent acting for the user, under a delegation ─────
-  'ManagementDoor.handle': READ,
-  'ManagementTools.listMyConnections': READ,
-  'ManagementTools.getCatalog': READ,
-  'ManagementTools.listMyMissions': READ,
-  'ManagementTools.previewPolicy': READ,
-  'ManagementTools.issueMission': {
-    kind: 'mutation',
-    target: managementTools,
+    target: vaubaanActs,
     prepare: async (rig) => ({
       connection: await rig.connectByKey(),
-      actor: await delegatedActor(rig),
+      caller: await rig.platformCaller(),
     }),
-    drive: (rig, prepared: { connection: ConnectionRecord; actor: ManagementActor }) =>
-      rig.root.management.tools.issueMission(prepared.actor, {
+    drive: (rig, prepared: { connection: ConnectionRecord; caller: VaubaanCaller }) =>
+      rig.root.vaubaan.ports.issueMission(prepared.caller, {
         name: 'Read the things',
         connections: [{ connection_id: prepared.connection.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       }),
-    writes: { act: 'mission-issued', object: 'mission', actor: 'alice', delegated: true },
+    writes: { act: 'mission-issued', object: 'mission', actor: 'alice', viaMission: true },
   },
-  'ManagementTools.rotateMissionToken': {
+  'VaubaanActs.rotateMissionToken': {
     kind: 'mutation',
-    target: managementTools,
-    // A delegation rotates only what it issued itself: the mission comes from the door.
+    target: vaubaanActs,
+    // A mission rotates only what it issued itself: the mission comes from the plugin.
     prepare: async (rig) => {
       const connection = await rig.connectByKey();
-      const actor = await delegatedActor(rig);
-      const issued = await rig.root.management.tools.issueMission(actor, {
+      const caller = await rig.platformCaller();
+      const issued = await rig.root.vaubaan.ports.issueMission(caller, {
         name: 'Read the things',
         connections: [{ connection_id: connection.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       });
       if (!issued.ok) throw new Error(`issue refused: ${issued.refusal.code}`);
-      return { missionId: issued.data.mission.mission_id, actor };
+      const data = issued.data as { mission: { mission_id: string } };
+      return { missionId: data.mission.mission_id, caller };
     },
-    drive: (rig, prepared: { missionId: string; actor: ManagementActor }) =>
-      rig.root.management.tools.rotateMissionToken(prepared.actor, {
+    drive: (rig, prepared: { missionId: string; caller: VaubaanCaller }) =>
+      rig.root.vaubaan.ports.rotateMissionToken(prepared.caller, {
         mission_id: prepared.missionId,
       }),
-    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice', delegated: true },
+    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice', viaMission: true },
   },
-  'ManagementTools.revokeMission': {
+  'VaubaanActs.revokeMission': {
     kind: 'mutation',
-    target: managementTools,
-    prepare: async (rig) => ({ mission: await rig.issue(), actor: await delegatedActor(rig) }),
-    drive: (rig, prepared: { mission: MissionRecord; actor: ManagementActor }) =>
-      rig.root.management.tools.revokeMission(prepared.actor, { mission_id: prepared.mission.id }),
-    writes: { act: 'mission-revoked', object: 'mission', actor: 'alice', delegated: true },
+    target: vaubaanActs,
+    prepare: async (rig) => ({ mission: await rig.issue(), caller: await rig.platformCaller() }),
+    drive: (rig, prepared: { mission: MissionRecord; caller: VaubaanCaller }) =>
+      rig.root.vaubaan.ports.revokeMission(prepared.caller, { mission_id: prepared.mission.id }),
+    writes: { act: 'mission-revoked', object: 'mission', actor: 'alice', viaMission: true },
   },
 };
 
@@ -1820,10 +1726,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'connection-reassigned',
       'connection-revoked',
       'connection-transferred',
-      'delegation-granted',
-      'delegation-revoked',
-      'delegation-revoked',
-      'delegation-revoked',
       'gate-changed',
       'group-created',
       'group-member-added',
@@ -1856,7 +1758,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-token-issued',
       'mission-token-revoked',
       'mission-token-revoked',
-      'oauth-client-approved',
       'period-reset',
       'permissions-changed',
       'request-refused',
@@ -1909,11 +1810,13 @@ describe('every administrative mutation writes an admin audit entry', () => {
     const [entry] = matching;
     expect(entry?.object.id.length).toBeGreaterThan(0);
     expect(Number.isNaN(Date.parse(entry?.ts ?? ''))).toBe(false);
-    if (rule.writes.delegated) {
-      expect(entry?.delegated_client_id, name).toMatch(/^vbn_client_/);
+    if (rule.writes.viaMission) {
+      expect(entry?.via_mission_id, name).toBe(
+        (prepared as { caller: VaubaanCaller }).caller.missionId,
+      );
     } else if (rule.writes.act.startsWith('mission-')) {
-      // An act of the interface names no client.
-      expect(entry?.delegated_client_id ?? null, name).toBeNull();
+      // An act of the interface names no calling mission.
+      expect(entry?.via_mission_id ?? null, name).toBeNull();
     }
   });
 

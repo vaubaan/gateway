@@ -26,17 +26,9 @@
  *   frame-ancestors 'none'              no page of the gateway in a frame
  *
  * No `form-action`: Chrome applies it to the redirects that follow a form post,
- * and a sign-in, the connect flow of an account and the answer to an OAuth
- * consent are form posts that end at another origin (the provider, a CLI
- * agent's loopback address), chosen at run time.
- *
- * The documents of the OAuth authorization server (`/oauth/authorize/**`) carry a
- * stricter policy of their own (`server/oauth-as/pages.ts`, `default-src 'none'`
- * and the nonce of their one style element): `OWN_POLICY_PATHS` leaves them alone.
+ * and a sign-in and the connect flow of an account are form posts that end at
+ * another origin (the provider), chosen at run time.
  */
-
-/** The paths whose responses set their own security headers. */
-export const OWN_POLICY_PATHS: readonly string[] = ['/oauth/authorize'];
 
 /** One year, this host only: sibling hosts are not the gateway's to bind. */
 export const HSTS_VALUE = 'max-age=31536000';
@@ -83,10 +75,6 @@ export function securityHeaders(options: SecurityHeaderOptions): Record<string, 
     'Permissions-Policy': PERMISSIONS_POLICY,
     ...(options.https ? { 'Strict-Transport-Security': HSTS_VALUE } : {}),
   };
-}
-
-export function ownsItsPolicy(pathname: string): boolean {
-  return OWN_POLICY_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
 const PUBLIC_URL_KEY = Symbol.for('vaubaan.gateway.publicUrlIsHttps');

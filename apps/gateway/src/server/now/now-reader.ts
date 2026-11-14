@@ -24,6 +24,7 @@ import type { Iso8601, MissionTokenKind, RiskId } from '@vaubaan/shared';
 import type { Actor, ConnectionService } from '../connections';
 import type { MissionOverview, MissionRole, MissionService, TrustRaiseOffer } from '../missions';
 import { riskExplainer } from '../../lib/providers/reference';
+import { issuerName } from '../../lib/vocabulary';
 import type { RequestService, WaitingItem } from '../requests';
 import { effectiveState } from '../requests/state';
 import type { ShareService } from '../shares';
@@ -275,7 +276,7 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       creator: role === 'member' ? await personLabel(mission.creatorUserId) : null,
       services,
       holders: await holdersOf(mission.id),
-      issued_via: overview.issued_via?.client_name ?? null,
+      issued_via: overview.issued_via ? issuerName(overview.issued_via) : null,
       nearest: nearestLimit(mission.policy, state.remaining, labelOf),
       limits_reached: state.exhausted.length,
       open_requests: await openRequestsOf(overview),

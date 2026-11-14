@@ -166,11 +166,11 @@ Things to try
      key, the permissions touched and what is left. On a mission, "Everything this
      mission did" shows the calls of the current period per key holder and per
      agent label ("planner", "coder").
- 13. Settings, as Alice (she administers the gateway): Connected apps ("Claude
-     Code (demo)"); under Administration, Setup (a checklist of what is left),
-     Sign-in, People, Teams ("GitHub admins",
-     "Contractors"), Telemetry (off), Registered apps; the accounts without
-     owner, when there are any, are the last region of Accounts.
+ 13. Settings, as Alice (she administers the gateway): under Administration,
+     Setup (a checklist of what is left), Sign-in, People, Teams ("GitHub
+     admins", "Contractors"), Telemetry (off); the accounts without owner,
+     when there are any, are the last region of Accounts. Her Vaubaan account
+     is in Accounts, with the "Platform management" mission on it.
      Settings also holds the theme (System, Light, Dark) and the interface
      reference (/design).
  14. Sign in as Carol: she sees the GitHub account owned by the team
