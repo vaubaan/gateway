@@ -7,6 +7,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
+import { DOC_PAGES } from '../../../src/lib/vocabulary';
 import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { E2E_OPERATOR, E2E_USER, localOrigin, PUBLIC_URL } from './instance';
 
@@ -213,6 +214,67 @@ test('on a phone the navigation is a bar of icons WITH their words, and no page 
     await expectNoSidewaysScroll(page);
   }
   await snap(page, 'reference-phone-390');
+});
+
+test('the (i) beside a title explains the page in place and never leaves it', async ({
+  page,
+  context,
+}) => {
+  await signIn(page, '/missions');
+  const trigger = page.getByTestId('page-doc-link');
+  const hint = page.getByTestId('doc-hint').first();
+  await expect(trigger).toHaveAttribute('aria-label', `About ${DOC_PAGES.missions.label}`);
+  await expect(hint).toBeHidden();
+
+  // Hovering shows the context: the title, the sentences, the Documentation line.
+  await trigger.hover();
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText(DOC_PAGES.missions.label);
+  await expect(hint).toContainText(DOC_PAGES.missions.hint);
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const link = hint.getByTestId('doc-hint-link');
+  await expect(link).toHaveAttribute('href', /\/docs\/missions$/);
+  await expect(link).toHaveAttribute('target', '_blank');
+  // The pointer travels into the popover: it stays open, its link reachable.
+  await link.hover();
+  await expect(hint).toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(hint).toBeHidden();
+
+  // A click opens no page: it pins the hint, as a non-modal dialog; Escape closes it.
+  let popups = 0;
+  context.on('page', () => (popups += 1));
+  const url = page.url();
+  await trigger.click();
+  await page.mouse.move(5, 5);
+  await expect(page.getByRole('dialog', { name: DOC_PAGES.missions.label })).toBeVisible();
+  expect(page.url()).toBe(url);
+  await page.keyboard.press('Escape');
+  await expect(hint).toBeHidden();
+  // A press outside closes it as well.
+  await trigger.click();
+  await expect(hint).toBeVisible();
+  await page.getByRole('heading', { level: 1 }).click();
+  await expect(hint).toBeHidden();
+  expect(popups).toBe(0);
+
+  // The keyboard: focus shows it, Tab reaches its link, Escape gives the focus back.
+  await trigger.focus();
+  await expect(hint).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(link).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(hint).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  // On a phone it stays inside the screen.
+  await page.setViewportSize({ width: 400, height: 780 });
+  await trigger.click();
+  await expect(hint).toBeVisible();
+  const box = await hint.boundingBox();
+  expect(box?.x).toBeGreaterThanOrEqual(0);
+  expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(400);
+  await snap(page, 'doc-hint-phone');
 });
 
 test('the theme has three states, is kept across a reload and is rendered by the server', async ({

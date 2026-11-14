@@ -50,6 +50,7 @@ import {
   type PageSearchParams,
 } from '@/lib/accounts/session';
 import {
+  connectHint,
   serviceDoc,
   ACCOUNT_ACTIONS,
   ACCOUNT_PAGES,
@@ -235,7 +236,12 @@ export default async function ConnectOneAccountPage({
             : `Connect ${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name} account`
         }
         lede={ledeOf(provider)}
-        doc={serviceDoc(provider.id, name, 'connect')}
+        doc={serviceDoc(
+          provider.id,
+          name,
+          'connect',
+          connectHint(name, provider.kind, provider.label),
+        )}
       />
       <NoticeBanner notice={notice} />
 

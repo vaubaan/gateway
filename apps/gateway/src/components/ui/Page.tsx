@@ -20,7 +20,7 @@ import Link from 'next/link';
 
 import { formatNumber, type DocTarget } from '@/lib/vocabulary';
 
-import { DocLink } from './DocLink';
+import { DocHint } from './DocHint';
 import styles from './Page.module.css';
 import { TrailSetter } from './Trail';
 
@@ -80,7 +80,7 @@ export function PageHeader({
   secondary?: readonly [React.ReactNode] | readonly [React.ReactNode, React.ReactNode];
   /** Everything else, behind "···". */
   more?: React.ReactNode;
-  /** The page of the user docs that explains this one: an (i) after the title, opening a new tab. */
+  /** The page of the user docs that explains this one: an (i) after the title showing its context, with a link to its docs. */
   doc?: DocTarget;
   /** The measure of the page column: `narrow` for one object or a form, `wide` for a table. */
   width?: PageWidth;
@@ -102,7 +102,7 @@ export function PageHeader({
               <span>{title}</span>
               {status && <span className={styles.titleStatus}>{status}</span>}
             </Title>
-            {doc && <DocLink to={doc} testId="page-doc-link" />}
+            {doc && <DocHint to={doc} testId="page-doc-link" />}
           </div>
           {lede && <p className={styles.lede}>{lede}</p>}
         </div>

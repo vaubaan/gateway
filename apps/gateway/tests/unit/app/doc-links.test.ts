@@ -1,7 +1,9 @@
 /**
- * The (i) of every page leads to a page that exists (docs/handbook/web-app.md,
- * "doc links"): each target of `DOC_PAGES`, and `serviceDoc` for every plugin
- * the repository ships, is read against the website's sources on disk.
+ * The (i) of every page explains where one is and leads to a page that exists
+ * (docs/handbook/web-app.md, "doc hints"): each target of `DOC_PAGES` carries a
+ * title and a hint within `DOC_HINT_MAX`, and its path, like `serviceDoc`'s for
+ * every plugin the repository ships, is read against the website's sources on
+ * disk.
  *
  * - `docs/<path>` is a hand-written page of `apps/website/content/docs`
  *   (`<path>.mdx` or `<path>/index.mdx`), listed in its folder's `meta.json`,
@@ -20,7 +22,17 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { docHref } from '@/lib/docs-links';
-import { DOC_PAGES, docLinkLabel, serviceDoc, type DocTarget } from '@/lib/vocabulary';
+import {
+  clampHint,
+  connectHint,
+  DOC_HINT_MAX,
+  DOC_PAGES,
+  docHintLabel,
+  docLinkLabel,
+  serviceDoc,
+  type ConnectWay,
+  type DocTarget,
+} from '@/lib/vocabulary';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const DOCS = join(REPO, 'apps/website/content/docs');
@@ -146,9 +158,10 @@ describe('doc links: every target of the table has its page on the site', () => 
   });
 
   it('a missing page or heading is caught', () => {
-    expect(problemOf({ label: 'x', path: 'no-such-page' })).toMatch(/no page/);
-    expect(problemOf({ label: 'x', path: 'missions#no-such-heading' })).toMatch(/no heading/);
-    expect(problemOf({ label: 'x', path: '../plugins/no-such-plugin' })).toMatch(/no plugin/);
+    const at = (path: string): DocTarget => ({ label: 'x', hint: 'x', path });
+    expect(problemOf(at('no-such-page'))).toMatch(/no page/);
+    expect(problemOf(at('missions#no-such-heading'))).toMatch(/no heading/);
+    expect(problemOf(at('../plugins/no-such-plugin'))).toMatch(/no plugin/);
   });
 });
 
@@ -165,9 +178,12 @@ describe('doc links: addresses and names', () => {
     ).toBe('https://mirror.test/vaubaan/plugins/github#connect');
   });
 
-  it('names the link after the page', () => {
-    expect(docLinkLabel(DOC_PAGES.missions)).toBe('Documentation: Missions');
-    expect(docLinkLabel(serviceDoc('github', 'GitHub'))).toBe('Documentation: GitHub');
+  it('names the (i) and its Documentation line after the page', () => {
+    expect(docHintLabel(DOC_PAGES.missions)).toBe('About Missions');
+    expect(docLinkLabel(DOC_PAGES.missions)).toBe('Documentation: Missions (opens in a new tab)');
+    expect(docLinkLabel(serviceDoc('github', 'GitHub'))).toBe(
+      'Documentation: GitHub (opens in a new tab)',
+    );
   });
 
   it('slugs headings as the site does', () => {
@@ -175,5 +191,63 @@ describe('doc links: addresses and names', () => {
     expect(slugOf('Sign-in')).toBe('sign-in');
     expect(slugOf('When a call is refused')).toBe('when-a-call-is-refused');
     expect(slugOf("What's `new`, (really)?")).toBe('whats-new-really');
+  });
+});
+
+describe('doc hints: every target says where one is, in a few words', () => {
+  /** What is wrong with a hint, or `null`: a title, a text within the limit, one to three sentences. */
+  function hintProblem(target: DocTarget): string | null {
+    if (target.label.trim() === '') return 'no title';
+    const text = target.hint.trim();
+    if (text === '') return 'no text';
+    if (text.length > DOC_HINT_MAX) return `${text.length} characters, more than ${DOC_HINT_MAX}`;
+    const sentences = text.split(/[.!?…](?:\s|$)/).filter((s) => s.trim() !== '').length;
+    if (sentences > 3) return `${sentences} sentences, more than 3`;
+    return null;
+  }
+
+  for (const [id, target] of Object.entries(DOC_PAGES)) {
+    it(`${id}: “${target.label}”`, () => {
+      expect(hintProblem(target)).toBeNull();
+    });
+  }
+
+  it('says account and service, never the retired words', () => {
+    const texts = [
+      ...Object.values(DOC_PAGES).map((t) => t.hint),
+      ...(['api-key', 'oauth2', 'ssh-key', 'host'] as const).map((way) => connectHint('X', way)),
+    ];
+    for (const text of texts) expect(text).not.toMatch(/\b(connections?|providers?)\b/i);
+  });
+
+  it('a service hint is its plugin’s description, or what connecting involves', () => {
+    const page = serviceDoc(
+      'github',
+      'GitHub',
+      'page',
+      'Repositories, branches and pull requests.',
+    );
+    expect(page.hint).toBe('Repositories, branches and pull requests.');
+    expect(serviceDoc('github', 'GitHub').hint).toMatch(/GitHub/);
+    const ways: ConnectWay[] = ['api-key', 'oauth2', 'ssh-key', 'host'];
+    for (const way of ways) {
+      const longest = connectHint(
+        'A service with a very long display name',
+        way,
+        'fine-grained personal access token',
+      );
+      expect(hintProblem(serviceDoc('x', 'X', 'connect', longest))).toBeNull();
+    }
+    expect(connectHint('Vercel', 'api-key', 'access token')).toMatch(
+      /^You create an access token at Vercel and paste it once\./,
+    );
+  });
+
+  it('cuts a plugin’s long description at a word, within the limit', () => {
+    const long = `${'word '.repeat(80)}end.`;
+    const cut = clampHint(long);
+    expect(cut.length).toBeLessThanOrEqual(DOC_HINT_MAX);
+    expect(cut).toMatch(/word…$/);
+    expect(clampHint('  Short,\n  on two lines. ')).toBe('Short, on two lines.');
   });
 });

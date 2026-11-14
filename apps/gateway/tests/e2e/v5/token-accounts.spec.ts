@@ -172,11 +172,14 @@ test('Vercel: one project or the team, the narrowest first; a project token name
   await signIn(page);
   await page.goto('/accounts/new/vercel');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Vercel account$/);
-  // The (i) of the header leads to the service's connect guide on the site.
-  await expect(page.getByTestId('page-doc-link')).toHaveAttribute(
+  // The (i) of the header says what connecting involves, and leads to the connect guide.
+  await page.getByTestId('page-doc-link').click();
+  await expect(page.getByTestId('doc-hint').first()).toContainText(/paste it once/);
+  await expect(page.getByTestId('doc-hint-link').first()).toHaveAttribute(
     'href',
     /\/plugins\/vercel#connect$/,
   );
+  await page.keyboard.press('Escape');
   const guide = page.getByTestId('token-guide');
   const team = page.getByTestId('token-alternative-team');
   const project = page.getByTestId('token-alternative-project');
