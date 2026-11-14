@@ -328,6 +328,13 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await snap(ines, 'team-creator-after-calls');
 
   await ines.getByRole('link', { name: 'Everything this mission did' }).click();
+  await expect(ines).toHaveURL(/\/activity\/timeline\?mission=/);
+  // The timeline names the holder and, separately, the label each caller declared.
+  const timeline = ines.getByTestId('timeline-table');
+  await expect(timeline.getByRole('row').filter({ hasText: 'joan-laptop' }).first()).toContainText(
+    E2E_SHARE_TARGET.email,
+  );
+  await ines.getByRole('link', { name: 'what waits, who called and what was used' }).click();
   await expect(
     ines.getByRole('heading', { name: `Activity of ${MISSION}`, level: 1 }),
   ).toBeVisible();
@@ -347,18 +354,14 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(permissionRow(ines.getByTestId('session-permissions'), READ_CODE)).toContainText(
     /^.*4 \/ \d/s,
   );
-  // The timeline names the holder and, separately, the label each caller declared.
-  const timeline = ines.getByTestId('timeline-table');
-  await expect(timeline.getByRole('row').filter({ hasText: 'joan-laptop' }).first()).toContainText(
-    E2E_SHARE_TARGET.email,
-  );
   await snap(ines, 'activity-per-holder');
   await perHolder
     .getByRole('row')
     .filter({ hasText: E2E_SHARE_TARGET.email })
     .getByRole('link', { name: 'in the timeline' })
     .click();
-  await expect(ines.getByTestId('timeline-filter')).toContainText(E2E_SHARE_TARGET.email);
+  // The Timeline of the mission, filtered on the holder's key.
+  await expect(ines).toHaveURL(/\/activity\/timeline\?mission=[^&]+&holder=member%3A/);
   await expect(timeline.getByTestId('event-holder')).toHaveCount(2);
   await expect(timeline.getByTestId('event-holder')).toContainText([
     E2E_SHARE_TARGET.email,
@@ -374,16 +377,20 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   expect(await ines.getByRole('main').innerText()).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{4}|\b[AP]M\b/);
 
   await ines.goto('/activity');
-  // Her audit also holds other missions on her connections: this one only.
+  // Her audit also holds other missions on her connections: this one only, at once
+  // (once the filters are live: before, the form waits for its button).
+  await expect(ines.locator('form[data-live="true"]')).toHaveCount(1);
   await ines.locator('select[name="mission"]').selectOption({ label: MISSION });
+  await expect(ines).toHaveURL(/\/activity\/record\?mission=/);
   await ines.getByRole('button', { name: 'More filters' }).click();
   await ines.getByLabel(/^Who/).fill(CI);
-  await ines.getByRole('button', { name: 'Apply' }).click();
+  await ines.getByLabel(/^Who/).press('Enter');
+  await expect(ines).toHaveURL(/[?&]holder=CI/);
   const audit = ines.getByTestId('audit-table');
   // A machine key is said in words, and drawn as a dashed square, not as a person.
   await expect(audit.getByTestId('audit-holder')).toHaveText([/CI runner\s*·\s*machine key/]);
   await ines.getByLabel(/^Who/).fill(E2E_SHARE_TARGET.email);
-  await ines.getByRole('button', { name: 'Apply' }).click();
+  await ines.getByLabel(/^Who/).press('Enter');
   await expect(audit.getByTestId('audit-holder')).toHaveText([
     new RegExp(E2E_SHARE_TARGET.email.replace('.', '\\.')),
     new RegExp(E2E_SHARE_TARGET.email.replace('.', '\\.')),
@@ -392,10 +399,10 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
 
   // ── Joan reads the activity too; the answers stay the creator's ─────────
   await joan.getByRole('link', { name: 'Everything this mission did' }).click();
-  await expect(joan.getByTestId('holder-activity')).toContainText(E2E_SHARE_OWNER.email);
+  await expect(joan.getByTestId('timeline-table')).toContainText(E2E_SHARE_OWNER.email);
   // A member reads the audit of a mission shared with them (spec §4.2): every call of
   // it, whoever made it, and never the fingerprint of the arguments.
-  await joan.getByRole('link', { name: 'Full record of this mission' }).click();
+  await joan.getByRole('link', { name: 'its record' }).click();
   await expect(joan.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   const memberAudit = joan.getByTestId('audit-table');
   await expect(memberAudit.getByTestId('audit-holder').first()).toBeVisible();
@@ -417,7 +424,7 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   // Opening the detail was a navigation of its own.
   await joan.goBack();
   await joan.goBack();
-  await expect(joan.getByTestId('holder-activity')).toBeVisible();
+  await expect(joan.getByTestId('timeline-table')).toBeVisible();
   await joan.goBack();
 
   // ── Each key stops on its own ───────────────────────────────────────────

@@ -318,12 +318,12 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await joan.keyboard.press('Escape');
   // The activity kept its history across the gap: the two calls served are still there.
   await joan.getByRole('link', { name: 'Everything this mission did' }).click();
-  await expect(joan.getByRole('heading', { name: /^Activity of /, level: 1 })).toBeVisible();
-  const timeline = joan.getByTestId('timeline');
+  await expect(joan).toHaveURL(/\/activity\/timeline\?mission=/);
+  const timeline = joan.getByTestId('timeline-table');
   await expect(timeline.locator('tbody tr').filter({ hasText: 'allowed' })).toHaveCount(2);
   await snap(joan, 'mission-restored-activity');
   // Both acts of the owner are in the creator's record.
-  await joan.getByRole('link', { name: 'Full record of this mission' }).click();
+  await joan.getByRole('link', { name: 'its record' }).click();
   await expect(joan.getByText('left a mission without an owner').first()).toBeVisible();
   await expect(joan.getByText('brought a mission back').first()).toBeVisible();
 

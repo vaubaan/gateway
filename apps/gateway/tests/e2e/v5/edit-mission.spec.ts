@@ -74,8 +74,8 @@ test('the creator edits a running mission; the same key sees it at its next call
   expect(refused).toMatchObject({ outcome: 'refused' });
   if (refused.outcome === 'refused') expect(refused.refusal.code).toBe('resource-not-in-mission');
 
-  // The mission's activity says the change in words.
-  await page.goto(`/missions/${issued.mission_id}/session`);
+  // The mission's timeline says the change in words.
+  await page.goto(`/activity/timeline?mission=${issued.mission_id}`);
   await expect(page.getByText('changed the mission').first()).toBeVisible();
   await context.close();
 });

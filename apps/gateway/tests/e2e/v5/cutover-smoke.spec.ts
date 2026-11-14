@@ -234,7 +234,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   });
 
   // ── 8. The calls on the Audit page ────────────────────────────────────────
-  await page.goto(`/activity?mission=${missionId}`);
+  await page.goto(`/activity/record?mission=${missionId}`);
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   const entries = page.getByTestId('audit-table').locator('tbody tr[data-row]');
   const calls = entries.filter({ hasText: 'github__list_branches' });
@@ -256,20 +256,15 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   expect(auditHtml).not.toContain(upstream.connection_token);
   await snap(page, 'cutover-audit');
 
-  // ── 9. …and on the mission's session page ─────────────────────────────────
+  // ── 9. …and in the timeline of the mission ────────────────────────────────
   await page.goto(`/missions/${missionId}`);
   // The mission says its limit is reached on the gauge of Read (its title says the claim waits).
   await expect(cardOf(page, `GitHub · ${CONNECTION}`).getByTestId('gauge-read')).toContainText(
     'Limit reached',
   );
   await page.getByRole('link', { name: 'Everything this mission did' }).click();
-  await expect(page).toHaveURL(new RegExp(`/missions/${missionId}/session$`));
-  const permissions = page.getByTestId('session-permissions');
-  await permissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
-  const readCode = permissions.locator(`tr[data-permission="${READ_CODE}"]`);
-  await expect(readCode).toContainText('Limit reached');
-  await expect(page.getByTestId('label-activity')).toContainText(AGENT_LABEL);
-  const timeline = page.getByTestId('timeline').locator('table');
+  await expect(page).toHaveURL(new RegExp(`/activity/timeline\\?mission=${missionId}$`));
+  const timeline = page.getByTestId('timeline-table').locator('table');
   const outcome = (words: string) =>
     timeline.locator('tbody tr').filter({ has: page.getByText(words, { exact: true }) });
   // The activity holds what was counted: three allowed calls with what was left
@@ -284,5 +279,14 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   );
   // The last refusal opened a claim of its own: the first one is closed.
   await expect(timeline.getByRole('link', { name: 'Review and answer' }).first()).toBeVisible();
+  await snap(page, 'cutover-timeline');
+
+  // The activity of the mission: what each permission used, who called.
+  await page.goto(`/missions/${missionId}/session`);
+  const permissions = page.getByTestId('session-permissions');
+  await permissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
+  const readCode = permissions.locator(`tr[data-permission="${READ_CODE}"]`);
+  await expect(readCode).toContainText('Limit reached');
+  await expect(page.getByTestId('label-activity')).toContainText(AGENT_LABEL);
   await snap(page, 'cutover-activity');
 });

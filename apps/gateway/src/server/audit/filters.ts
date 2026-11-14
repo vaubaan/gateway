@@ -22,7 +22,6 @@ export const AUDIT_PARAMS = {
   kind: 'kind',
   from: 'from',
   to: 'to',
-  cursor: 'cursor',
 } as const;
 
 export type AuditParam = keyof typeof AUDIT_PARAMS;
@@ -54,10 +53,10 @@ export interface AuditFilters {
   readonly until: string | null;
 }
 
+/** The filters only: where a page starts is `paging.ts`'s (`cursor`, `after`, `at`). */
 export interface ParsedAuditQuery {
   readonly filters: AuditFilters;
-  readonly cursor: AuditCursor | null;
-  /** The raw values, for re-filling the form and building the next-page link. */
+  /** The raw values, for re-filling the form and building the pager's links. */
   readonly raw: Readonly<Partial<Record<AuditParam, string>>>;
   readonly problems: readonly string[];
 }
@@ -157,12 +156,6 @@ export function parseAuditQuery(query: RawQuery): ParsedAuditQuery {
     until = null;
   }
 
-  const cursorRaw = read('cursor');
-  const cursor = cursorRaw === null ? null : decodeCursor(cursorRaw);
-  if (cursorRaw !== null && cursor === null) {
-    drop('cursor', 'cursor: unreadable, showing the first page');
-  }
-
   return {
     filters: {
       missionId: read('mission'),
@@ -176,19 +169,17 @@ export function parseAuditQuery(query: RawQuery): ParsedAuditQuery {
       since,
       until,
     },
-    cursor,
     raw,
     problems,
   };
 }
 
-/** The query string of the same search at another position (or the first page). */
-export function auditQueryString(raw: ParsedAuditQuery['raw'], cursor: AuditCursor | null): string {
+/** The query string of the same filters, on their first page. */
+export function auditQueryString(raw: ParsedAuditQuery['raw']): string {
   const params = new URLSearchParams();
   for (const param of Object.keys(AUDIT_PARAMS) as AuditParam[]) {
     const value = raw[param];
-    if (param !== 'cursor' && value) params.set(AUDIT_PARAMS[param], value);
+    if (value) params.set(AUDIT_PARAMS[param], value);
   }
-  if (cursor) params.set(AUDIT_PARAMS.cursor, encodeCursor(cursor));
   return params.toString();
 }

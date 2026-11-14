@@ -624,8 +624,9 @@ stands in without one.
   A teammate never sees a pending approval's arguments nor their fingerprint, and their home does
   not list the creator's requests.
 - **The activity of a mission** — its session: what waits, who called this period per key holder and
-  per agent label (self-declared, and the page says so), the event timeline, earlier periods'
-  counters.
+  per agent label (self-declared, and the page says so), what each permission used, earlier
+  periods' counters. Its events are the Activity's Timeline filtered on the mission, its audit the
+  Record filtered on it; both are linked from it and from the mission.
 - **Accounts** — mine (alone or through an owning team) with their state; "Shared with you" with the
   exact permissions of each access; the services I can connect. **On an account**, for its owners
   only: who has access and up to what; its resources and environment labels; every mission that
@@ -641,9 +642,14 @@ stands in without one.
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
   permission shown elsewhere links here. Each service names its plugin version and, when the
   plugin is pinned by the operator rather than bundled with the image, says so.
-- **Activity** — the audit, newest first, filtered by period, mission, account, tool, decision,
-  person, key holder, agent label and kind; each line has a detail at its own address. Who reads
-  what: §8.
+- **Activity** — two tabs. **Record**: the audit, filtered by period, mission, account, tool,
+  decision, person, key holder, agent label and kind; each line has a detail at its own address;
+  who reads what: §8. **Timeline**: the session events (calls, requests and their answers, resets,
+  limits, gates, keys) of the missions I created or am a teammate of — of every mission for an
+  administrator; an account's owner reads its calls in the Record, not the sessions of the missions
+  that carry it —, filtered by mission, key holder and agent label. Both list newest first, in pages
+  of 50 reached by Newer and Older, the page in the address; a filter applies as soon as it is
+  chosen.
 - **Settings** — for everyone: theme; the second factor (enrol, replace, remove after a fresh
   sign-in — never an administrator's); a local account's password; **Connected apps** (until when
   each consent runs, the missions it prepared, disconnect); **Notifications** (my devices, messaging

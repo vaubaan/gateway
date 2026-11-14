@@ -51,6 +51,9 @@ export const ROUTES = {
   newMission: '/missions/new',
   accounts: '/accounts',
   activity: '/activity',
+  /** The Activity's tabs: the audit record, and the session events of every mission. */
+  activityRecord: '/activity/record',
+  activityTimeline: '/activity/timeline',
   reference: '/reference',
   settings: '/settings',
   connectedApps: '/settings/connected-apps',
@@ -613,9 +616,21 @@ export const ENVIRONMENT_WORDS = {
 export const TRUST_LEVEL_CUSTOM = 'Custom';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Activity (the record at `/activity`). Protocol names: audit entry, call,
-// administrative act, decision, refusal code, token holder, agent label.
+// Activity (`/activity`: the Record, the audit; the Timeline, the session
+// events). Protocol names: audit entry, call, administrative act, decision,
+// refusal code, token holder, agent label, session event.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** The tabs of Activity, in their order. */
+export const ACTIVITY_TABS = {
+  record: { label: 'Record', href: ROUTES.activityRecord },
+  timeline: { label: 'Timeline', href: ROUTES.activityTimeline },
+} as const;
+
+/** What the Timeline holds, said under its title. */
+export function timelineLede(retentionDays: number): string {
+  return `What happened in each mission: calls, requests and their answers, limits, gates and keys, kept ${count(retentionDays, { one: 'day', many: 'days' })}.`;
+}
 
 export const ACTIVITY_WORDS = {
   time: 'Time',
@@ -627,14 +642,12 @@ export const ACTIVITY_WORDS = {
   mission: 'Mission',
   detail: 'detail',
   hideDetail: 'hide detail',
-  /** The end of the list: one page more, also loaded as the reader scrolls there. */
-  loadEarlier: 'Load earlier',
-  loadingEarlier: 'Loading…',
-  noEarlier: 'No earlier activity',
-  /** Past the ceiling of one address: the next lines start a fresh list. */
-  continueEarlier: 'Continue with earlier lines',
+  /** The pager: the page before (newer lines), the page after (older lines), the top. */
+  newer: 'Newer',
+  older: 'Older',
   newest: 'Newest',
-  apply: 'Apply',
+  /** Without JavaScript, the filters wait for this button; with it, they apply at once. */
+  show: 'Show',
   clear: 'Clear',
   moreFilters: 'More filters',
   fewerFilters: 'Fewer filters',
@@ -662,6 +675,14 @@ export const ACTIVITY_SCOPE = {
   person:
     'You read the missions you created, the missions shared with you, and the accounts you own.',
   installer: 'Until someone signs in, the record holds the changes made while installing.',
+} as const;
+
+/** Whose sessions the Timeline lists, said once above it. */
+export const TIMELINE_SCOPE = {
+  administrator: 'As an administrator you read the sessions of every mission.',
+  person:
+    'You read the sessions of the missions you created and of those shared with you; the calls through the accounts you own are in the Record.',
+  installer: 'The setup token reads no session: sign in as a person.',
 } as const;
 
 /** The periods of the record, as the segments name them. */

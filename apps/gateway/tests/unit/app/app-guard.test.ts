@@ -33,7 +33,9 @@ const ROUTES = surfaceFiles(APP_DIR, 'route.ts');
 const PAGE_GUARD = /await (currentUser|currentActor|requirePrincipal)\(\)/;
 /** The pages that render for the bootstrap operator too: they show nothing that belongs to a user. */
 const PAGES_FOR_ANY_SESSION: readonly string[] = [
-  'activity/page.tsx',
+  // The record and the timeline: each reads what the session may read, nothing for the token.
+  'activity/record/page.tsx',
+  'activity/timeline/page.tsx',
   // The reference documents the instance: it shows no account and no mission.
   'reference/page.tsx',
   'reference/[id]/page.tsx',
@@ -41,6 +43,14 @@ const PAGES_FOR_ANY_SESSION: readonly string[] = [
   'settings/page.tsx',
   'design/page.tsx',
 ];
+
+/**
+ * The pages that lead a session elsewhere and render nothing themselves, with
+ * where they lead: `/activity` opens its first tab.
+ */
+const REDIRECTING_PAGES: Readonly<Record<string, string>> = {
+  'activity/page.tsx': '/activity/record',
+};
 
 /**
  * The handlers a route of the surface may delegate to. Each was read in
@@ -180,6 +190,7 @@ describe('the human surface authenticates in every page and route', () => {
 
   describe.each(PAGES)('page $name', ({ path, name }) => {
     const forAnySession = PAGES_FOR_ANY_SESSION.includes(name);
+    const leadsTo = REDIRECTING_PAGES[name];
 
     it('calls a session helper before it reads anything from the root', () => {
       const source = readFileSync(path, 'utf8');
@@ -202,12 +213,21 @@ describe('the human surface authenticates in every page and route', () => {
     });
 
     it(
-      forAnySession
-        ? 'renders for the bootstrap operator'
-        : 'renders only <NeedsUser /> for the bootstrap operator',
+      leadsTo
+        ? 'leads any session to the page it stands for'
+        : forAnySession
+          ? 'renders for the bootstrap operator'
+          : 'renders only <NeedsUser /> for the bootstrap operator',
       async () => {
         await signInBootstrap();
         const outcome = await renderPage(path, PARAMS);
+        if (leadsTo) {
+          expect(outcome.kind).toBe('redirect');
+          expect(outcome.kind === 'redirect' && outcome.to.split('?')[0]).toBe(leadsTo);
+          await signInUser('ada');
+          expect(await renderPage(path, PARAMS)).toMatchObject({ kind: 'redirect' });
+          return;
+        }
         // A page for any session that is addressed by id answers "not found" for an unknown one.
         expect(forAnySession ? ['returned', 'not-found'] : ['returned']).toContain(outcome.kind);
         expect(isNeedsUser(outcome)).toBe(!forAnySession);
@@ -217,6 +237,10 @@ describe('the human surface authenticates in every page and route', () => {
     it('answers a signed-in user with the page, or "not found" for an object that does not exist', async () => {
       await signInUser('ada');
       const outcome = await renderPage(path, PARAMS);
+      if (leadsTo) {
+        expect(outcome).toMatchObject({ kind: 'redirect' });
+        return;
+      }
       expect(['returned', 'not-found']).toContain(outcome.kind);
       expect(isNeedsUser(outcome)).toBe(false);
     });

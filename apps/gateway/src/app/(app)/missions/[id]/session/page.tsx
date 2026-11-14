@@ -1,13 +1,14 @@
 /**
  * `/missions/<id>/session` — the activity of one mission (spec §4.2, §3.3):
  * what waits for an answer, who called in the current period — per key holder
- * and per agent label —, the timeline of its events, then, one click away,
- * what each permission used and the counters of the earlier periods.
+ * and per agent label —, then, one click away, what each permission used and
+ * the counters of the earlier periods.
  *
- * The timeline is whole, or the calls of one holder
- * (`?holder=member:<user id>`, `?holder=named:<name>`), or the calls of one
- * label (`?agent=<label>`, `?unlabelled=1`). What a row says of an event is
- * `eventWords` (`event-words.ts`).
+ * Its events are the Activity's Timeline filtered on the mission
+ * (`/activity/timeline?mission=<id>`, and `&holder=` / `&agent=` /
+ * `&unlabelled=1` from the rows of who called); its audit is the Record
+ * filtered on it. What a row says of an event is `eventWords`
+ * (`event-words.ts`).
  *
  * A key holder is authenticated: it is whose key the call presented (spec
  * §8). An agent label is what a caller said about itself (spec §0, §7.9): the
@@ -53,64 +54,22 @@ import {
   waitingFor,
 } from '@/lib/vocabulary';
 import {
-  ALL_EVENTS,
   AUDIT_PARAMS,
-  decodeCursor,
-  encodeCursor,
   holderParam,
-  parseHolderParam,
+  TIMELINE_PARAMS,
   type MissionSessionView,
   type SessionHolderView,
-  type SessionTimelineFilter,
 } from '@/server/audit';
 import { riskExplainer } from '@/lib/providers/reference';
 
 import styles from '../../missions.module.css';
 import { missionMark } from '../../mission-view';
-import { ActivityTable } from '../activity-table';
 import { PermissionsUsage } from '../permissions-usage';
 
 export const dynamic = 'force-dynamic';
 
-const EVENTS_CURSOR_PARAM = 'before';
-/** Timeline filter: the calls of one agent label. */
-const AGENT_PARAM = 'agent';
-/** Timeline filter: the calls that carried no label. */
-const UNLABELLED_PARAM = 'unlabelled';
-/** Timeline filter: the calls made with a key of one holder. */
-const HOLDER_PARAM = 'holder';
-const MAX_LABEL_PARAM_LENGTH = 200;
-
-type SearchParams = Record<string, string | string[] | undefined>;
-
-function timelineFilterOf(params: SearchParams): SessionTimelineFilter {
-  const holderRaw = params[HOLDER_PARAM];
-  if (typeof holderRaw === 'string' && holderRaw.length <= MAX_LABEL_PARAM_LENGTH) {
-    const holder = parseHolderParam(holderRaw);
-    if (holder) return { kind: 'holder', holder };
-  }
-  const agent = params[AGENT_PARAM];
-  if (typeof agent === 'string') {
-    const label = agent.trim();
-    if (label.length > 0 && label.length <= MAX_LABEL_PARAM_LENGTH) return { kind: 'label', label };
-  }
-  return params[UNLABELLED_PARAM] === '1' ? { kind: 'unlabelled' } : ALL_EVENTS;
-}
-
-/** The page's own query string for a timeline filter and a position. */
-function sessionQuery(filter: SessionTimelineFilter, cursor: string | null): string {
-  const params = new URLSearchParams();
-  if (filter.kind === 'label') params.set(AGENT_PARAM, filter.label);
-  if (filter.kind === 'unlabelled') params.set(UNLABELLED_PARAM, '1');
-  if (filter.kind === 'holder') params.set(HOLDER_PARAM, holderParam(filter.holder));
-  if (cursor) params.set(EVENTS_CURSOR_PARAM, cursor);
-  const text = params.toString();
-  return text ? `?${text}` : '';
-}
-
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<SearchParams>;
 }
 
 type HolderActivity = MissionSessionView['holder_activity'][number];
@@ -129,41 +88,32 @@ function HolderName({ holder }: { holder: SessionHolderView | null }) {
   );
 }
 
-export default async function MissionSessionPage({ params, searchParams }: Props) {
+export default async function MissionSessionPage({ params }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const { id } = await params;
-  const query = await searchParams;
-  const cursorRaw = query[EVENTS_CURSOR_PARAM];
-  const cursor = typeof cursorRaw === 'string' ? decodeCursor(cursorRaw) : null;
-  const filter = timelineFilterOf(query);
   const { root, user } = session;
   const [view, detail] = await Promise.all([
-    root.audit.sessions.get(user, id, { eventsBefore: cursor, timeline: filter }),
+    root.audit.sessions.get(user, id),
     root.missions.service.get(user, id),
   ]);
   if (!view || !detail) notFound();
   const { mission, state } = view;
   const now = new Date();
   const base = `${ROUTES.missions}/${encodeURIComponent(mission.id)}`;
-  const sessionPath = `${base}/session`;
-  const recordOfMission = `${ROUTES.activity}?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
+  const ofMission = encodeURIComponent(mission.id);
+  const timelineOfMission = `${ROUTES.activityTimeline}?${TIMELINE_PARAMS.mission}=${ofMission}`;
+  const recordOfMission = `${ROUTES.activityRecord}?${AUDIT_PARAMS.mission}=${ofMission}`;
   const isCreator = view.viewer_role === 'creator';
   const creatorName = isCreator ? null : (detail.creator.email ?? 'the creator');
   const mark = missionMark(state, view.open_requests.length, creatorName);
   const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
   const period = periodWord(periodSeconds);
   const labels = new Map(view.risks.map((risk) => [risk.risk_id, risk.label]));
-  const filteredHolder =
-    filter.kind === 'holder'
-      ? (view.holder_activity.find(
-          (a) => a.holder?.kind === filter.holder.kind && a.holder.key === filter.holder.key,
-        )?.holder ?? { ...filter.holder, label: filter.holder.key })
-      : null;
-
-  const showLinks = (own: SessionTimelineFilter, recordParam: string | null) => (
+  /** The rows of one holder or one label, in the Timeline and in the Record of the mission. */
+  const showLinks = (timelineParam: string, recordParam: string | null) => (
     <span className={styles.rowLinks}>
-      <Link href={`${sessionPath}${sessionQuery(own, null)}`}>in the timeline</Link>
+      <Link href={`${timelineOfMission}&${timelineParam}`}>in the timeline</Link>
       {recordParam && <Link href={`${recordOfMission}&${recordParam}`}>in the full record</Link>}
     </span>
   );
@@ -184,7 +134,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
       cell: (a) =>
         a.holder
           ? showLinks(
-              { kind: 'holder', holder: a.holder },
+              `${TIMELINE_PARAMS.holder}=${encodeURIComponent(holderParam(a.holder))}`,
               `${AUDIT_PARAMS.holder}=${encodeURIComponent(holderParam(a.holder))}`,
             )
           : '—',
@@ -213,10 +163,12 @@ export default async function MissionSessionPage({ params, searchParams }: Props
       id: 'show',
       header: 'Show',
       cell: (a) =>
-        showLinks(
-          a.label === null ? { kind: 'unlabelled' } : { kind: 'label', label: a.label },
-          a.label === null ? null : `${AUDIT_PARAMS.agent}=${encodeURIComponent(a.label)}`,
-        ),
+        a.label === null
+          ? showLinks(`${TIMELINE_PARAMS.unlabelled}=1`, null)
+          : showLinks(
+              `${TIMELINE_PARAMS.agent}=${encodeURIComponent(a.label)}`,
+              `${AUDIT_PARAMS.agent}=${encodeURIComponent(a.label)}`,
+            ),
     },
   ];
   const periodColumns: Column<PeriodRow>[] = [
@@ -286,8 +238,11 @@ export default async function MissionSessionPage({ params, searchParams }: Props
           </span>
         }
         secondary={[
+          <ButtonLink key="timeline" href={timelineOfMission}>
+            Timeline
+          </ButtonLink>,
           <ButtonLink key="record" href={recordOfMission}>
-            Full record of this mission
+            Full record
           </ButtonLink>,
         ]}
       />
@@ -383,53 +338,6 @@ export default async function MissionSessionPage({ params, searchParams }: Props
             .
           </Hint>
         )}
-      </Section>
-
-      <Section
-        title="Timeline"
-        note={
-          filter.kind === 'all' ? (
-            'Newest first.'
-          ) : (
-            <span data-testid="timeline-filter">
-              {filter.kind === 'holder' ? (
-                <>Calls made with a key of {filteredHolder?.label} only.</>
-              ) : filter.kind === 'label' ? (
-                <>
-                  Calls labelled <AgentLabel>{filter.label}</AgentLabel> only.
-                </>
-              ) : (
-                'Calls without an agent label only.'
-              )}{' '}
-              <Link href={sessionPath}>Show the whole timeline</Link>
-            </span>
-          )
-        }
-        testId="timeline"
-      >
-        <div data-testid="timeline-table">
-          <ActivityTable
-            events={view.events}
-            openRequests={view.open_requests}
-            labels={labels}
-            creator={creatorName}
-            caption={`Events of ${mission.name}`}
-            empty={
-              <p className={styles.quiet}>
-                {filter.kind === 'all' ? 'No event yet.' : 'No call matches on this page.'}
-              </p>
-            }
-          />
-        </div>
-        <p className={styles.pager}>
-          <span>{count(view.events.length, { one: 'event', many: 'events' })} on this page</span>
-          {cursor && <Link href={`${sessionPath}${sessionQuery(filter, null)}`}>Newest</Link>}
-          {view.next_events && (
-            <Link href={`${sessionPath}${sessionQuery(filter, encodeCursor(view.next_events))}`}>
-              Older
-            </Link>
-          )}
-        </p>
       </Section>
 
       <Section

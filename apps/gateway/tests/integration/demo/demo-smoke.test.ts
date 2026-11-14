@@ -261,7 +261,8 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     ['/missions', 'Ship the billing page'],
     ['/accounts', 'Acme product repositories'],
     ['/waiting', 'Nightly dependency audit'],
-    ['/activity', 'github__list_pull_requests'],
+    ['/activity/record', 'github__list_pull_requests'],
+    ['/activity/timeline', 'github__list_pull_requests'],
     // What a colleague gave access to is a region of Accounts; connected apps are a page of Settings.
     ['/accounts', 'Acme billing'],
     ['/settings/connected-apps', 'Claude Code (demo)'],
@@ -314,13 +315,15 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
 
     // The audit, filtered on each holder (Alice is signed in).
     const byCi = readable(
-      await (await browser.get(`/activity?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)).text(),
+      await (
+        await browser.get(`/activity/record?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)
+      ).text(),
     );
     expect(byCi).toContain(CI_TOKEN_NAME);
     expect(byCi).toContain('machine key');
     expect(byCi).toContain('github__list_branches');
     const byBob = readable(
-      await (await browser.get(`/activity?holder=${encodeURIComponent(BOB.email)}`)).text(),
+      await (await browser.get(`/activity/record?holder=${encodeURIComponent(BOB.email)}`)).text(),
     );
     expect(byBob).toContain(BOB.email);
     expect(byBob).toContain('github__get_file_contents');

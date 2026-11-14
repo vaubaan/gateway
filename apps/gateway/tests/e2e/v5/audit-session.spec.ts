@@ -1,5 +1,5 @@
 /**
- * The Mission session page and the Audit page in a browser, against an
+ * The activity of a mission, the Activity's Timeline and Record in a browser, against an
  * ephemeral instance (spec §4.2, §8: "a day of
  * calls per mission with the remaining budget per call").
  *
@@ -52,10 +52,35 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await expect(page.getByTestId('mission-cards')).toContainText('Limit reached');
   await snap(page, 'mission-waiting');
 
-  // ── From the mission to its activity ──────────────────────────────────────
+  // ── From the mission to its timeline, in Activity ─────────────────────────
   await page.getByRole('link', { name: 'Everything this mission did' }).click();
+  await expect(page).toHaveURL(new RegExp(`/activity/timeline\\?mission=${day.mission_id}$`));
+  await expect(page.getByLabel('Mission', { exact: true })).toHaveValue(day.mission_id);
+
+  // Timeline, newest first: the merge that asked first is on top.
+  const timeline = page.getByTestId('timeline-table').locator('table');
+  await expect(timeline.locator('tbody tr')).toHaveCount(8); // 6 calls + 2 requests
+  await expect(timeline.locator('tbody tr').first()).toContainText('asked first');
+  await expect(timeline.locator('tbody tr').first()).toContainText('approval-required');
+  await expect(timeline.locator('tbody tr').last()).toContainText('github__get_file');
+  await expect(timeline.locator('tbody tr').last()).toContainText('github.read-code');
+  await expect(timeline.locator('tbody tr').last()).toContainText('4 left');
+  // The refused call and the request it opened both lead to the page that answers it.
+  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`)).toHaveCount(2);
+  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`).first()).toHaveText(
+    'Review and answer',
+  );
+  await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
+  // The timeline is kept as long as the record, and the page says so.
+  await expect(page.getByText('kept 90 days')).toBeVisible();
+  await snap(page, 'mission-timeline');
+
+  // ── The activity of the mission: what waits, who called, what was used ────
+  await page.getByRole('link', { name: 'what waits, who called and what was used' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
   await expect(page.getByRole('heading', { name: /^Activity of /, level: 1 })).toBeVisible();
+  // Its events are the Timeline's: no second list here.
+  await expect(page.getByTestId('timeline')).toHaveCount(0);
   await expect(page.getByTestId('mission-state')).toHaveText('Waiting for you');
 
   // What waits: one row each, answered by link only.
@@ -103,43 +128,30 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await expect(labelRow('planner').locator('td').nth(1)).toHaveText('1');
   await expect(labelRow('planner').locator('td').nth(2)).toHaveText('0');
 
-  // Timeline, newest first: the merge that asked first is on top.
-  const timeline = page.getByTestId('timeline').locator('table');
-  await expect(timeline.locator('tbody tr')).toHaveCount(8); // 6 calls + 2 requests
-  await expect(timeline.locator('tbody tr').first()).toContainText('asked first');
-  await expect(timeline.locator('tbody tr').first()).toContainText('approval-required');
-  await expect(timeline.locator('tbody tr').last()).toContainText('github__get_file');
-  await expect(timeline.locator('tbody tr').last()).toContainText('github.read-code');
-  await expect(timeline.locator('tbody tr').last()).toContainText('4 left');
-  // The refused call and the request it opened both lead to the page that answers it.
-  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`)).toHaveCount(2);
-  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`).first()).toHaveText(
-    'Review and answer',
-  );
-  await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
-  // The timeline is kept as long as the record, and the page says so.
   await expect(page.getByTestId('timeline-retention')).toContainText('kept 90 days');
   await snap(page, 'mission-activity');
 
-  // The timeline of one label: its calls only; what was used does not move.
+  // The timeline of one label: the Timeline, filtered on the mission and the label.
   await labelRow('planner').getByRole('link', { name: 'in the timeline' }).click();
-  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session\\?agent=planner$`));
-  await expect(page.getByTestId('timeline-filter')).toContainText('planner');
+  await expect(page).toHaveURL(
+    new RegExp(`/activity/timeline\\?mission=${day.mission_id}&agent=planner$`),
+  );
+  await expect(page.getByLabel('Agent label, exact')).toHaveValue('planner');
   await expect(timeline.locator('tbody tr')).toHaveCount(1);
   await expect(timeline.locator('tbody tr').first()).toContainText('github__get_file');
   await expect(timeline.locator('tbody tr').first()).toContainText('planner');
-  // The permissions stay open across the page's own links: the choice is remembered.
-  await expect(row('github.read-code')).toContainText('2 / 5');
-  await expect(labelRow('coder').locator('td').nth(1)).toHaveText('3');
-  await snap(page, 'mission-activity-one-label');
-  await page.getByRole('link', { name: 'Show the whole timeline' }).click();
-  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
+  await snap(page, 'mission-timeline-one-label');
+  // Clearing the label, typed, applies on Enter: the whole timeline of the mission again.
+  await page.getByLabel('Agent label, exact').fill('');
+  await page.getByLabel('Agent label, exact').press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/activity/timeline\\?mission=${day.mission_id}$`));
   await expect(timeline.locator('tbody tr')).toHaveCount(8);
 
   // ── The audit of this mission ─────────────────────────────────────────────
-  await page.getByRole('link', { name: 'Full record of this mission' }).click();
+  await page.goto(`/missions/${day.mission_id}/session`);
+  await page.getByRole('link', { name: 'Full record', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/activity\\?mission=${day.mission_id}$`));
+  await expect(page).toHaveURL(new RegExp(`/activity/record\\?mission=${day.mission_id}$`));
   const record = page.getByTestId('audit-table');
   const entries = record.locator('tbody tr[data-row]');
   // Six calls and the creation of the mission.
@@ -190,7 +202,7 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await expect(page.getByTestId('entry-detail')).toHaveCount(0);
 
   // The filters: the period as segments and four controls on one line; the others on demand.
-  const filters = page.locator('form[action="/activity"]');
+  const filters = page.locator('form[action="/activity/record"]');
   await expect(filters.getByRole('group', { name: 'Period' }).getByRole('link')).toHaveText([
     'Today',
     'Yesterday',
@@ -210,11 +222,15 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 
+  // A filter applies as it is chosen: no button to press.
+  await expect(page.locator('form[data-live="true"]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Apply' })).toHaveCount(0);
   await page.getByLabel('Decision', { exact: true }).selectOption('refused');
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page).toHaveURL(/[?&]decision=refused(&|$)/);
   await expect(entries).toHaveCount(2);
+  // A typed value applies once the typing pauses.
   await page.getByLabel('Tool, exact name').fill('github__create_pull_request');
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page).toHaveURL(/[?&]tool=github__create_pull_request(&|$)/);
   await expect(entries).toHaveCount(1);
   // Refused, in words; the code of the protocol is in the detail of the line.
   await expect(entries.first()).toContainText('refused');
@@ -225,10 +241,13 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await expect(page.getByLabel('Mission', { exact: true })).toHaveValue(day.mission_id);
 
   await page.getByLabel('Tool, exact name').fill('');
+  await page.getByLabel('Tool, exact name').press('Enter');
+  await expect(page).not.toHaveURL(/[?&]tool=/);
   await page.getByLabel('Decision', { exact: true }).selectOption('');
+  await expect(page).not.toHaveURL(/[?&]decision=/);
   // The calls one agent label declared.
   await page.getByLabel(/^Agent/).fill('planner');
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await page.getByLabel(/^Agent/).press('Enter');
   await expect(page).toHaveURL(/[?&]agent=planner(&|$)/);
   await expect(entries).toHaveCount(1);
   await expect(entries.first()).toContainText('planner');
@@ -236,12 +255,16 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await page.getByLabel(/^Agent/).fill('');
   await page.getByLabel(/^From · /).fill('2020-01-01');
   await page.getByLabel(/^To · /).fill('2020-01-02');
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await page.getByLabel(/^To · /).press('Enter');
+  await expect(page).toHaveURL(/[?&]to=2020-01-02(&|$)/);
+  await expect(page).not.toHaveURL(/[?&]agent=/);
   await expect(page.getByText('Nothing was recorded for these filters.')).toBeVisible();
 
   // The page is in the navigation, and "Clear" brings everything back.
   await page.getByRole('link', { name: 'Clear' }).click();
-  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page).toHaveURL(/\/activity\/record$/);
+  // The fields follow the address: nothing is left in them.
+  await expect(page.getByLabel(/^From · /)).toHaveValue('');
   await expect(
     page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Activity' }),
   ).toBeVisible();
@@ -254,7 +277,7 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   // on screen at this width.
   const day = await seedDay(request);
   await signIn(page);
-  await page.goto(`/activity?mission=${day.mission_id}`);
+  await page.goto(`/activity/record?mission=${day.mission_id}`);
   await expect(page.locator('table tbody tr').first()).toBeVisible();
   // Every column is on screen: the table does not scroll sideways at this width, with the
   // detail of a line open (the fingerprint is 64 characters) and the seventh column shown.
@@ -273,13 +296,13 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   await page.getByRole('button', { name: 'Hide details' }).click();
 });
 
-test('the timeline of a mission shows every column at 1280 px', async ({ page, request }) => {
+test('the timeline shows every column at 1280 px', async ({ page, request }) => {
   // Five columns; the page takes the wide measure and the last cell wraps, so the
-  // outcome of every event stays on screen at this width.
-  const day = await seedDay(request);
+  // outcome of every event stays on screen at this width, its mission named under its time.
+  await seedDay(request);
   await signIn(page);
-  await page.goto(`/missions/${day.mission_id}/session`);
-  const timeline = page.getByTestId('timeline');
+  await page.goto('/activity/timeline');
+  const timeline = page.getByTestId('timeline-table');
   await expect(timeline.locator('tbody tr').first()).toBeVisible();
   const table = await page
     .getByTestId('timeline-table')

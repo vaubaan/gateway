@@ -35,6 +35,7 @@ import type { MissionTokenKind, Principal, RefusalCode, RiskId } from '@vaubaan/
 import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, ShareKey, Store } from '../store';
 import type { ConnectionRecord, MissionRecord } from '../store/types';
 import type { AuditFilters } from './filters';
+import { keysetOf, pageOf, type PagePosition } from './paging';
 import { parseHolderParam } from './session-view';
 
 export const AUDIT_PAGE_SIZE = 50;
@@ -130,8 +131,10 @@ export type AuditEntryView = AuditCallView | AuditAdminView;
 
 export interface AuditPage {
   readonly entries: readonly AuditEntryView[];
-  /** Position of the next (older) page; `null` on the last one. */
-  readonly next: AuditCursor | null;
+  /** Position of the older page (its `cursor`); `null` on the last one. */
+  readonly older: AuditCursor | null;
+  /** Position of the newer page (its `after`); `null` on the first one. */
+  readonly newer: AuditCursor | null;
 }
 
 export interface AuditFilterOptions {
@@ -234,17 +237,20 @@ export function withoutArguments(value: unknown, standing: AuditStanding = 'resp
 export class AuditQueryService {
   constructor(private readonly deps: AuditQueryDeps) {}
 
-  /** One page, newest first. `cursor` is the `next` of the previous page. */
+  /**
+   * One page, newest first: the newest lines, or the page older or newer than a
+   * position (`paging.ts`) — the `older` / `newer` of the page next to it.
+   */
   async search(
     viewer: AuditViewer,
     filters: AuditFilters,
-    cursor: AuditCursor | null = null,
+    position: PagePosition | null = null,
     pageSize: number = AUDIT_PAGE_SIZE,
   ): Promise<AuditPage> {
     const userIds = filters.user === null ? undefined : await this.userIdsOf(filters.user);
     const tokenHolders =
       filters.tokenHolder === null ? undefined : await this.holdersOf(filters.tokenHolder);
-    // One more than the page: its presence says there is an older page.
+    // One more than the page: its presence says there is a further page that way.
     const records = await this.deps.store.audit.search({
       scope: scopeOf(viewer),
       limit: pageSize + 1,
@@ -258,17 +264,13 @@ export class AuditQueryService {
       ...(filters.kind ? { kind: filters.kind } : {}),
       ...(filters.since ? { since: filters.since } : {}),
       ...(filters.until ? { until: filters.until } : {}),
-      ...(cursor ? { before: cursor } : {}),
+      ...keysetOf(position),
     });
-    const page = records.slice(0, pageSize);
-    const last = page.at(-1);
+    const { shown, older, newer } = pageOf(records, pageSize, position);
     const names = new NameCache(this.deps.store);
     const entries: AuditEntryView[] = [];
-    for (const record of page) entries.push(await toView(record, names, viewer));
-    return {
-      entries,
-      next: records.length > pageSize && last ? { ts: last.ts, id: last.id } : null,
-    };
+    for (const record of shown) entries.push(await toView(record, names, viewer));
+    return { entries, older, newer };
   }
 
   /**
@@ -343,31 +345,42 @@ export class AuditQueryService {
     return found;
   }
 
-  /**
-   * The user filter as typed: an email address or a user id. An unknown value
-   * yields no entry, exactly like a known user with none, so the filter does
-   * not reveal who has an account.
-   */
-  private async userIdsOf(typed: string): Promise<string[]> {
-    if (typed.includes('@')) {
-      return (await this.deps.store.users.findByEmail(typed)).map((u) => u.id);
-    }
-    return [typed];
+  private userIdsOf(typed: string): Promise<string[]> {
+    return userIdsOf(this.deps.store.users, typed);
   }
 
-  /**
-   * The holder filter as typed. The exact form (`member:<user id>`,
-   * `named:<name>`) is taken as it is. Otherwise an email names a member — a
-   * token name never contains `@` (`parseTokenName`) — and anything else the
-   * name of a named token. An unknown email yields no entry, like a known
-   * member with no call.
-   */
-  private async holdersOf(typed: string): Promise<NonNullable<AuditSearch['tokenHolders']>> {
-    const exact = parseHolderParam(typed);
-    if (exact) return { kind: exact.kind, holders: [exact.key] };
-    if (typed.includes('@')) return { kind: 'member', holders: await this.userIdsOf(typed) };
-    return { kind: 'named', holders: [typed] };
+  private holdersOf(typed: string): Promise<NonNullable<AuditSearch['tokenHolders']>> {
+    return holdersOf(this.deps.store.users, typed);
   }
+}
+
+type UserLookup = Pick<Store['users'], 'findByEmail'>;
+
+/**
+ * The user filter as typed: an email address or a user id. An unknown value
+ * yields no entry, exactly like a known user with none, so the filter does
+ * not reveal who has an account.
+ */
+async function userIdsOf(users: UserLookup, typed: string): Promise<string[]> {
+  if (typed.includes('@')) return (await users.findByEmail(typed)).map((u) => u.id);
+  return [typed];
+}
+
+/**
+ * The holder filter as typed, for the Record and the Timeline alike. The exact
+ * form (`member:<user id>`, `named:<name>`) is taken as it is. Otherwise an
+ * email names a member — a token name never contains `@` (`parseTokenName`) —
+ * and anything else the name of a named token. An unknown email yields
+ * nothing, like a known member with no call.
+ */
+export async function holdersOf(
+  users: UserLookup,
+  typed: string,
+): Promise<NonNullable<AuditSearch['tokenHolders']>> {
+  const exact = parseHolderParam(typed);
+  if (exact) return { kind: exact.kind, holders: [exact.key] };
+  if (typed.includes('@')) return { kind: 'member', holders: await userIdsOf(users, typed) };
+  return { kind: 'named', holders: [typed] };
 }
 
 /** Names behind the ids of one page, looked up once each. */

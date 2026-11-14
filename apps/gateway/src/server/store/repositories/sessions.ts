@@ -33,7 +33,7 @@ import {
 } from '@vaubaan/shared';
 
 import { withImmediateTransaction } from '../db.ts';
-import { NotFoundError } from '../errors.ts';
+import { InvariantError, NotFoundError } from '../errors.ts';
 import type {
   ApprovalRecord,
   EventRecord,
@@ -178,6 +178,12 @@ export interface SessionsRepo {
    */
   listRecentEvents(sessionId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
   /**
+   * The events of every session a viewer may read (the Activity's Timeline): scoped in
+   * SQL before the filters and the keyset, like `AuditRepo.search`. Newest first; oldest
+   * first when it reads the page newer than `after`. Each event carries its mission.
+   */
+  searchEvents(query: EventSearch): Promise<MissionEventRecord[]>;
+  /**
    * The sessions that hold an event or a counter older than `cutoff`: what a retention
    * sweep looks at. A superset of what it removes.
    */
@@ -213,6 +219,41 @@ export interface RecentEventsOptions {
    * Same order and keyset as the unfiltered timeline.
    */
   readonly calls?: { readonly agentLabel: string | null } | { readonly holder: EventHolder };
+}
+
+/**
+ * Whose session events a search may return: the sessions of the missions one user
+ * created or is a current member of, or every session (an operator). An empty scope
+ * matches nothing.
+ */
+export interface EventScope {
+  readonly missionCreatorUserId: string | null;
+  /** A member row with `removed_at` set grants nothing. */
+  readonly missionMemberUserId: string | null;
+  readonly allMissions: boolean;
+}
+
+export interface EventSearch {
+  readonly scope: EventScope;
+  readonly missionId?: string;
+  /**
+   * Only call events: of one agent label (`null`: the calls that carried none), made
+   * with a token of one of these holders (an empty list matches nothing), or both.
+   */
+  readonly calls?: {
+    readonly agentLabel?: string | null;
+    readonly holders?: { readonly kind: MissionTokenKind; readonly holders: readonly string[] };
+  };
+  /** Events strictly older than this position. */
+  readonly before?: { readonly ts: Iso; readonly id: string };
+  /** Events strictly newer than this position, read oldest first. Not with `before`. */
+  readonly after?: { readonly ts: Iso; readonly id: string };
+  readonly limit: number;
+}
+
+/** An event with the mission its session belongs to. */
+export interface MissionEventRecord extends EventRecord {
+  readonly missionId: string;
 }
 
 /** A token holder as the events keep it: the kind, and the user id or the token name. */
@@ -727,5 +768,84 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     async listRecentEvents(sessionId, options) {
       return recentRows(sessionId, options).map(eventToRecord);
     },
+    async searchEvents(query) {
+      const { sql, params } = eventSearchStatement(query);
+      return db
+        .prepare<(string | number)[], EventRow & { mission_id: string }>(sql)
+        .all(...params)
+        .map((row) => ({ ...eventToRecord(row), missionId: row.mission_id }));
+    },
+  };
+}
+
+/**
+ * The statement of `searchEvents`: the scope first, then the filters, then the keyset.
+ * Plain subqueries and `IN` lists, as `AuditRepo.search`, so it stays portable.
+ */
+function eventSearchStatement(query: EventSearch): { sql: string; params: (string | number)[] } {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  const add = (sql: string, ...values: (string | number)[]): void => {
+    where.push(sql);
+    params.push(...values);
+  };
+  const { scope } = query;
+  const pieces: string[] = [];
+  const scopeParams: string[] = [];
+  if (scope.allMissions) pieces.push('1 = 1');
+  if (scope.missionCreatorUserId !== null) {
+    pieces.push('s.mission_id IN (SELECT id FROM missions WHERE creator_user_id = ?)');
+    scopeParams.push(scope.missionCreatorUserId);
+  }
+  if (scope.missionMemberUserId !== null) {
+    pieces.push(
+      's.mission_id IN (SELECT mission_id FROM mission_members WHERE user_id = ? AND removed_at IS NULL)',
+    );
+    scopeParams.push(scope.missionMemberUserId);
+  }
+  add(pieces.length === 0 ? '1 = 0' : `(${pieces.join(' OR ')})`, ...scopeParams);
+
+  if (query.missionId) add('s.mission_id = ?', query.missionId);
+  const { calls } = query;
+  if (calls) {
+    add(`e.kind IN (${CALL_KINDS_SQL})`);
+    if (calls.holders) {
+      const { kind, holders } = calls.holders;
+      if (holders.length === 0) add('1 = 0');
+      else {
+        add(
+          `e.token_kind = ? AND e.token_holder IN (${placeholders(holders.length)})`,
+          kind,
+          ...holders,
+        );
+      }
+    }
+    if (calls.agentLabel === null) add('e.agent_label IS NULL');
+    else if (calls.agentLabel !== undefined) add('e.agent_label = ?', calls.agentLabel);
+  }
+  if (query.before && query.after) {
+    throw new InvariantError('event search: before and after are exclusive');
+  }
+  if (query.before) {
+    const { ts, id } = query.before;
+    add('(e.ts < ? OR (e.ts = ? AND e.id < ?))', ts, ts, id);
+  }
+  if (query.after) {
+    const { ts, id } = query.after;
+    add('(e.ts > ? OR (e.ts = ? AND e.id > ?))', ts, ts, id);
+  }
+  if (!Number.isInteger(query.limit) || query.limit < 1) {
+    throw new InvariantError('event search: limit must be a positive integer');
+  }
+  params.push(query.limit);
+  const order = query.after ? 'e.ts ASC, e.id ASC' : 'e.ts DESC, e.id DESC';
+  const columns = EVENT_COLUMNS.split(', ')
+    .map((column) => `e.${column}`)
+    .join(', ');
+  return {
+    sql: `SELECT ${columns}, s.mission_id AS mission_id
+          FROM events e JOIN sessions s ON s.id = e.session_id
+          WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`,
+    params,
   };
 }

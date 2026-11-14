@@ -1,4 +1,4 @@
-/* The record: filters on one line, the counts, then rows. */
+/* Activity, its two tabs: filters on one line, the counts and the pager, then rows. */
 
 .quiet {
   color: var(--ink-3);
@@ -42,9 +42,6 @@
   gap: var(--space-3) var(--space-4);
   max-width: 980px;
   padding-bottom: var(--space-2);
-}
-.counts {
-  margin-bottom: 10px;
 }
 
 /* ── Cells ─────────────────────────────────────────────────────────────── */
@@ -122,25 +119,78 @@
   margin-top: var(--space-3);
 }
 
-/* ── The end of the list ───────────────────────────────────────────────── */
-.more {
-  position: relative;
+/* ── The page: the lines in a box of bounded height, the pager above ───── */
+.toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-2) 0;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: 10px;
 }
-/* Where the next page starts loading: the top of the end block. */
-.sentinel {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
+/* The rows scroll inside; the filters and the pager stay in view. */
+.region {
+  max-height: max(320px, calc(100dvh - 340px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--line);
 }
-.end {
-  margin: var(--space-2) 0;
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+.pagerLines {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.pagerSteps {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.pagerLink {
+  color: var(--accent);
+}
+.pagerLink:hover {
+  text-decoration: underline;
+}
+.pagerOff {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+.mission {
+  display: block;
+  overflow: hidden;
+  max-width: 18ch;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+/* A phone: the box would be a slit; the page scrolls instead. */
+@media (max-width: 640px) {
+  .region {
+    max-height: none;
+  }
+}
+
+/* A line of words under the filters: links of the mission filtered on. */
+.missionLinks {
+  margin: 0;
   color: var(--ink-3);
   font-size: var(--text-sm);
+}
+.missionLinks a {
+  color: var(--accent);
 }

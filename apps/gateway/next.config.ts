@@ -124,7 +124,7 @@ export const LEGACY_REDIRECTS: readonly {
   },
   { source: '/requests', destination: '/waiting' },
   { source: '/requests/:path*', destination: '/waiting/:path*' },
-  { source: '/audit', destination: '/activity' },
+  { source: '/audit', destination: '/activity/record' },
   { source: '/providers', destination: '/reference' },
   { source: '/providers/:path*', destination: '/reference/:path*' },
   // What a colleague gave access to is the second region of Accounts ("Shared with you").
