@@ -147,6 +147,12 @@ export interface AuditSearch {
   readonly until?: Iso;
   /** Entries strictly older than this position (newest first). */
   readonly before?: AuditCursor;
+  /**
+   * Entries strictly newer than this position, read oldest first (`ts ASC, id ASC`): the
+   * page before the current one, which the caller turns back to newest first. Not with
+   * `before`.
+   */
+  readonly after?: AuditCursor;
   readonly limit: number;
 }
 
@@ -213,7 +219,8 @@ export interface AuditRepo {
   list(filter?: AuditFilter): Promise<AuditRecord[]>;
   /**
    * The Audit page's query: scoped, filtered, newest first (`ts DESC, id DESC`), paged
-   * by keyset. Returns at most `limit` records.
+   * by keyset; oldest first when it reads the page newer than `after`. Returns at most
+   * `limit` records.
    */
   search(query: AuditSearch): Promise<AuditRecord[]>;
   /**
@@ -622,15 +629,22 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
   if (query.kind) add('kind = ?', query.kind);
   if (query.since) add('ts >= ?', query.since);
   if (query.until) add('ts < ?', query.until);
+  if (query.before && query.after) {
+    throw new InvariantError('audit search: before and after are exclusive');
+  }
   if (query.before) {
     add('(ts < ? OR (ts = ? AND id < ?))', query.before.ts, query.before.ts, query.before.id);
+  }
+  if (query.after) {
+    add('(ts > ? OR (ts = ? AND id > ?))', query.after.ts, query.after.ts, query.after.id);
   }
   if (!Number.isInteger(query.limit) || query.limit < 1) {
     throw new InvariantError('audit search: limit must be a positive integer');
   }
   params.push(query.limit);
+  const order = query.after ? 'ts ASC, id ASC' : 'ts DESC, id DESC';
   return {
-    sql: `SELECT ${COLUMNS} FROM audit WHERE ${where.join(' AND ')} ORDER BY ts DESC, id DESC LIMIT ?`,
+    sql: `SELECT ${COLUMNS} FROM audit WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`,
     params,
   };
 }

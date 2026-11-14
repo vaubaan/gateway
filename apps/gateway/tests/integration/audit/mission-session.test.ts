@@ -5,7 +5,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { eventView, SESSION_EVENTS_PAGE_SIZE } from '../../../src/server/audit';
+import {
+  eventView,
+  LATEST_EVENTS,
+  NO_TIMELINE_FILTER,
+  TIMELINE_PAGE_SIZE,
+  type PagePosition,
+  type TimelineFilters,
+} from '../../../src/server/audit';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -18,9 +25,15 @@ import {
   PR,
   READ,
   seedCall,
+  userViewer,
   type OperatorRig,
 } from './support';
 import { heldArguments } from '../../support/store/testing.ts';
+
+/** A neighbouring page the test expects. */
+function fail(): never {
+  throw new Error('expected a neighbouring page');
+}
 
 const byRisk = (a: readonly unknown[], b: readonly unknown[]) =>
   String(a[0]).localeCompare(String(b[0]));
@@ -105,23 +118,24 @@ describe('mission session view', () => {
     // Arguments are shown to nobody.
     expect(JSON.stringify(asBob)).not.toContain(ARGUMENT_MARKER);
 
-    // The timeline of one holder; a holder with no call lists nothing.
-    const of = async (holder: { kind: 'member' | 'named'; key: string }) =>
-      (await rig.root.audit.sessions.get(bob, mission.id, {
-        timeline: { kind: 'holder', holder },
-      }))!;
-    const ciOnly = await of({ kind: 'named', key: 'CI runner' });
-    expect(ciOnly.timeline_filter).toEqual({
-      kind: 'holder',
-      holder: { kind: 'named', key: 'CI runner' },
-    });
+    // The Timeline of one holder; a holder with no call lists nothing.
+    const of = async (holder: string) =>
+      rig.root.audit.timeline.search(userViewer(bob), {
+        ...NO_TIMELINE_FILTER,
+        missionId: mission.id,
+        holder,
+      });
+    const ciOnly = await of('named:CI runner');
     expect(ciOnly.events.map((e) => [e.kind, e.holder?.label])).toEqual([
       ['call-refused', 'CI runner'],
     ]);
-    expect((await of({ kind: 'member', key: bob.id })).events).toHaveLength(1);
-    expect((await of({ kind: 'member', key: 'nobody' })).events).toEqual([]);
+    // A machine key by its name, a member by their email or by the exact form.
+    expect((await of('CI runner')).events).toHaveLength(1);
+    expect((await of(bob.email)).events).toHaveLength(1);
+    expect((await of(`member:${bob.id}`)).events).toHaveLength(1);
+    expect((await of('member:nobody')).events).toEqual([]);
     // A name spelled like a member's id is another holder.
-    expect((await of({ kind: 'named', key: bob.id })).events).toEqual([]);
+    expect((await of(`named:${bob.id}`)).events).toEqual([]);
 
     // Removed, the mission is gone for him again.
     await rig.root.missions.team.removeMember(ada, mission.id, bob.id);
@@ -424,35 +438,36 @@ describe('mission session view', () => {
       await seedCall(rig, mission, { ...pr, now: t(5) }); // refused, opens a claim
       await rig.root.missions.service.rotate(rig.seeded.ada, mission.id);
 
-      const filtered = async (timeline: Parameters<typeof rig.root.audit.sessions.get>[2]) =>
-        (await rig.root.audit.sessions.get(rig.seeded.ada, mission.id, timeline))!;
+      const filtered = async (filters: Partial<TimelineFilters>) =>
+        rig.root.audit.timeline.search(userViewer(rig.seeded.ada), {
+          ...NO_TIMELINE_FILTER,
+          missionId: mission.id,
+          ...filters,
+        });
 
       const all = await view();
-      expect(all.timeline_filter).toEqual({ kind: 'all' });
       expect(all.events.map((e) => e.kind)).toContain('rotation');
       expect(all.events.map((e) => e.kind)).toContain('request');
+      const whole = await filtered({});
+      expect(whole.events.map((e) => e.id)).toEqual(all.events.map((e) => e.id));
 
-      const coder = await filtered({ timeline: { kind: 'label', label: 'coder' } });
-      expect(coder.timeline_filter).toEqual({ kind: 'label', label: 'coder' });
+      const coder = await filtered({ agentLabel: 'coder' });
       expect(coder.events.map((e) => [e.kind, e.tool, e.agent_label])).toEqual([
         ['call-refused', 'github__create_pull_request', 'coder'],
         ['call-allowed', 'github__create_pull_request', 'coder'],
         ['call-allowed', 'github__create_pull_request', 'coder'],
         ['call-allowed', 'github__get_file', 'coder'],
       ]);
-      expect(coder.next_events).toBeNull();
+      expect(coder.older).toBeNull();
 
-      const unlabelled = await filtered({ timeline: { kind: 'unlabelled' } });
+      const unlabelled = await filtered({ unlabelled: true });
       // The request and the rotation carry no label either, but they are not calls.
       expect(unlabelled.events.map((e) => [e.kind, e.agent_label])).toEqual([
         ['call-allowed', null],
       ]);
 
-      const nobody = await filtered({ timeline: { kind: 'label', label: 'reviewer' } });
+      const nobody = await filtered({ agentLabel: 'reviewer' });
       expect(nobody.events).toEqual([]);
-      // Whatever the filter, the budget and the per-label counts are the mission's.
-      expect(nobody.label_activity).toEqual(all.label_activity);
-      expect(nobody.risks).toEqual(all.risks);
     });
 
     it('pages the calls of one label among thousands of events of other labels, in the timeline’s order', async () => {
@@ -489,7 +504,7 @@ describe('mission session view', () => {
       // interleaved with other events.
       const others = 2100;
       for (let i = 0; i < others; i++) await call(i % 2 === 0 ? 'other' : null);
-      const recent = SESSION_EVENTS_PAGE_SIZE + 2;
+      const recent = TIMELINE_PAGE_SIZE + 2;
       const scoutIds: string[] = [bornEvent?.id ?? ''];
       for (let i = 0; i < recent; i++) {
         scoutIds.push((await call('scout')).id);
@@ -497,31 +512,35 @@ describe('mission session view', () => {
         await sessions.recordEvent(sessionId, { kind: 'rotation', details: { token_prefix: 'x' } });
       }
       const newestFirst = [...scoutIds].reverse();
-      const scout = { kind: 'label', label: 'scout' } as const;
-      const read = async (before: Parameters<typeof rig.root.audit.sessions.get>[2]) =>
-        (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
-          timeline: scout,
-          ...before,
-        }))!;
+      const scout = { ...NO_TIMELINE_FILTER, missionId: busy.id, agentLabel: 'scout' };
+      const ada = userViewer(rig.seeded.ada);
+      const read = (position: PagePosition | null) =>
+        rig.root.audit.timeline.search(ada, scout, position);
 
-      const first = await read({});
-      expect(first.events).toHaveLength(SESSION_EVENTS_PAGE_SIZE);
-      expect(first.events.map((e) => e.id)).toEqual(newestFirst.slice(0, SESSION_EVENTS_PAGE_SIZE));
+      const first = await read(null);
+      expect(first.events).toHaveLength(TIMELINE_PAGE_SIZE);
+      expect(first.events.map((e) => e.id)).toEqual(newestFirst.slice(0, TIMELINE_PAGE_SIZE));
       expect(first.events.every((e) => e.agent_label === 'scout')).toBe(true);
-      expect(first.next_events).not.toBeNull();
+      expect(first.older).not.toBeNull();
 
       // "Older" is the rest, the call the session was born with included: nothing is
       // skipped behind the 2 100 events of other labels, and nothing is listed twice.
-      const second = await read({ eventsBefore: first.next_events });
-      expect(second.events.map((e) => e.id)).toEqual(newestFirst.slice(SESSION_EVENTS_PAGE_SIZE));
+      const second = await read({ direction: 'older', from: first.older ?? fail() });
+      expect(second.events.map((e) => e.id)).toEqual(newestFirst.slice(TIMELINE_PAGE_SIZE));
       expect(second.events).toHaveLength(3);
-      expect(second.next_events).toBeNull();
+      expect(second.older).toBeNull();
+      // "Newer" from there is the first page again.
+      const back = await read({ direction: 'newer', from: second.newer ?? fail() });
+      expect(back.events.map((e) => e.id)).toEqual(first.events.map((e) => e.id));
+      expect(back.newer).toBeNull();
 
       // The unlabelled calls are a filter of their own; the rotations are not calls.
-      const unlabelled = (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
-        timeline: { kind: 'unlabelled' },
-      }))!;
-      expect(unlabelled.events).toHaveLength(SESSION_EVENTS_PAGE_SIZE);
+      const unlabelled = await rig.root.audit.timeline.search(ada, {
+        ...NO_TIMELINE_FILTER,
+        missionId: busy.id,
+        unlabelled: true,
+      });
+      expect(unlabelled.events).toHaveLength(TIMELINE_PAGE_SIZE);
       expect(unlabelled.events.every((e) => e.kind === 'call-allowed' && !e.agent_label)).toBe(
         true,
       );
@@ -646,7 +665,7 @@ describe('mission session view', () => {
     expect(JSON.stringify(events)).not.toContain(ARGUMENT_MARKER);
   });
 
-  it('pages the timeline by keyset', async () => {
+  it('keeps the latest events, and pages the whole timeline in the Activity by keyset', async () => {
     const policy = [{ risk_id: READ, quota: 500, rate_limit: { max: 500, window_seconds: 60 } }];
     const busy = await issueMission(
       rig,
@@ -656,18 +675,28 @@ describe('mission session view', () => {
         connections: [{ connection_id: rig.seeded.github.connection.id, policy }],
       }),
     );
-    const total = SESSION_EVENTS_PAGE_SIZE + 5;
+    const total = TIMELINE_PAGE_SIZE + 5;
     for (let i = 0; i < total; i++) await seedCall(rig, busy);
 
-    const first = await view(rig.seeded.ada, busy.id);
-    expect(first.events).toHaveLength(SESSION_EVENTS_PAGE_SIZE);
-    expect(first.next_events).not.toBeNull();
-    const second = await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
-      eventsBefore: first.next_events,
+    const latest = await view(rig.seeded.ada, busy.id);
+    expect(latest.events).toHaveLength(Math.min(total, LATEST_EVENTS));
+
+    const ada = userViewer(rig.seeded.ada);
+    const filters = { ...NO_TIMELINE_FILTER, missionId: busy.id };
+    const first = await rig.root.audit.timeline.search(ada, filters);
+    expect(first.events).toHaveLength(TIMELINE_PAGE_SIZE);
+    expect(first.events).toEqual(
+      latest.events
+        .slice(0, TIMELINE_PAGE_SIZE)
+        .map((e) => ({ ...e, mission: { id: busy.id, name: busy.name } })),
+    );
+    const second = await rig.root.audit.timeline.search(ada, filters, {
+      direction: 'older',
+      from: first.older ?? fail(),
     });
-    expect(second?.events).toHaveLength(5);
-    expect(second?.next_events).toBeNull();
-    const ids = [...first.events, ...(second?.events ?? [])].map((e) => e.id);
+    expect(second.events).toHaveLength(5);
+    expect(second.older).toBeNull();
+    const ids = [...first.events, ...second.events].map((e) => e.id);
     expect(new Set(ids).size).toBe(total);
   });
 

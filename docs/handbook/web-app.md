@@ -23,7 +23,7 @@ tracks:
   - apps/gateway/public/sw.js
   - apps/gateway/src/components/notifications/
   - apps/gateway/tests/unit/app/
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-14
 ---
 
 # Web app — handbook
@@ -37,7 +37,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 ## Start here
 
 - [`lib/auth/session.ts`](../../apps/gateway/src/lib/auth/session.ts) — `currentPrincipal`, `requirePrincipal`, `currentUser`, `requireOperator`: how a page gets its reader.
-- [`components/shell/`](../../apps/gateway/src/components/shell/) — `AppShell`, `AdminShell`, the path bar, the navigation (`nav.ts`, `settings-nav.ts`).
+- [`components/shell/`](../../apps/gateway/src/components/shell/) — `AppShell`, `AdminShell`, the path bar, the navigation (`nav.ts`), the local tabs of Settings and Activity (`settings-nav.ts`, `activity-nav.ts`, drawn by `SubNav`).
 - [`components/ui/`](../../apps/gateway/src/components/ui/) — the design system; each component's rule of use is in its header and on `/design`.
 - [`lib/vocabulary.ts`](../../apps/gateway/src/lib/vocabulary.ts) — every word a person reads, keyed by the protocol name it translates.
 - [`next.config.ts`](../../apps/gateway/next.config.ts) — `LEGACY_REDIRECTS`, what the standalone output traces and excludes.
@@ -68,6 +68,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - The CSP carries `worker-src 'self'` and `manifest-src 'self'`: with `'strict-dynamic'`, `script-src` no longer admits `'self'`, and a worker falling back to it would be blocked. Never add a `fetch` listener or a cache to `public/sw.js`.
 - `LEGACY_REDIRECTS` never touches protocol paths: `/connections/callback/<provider>` (registered at providers), `/r/<id>` (handed to agents), `/mcp`, `/api`, `/oauth`, `/auth`, `/.well-known`.
 - The bootstrap operator has a session but no user: a page needing a user renders `<NeedsUser />`, never a redirect.
+- `/activity` only redirects to its first tab (`/activity/record`), query kept, after the session check; `app-guard.test.ts` lists it in `REDIRECTING_PAGES`. An Overview tab later takes `/activity` itself: one entry first in `activityNav`, `exact`.
 - `catalogPathNextTo` joins a run-time path, so Turbopack traces the whole app directory (tests included) into every entry reaching it. Guards: `/* turbopackIgnore: true */` on the join (the only guard for the boot hook's trace) and `outputFileTracingExcludes` with `NEVER_SHIPPED` for routes; `tests/integration/standalone-plugin-catalogs.test.ts` checks it after a build.
 - A client component takes rendered nodes from a server page, never a function; anything not marked client has no hook.
 - `--ink-3` on a tinted surface is under AA: a tinted surface redefines it as `--ink-2` for its subtree.

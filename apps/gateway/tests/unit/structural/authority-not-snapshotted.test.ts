@@ -267,6 +267,8 @@ describe('authority is recomputed, never snapshotted', () => {
       'execution/admission.ts':
         'derives: `grounds.inspect` on every request of both doors (MCP and the remote), before the pipeline',
       'audit/query-service.ts': 'reads names and creators only, never the status',
+      'audit/timeline.ts':
+        'reads the name and the creator only, to name an event’s mission and say whose answer a request waits for; never the status',
       'notifications/dispatch.ts':
         'reads the name and the creator only, to address and word a notification; never the status',
       'budget/budget-stage.ts':

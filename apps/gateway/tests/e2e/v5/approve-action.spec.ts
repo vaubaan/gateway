@@ -321,7 +321,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   await snap(hedy, 'mission-gate-edited');
 
   // ── What the audit keeps: the acts and the fingerprint, never the arguments ──
-  await hedy.goto(`/activity?mission=${issued.mission_id}`);
+  await hedy.goto(`/activity/record?mission=${issued.mission_id}`);
   await expect(hedy.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   // One line per call and per change, in words; the protocol's names are in a line's detail.
   const entries = hedy.getByTestId('audit-table').locator('tbody tr[data-row]');
@@ -341,13 +341,16 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   expect(await hedy.content()).not.toContain(MARKER);
   await snap(hedy, 'approval-audit');
 
-  // …and the activity of the mission: the decisions are on the timeline, without the arguments.
+  // …and the activity of the mission: the opening was closed on the mission. The page
+  // remembered that the permissions were open.
   await hedy.goto(`/missions/${issued.mission_id}/session`);
-  // The opening was closed on the mission. The page remembered that the permissions were open.
   const gateNow = permissionRow(hedy.getByTestId('session-permissions'), GATED);
   await expect(gateNow).toContainText('ask me first');
   await expect(gateNow).not.toContainText('runs freely until');
-  const timeline = hedy.getByTestId('timeline');
+  // The decisions are on the timeline of the mission, without the arguments.
+  await hedy.getByRole('link', { name: 'Timeline', exact: true }).click();
+  await expect(hedy).toHaveURL(new RegExp(`/activity/timeline\\?mission=${issued.mission_id}$`));
+  const timeline = hedy.getByTestId('timeline-table');
   const events = (outcome: string) =>
     timeline.locator('tbody tr').filter({ has: hedy.getByText(outcome, { exact: true }) });
   // Each event says what it did, in the words of the interface.

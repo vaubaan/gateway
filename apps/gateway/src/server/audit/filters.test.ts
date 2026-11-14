@@ -30,8 +30,8 @@ const EMPTY = {
 };
 
 describe('parseAuditQuery', () => {
-  it('an empty query is no filter, no cursor, no problem', () => {
-    expect(parseAuditQuery({})).toEqual({ filters: EMPTY, cursor: null, raw: {}, problems: [] });
+  it('an empty query is no filter, no problem', () => {
+    expect(parseAuditQuery({})).toEqual({ filters: EMPTY, raw: {}, problems: [] });
     expect(parseAuditQuery(new URLSearchParams()).filters).toEqual(EMPTY);
   });
 
@@ -119,13 +119,13 @@ describe('parseAuditQuery', () => {
     expect(parsed.problems).toEqual(['tool: value too long, ignored']);
   });
 
-  it('reads the cursor, and falls back to the first page on an unreadable one', () => {
-    const cursor = { ts: '2026-10-13T09:00:00.000Z', id: '0199-abc' };
-    expect(parseAuditQuery({ cursor: encodeCursor(cursor) }).cursor).toEqual(cursor);
-    const bad = parseAuditQuery({ cursor: 'not a cursor!' });
-    expect(bad.cursor).toBeNull();
-    expect(bad.raw).toEqual({});
-    expect(bad.problems).toEqual(['cursor: unreadable, showing the first page']);
+  it('leaves the position to the pager: a cursor is not a filter', () => {
+    const cursor = encodeCursor({ ts: '2026-10-13T09:00:00.000Z', id: '0199-abc' });
+    expect(parseAuditQuery({ cursor, after: cursor, at: '51' })).toEqual({
+      filters: EMPTY,
+      raw: {},
+      problems: [],
+    });
   });
 });
 
@@ -194,17 +194,13 @@ describe('a token holder in a query string', () => {
 });
 
 describe('auditQueryString', () => {
-  it('keeps the filters and replaces the position', () => {
+  it('keeps the filters and drops the position', () => {
     const { raw } = parseAuditQuery({
       mission: 'm-1',
       decision: 'refused',
       cursor: encodeCursor({ ts: '2026-10-13T09:00:00.000Z', id: 'a' }),
     });
-    expect(auditQueryString(raw, null)).toBe('mission=m-1&decision=refused');
-    const next = { ts: '2026-10-12T09:00:00.000Z', id: 'b' };
-    const params = new URLSearchParams(auditQueryString(raw, next));
-    expect(params.get('mission')).toBe('m-1');
-    expect(decodeCursor(params.get('cursor') ?? '')).toEqual(next);
+    expect(auditQueryString(raw)).toBe('mission=m-1&decision=refused');
   });
 });
 

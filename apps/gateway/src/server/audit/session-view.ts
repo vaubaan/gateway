@@ -33,19 +33,20 @@
  *     audit entries — NOT a budget: the quota is per risk and shared by every
  *     agent, so these numbers neither add up to it (a call touching two risks
  *     is one call) nor bound anyone;
- *   - a timeline filter: the call events of one label, or the unlabelled ones.
- *     Events that are not calls (requests, resets, rotations…) carry no label
- *     and are left out of a filtered timeline. The repository filters on the
- *     `events.agent_label` column (migration 0008): a filtered page is one
- *     indexed read, paged by the same keyset as the whole timeline.
+ *   - a filter of the Activity's Timeline (`timeline.ts`): the call events of
+ *     one label, or the unlabelled ones, on the `events.agent_label` column
+ *     (migration 0008).
  *
  * Token holders (spec §8 "the token used and its holder"). Unlike a label, the
  * holder of a call is authenticated: it is the member, or the named token,
  * whose token the call presented. The same two reads exist per holder —
  * `holder_activity` (calls of the current period per holder, NOT a budget: all
- * the tokens of a mission draw from one) and a timeline filter on the
+ * the tokens of a mission draw from one) and a Timeline filter on the
  * `events.token_kind` / `events.token_holder` columns (migration 0010). A call
  * stored before tokens had a holder is listed as unattributed.
+ *
+ * The whole timeline, paged and filtered, is the Activity's (`timeline.ts`);
+ * this view keeps the latest events, which the mission page shows.
  */
 import {
   isMissionTokenKind,
@@ -68,29 +69,17 @@ import type { MissionDetail, MissionRole, MissionService, Row } from '../mission
 import { missionChangeClauses } from '../../lib/missions/change-words';
 import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
-import type {
-  AgentLabelActivity,
-  AgentLabelSeen,
-  AuditCursor,
-  Store,
-  TokenHolderActivity,
-} from '../store';
+import type { AgentLabelActivity, AgentLabelSeen, Store, TokenHolderActivity } from '../store';
 import type { Clock } from '../store/clock';
 import type { EventRecord, RequestRecord, SessionCounterRecord } from '../store/types';
 
-export const SESSION_EVENTS_PAGE_SIZE = 100;
+/**
+ * How many of the latest events the view holds: the mission page shows a few of
+ * them, and finds among them the call that opened each waiting request (who asked).
+ */
+export const LATEST_EVENTS = 100;
 /** How many past periods the counters table shows, newest first. */
 export const PAST_PERIODS_SHOWN = 7;
-
-/** Which events of the timeline are listed. */
-export type SessionTimelineFilter =
-  | { readonly kind: 'all' }
-  /** The calls that carried this agent label. */
-  | { readonly kind: 'label'; readonly label: string }
-  /** The calls that carried no label. */
-  | { readonly kind: 'unlabelled' }
-  /** The calls made with a token of this holder (a user id, or a token name). */
-  | { readonly kind: 'holder'; readonly holder: SessionHolderRef };
 
 /** A token holder as the store keeps it: the kind, and the user id or the token name. */
 export interface SessionHolderRef {
@@ -118,8 +107,6 @@ export function parseHolderParam(value: string): SessionHolderRef | null {
   const key = value.slice(at + 1);
   return isMissionTokenKind(kind) && key.length > 0 ? { kind, key } : null;
 }
-
-export const ALL_EVENTS: SessionTimelineFilter = { kind: 'all' };
 
 const MS_PER_SECOND = 1000;
 
@@ -274,11 +261,8 @@ export interface MissionSessionView {
   readonly risks: readonly SessionRiskRow[];
   /** The current period first (when the mission is active), then the past ones. */
   readonly periods: readonly SessionPeriodRow[];
-  /** Newest first. */
+  /** The latest `LATEST_EVENTS` events, newest first; the rest is the Activity's Timeline. */
   readonly events: readonly SessionEventView[];
-  readonly next_events: AuditCursor | null;
-  /** The filter `events` was read with. */
-  readonly timeline_filter: SessionTimelineFilter;
   readonly open_requests: readonly SessionOpenRequest[];
   /** Every label seen on the mission's calls still in the audit, most recent first. */
   readonly agent_labels: readonly AgentLabelSeen[];
@@ -304,23 +288,15 @@ export interface MissionSessionDeps {
 export class MissionSessionService {
   constructor(private readonly deps: MissionSessionDeps) {}
 
-  async get(
-    user: Subject,
-    missionId: string,
-    options: {
-      readonly eventsBefore?: AuditCursor | null;
-      readonly timeline?: SessionTimelineFilter;
-    } = {},
-  ): Promise<MissionSessionView | null> {
+  async get(user: Subject, missionId: string): Promise<MissionSessionView | null> {
     const detail = await this.deps.missions.get(user, missionId);
     if (!detail) return null;
     const { store } = this.deps;
     const session = await store.sessions.getByMission(missionId);
     const counters = session ? await store.sessions.counters(session.id) : [];
-    const filter = options.timeline ?? ALL_EVENTS;
-    const timeline: TimelinePage = session
-      ? await this.timelinePage(session.id, filter, options.eventsBefore ?? null)
-      : { shown: [], next: null };
+    const latest = session
+      ? await store.sessions.listRecentEvents(session.id, { limit: LATEST_EVENTS })
+      : [];
     const now = this.deps.clock.now();
     const requests = await store.requests.listForMission(missionId);
     const period = detail.state.kind === 'active' ? detail.state.period : null;
@@ -343,9 +319,7 @@ export class MissionSessionService {
       session: session ? { id: session.id, created_at: session.createdAt } : null,
       risks: riskRows(detail, counters),
       periods: periodRows(detail, counters),
-      events: await this.eventViews(timeline.shown, names),
-      next_events: timeline.next,
-      timeline_filter: filter,
+      events: await this.eventViews(latest, names),
       open_requests: await Promise.all(
         requests
           .filter((r) => isDecidable(r, now))
@@ -376,26 +350,6 @@ export class MissionSessionService {
     };
   }
 
-  /** One page of the timeline, newest first, under `filter`. */
-  private async timelinePage(
-    sessionId: string,
-    filter: SessionTimelineFilter,
-    before: AuditCursor | null,
-  ): Promise<TimelinePage> {
-    // One more than the page: its presence says there is an older page.
-    const page = await this.deps.store.sessions.listRecentEvents(sessionId, {
-      limit: SESSION_EVENTS_PAGE_SIZE + 1,
-      ...(before ? { before } : {}),
-      ...callsOf(filter),
-    });
-    const shown = page.slice(0, SESSION_EVENTS_PAGE_SIZE);
-    const last = shown.at(-1);
-    return {
-      shown,
-      next: page.length > SESSION_EVENTS_PAGE_SIZE && last ? positionOf(last) : null,
-    };
-  }
-
   private async eventViews(
     events: readonly EventRecord[],
     names: HolderNames,
@@ -403,32 +357,15 @@ export class MissionSessionService {
     const views: SessionEventView[] = [];
     for (const event of events) {
       const actorEmail = event.actorUserId ? await names.email(event.actorUserId) : null;
-      const parsed = parseEventDetails(event.kind, event.details);
-      const ref = holderRefOf(parsed);
+      const ref = holderRefOfEvent(event);
       views.push(eventView(event, actorEmail, ref && (await names.view(ref))));
     }
     return views;
   }
 }
 
-/** The repository's `calls` option of a timeline filter. */
-function callsOf(
-  filter: SessionTimelineFilter,
-): Pick<Parameters<Store['sessions']['listRecentEvents']>[1], 'calls'> {
-  switch (filter.kind) {
-    case 'all':
-      return {};
-    case 'label':
-      return { calls: { agentLabel: filter.label } };
-    case 'unlabelled':
-      return { calls: { agentLabel: null } };
-    case 'holder':
-      return { calls: { holder: { kind: filter.holder.kind, holder: filter.holder.key } } };
-  }
-}
-
 /** Emails behind the user ids of one view, read once each. */
-class HolderNames {
+export class HolderNames {
   private readonly emails = new Map<string, string | null>();
 
   constructor(private readonly users: Pick<Store['users'], 'getById'>) {}
@@ -448,6 +385,10 @@ class HolderNames {
 }
 
 /** The holder an event names, from its stored details. */
+export function holderRefOfEvent(event: EventRecord): SessionHolderRef | null {
+  return holderRefOf(parseEventDetails(event.kind, event.details));
+}
+
 function holderRefOf(parsed: SessionEventDetails | null): SessionHolderRef | null {
   if (!parsed) return null;
   switch (parsed.kind) {
@@ -485,14 +426,6 @@ async function holderActivityView(
     last_seen_at: activity.lastSeenAt,
   };
 }
-
-/** A page of timeline events and where the next (older) one starts. */
-interface TimelinePage {
-  readonly shown: readonly EventRecord[];
-  readonly next: AuditCursor | null;
-}
-
-const positionOf = (event: EventRecord): AuditCursor => ({ ts: event.ts, id: event.id });
 
 function labelActivityView(activity: AgentLabelActivity): SessionLabelActivity {
   return {

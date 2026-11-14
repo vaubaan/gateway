@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { LEGACY_REDIRECTS } from '../../../next.config';
 import { isCurrentSection, sectionOf } from '../../../src/components/shell/nav';
+import { activityNav } from '../../../src/components/shell/activity-nav';
 import { ADMIN_PAGES, settingsNav } from '../../../src/components/shell/settings-nav';
 import { nextTheme, parseTheme, themeAttribute, themeCookie } from '../../../src/lib/theme';
 import {
@@ -134,6 +135,17 @@ describe('the side navigation', () => {
     expect(items.map((item) => item.href)).toEqual(
       expect.arrayContaining(Object.values(ADMIN_PAGES)),
     );
+  });
+
+  it('gives Activity its tabs, Record then Timeline, each a page under Activity', () => {
+    const items = activityNav().flatMap((group) => group.items);
+    expect(items.map((item) => item.label)).toEqual(['Record', 'Timeline']);
+    for (const item of items) {
+      expect(served(item.href), item.href).toBe(true);
+      expect(sectionOf(item.href), item.href).toBe('activity');
+    }
+    // `/activity` itself is served: it leads to the first tab.
+    expect(served(ROUTES.activity)).toBe(true);
   });
 });
 

@@ -22,6 +22,8 @@ import {
   type AuditFilters,
   type AuditViewer,
 } from '../../../src/server/audit';
+import type { PagePosition } from '../../../src/server/audit';
+import type { AuditCursor } from '../../../src/server/store';
 import { seedConnection } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
@@ -764,6 +766,12 @@ describe('audit search: visibility, filters, paging', () => {
 
   // ── Paging ────────────────────────────────────────────────────────────────
 
+  /** A neighbour the test expects to exist. */
+  const present = (cursor: AuditCursor | null): AuditCursor => {
+    if (!cursor) throw new Error('expected a neighbouring page');
+    return cursor;
+  };
+
   it('keyset paging: newest first, no entry twice, none skipped, stable on equal timestamps', async () => {
     const same = new Date(Date.UTC(2026, 9, 11, 9, 0, 0));
     for (let i = 0; i < 4; i++) await seedCall(rig, mission, { now: same, tool: `github__t${i}` });
@@ -779,24 +787,49 @@ describe('audit search: visibility, filters, paging', () => {
 
     const seen: string[] = [];
     const sizes: number[] = [];
-    let cursor = null;
+    const pages: string[][] = [];
+    let position: PagePosition | null = null;
     for (let guard = 0; guard < 10; guard++) {
-      const page = await query.search(viewer, filters, cursor, 3);
+      const page = await query.search(viewer, filters, position, 3);
       sizes.push(page.entries.length);
       seen.push(...page.entries.map((e) => e.id));
-      cursor = page.next;
-      if (!cursor) break;
+      pages.push(page.entries.map((e) => e.id));
+      // Only the first page has nothing newer.
+      expect(page.newer === null).toBe(position === null);
+      if (!page.older) break;
+      position = { direction: 'older', from: page.older };
     }
     expect(sizes).toEqual([3, 3, 1]);
     expect(new Set(seen).size).toBe(7);
 
     const all = await query.search(viewer, filters, null, 50);
-    expect(all.next).toBeNull();
+    expect(all.older).toBeNull();
     expect(seen).toEqual(all.entries.map((e) => e.id));
     const stamps = all.entries.map((e) => e.ts);
     expect(stamps).toEqual([...stamps].sort().reverse());
     // The page that ends exactly on the last entry announces no further page.
-    expect((await query.search(viewer, filters, null, 7)).next).toBeNull();
+    expect((await query.search(viewer, filters, null, 7)).older).toBeNull();
+
+    // Back up, page by page: "Newer" gives the same pages, newest first, on equal stamps too.
+    const last = await query.search(viewer, filters, position, 3);
+    expect(last.newer).not.toBeNull();
+    const back = await query.search(
+      viewer,
+      filters,
+      { direction: 'newer', from: present(last.newer) },
+      3,
+    );
+    expect(back.entries.map((e) => e.id)).toEqual(pages[1]);
+    const top = await query.search(
+      viewer,
+      filters,
+      { direction: 'newer', from: present(back.newer) },
+      3,
+    );
+    expect(top.entries.map((e) => e.id)).toEqual(pages[0]);
+    // Reached from below, the newest page knows it is the newest.
+    expect(top.newer).toBeNull();
+    expect(top.older).not.toBeNull();
   });
 
   it('an entry written while paging does not shift the following pages', async () => {
@@ -807,7 +840,12 @@ describe('audit search: visibility, filters, paging', () => {
     const filters = { ...NO_FILTER, kind: 'call' } as const;
     const first = await rig.root.audit.query.search(viewer, filters, null, 2);
     await seedCall(rig, mission, { now: new Date(Date.UTC(2026, 9, 11, 10, 0)) });
-    const second = await rig.root.audit.query.search(viewer, filters, first.next, 2);
+    const second = await rig.root.audit.query.search(
+      viewer,
+      filters,
+      { direction: 'older', from: present(first.older) },
+      2,
+    );
     expect(second.entries).toHaveLength(2);
     expect(second.entries.some((e) => first.entries.some((f) => f.id === e.id))).toBe(false);
   });

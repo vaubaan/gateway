@@ -1,5 +1,5 @@
 ---
-title: Audit — search, mission session view, retention, administrative entries
+title: Audit — Record, Timeline, mission session view, retention, administrative entries
 tracks:
   - apps/gateway/src/server/audit/
   - apps/gateway/src/server/budget/retention.ts
@@ -9,18 +9,20 @@ tracks:
   - apps/gateway/src/app/(app)/missions/[id]/session/
   - apps/gateway/tests/integration/audit/admin-mutations.test.ts
   - packages/gateway-core/src/audit.ts
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-14
 ---
 
 # Audit — handbook
 
-How the record is read (Activity, the activity of one mission), purged, and kept complete for administrative acts. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 "Activity", §6, §8; entry shapes and the writer: [gateway-core](gateway-core.md); tables and append-only triggers: [store](store.md). This module only reads, and purges.
+How the record is read (Activity's Record and Timeline, the activity of one mission), purged, and kept complete for administrative acts. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 "Activity", §6, §8; entry shapes and the writer: [gateway-core](gateway-core.md); tables and append-only triggers: [store](store.md). This module only reads, and purges.
 
 ## Start here
 
-- [`query-service.ts`](../../apps/gateway/src/server/audit/query-service.ts) — `search`, `scopeOf`, `standingOn`, the views.
+- [`query-service.ts`](../../apps/gateway/src/server/audit/query-service.ts) — `search`, `scopeOf`, `standingOn`, the views: the Record (`/activity/record`).
 - [`store/repositories/audit.ts`](../../apps/gateway/src/server/store/repositories/audit.ts) — `scopePredicate`, the one visibility predicate.
-- [`session-view.ts`](../../apps/gateway/src/server/audit/session-view.ts) — the activity of one mission; its words live in the page's `event-words.ts`.
+- [`timeline.ts`](../../apps/gateway/src/server/audit/timeline.ts) — the Timeline (`/activity/timeline`): session events of every readable mission, through `SessionsRepo.searchEvents`; its words are `missions/[id]/session/event-words.ts`.
+- [`paging.ts`](../../apps/gateway/src/server/audit/paging.ts) — the pages of both tabs: `?cursor=` (older), `?after=` (newer), `?at=` (first line's number).
+- [`session-view.ts`](../../apps/gateway/src/server/audit/session-view.ts) — the activity of one mission (`/missions/<id>/session`): what waits, who called, usage, periods, and its latest events for the mission page.
 - [`retention.ts`](../../apps/gateway/src/server/audit/retention.ts) — the sweeper, the audit's only delete path.
 - [`admin-mutations.test.ts`](../../apps/gateway/tests/integration/audit/admin-mutations.test.ts) — the guard that every mutation writes an entry.
 
@@ -29,7 +31,8 @@ How the record is read (Activity, the activity of one mission), purged, and kept
 - **Scope first, in SQL.** `AuditRepo.search` applies the viewer's scope, then the filters, then the keyset, so a filter only narrows. `scopePredicate` is plain `IN` subqueries (portable to Postgres); a dimension the scope lacks is an always-false piece.
 - **A filter never widens nor reveals.** An unreadable value is dropped and listed in `problems`; an unknown email matches nothing, like a known user with no entry.
 - **Arguments are never readable.** An entry holds only their fingerprint, an unsalted SHA-256 guessable for low-entropy values (threat model, A9), so `standingOn` shows it only to who answers for the call; `withoutArguments` also masks fingerprints and `args`-like keys at any depth of `before`/`after` (defence in depth).
-- **The Activity list grows through its address.** The number of lines is part of the address (`?lines=`); the server renders the whole list in one `search` from the same position, so later pages are authorized exactly like the first. No endpoint or server action returns rows; the address is replaced, not pushed (Back leaves the page). Keyset `(ts, id)`: concurrent writes do not shift pages.
+- **A page of Activity is its address.** Pages of 50, keyset `(ts, id)`: `cursor` reads older than a line, `after` reads newer (the store reads ascending, `pageOf` turns it back), so concurrent writes do not shift a page; `at` only numbers the lines ("Lines 51–100") and never decides what is shown. Every page is a server render of one search, authorized like the first. No endpoint or server action returns rows. The filters (`FilterForm`) build the address and follow it; their fields are uncontrolled, so they are re-set from the address when it changes another way (a period, Clear, Back); the box of rows is keyed by its page so a new page starts at its top.
+- **The Timeline is scoped like the Record, narrower.** `searchEvents` applies the scope in SQL before filters and keyset: missions the viewer created, current memberships, everything for an operator; nothing for the bootstrap token. A connection owner is not in it: a session mixes every account of its mission (spec §4.2 "Accounts": only the account's part), so owners read their calls in the Record. A holder filter takes the Record's typed forms (`holdersOf`).
 - **Every public service method is classified.** `admin-mutations.test.ts` parses the classes under `server/{connections,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}`; each method is a read, a mutation (driver + expected entry) or an exemption with a reason. A new method fails until classified.
 - **A new object type does not compile until labelled**: `objectLabel` is a `switch` over `AdminObjectType` with no `default`. A share is labelled through the connection its entry names (`connection_id` in `before`/`after`): the store reads a share only with its connection.
 - **A change reads in words from the keys it holds**, not per act (`changeLines`): an unknown key is printed under its own name, never dropped.
@@ -41,7 +44,8 @@ How the record is read (Activity, the activity of one mission), purged, and kept
 
 - **Orphaned and lost are acts, not state.** Services write `mission-orphaned` / `mission-restored` around the acts that change an authority, through `appendUnlessLatest` (two concurrent acts write one entry). The execution door detects such changes on its own and writes no administrative entry, so a mission's two entries need not come in pairs.
 - **Token holders are never crossed.** The `holder` filter takes `member:<id>` / `named:<name>`; an email names a member (token names cannot contain `@`); a token named like a user id is not that member.
-- **Timeline label and holder filters** read indexed columns the sessions repository copies at insert (`events_session_label_ts`, `events_session_holder_ts`); the view still reads label and holder from the details.
+- **Timeline label and holder filters** read columns the sessions repository copies at insert (`agent_label`, `token_kind`, `token_holder`); the view still reads label and holder from the details. The indexes lead with `session_id`: across sessions (no mission filter) the Timeline sorts the scoped events, fine at a self-hosted volume under the retention; an `events (ts, id)` index is the fix if it is not.
+- **A waiting request on the Timeline** is linked (`/waiting/<id>`) for the mission's creator only; anyone else reads whose answer it waits for (`open_requests[].creator`).
 - **A resource edit and a discovery name the connection as object**, so the connection filter and owner visibility need no join; a request decision names the request, resolved to its mission at search.
 - **Joins and leaves of future resources name the mission as object** (`mission-resource-joined`, `mission-resource-left`, `after.connection_id`), so the mission's creator and members read them; their actor is the human whose act caused them, or `discovery` (`DISCOVERY_ACTOR_ID`, labelled "The gateway’s discovery") for the hourly discovery and the one after a creating call — a pseudo-actor like `schedule` and `bootstrap`, never a user row.
 - **`countersAgreeWithAudit` on a one-off mission older than the retention** reports a mismatch that is the retention, not a fault.

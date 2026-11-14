@@ -13,10 +13,12 @@ import { systemClock, type Clock } from '../store/clock';
 import { AuditQueryService } from './query-service';
 import { AuditRetentionSweeper, type SweepTimers } from './retention';
 import { MissionSessionService } from './session-view';
+import { ActivityTimelineService } from './timeline';
 
 export interface AuditModule {
   readonly query: AuditQueryService;
   readonly sessions: MissionSessionService;
+  readonly timeline: ActivityTimelineService;
   readonly retention: AuditRetentionSweeper;
 }
 
@@ -37,8 +39,9 @@ export function createAuditModule(deps: AuditModuleDeps): AuditModule {
     sessions: new MissionSessionService({
       store: deps.store,
       missions: deps.missions,
-      clock: deps.clock ?? systemClock,
+      clock,
     }),
+    timeline: new ActivityTimelineService({ store: deps.store, clock }),
     retention: new AuditRetentionSweeper({
       audit: deps.store.audit,
       sessionHistory: new SessionHistoryRetention({
@@ -82,6 +85,7 @@ export {
   type AuditConnectionRef,
   type AuditEntryView,
   type AuditFilterOptions,
+  holdersOf,
   type AuditMissionRef,
   type AuditPage,
   type AuditQueryDeps,
@@ -90,19 +94,43 @@ export {
   type AuditViewer,
 } from './query-service';
 export {
+  keysetOf,
+  PAGE_PARAMS,
+  pageOf,
+  parsePage,
+  type PagePosition,
+  type Paged,
+  type ParsedPage,
+} from './paging';
+export {
+  ActivityTimelineService,
+  eventScopeOf,
+  NO_TIMELINE_FILTER,
+  parseTimelineQuery,
+  TIMELINE_PAGE_SIZE,
+  TIMELINE_PARAMS,
+  timelineQueryString,
+  type ActivityTimelineDeps,
+  type ParsedTimelineQuery,
+  type TimelineEventView,
+  type TimelineFilters,
+  type TimelineMissionRef,
+  type TimelineOpenRequest,
+  type TimelinePage,
+} from './timeline';
+export {
   AuditRetentionSweeper,
   RETENTION_SWEEP_INTERVAL_MS,
   type RetentionSweeperDeps,
   type SweepTimers,
 } from './retention';
 export {
-  ALL_EVENTS,
   eventView,
   holderParam,
+  LATEST_EVENTS,
   MissionSessionService,
   parseHolderParam,
   PAST_PERIODS_SHOWN,
-  SESSION_EVENTS_PAGE_SIZE,
   type MissionSessionDeps,
   type MissionSessionView,
   type SessionEventView,
@@ -110,7 +138,6 @@ export {
   type SessionHolderRef,
   type SessionHolderView,
   type SessionLabelActivity,
-  type SessionTimelineFilter,
   type SessionOpenRequest,
   type SessionPeriodRow,
   type SessionRiskRow,

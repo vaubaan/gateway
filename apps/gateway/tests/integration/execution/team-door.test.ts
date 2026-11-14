@@ -203,10 +203,16 @@ describe('execution door: one mission, several token holders', () => {
     });
 
     // The timeline of one holder, and the audit search by holder.
-    const bobs = await instance.root.audit.sessions.get(ada, mission.mission.id, {
-      timeline: { kind: 'holder', holder: { kind: 'member', key: bob.id } },
-    });
-    expect(bobs?.events.map((e) => [e.kind, e.holder?.label])).toEqual([
+    const bobs = await instance.root.audit.timeline.search(
+      { kind: 'user', user: ada, groups: [], isOperator: false },
+      {
+        missionId: mission.mission.id,
+        holder: `member:${bob.id}`,
+        agentLabel: null,
+        unlabelled: false,
+      },
+    );
+    expect(bobs.events.map((e) => [e.kind, e.holder?.label])).toEqual([
       ['call-refused', bob.email],
       ['call-allowed', bob.email],
       ['call-allowed', bob.email],

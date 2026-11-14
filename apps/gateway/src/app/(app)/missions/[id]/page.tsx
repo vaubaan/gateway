@@ -66,6 +66,7 @@ import {
   waitingFor,
   WAITING,
 } from '@/lib/vocabulary';
+import { TIMELINE_PARAMS } from '@/server/audit';
 import { enumerateCatalog } from '@/lib/missions/catalog-view';
 import { macroActionsOf } from '@/lib/missions/macro-actions';
 import { riskPlanesOf } from '@/lib/providers/planes';
@@ -216,7 +217,8 @@ export default async function MissionPage({ params, searchParams }: Props) {
     .map((entry) => entry.last_seen_at)
     .sort()
     .at(-1);
-  const activityPath = `${ROUTES.missions}/${mission.id}/session`;
+  // Everything it did: the Activity's Timeline, filtered on this mission.
+  const activityPath = `${ROUTES.activityTimeline}?${TIMELINE_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
   const stoppable = isCreator && state.kind !== 'revoked';
   const editable = isCreator && detail.limits_editable;
   const needsMyKey = team.issuable && !team.my_token;

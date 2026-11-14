@@ -274,7 +274,7 @@ test('every old path answers with a permanent redirect to the page that replaced
       '/requests/00000000-0000-0000-0000-000000000000',
       '/waiting/00000000-0000-0000-0000-000000000000',
     ],
-    ['/audit?decision=refused', '/activity?decision=refused'],
+    ['/audit?decision=refused', '/activity/record?decision=refused'],
     ['/providers', '/reference'],
     ['/providers/github', '/reference/github'],
     // Two pages were folded into another: what was shared with a person is a region of
@@ -310,7 +310,7 @@ test('every old path answers with a permanent redirect to the page that replaced
   await page.goto('/shares');
   await expect(page).toHaveURL(/\/accounts$/);
   await page.goto('/audit');
-  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page).toHaveURL(/\/activity\/record$/);
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
 });
 
