@@ -117,6 +117,14 @@ export interface Resource {
   readonly displayName: string;
   /** Provider-specific, non-secret facts the classifier may need (Gmail allowlists, etc.). */
   readonly metadata?: Readonly<Record<string, unknown>>;
+  /**
+   * A discovery's hint: the credential reaches the resource but most likely cannot act on
+   * it (a public GitHub repository outside a token's grant), so it is listed hidden from
+   * new missions. Followed only while the connection's owner never showed or hid the
+   * resource themselves (ADR connect-driver-and-resource-curation, amendment 2026-11-14);
+   * the owner's choice always wins. Absent or false: listed as usual.
+   */
+  readonly hiddenByDefault?: boolean;
 }
 
 /** A resource as kept on a connection (discovered, then edited by the owner). */

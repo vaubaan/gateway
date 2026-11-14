@@ -351,16 +351,20 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
               {drift.applied ? '' : ' (nothing was)'}. It does not apply by itself: apply it here if
               you mean it.
             </Hint>
-            <ConfirmSubmit
-              action={`${USERS_PAGE}/administrators/apply-configuration`}
-              label="Apply the configuration’s rule"
-              ariaLabel="Apply the configuration’s admin rule"
-              variant="secondary"
-              title="Apply the configuration’s admin rule?"
-              consequence="Every address and group it names becomes an administrator, in your name. Nobody is removed."
-              confirmLabel="Apply"
-              testId="apply-admin-rule"
-            />
+            <Hint>
+              Every address and group it names becomes an administrator, in your name. Nobody is
+              removed.
+            </Hint>
+            <form method="post" action={`${USERS_PAGE}/administrators/apply-configuration`}>
+              <Button
+                type="submit"
+                size="sm"
+                aria-label="Apply the configuration’s admin rule"
+                data-testid="apply-admin-rule"
+              >
+                Apply the configuration’s rule
+              </Button>
+            </form>
           </div>
         )}
         {administrators.designations.length === 0 ? (

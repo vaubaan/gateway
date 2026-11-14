@@ -515,6 +515,8 @@ export const ACCOUNT_WORDS = {
   defaultEnvironment: 'Default environment for unlabelled resources',
   fromDefault: "from the account's default",
   hidden: 'hidden from new missions',
+  /** Hidden by the service's discovery (a public repository the token likely cannot act on). */
+  hiddenByDiscovery: 'hidden from new missions: the key may only read it',
   gone: 'no longer found',
   /** A resource of `InstanceConfig.selfResources` (SEC 2026-10-15 H1). */
   self: "this instance's own project: never reachable by a mission",
@@ -1404,8 +1406,6 @@ export const MISSION_LIST_FILTERS = {
 export const MISSION_WORDS = {
   editLede:
     'Change anything but how often the limits reset. Same key, same session, same counters: the next call of every holder sees the edited mission.',
-  editConfirm:
-    'Every change, before and after. It applies at once: the next call of every holder sees it, with the same key; what was used this period stays used.',
   nothingChangedYet: 'Nothing changed yet.',
   periodFixed:
     'How often the limits reset does not change on a running mission: its counters are kept per period. Duplicate the mission for another one.',
@@ -1461,6 +1461,10 @@ export const CARD_WORDS = {
   /** The resources without an environment label, on a provider that needs one. */
   notSelectable: 'not selectable',
   labelIt: 'Label it to add it',
+  /** Ticks every free listed resource of a group (never a hidden one). */
+  selectAll: 'Select all',
+  /** The collapsed list of a group's hidden resources: "Hidden from new missions (12)". */
+  hiddenResources: (n: number): string => `Hidden from new missions (${formatNumber(n)})`,
   /** "2 of 4 boards free": what another card of the account may still take. */
   free: (free: number, total: number, other: string): string =>
     `${formatNumber(free)} of ${formatNumber(total)} ${other} free`,

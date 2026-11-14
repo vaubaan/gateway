@@ -383,14 +383,6 @@ export interface MissionEditView {
   readonly revision: string;
   /** Why the mission cannot be edited now; `null` when it can. */
   readonly blocked: 'revoked' | 'orphaned' | null;
-  /** Calls used in the current period, per line (`lineKeyOf`): what a lowered limit is compared with. */
-  readonly used: Readonly<Record<PolicyLineKey, number>>;
-  /** Open claims and approval requests, with the risks they are about. */
-  readonly open_requests: readonly {
-    readonly id: string;
-    readonly kind: string;
-    readonly risk_ids: readonly RiskId[];
-  }[];
 }
 
 /** What an edit would do, or why it is refused; writes nothing. */
@@ -1584,32 +1576,18 @@ export class MissionService {
 
   /**
    * What the creator's edit form starts from: the mission as a snapshot and as a
-   * draft, its revision, what was used this period and the open requests. `null`
-   * ("not found") for anyone but the creator.
+   * draft, and its revision. `null` ("not found") for anyone but the creator.
    */
   async editView(user: Subject, missionId: string): Promise<MissionEditView | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const snapshot = await this.snapshotOf(mission);
-    const session = await this.deps.store.sessions.getByMission(mission.id);
-    const used: Record<PolicyLineKey, number> = {};
-    if (session) {
-      const period = this.periodNow(mission);
-      for (const counter of await this.deps.store.sessions.counters(session.id, period.start)) {
-        used[policyLineKey(counter.resourceSetId, counter.riskId)] = counter.consumed;
-      }
-    }
-    const open = (await this.deps.store.requests.listForMission(mission.id)).filter(
-      (r) => r.state === 'open' && r.kind !== 'permission',
-    );
     return {
       mission,
       snapshot,
       draft: draftOfSnapshot(snapshot),
       revision: revisionOfRecord(mission),
       blocked: gateEditBlockedBy(mission),
-      used,
-      open_requests: open.map((r) => ({ id: r.id, kind: r.kind, risk_ids: r.riskIds })),
     };
   }
 

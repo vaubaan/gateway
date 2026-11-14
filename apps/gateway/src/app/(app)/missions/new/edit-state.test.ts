@@ -1,14 +1,14 @@
 /**
  * The creation form in edit mode: prefilled from the mission, the draft it sends
- * back, and what the confirmation says of each change.
+ * back.
  */
 import { describe, expect, it } from 'vitest';
 
 import { judgeEdit, type MissionSnapshot } from '@/lib/missions/mission-edit';
 import { ACME_RESOURCES, acmeConnection } from '../../../../../tests/support/missions/testing';
 
-import { changeLines, editDraftOf, initialEditState, raisedEditState } from './edit-state';
-import { expiryOf, replaceCard, type FormState } from './form-state';
+import { editDraftOf, initialEditState, raisedEditState } from './edit-state';
+import { expiryOf, type FormState } from './form-state';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
 // `scratch` labelled staging: it may join the staging set (a set holds one environment).
@@ -48,8 +48,6 @@ const SNAPSHOT: MissionSnapshot = {
     },
   ],
 };
-
-const naming = { resource: (_c: string, id: string) => id, risk: (id: string) => id };
 
 describe('the mission screen in edit mode', () => {
   it('starts from the mission and sends it back unchanged', () => {
@@ -97,61 +95,6 @@ describe('the mission screen in edit mode', () => {
     const draft = editDraftOf(context, state, snapshot, NOW);
     expect(draft.period).toEqual(snapshot.period);
     expect(draft.connections.map((c) => c.connection_id)).toEqual([acme.id, 'conn-lost']);
-  });
-
-  it('lists every change with what it means', () => {
-    const state = initialEditState(context, SNAPSHOT);
-    const [set] = state.cards;
-    if (!set) throw new Error('fixture');
-    // Remove the read permission, add scratch (labelled staging in this fixture).
-    const next: FormState = replaceCard(state, {
-      ...set,
-      entries: {},
-      resourceIds: ['res-app-staging', 'res-scratch'],
-    });
-    const lowered: FormState = replaceCard(state, {
-      ...set,
-      entries: { 'acme.read': { quota: '2', rateMax: '10', rateWindow: '60', gate: 'auto' } },
-    });
-    const judgedRemoval = judgeEdit(
-      { connections: context, now: NOW },
-      SNAPSHOT,
-      editDraftOf(context, next, SNAPSHOT, NOW),
-    );
-    const removal = changeLines(
-      judgedRemoval.changes,
-      {
-        used: {},
-        openRequests: [{ id: 'r1', kind: 'claim', risk_ids: ['acme.read'] }],
-      },
-      naming,
-    );
-    expect(removal.map((l) => [l.section, l.text])).toEqual(
-      expect.arrayContaining([
-        ['Resources', 'Acme main: res-scratch added'],
-        ['Permissions', 'Removed: acme.read'],
-      ]),
-    );
-    expect(removal.find((l) => l.text === 'Removed: acme.read')?.consequence).toBe(
-      'Refused from the next call. The request waiting about it is closed.',
-    );
-
-    const judgedLower = judgeEdit(
-      { connections: context, now: NOW },
-      SNAPSHOT,
-      editDraftOf(context, lowered, SNAPSHOT, NOW),
-    );
-    const [limit] = changeLines(
-      judgedLower.changes,
-      { used: { 'set-1::acme.read': 4 }, openRequests: [] },
-      naming,
-    );
-    expect(limit).toMatchObject({
-      section: 'Permissions',
-      text: 'acme.read: limit 10 → 2',
-      warn: true,
-      consequence: 'Already used up: 4 used this period. Refused until the limits reset.',
-    });
   });
 });
 

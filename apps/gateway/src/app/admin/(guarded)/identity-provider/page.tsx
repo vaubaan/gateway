@@ -305,30 +305,35 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                   </form>
                 )}
                 {provider.kind !== 'local' && (
-                  <ConfirmSubmit
+                  // Reversible either way, so asked nowhere (spec §4.2): the button's
+                  // title says what it does.
+                  <form
+                    method="post"
                     action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/waiver`}
-                    fields={{
-                      waiver: state.waiver ? 'none' : provider.kind === 'oidc' ? 'amr' : 'always',
-                    }}
-                    label={state.waiver ? 'Ask the second factor again' : 'Waive the second factor'}
-                    ariaLabel={`Second factor for ${provider.name}`}
-                    variant="ghost"
-                    tone={state.waiver ? undefined : 'danger'}
-                    title={
-                      state.waiver
-                        ? `Ask this gateway's second factor again of ${provider.name}'s people?`
-                        : `Waive this gateway's second factor for ${provider.name}?`
-                    }
-                    consequence={
-                      state.waiver
-                        ? 'Each of them enrols one at their next sign-in.'
-                        : provider.kind === 'oidc'
-                          ? 'Its people sign in without this gateway’s code when the provider says it asked a second factor of its own (the “mfa” method of its token); otherwise the code is still asked. Never for administrators. Do it only for a directory that enforces one.'
-                          : 'Its people sign in without this gateway’s code: you vouch that the provider enforces a second factor of its own. Never for administrators.'
-                    }
-                    confirmLabel={state.waiver ? 'Ask it again' : 'Waive'}
-                    testId={`waiver-toggle-${provider.id}`}
-                  />
+                  >
+                    <input
+                      type="hidden"
+                      name="waiver"
+                      value={state.waiver ? 'none' : provider.kind === 'oidc' ? 'amr' : 'always'}
+                      readOnly
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Second factor for ${provider.name}`}
+                      title={
+                        state.waiver
+                          ? 'Each of its people enrols one at their next sign-in.'
+                          : provider.kind === 'oidc'
+                            ? 'Its people sign in without this gateway’s code when the provider says it asked a second factor of its own (the “mfa” method of its token); otherwise the code is still asked. Never for administrators. Do it only for a directory that enforces one.'
+                            : 'Its people sign in without this gateway’s code: you vouch that the provider enforces a second factor of its own. Never for administrators.'
+                      }
+                      data-testid={`waiver-toggle-${provider.id}`}
+                    >
+                      {state.waiver ? 'Ask the second factor again' : 'Waive the second factor'}
+                    </Button>
+                  </form>
                 )}
                 {provider.source === 'store' && provider.enabled && (
                   <ConfirmSubmit

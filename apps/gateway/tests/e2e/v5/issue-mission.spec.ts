@@ -25,7 +25,6 @@ import {
   missionMenu,
   openCreatedMission,
   openCustom,
-  permissionRow,
   pickTrustLevel,
   revealedKey,
   savedKey,
@@ -87,12 +86,16 @@ test('create a mission card by card on one page, then replace its key and stop i
   await expect(picker.getByRole('button', { name: /^Gmail · ops mailbox/ })).toBeVisible();
   await expect(picker.getByText(/experimental/i)).toHaveCount(0);
   await picker.getByRole('button', { name: /^GitHub · acme-org/ }).click();
-  // Step 2: the repositories, ticked one by one; no "All".
+  // Step 2: the repositories, none ticked by itself when there are several: ticked one by
+  // one, or "Select all"; no "All" scope.
   const step = page.getByTestId('resource-picker');
   await expect(step).toContainText('Which repositories?');
-  await expect(step.getByRole('checkbox', { name: 'Resource acme/app' })).toBeChecked();
+  await expect(step.getByRole('checkbox', { name: 'Resource acme/app' })).not.toBeChecked();
   await expect(step.getByText(/^All$/)).toHaveCount(0);
   await expect(step.getByRole('checkbox', { name: /^\+ future repositories/ })).not.toBeChecked();
+  await expect(step.getByRole('button', { name: 'Add card' })).toBeDisabled();
+  await step.getByRole('button', { name: /^Select all/ }).click();
+  await expect(step.getByRole('checkbox', { name: 'Resource acme/app' })).toBeChecked();
   await step.getByRole('button', { name: 'Add card' }).click();
 
   const github = 'GitHub · acme-org';
@@ -195,33 +198,15 @@ test('create a mission card by card on one page, then replace its key and stop i
   await expect(create).toBeEnabled();
   await expect(create).toBeInViewport();
 
-  // "Create mission" asks once, and what is confirmed is the explicit list: every
-  // permission by its name and its id, with its limit, and what asks first.
-  await create.click();
-  const confirm = page.getByTestId('confirm-create');
-  await expect(confirm).toContainText('Create “Ship the billing page”?');
-  await expect(confirm).toContainText('This is the explicit list the key will carry');
-  const list = confirm.getByTestId('explicit-list');
-  const confirmed = await list.locator('[data-permission]').count();
-  expect(confirmed).toBeGreaterThan(15);
-  const readCodeLine = permissionRow(list, 'github.read-code');
-  await expect(readCodeLine).toContainText('Read code, branches, commits, files');
-  await expect(readCodeLine).toContainText('42 a week');
-  await expect(readCodeLine).toContainText(/\d+ a minute/);
-  await expect(permissionRow(list, 'github.read-meta')).toContainText('ask me first');
-  await expect(permissionRow(list, 'github.read-code')).toContainText('runs freely');
-  await snap(page, 'creation-confirm');
-  // Nothing was created yet: going back changes nothing.
-  await confirm.getByRole('button', { name: 'Back to the form' }).click();
-  await expect(confirm).toBeHidden();
-
-  // The key, shown once, on the page that follows, with the kit.
+  // "Create mission" creates at once, with no confirmation: the key, shown once, on the
+  // page that follows, with the kit. The explicit list is on the mission page.
   const token = await createMission(page);
   await expect(
     page.getByRole('heading', { name: 'Ship the billing page', level: 1 }),
   ).toBeVisible();
   await expect(page.getByTestId('created')).toContainText('Shown once.');
-  await expect(page.getByTestId('created')).toContainText(`${confirmed} permissions on GitHub`);
+  const lede = (await page.getByTestId('created').innerText()).match(/(\d+) permissions on GitHub/);
+  expect(Number(lede?.[1] ?? 0)).toBeGreaterThan(15);
   await expect(page.getByTestId('kit-mcp')).toContainText('"url": "https://gateway.e2e.test/mcp"');
   await expect(page.getByTestId('kit-mcp')).toContainText('Bearer ${VAUBAAN_MISSION_TOKEN}');
   await expect(page.getByTestId('kit-mcp')).not.toContainText(token);

@@ -340,11 +340,72 @@ describe('discoverResources — the repositories the token reaches, paged', () =
         ref: 'acme/repo-1',
         displayName: 'acme/repo-1',
         metadata: { default_branch: 'main', private: false, archived: false },
+        // Public, under a fine-grained token: its grant cannot be read, listed hidden.
+        hiddenByDefault: true,
       },
       { provider: 'github', ref: 'acme/bare', displayName: 'acme/bare', metadata: {} },
     ]);
     expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${PAT}`);
     expect(fetch.calls).toHaveLength(1);
+  });
+
+  // Recorded shapes of `/user/repos` items (docs.github.com/en/rest/repos/repos): `private`
+  // and the `permissions` object of the authenticated user's role on the repository.
+  const listed = (fullName: string, isPrivate: boolean, push: boolean) => ({
+    full_name: fullName,
+    default_branch: 'main',
+    private: isPrivate,
+    archived: false,
+    permissions: { admin: push, maintain: push, push, triage: true, pull: true },
+  });
+  const hiddenOf = (resources: readonly { ref: string; hiddenByDefault?: boolean }[]) =>
+    Object.fromEntries(resources.map((r) => [r.ref, r.hiddenByDefault === true]));
+
+  test('a fine-grained token: every public repository is listed hidden, a private one never', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: pageUrl(1),
+        body: [
+          listed('acme/granted', true, true),
+          listed('acme/site', false, true),
+          listed('octo/docs', false, false),
+        ],
+      },
+    ]);
+    expect(hiddenOf(await githubPlugin.discoverResources(connectionCtx(fetch)))).toEqual({
+      'acme/granted': false,
+      'acme/site': true,
+      'octo/docs': true,
+    });
+  });
+
+  test('a classic token: only a public repository the user cannot push to is listed hidden', async () => {
+    const classic = {
+      kind: 'api-key',
+      fields: { token: 'ghp_0123456789abcdefghijklmnopqrstuvwxyz' },
+      metadata: {},
+    } as const;
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: pageUrl(1),
+        body: [
+          listed('acme/private', true, false),
+          listed('acme/site', false, true),
+          listed('octo/docs', false, false),
+          { full_name: 'octo/unknown', private: false },
+        ],
+      },
+    ]);
+    expect(
+      hiddenOf(await githubPlugin.discoverResources(connectionCtx(fetch, { credential: classic }))),
+    ).toEqual({
+      'acme/private': false,
+      'acme/site': false,
+      'octo/docs': true,
+      'octo/unknown': false,
+    });
   });
 
   test('follows pages until a short one', async () => {

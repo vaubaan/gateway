@@ -119,10 +119,9 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await page.reload();
   await page.getByTestId('enable-provider-github').click();
   await expect(page.getByTestId('idp-enabled')).toBeVisible();
-  // Its people are asked no second factor of the gateway's: the administrator waives it,
-  // asked first (never for administrators).
+  // Its people are asked no second factor of the gateway's: the administrator waives it
+  // (never for administrators). It can be switched back, so it is not asked first.
   await page.getByRole('button', { name: 'Second factor for GitHub' }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Waive' }).click();
   await expect(page.getByTestId('waiver-github')).toBeVisible();
 
   // Signed out, the sign-in page offers both providers.

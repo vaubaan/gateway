@@ -51,18 +51,8 @@ test('the creator edits a running mission; the same key sees it at its next call
   // The bar says what changed, before anything is saved.
   await expect(page.getByTestId('summary')).toContainText('Name changed');
   await expect(page.getByTestId('summary')).toContainText('repositories changed');
+  // Saved at once, no confirmation: the mission page, with its "Saved" callout.
   await page.getByRole('button', { name: 'Save changes' }).click();
-
-  // Every change, before and after, with what it means.
-  const confirm = page.getByTestId('confirm-edit');
-  const changes = page.getByTestId('edit-changes');
-  await expect(changes).toContainText(
-    '“Read the billing code” → “Read the billing code, web only”',
-  );
-  await expect(changes).toContainText('acme/app removed');
-  await expect(changes).toContainText('No longer reached');
-  await confirm.getByRole('button', { name: 'Save changes' }).click();
-
   await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}\\?edited=1$`));
   await expect(page.getByTestId('mission-edited')).toBeVisible();
   await expect(

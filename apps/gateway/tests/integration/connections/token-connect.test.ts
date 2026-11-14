@@ -43,7 +43,16 @@ describe('a GitHub account connected with a token', () => {
       {
         method: 'GET',
         url: 'https://api.github.com/user/repos?per_page=100&page=1',
-        body: [{ full_name: 'acme/app', default_branch: 'main', private: true }],
+        body: [
+          { full_name: 'acme/app', default_branch: 'main', private: true },
+          // Public, outside the grant: every token reads it, so GitHub lists it.
+          {
+            full_name: 'octo/docs',
+            default_branch: 'main',
+            private: false,
+            permissions: { admin: false, push: false, pull: true },
+          },
+        ],
       },
       {
         method: 'GET',
@@ -174,8 +183,16 @@ describe('a GitHub account connected with a token', () => {
       credentialExpiresAt: '2027-01-15T10:30:00.000Z',
     });
     expect(connection?.metadata).toMatchObject({ credential_kind: 'api-key', account: 'acme-bot' });
-    expect((await root.store.connections.listResources(connection!.id)).map((r) => r.ref)).toEqual([
-      'acme/app',
+    // The public repository the token only reads is listed hidden from new missions.
+    expect(
+      (await root.store.connections.listResources(connection!.id)).map((r) => [
+        r.ref,
+        r.hidden,
+        r.hiddenEdited,
+      ]),
+    ).toEqual([
+      ['acme/app', false, false],
+      ['octo/docs', true, false],
     ]);
     expect(databaseDump()).not.toContain(PAT);
     for (const call of github.calls) expect(call.headers.authorization).toBe(`Bearer ${PAT}`);

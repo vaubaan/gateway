@@ -13,15 +13,17 @@
  *     are edited one by one (`MissionCard`, `CustomModal`, `AccountPicker`).
  *   - A sticky bar says what changed (or what the mission holds) and saves.
  *
- * "Create mission" asks once: the dialog lists **every permission with its limit**,
- * card by card, and that list is what is created — the trust levels are kept only to
- * redraw this screen. The decision shown is `previewDraft`, which the server runs
- * again; the browser's copy only saves a round trip. Once created, the screen becomes
- * the key, shown once, with the kit (`KeyReveal`).
+ * "Create mission" creates at once, with no confirmation (spec §4.2: only an
+ * irreversible act is asked first): the draft carries the explicit lines, which are
+ * what is created — the trust levels are kept only to redraw this screen. The decision
+ * shown is `previewDraft`, which the server runs again on arrival; a 422 shows its
+ * issues beside the cards. Once created, the screen becomes the key, shown once, with
+ * the kit (`KeyReveal`); the mission page shows the explicit list read-only.
  *
  * With `edit`, the same screen edits a mission after issuance (ADR
  * mission-editable-after-issuance): prefilled, its period fixed, its end date "as it
- * is", judged by `judgeEdit`, and "Save changes" confirms every change before → after.
+ * is", judged by `judgeEdit` (again by the server), and "Save changes" saves at once
+ * and lands on the mission page with its "Saved" callout.
  */
 import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
@@ -30,7 +32,6 @@ import {
   Button,
   ButtonLink,
   Callout,
-  Dialog,
   Field,
   Input,
   Mono,
@@ -59,7 +60,6 @@ import {
   TERMS,
   TRUST_LEVEL_LABELS,
   TRUST_RAISE_WORDS,
-  WAITING,
 } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type {
@@ -107,14 +107,7 @@ import {
   type FormState,
   type PeriodChoice,
 } from './form-state';
-import {
-  changeLines,
-  editDraftOf,
-  initialEditState,
-  raisedEditState,
-  type EditSource,
-} from './edit-state';
-import { ExplicitList } from './policy-lines';
+import { editDraftOf, initialEditState, raisedEditState, type EditSource } from './edit-state';
 
 export interface InitialDraft {
   readonly name: string;
@@ -211,7 +204,6 @@ export function MissionForm({
   const [now] = useState(() => new Date());
   const { busy, error, setError, run } = useAction();
   const [serverIssues, setServerIssues] = useState<readonly PreviewIssue[]>([]);
-  const [confirming, setConfirming] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [proposalText, setProposalText] = useState('');
@@ -240,8 +232,6 @@ export function MissionForm({
   const periodSeconds = period.kind === 'recurring' ? period.length_seconds : null;
   const expiresAt = expiryOf(state, now);
   const limitLabel = limitColumn(periodSeconds);
-  const permissionCount = preview.policy.length;
-  const carries = `${count(permissionCount, { one: 'explicit permission', many: 'explicit permissions' })}, ${limitsResetEvery(periodSeconds)}, ${expiresAt && Number.isNaN(Date.parse(expiresAt)) ? 'no end date yet' : expiresOn(expiresAt, now)}.`;
   const connectionOf = (card: CardState) => context.find((c) => c.id === card.connectionId);
 
   function patch(next: Partial<FormState>) {
@@ -265,7 +255,6 @@ export function MissionForm({
     const { body } = answer;
     const made = revealedOf(body);
     if (answer.status === 201 && isCreatedBody(body) && made) {
-      setConfirming(false);
       setCreated({
         missionId: body.mission.id,
         name: body.mission.name,
@@ -276,7 +265,6 @@ export function MissionForm({
         ],
       });
     } else if (answer.status === 422 && isRefusedBody(body)) {
-      setConfirming(false);
       setServerIssues(body.preview.issues);
     }
   }
@@ -294,7 +282,6 @@ export function MissionForm({
       return;
     }
     if (answer.status === 422 && isIssuesBody(answer.body)) {
-      setConfirming(false);
       setServerIssues(answer.body.issues);
     }
   }
@@ -373,17 +360,6 @@ export function MissionForm({
     );
   }
 
-  const naming = {
-    resource: (connectionId: string, resourceId: string) => {
-      const found = context
-        .find((c) => c.id === connectionId)
-        ?.resources.find((r) => r.id === resourceId);
-      return found ? found.display_name || found.ref : resourceId;
-    },
-    risk: (riskId: string) =>
-      context.flatMap((c) => c.risks).find((r) => r.risk_id === riskId)?.label ?? riskId,
-  };
-  const lines = judgement && edit ? changeLines(judgement.changes, edit, naming) : [];
   const phrases = edit
     ? changeSummary(context, opening.state, state, {
         before: edit.snapshot.expires_at,
@@ -471,7 +447,8 @@ export function MissionForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (ready) setConfirming(true);
+          if (!ready || busy) return;
+          void (edit ? save() : create());
         }}
       >
         <div className={cardStyles.fields}>
@@ -699,7 +676,7 @@ export function MissionForm({
                 cards
               </span>
             )}
-            {error && !confirming && (
+            {error && (
               <p className={styles.railRefused} role="alert" data-testid="create-error">
                 {edit ? 'Not saved' : 'Not created'}: {error}
               </p>
@@ -712,8 +689,20 @@ export function MissionForm({
             >
               {ACTIONS.cancel}
             </ButtonLink>
-            <Button type="submit" variant="primary" disabled={busy || !ready}>
-              {edit ? MISSION_ACTIONS.saveChanges : ACTIONS.createMission}
+            <Button
+              type="submit"
+              variant="primary"
+              loading={busy}
+              disabled={busy || !ready}
+              data-testid="mission-submit"
+            >
+              {busy
+                ? edit
+                  ? 'Saving…'
+                  : 'Creating…'
+                : edit
+                  ? MISSION_ACTIONS.saveChanges
+                  : ACTIONS.createMission}
             </Button>
           </div>
         </div>
@@ -762,93 +751,6 @@ export function MissionForm({
           }}
         />
       )}
-
-      {edit && (
-        <Dialog
-          open={confirming}
-          onClose={() => setConfirming(false)}
-          width="lg"
-          divided
-          dismissible={!busy}
-          title={`Save the changes to “${edit.snapshot.name}”?`}
-          description={<>{MISSION_WORDS.editConfirm}</>}
-          hint={WAITING.recorded}
-          testId="confirm-edit"
-          footer={
-            <>
-              <Button type="button" variant="primary" loading={busy} onClick={() => void save()}>
-                {busy ? 'Saving…' : MISSION_ACTIONS.saveChanges}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={busy}
-                onClick={() => setConfirming(false)}
-              >
-                Back to the form
-              </Button>
-            </>
-          }
-        >
-          <ul className={styles.issueList} data-testid="edit-changes">
-            {lines.map((line, index) => (
-              <li key={`${line.section}:${index}`} data-warn={line.warn ? 'true' : undefined}>
-                <strong>{line.section}</strong> · {line.text}
-                {line.consequence && (
-                  <span className={line.warn ? styles.railRefused : styles.quietText}>
-                    {' '}
-                    — {line.consequence}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-          {error && confirming && (
-            <p className={styles.railRefused} role="alert">
-              Not saved: {error}
-            </p>
-          )}
-        </Dialog>
-      )}
-
-      <Dialog
-        open={confirming && edit === null}
-        onClose={() => setConfirming(false)}
-        width="lg"
-        divided
-        dismissible={!busy}
-        title={`Create “${state.name.trim()}”?`}
-        description={
-          <>
-            This is the explicit list the key will carry: {carries} Anything else is refused. You
-            get the key next, shown once.
-          </>
-        }
-        hint={WAITING.recorded}
-        testId="confirm-create"
-        footer={
-          <>
-            <Button type="button" variant="primary" loading={busy} onClick={() => void create()}>
-              {busy ? 'Creating…' : ACTIONS.createMission}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setConfirming(false)}
-            >
-              Back to the form
-            </Button>
-          </>
-        }
-      >
-        <ExplicitList context={context} cards={state.cards} periodSeconds={periodSeconds} />
-        {error && confirming && (
-          <p className={styles.railRefused} role="alert">
-            Not created: {error}
-          </p>
-        )}
-      </Dialog>
     </>
   );
 }

@@ -3,7 +3,7 @@ title: GitHub provider plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-14
 ---
 
 # GitHub provider plugin — handbook
@@ -78,9 +78,35 @@ env-scoped. Rules common to every plugin: [providers README](README.md).
   ceiling at GitHub, which matters where a private repo on a free plan has no branch protection.
 - The guide asks for **Only select repositories**, the ones the missions will use (ADR
   one-place-to-authorize-services-token-first, amendment 2026-11-13). Discovery
-  (`discoverGithubResources`, `GET /user/repos`) lists only the repositories the token reaches: a
-  repository left out never appears as a resource; adding it means editing the token's repository
-  access at GitHub (or a new token), then a discovery refresh or a reconnect.
+  (`discoverGithubResources`, `GET /user/repos`) lists the repositories the token reaches: a
+  private repository left out of the grant never appears; adding it means editing the token's
+  repository access at GitHub (or a new token), then a discovery refresh or a reconnect.
+
+### Repositories outside the grant
+
+- **Why they appear.** A fine-grained token "always includes read-only access to all public
+  repositories" (GitHub, Managing your personal access tokens), and `GET /user/repos` lists every
+  repository the _user_ owns, collaborates on or reaches through an organization
+  (`affiliation=owner,collaborator,organization_member` by default; `visibility`/`affiliation`
+  filter on the user's relation, not on the token's grant). Its `permissions` object is the user's
+  role on the repository (GitHub's "discovering resources for a user" guide reads it as the user's
+  access), not the token's. GitHub has **no endpoint for a token to list its own selected
+  repositories** (only a GitHub App's user token has `GET /user/installations/{id}/repositories`).
+  Sources: docs.github.com/en/rest/repos/repos (List repositories for the authenticated user),
+  the token formats table (`github_pat_` = fine-grained), via Context7 2026-11-14.
+- **What the gateway does** (`hiddenByDefault` in `execute.ts`): a private repository is listed as
+  usual (a token sees only the private ones it was granted). A public one is marked
+  `hiddenByDefault` — under a fine-grained token always (its grant on a public repository cannot
+  be read), under any other token when `permissions.push` is false (no token of that user can
+  write it). The host stores it hidden from new missions while the owner never hid nor showed it
+  (`connection_resources.hidden_edited`, ADR connect-driver-and-resource-curation, amendment
+  2026-11-14); the account page tags it "the key may only read it".
+- **The trade-off.** A public repository that _is_ in the grant is hidden too: the owner shows it
+  once on the account page (untick "Hide from new missions"), and every later refresh keeps that.
+  Hidden, it is not ticked by "Select all", does not join a card's future resources, and is not in
+  `{ scope: 'all' }`; a mission that already names it keeps it (reach is the stored lists). The
+  alternative — probing each public repository with a write-shaped call — would cost one request
+  per repository per refresh and still prove nothing for read-only grants.
 - The gateway cannot change a token's permissions or revoke it: create a new token and reconnect;
   delete the old one on GitHub's token settings page.
 

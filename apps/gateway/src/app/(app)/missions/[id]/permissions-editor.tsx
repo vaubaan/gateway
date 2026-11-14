@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, ConfirmDialog, Hint, Input } from '@/components/ui';
+import { Button, Hint, Input } from '@/components/ui';
 import type { MissionService } from '@/server/missions/mission-service';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
@@ -42,7 +42,6 @@ export function PermissionsEditor({
   const router = useRouter();
   const [policy, setPolicy] = useState<readonly MissionPolicyEntry[]>(data.policy);
   const [filter, setFilter] = useState('');
-  const [review, setReview] = useState(false);
   const { busy, error, run } = useAction();
   const original = new Map(data.policy.map((p) => [p.risk_id, p]));
   const selected = new Map(policy.map((p) => [p.risk_id, p]));
@@ -98,7 +97,6 @@ export function PermissionsEditor({
       { errorOf: refusalOf },
     );
     if (!answer.ok) return;
-    setReview(false);
     router.push(
       requestId ? `/waiting/${requestId}?decided=1` : `/missions/${data.missionId}#permissions`,
     );
@@ -220,46 +218,26 @@ export function PermissionsEditor({
         Use the mission’s limit and “ask first” controls to change an existing permission. Adding a
         previously removed permission keeps its earlier consumption.
       </Hint>
+      {requestId && additions.length + removals.length === 0 && (
+        <Hint>
+          The requested permissions are already included: saving marks the request granted.
+        </Hint>
+      )}
+      <Hint>
+        Applies at once to all people and keys; used calls stay counted. Recorded in the activity.
+      </Hint>
       <Button
+        variant="primary"
+        loading={busy}
         disabled={
           busy || invalid || incomplete || (!requestId && additions.length + removals.length === 0)
         }
-        onClick={() => setReview(true)}
+        onClick={() => void save()}
+        data-testid="permissions-save"
       >
-        Review permissions
+        {requestId ? 'Add permissions and answer' : 'Change permissions'}
       </Button>
-      <ConfirmDialog
-        open={review}
-        title="Change this mission’s permissions?"
-        consequence={
-          <>
-            <ul>
-              {additions.map((p) => (
-                <li key={p.risk_id}>
-                  Add {p.risk_id}: {p.quota} per period, {p.rate_limit.max} per minute,{' '}
-                  {p.gate === 'approval' ? 'ask me first' : 'runs freely'}.
-                </li>
-              ))}
-              {removals.map((p) => (
-                <li key={p.risk_id}>Remove {p.risk_id}.</li>
-              ))}
-            </ul>
-            {additions.length + removals.length === 0 && (
-              <p>The requested permissions are already included. Mark the request as granted.</p>
-            )}
-            <p>
-              This applies to all people and keys. Used calls stay counted. Nothing runs
-              automatically.
-            </p>
-          </>
-        }
-        confirmLabel={requestId ? 'Add permissions and answer' : 'Change permissions'}
-        busy={busy}
-        error={error}
-        hint="Recorded in the activity."
-        onConfirm={() => void save()}
-        onCancel={() => setReview(false)}
-      />
+      {error && <p role="alert">{error}</p>}
     </div>
   );
 }

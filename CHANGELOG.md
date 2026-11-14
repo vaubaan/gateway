@@ -9,6 +9,32 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **No confirmation except before an irreversible act** (spec §4.2, owner decision
+  2026-11-14). "Create mission" creates at once and shows the key: the recap of the explicit
+  list is gone (the mission page shows that list read-only, the server checks it again).
+  "Save changes" saves at once and lands on the mission page with its "Saved" callout: the
+  before → after recap is gone. A permission request's editor saves without a review dialog;
+  waiving or asking again the second factor of a sign-in provider and applying the
+  configuration's admin rule post at once. Stopping, removing, replacing a key, disconnecting
+  and finishing the setup are still asked first.
+- **The mission form ticks no resource by itself unless the group holds one**; "Select all"
+  ticks the others. Resources hidden from new missions are collapsed under "Hidden from new
+  missions (n)" and never ticked — they were listed and ticked before, unlike
+  `{ scope: 'all' }`.
+- **GitHub 5.1.0: public repositories are discovered hidden from new missions.** A
+  fine-grained token reads every public repository, and GitHub cannot list a token's own
+  repositories: a public repository is listed hidden until the account's owner shows it
+  (handbook providers/github, "Repositories outside the grant"). A resource the owner hid or
+  showed keeps that choice across refreshes (store migration 0034, `hidden_edited`).
+
+### Plugin SDK
+
+- **0.9.1 — `Resource.hiddenByDefault?`**: a discovery's hint that the credential most likely
+  cannot act on a resource; the host lists it hidden until its owner chooses (ADR
+  connect-driver-and-resource-curation, amendment 2026-11-14).
+
 ## [2.0.0-alpha.20] - 2026-11-13
 
 ### Plugin SDK

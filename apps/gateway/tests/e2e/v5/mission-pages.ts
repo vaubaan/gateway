@@ -18,7 +18,10 @@ function escaped(text: string): string {
 export interface CardPick {
   /** The environment group to take (its radio), when the account has several. */
   readonly env?: string;
-  /** Exactly these resources (refs) are ticked; absent, what the group ticks by itself. */
+  /**
+   * Exactly these resources (refs) are ticked; absent, every listed one of the group
+   * ("Select all" when it has several: a group ticks only its one resource by itself).
+   */
   readonly resources?: readonly string[];
   readonly future?: boolean;
 }
@@ -28,6 +31,12 @@ export async function pickResources(page: Page, pick: CardPick, done: string): P
   const step = page.getByTestId('resource-picker');
   await expect(step).toBeVisible();
   if (pick.env) await step.getByRole('radio', { name: `Environment ${pick.env}` }).check();
+  if (!pick.resources) {
+    const selectAll = pick.env
+      ? step.getByTestId(`select-all-${pick.env}`)
+      : step.getByRole('button', { name: /^Select all/ }).first();
+    if ((await selectAll.count()) > 0) await selectAll.click();
+  }
   if (pick.resources) {
     const boxes = step.getByRole('checkbox', { name: /^Resource / });
     for (const box of await boxes.all()) {
@@ -134,14 +143,11 @@ export async function allowOnly(
 }
 
 /**
- * "Create mission", then the confirmation that lists every permission with
- * its limit, then the key shown once. Returns the key.
+ * "Create mission" (no confirmation: spec §4.2), then the key shown once.
+ * Returns the key.
  */
 export async function createMission(page: Page): Promise<string> {
   await page.getByRole('button', { name: 'Create mission' }).click();
-  const confirm = page.getByTestId('confirm-create');
-  await expect(confirm.getByTestId('explicit-list')).toBeVisible();
-  await confirm.getByRole('button', { name: 'Create mission' }).click();
   await expect(page.getByTestId('created')).toBeVisible();
   return revealedKey(page);
 }

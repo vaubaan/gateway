@@ -2,7 +2,9 @@
 
 /**
  * Dialogs. A dialog asks one question, **states the consequence before
- * anything happens**, and offers the action and a way out.
+ * anything happens**, and offers the action and a way out. A confirmation is
+ * asked only before an act that deletes or stops something for good (spec
+ * §4.2); creating, editing and reversible switches act at once.
  *
  * - `Dialog` — the modal surface: a native `<dialog>` opened with
  *   `showModal()`, so the browser keeps focus inside it, closes it on Escape

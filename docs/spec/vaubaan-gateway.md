@@ -18,6 +18,10 @@ status: draft
 > 2026-11-13 — the tier became the row of a decision tree over five facts, and the severity word
 > left the product: a permission is shown with its row and the reason of the row
 > ([gateway-risk-model](./gateway-risk-model.md) §4.6, same ADR, amendment 2026-11-13).
+>
+> 2026-11-14 — confirmations only before an irreversible act (owner decision): creating and
+> editing a mission ask nothing (§4.2, §7.4); a plugin may hide at discovery what the credential
+> can only read (§0 Resource).
 
 ## 0. Vocabulary
 
@@ -115,7 +119,9 @@ callback registered at a provider).
   where the environment lives in the arguments, the plugin derives it). An environment-scoped risk
   on a resource with no label, or a label outside the risk's environments, is refused. The owner may
   rename or hide a resource; a refresh keeps names, labels and hidden marks, and marks stale what
-  discovery no longer returns. "Every resource known" excludes hidden and stale ones; selecting a
+  discovery no longer returns. A plugin may discover a resource hidden when the credential most
+  likely cannot act on it (a public repository outside a token's grant); once the owner hides or
+  shows it, the owner's choice stays. "Every resource known" excludes hidden and stale ones; selecting a
   stale one is refused at issuance.
 - **Share** — the owner grants a target (user or group) a **restriction** on the connection.
 - **Restriction** — an explicit enumeration of `RiskId`s of the provider's catalog: the upper bound
@@ -584,9 +590,14 @@ connection on it is refused.
 
 A web interface served by the instance, behind sign-in, in the interface's words (§0). Seven entries
 — Now, Waiting for you, Missions, Accounts, Activity, Reference, Settings. A page offers an act only
-when the instance would take it, and the instance checks again on arrival. Acts that stop, remove,
-hand over or replace are asked first; irreversible ones (stopping a mission, removing a teammate,
-leaving, revoking a key) are confirmed by typing a name. **The instance's name** (§4.3) is shown
+when the instance would take it, and the instance checks again on arrival. **A confirmation is
+asked only before an act that deletes, stops or hands over something for good** (replacing a key,
+removing an access, disconnecting an account or an app, deactivating a person, removing what was
+set up, finishing the setup), and before an access that would bring stopped missions back to work
+(§7.3: their agents act again at once); the hardest of them (stopping a mission, removing a teammate, leaving, revoking a key)
+are confirmed by typing a name. Creating, editing and anything that can be switched back act at
+once, with a busy button and the outcome on the page that follows; a refusal shows where it
+applies. **The instance's name** (§4.3) is shown
 above the navigation, in every page title and on the sign-in page, as text; the public URL's host
 stands in without one.
 
@@ -607,19 +618,20 @@ stands in without one.
   the connected app that prepared it; stopped missions are behind a filter. **Creating**, on one
   screen: a name (or a copy of a mission, or a pasted agent proposal), the period and the end, and
   one **card** per resource set. "Add an account" picks an account, then its resources grouped by
-  environment (one environment per card), plus "future" ones; only the cards of the mission are
-  shown. A card lists the account's macro-actions, each ticked at a trust level — Careful, Trusting,
+  environment (one environment per card), plus "future" ones — nothing ticked by itself unless
+  the group holds one resource ("Select all" otherwise), the hidden ones collapsed and never
+  ticked; only the cards of the mission are shown. A card lists the account's macro-actions, each ticked at a trust level — Careful, Trusting,
   Autonomous, or Custom when its lines were edited by hand ([risk model](gateway-risk-model.md)
   §4.6); Custom opens the macro-action's permissions one by one (behaviour and limits, filterable by
   plane), and hovering the line shows the same content read-only. The trust levels are sent only to
-  redraw the screen. **Creating confirms the explicit list** (every permission by account, with
-  limits and gate), which is what is sent and checked again; then the key, shown once, with the setup
-  kit. **On a mission**: the creation screen, read-only, with one more column: today's use per
+  redraw the screen. **Creating asks nothing**: what is sent is the explicit list (every permission
+  by account, with limits and gate), checked again on arrival — a refusal shows beside the cards —;
+  then the key, shown once, with the setup kit. The mission page shows the explicit list read-only. **On a mission**: the creation screen, read-only, with one more column: today's use per
   macro-action (the permission closest to its limit), each permission's use on hover; its state, a
   waiting request (the way to answer for the creator; whose answer it waits for, for a teammate),
   its people and keys with what each did this period, its activity; stop, duplicate and replace key
-  in its menu. **Edit mission** opens the creation screen prefilled (period fixed) and confirms every
-  change before saving.
+  in its menu. **Edit mission** opens the creation screen prefilled (period fixed); its bar says what
+  changed, and saving applies at once, back on the mission page that says it was saved.
   **Replace key**: the old key stops at once, no grace period; a machine key is replaced in one act.
   A teammate never sees a pending approval's arguments nor their fingerprint, and their home does
   not list the creator's requests.
@@ -989,7 +1001,8 @@ confirmed their list.
 ### 7.4 Create a mission
 
 Accounts, resources, macro-actions at a trust level per account, adjustments, period (default daily) and end (default
-never), confirmation of the explicit list; the key is revealed once with the setup kit.
+never), then "Create mission", with no confirmation (the explicit list is what is sent and checked
+again); the key is revealed once with the setup kit.
 
 ### 7.4 bis Edit a mission
 
