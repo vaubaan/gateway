@@ -65,7 +65,7 @@ async function missionOf(r: Rig, user: UserRecord): Promise<string> {
     periodAnchor: '2026-11-01T00:00:00.000Z',
     periodSeconds: 86_400,
     expiresAt: null,
-    connections: [{ connectionId: r.seeded.github.connection.id, resourceIds: [] }],
+    accounts: [{ accountId: r.seeded.github.account.id, resourceIds: [] }],
     policy: [
       { riskId: 'github.read-code', quota: 10, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' },
     ],

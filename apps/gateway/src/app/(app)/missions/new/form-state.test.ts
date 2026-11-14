@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { previewDraft } from '@/lib/missions/preview';
-import { acmeConnection } from '../../../../../tests/support/missions/testing';
+import { acmeAccount } from '../../../../../tests/support/missions/testing';
 
 import { actionRows } from '../cards/card-model';
 import {
@@ -25,7 +25,7 @@ import {
 } from './form-state';
 
 const NOW = new Date('2026-11-04T09:00:00.000Z');
-const acme = acmeConnection();
+const acme = acmeAccount();
 const context = [acme];
 
 function card(resourceIds: readonly string[], env: string | null, key = 'c1', future = false) {
@@ -53,7 +53,7 @@ describe('mission screen — a card and its macro-actions', () => {
     expect(Object.keys(staging.entries)).toEqual(['acme.read']);
     expect(levelOf(staging, 'read')).toBe('careful');
     const preview = previewDraft(
-      { connections: context, now: NOW },
+      { accounts: context, now: NOW },
       draftOf(context, withCards(staging), NOW),
     );
     expect(preview.ok).toBe(true);
@@ -138,7 +138,7 @@ describe('mission screen — a card and its macro-actions', () => {
 });
 
 describe('mission screen — the draft', () => {
-  it('sends one connection per account, its cards as resource sets, in screen order', () => {
+  it('sends one account per account, its cards as resource sets, in screen order', () => {
     const staging = setActionLevel(
       acme,
       card(['res-app-staging'], 'staging', 'a', true),
@@ -147,8 +147,8 @@ describe('mission screen — the draft', () => {
     );
     const prod = setActionLevel(acme, card(['res-app-prod'], 'prod', 'b'), 'read', 'trusting');
     const draft = draftOf(context, withCards(staging, prod), NOW);
-    expect(draft.connections).toHaveLength(1);
-    const sets = draft.connections[0]?.resource_sets ?? [];
+    expect(draft.accounts).toHaveLength(1);
+    const sets = draft.accounts[0]?.resource_sets ?? [];
     expect(sets.map((s) => s.resources)).toEqual([
       { scope: 'selected', resource_ids: ['res-app-staging'] },
       { scope: 'selected', resource_ids: ['res-app-prod'] },
@@ -157,14 +157,14 @@ describe('mission screen — the draft', () => {
     // The environment is said only by a card without resources.
     expect(sets.every((s) => s.env === undefined)).toBe(true);
     expect(sets[1]?.trust_levels).toEqual({ read: 'trusting' });
-    const preview = previewDraft({ connections: context, now: NOW }, draft);
+    const preview = previewDraft({ accounts: context, now: NOW }, draft);
     expect(preview.ok).toBe(true);
     expect(preview.resolved[0]?.resource_sets.map((s) => s.env)).toEqual(['staging', 'prod']);
   });
 
   it('names the environment of a card of future resources only', () => {
     const future = setActionLevel(acme, card([], 'prod', 'a', true), 'read', 'careful');
-    const set = draftOf(context, withCards(future), NOW).connections[0]?.resource_sets?.[0];
+    const set = draftOf(context, withCards(future), NOW).accounts[0]?.resource_sets?.[0];
     expect(set).toMatchObject({
       resources: { scope: 'selected', resource_ids: [] },
       future: true,
@@ -173,7 +173,7 @@ describe('mission screen — the draft', () => {
   });
 
   it('reaches an account that lists no resource as itself', () => {
-    const bare = acmeConnection({ resources: [] });
+    const bare = acmeAccount({ resources: [] });
     const c = setActionLevel(
       bare,
       newCard(bare.id, 'a', { resourceIds: [], future: false, env: null }),
@@ -181,13 +181,13 @@ describe('mission screen — the draft', () => {
       'careful',
     );
     const draft = draftOf([bare], withCards(c), NOW);
-    expect(draft.connections[0]?.resource_sets?.[0]?.resources).toEqual({ scope: 'all' });
-    expect(previewDraft({ connections: [bare], now: NOW }, draft).ok).toBe(true);
+    expect(draft.accounts[0]?.resource_sets?.[0]?.resources).toEqual({ scope: 'all' });
+    expect(previewDraft({ accounts: [bare], now: NOW }, draft).ok).toBe(true);
   });
 
   it('refuses a card that ticks nothing, and two cards that take the future of one environment', () => {
     const empty = previewDraft(
-      { connections: context, now: NOW },
+      { accounts: context, now: NOW },
       draftOf(context, withCards(card(['res-app-staging'], 'staging')), NOW),
     );
     expect(empty.issues.map((i) => i.code)).toContain('no-accepted-risk');
@@ -199,7 +199,7 @@ describe('mission screen — the draft', () => {
     );
     const b = setActionLevel(acme, card([], 'staging', 'b', true), 'read', 'careful');
     const twice = previewDraft(
-      { connections: context, now: NOW },
+      { accounts: context, now: NOW },
       draftOf(context, withCards(a, b), NOW),
     );
     expect(twice.issues.map((i) => i.code)).toContain('resource-sets-overlap');
@@ -226,7 +226,7 @@ describe('mission screen — loading a mission', () => {
   it('loads one card per set, with its lines, its level and its future', () => {
     const state = loadResolved(context, initialFormState(), [
       {
-        connection_id: acme.id,
+        account_id: acme.id,
         resource_sets: [
           {
             id: 'set-1',
@@ -250,7 +250,7 @@ describe('mission screen — loading a mission', () => {
   it('splits a set that mixed environments into one card per environment, each with its lines', () => {
     const state = loadResolved(context, initialFormState(), [
       {
-        connection_id: acme.id,
+        account_id: acme.id,
         resource_sets: [
           {
             id: 'legacy',
@@ -270,7 +270,7 @@ describe('mission screen — loading a mission', () => {
       [null, 'prod', ['acme.read', 'acme[prod].write']],
     ]);
     const preview = previewDraft(
-      { connections: context, now: NOW },
+      { accounts: context, now: NOW },
       draftOf(context, { ...state, name: 'x' }, NOW),
     );
     expect(preview.ok).toBe(true);
@@ -296,7 +296,7 @@ describe('mission screen — loading a mission', () => {
 
 describe('mission screen — what stands in the way, in words', () => {
   it('says each blocking reason with the account, and the card rules in the interface’s words', () => {
-    const at = { connection_id: acme.id };
+    const at = { account_id: acme.id };
     expect(issueSentence({ code: 'name-missing', message: '' }, context)).toBe(
       'Give the mission a name.',
     );

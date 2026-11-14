@@ -14,7 +14,7 @@ import {
   parseSlice,
   serializeSlice,
   slicePathIssue,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -971,7 +971,7 @@ describe('executeResend with mockFetch', () => {
 });
 
 describe('discoverResendResources with mockFetch', () => {
-  const connection = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+  const account = (fetch: typeof globalThis.fetch): AccountContext => ({
     credential,
     fetch,
   });
@@ -1007,7 +1007,7 @@ describe('discoverResendResources with mockFetch', () => {
         body: { data: [{ id: 'seg_news', name: 'Newsletter' }], has_more: false },
       },
     ]);
-    const resources = await resendPlugin.discoverResources(connection(fetch));
+    const resources = await resendPlugin.discoverResources(account(fetch));
     expect(resources).toEqual([
       {
         provider: 'resend',
@@ -1052,14 +1052,14 @@ describe('discoverResendResources with mockFetch', () => {
       { url: /\/domains\?limit=100$/, body: { data: [], has_more: false } },
       { url: /\/segments\?limit=100$/, body: { data: [], has_more: false } },
     ]);
-    expect(await resendPlugin.discoverResources(connection(fetch))).toEqual([]);
+    expect(await resendPlugin.discoverResources(account(fetch))).toEqual([]);
   });
 
   test('a restricted or invalid key surfaces as UpstreamAuthError', async () => {
     const fetch = mockFetch([
       { url: /\/domains/, status: 403, body: { statusCode: 403, name: 'restricted_api_key' } },
     ]);
-    await expect(resendPlugin.discoverResources(connection(fetch))).rejects.toMatchObject({
+    await expect(resendPlugin.discoverResources(account(fetch))).rejects.toMatchObject({
       name: 'UpstreamAuthError',
       upstreamStatus: 403,
     });

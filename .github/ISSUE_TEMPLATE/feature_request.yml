@@ -23,7 +23,7 @@ body:
       multiple: true
       options:
         - The operator who installs and runs the instance
-        - A user who connects providers and shares connections
+        - A user who connects providers and shares accounts
         - A user who issues missions and answers requests
         - A coding agent working under a mission
         - An agent that prepares missions for a user (management door)

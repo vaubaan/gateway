@@ -22,7 +22,7 @@ export const GITHUB_API_HEADERS = {
   'x-github-api-version': '2022-11-28',
 } as const;
 
-/** The headers of a REST call made with the connection's `token`. */
+/** The headers of a REST call made with the account's `token`. */
 export function githubApiHeaders(token: string): Readonly<Record<string, string>> {
   return { ...GITHUB_API_HEADERS, authorization: `Bearer ${token}` };
 }

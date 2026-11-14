@@ -22,7 +22,7 @@ export default async function AdminPluginsPage() {
   const { entries } = root.plugins;
   const icons = new Map(providerCards(root.registry).map((card) => [card.id, card.icon]));
   const [counts, validations] = await Promise.all([
-    root.limits.counts.connections(),
+    root.limits.counts.accounts(),
     Promise.all(
       entries.map((entry) =>
         entry.enabled ? root.telemetry.stats.statusFor(entry.id) : Promise.resolve(null),

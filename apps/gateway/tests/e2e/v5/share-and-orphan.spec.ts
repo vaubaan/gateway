@@ -1,9 +1,9 @@
 /**
  * "Give access, then remove it" in a browser, against an ephemeral instance
- * with a simulated IdP (spec §7.3, §7.8, §4.2 "Connections" / "Shares
+ * with a simulated IdP (spec §7.3, §7.8, §4.2 "Accounts" / "Shares
  * received" / "Administration", §2.3 "orphaned" / "unowned").
  *
- * Ines owns a GitHub account (a connection). She gives Joan access to two of
+ * Ines owns a GitHub account (an account). She gives Joan access to two of
  * its permissions through the "Give access" dialog; Joan finds it under
  * "Shared with you" on her Accounts page, issues a mission on it — her
  * creation screen offers nothing beyond what she was given — and an MCP
@@ -19,7 +19,7 @@
  *
  * The third is a disconnection under a two-account mission: the mission
  * loses that account only (ADR orphaned-missions-and-ownerless-connections,
- * amendment 2026-10-21) — refused `connection-revoked` there, served on the
+ * amendment 2026-10-21) — refused `account-revoked` there, served on the
  * other, and its page says which account is gone.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
@@ -91,12 +91,12 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   browser,
   request,
 }) => {
-  const connectionName = 'ines-org';
-  const { connection_id: connectionId } = await seedShareScenario(request, connectionName);
+  const accountName = 'ines-org';
+  const { account_id: accountId } = await seedShareScenario(request, accountName);
 
   // ── The owner shares ────────────────────────────────────────────────────
-  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
-  await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${accountId}`);
+  await expect(ines.getByRole('heading', { name: accountName, level: 1 })).toBeVisible();
   // Nobody but its owner holds it yet: one line, "all <every permission>".
   const access = ines.getByTestId('who-has-access');
   await expect(access.getByRole('row')).toHaveCount(2);
@@ -104,10 +104,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await ines.getByRole('link', { name: 'Give access', exact: true }).click();
   const dialog = ines.getByTestId('give-access-dialog');
   await expect(
-    dialog.getByRole('heading', { name: `Give access to ${connectionName}` }),
+    dialog.getByRole('heading', { name: `Give access to ${accountName}` }),
   ).toBeVisible();
   // The page of the account stays under the dialog.
-  await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeAttached();
+  await expect(ines.getByRole('heading', { name: accountName, level: 1 })).toBeAttached();
 
   // The dialog is who, starting points, the checklist with a "why?" per line, and a one-line summary.
   const summary = dialog.getByTestId('restriction-summary');
@@ -164,7 +164,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(submit).toHaveText('Give access · 2 permissions');
   await submit.click();
 
-  await expect(ines).toHaveURL(new RegExp(`/accounts/${connectionId}\\?notice=`));
+  await expect(ines).toHaveURL(new RegExp(`/accounts/${accountId}\\?notice=`));
   await expect(ines.getByText('Access given', { exact: true })).toBeVisible();
   await expect(
     ines.getByText(`${E2E_SHARE_TARGET.email} may now allow 2 permissions of this account`),
@@ -178,7 +178,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(held).toContainText(READ_CODE);
   await expect(held).toContainText(READ_META);
   await expect(held).not.toContainText('github.merge-protected');
-  await snap(ines, 'connection-shares');
+  await snap(ines, 'account-shares');
 
   // ── The beneficiary reads what she received ─────────────────────────────
   // The page that listed what was received is a region of Accounts: its old path leads there.
@@ -186,7 +186,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(joan).toHaveURL(/\/accounts$/);
   await expect(joan.getByRole('heading', { name: /^Shared with you/ })).toBeVisible();
   const shared = joan.getByTestId('shared-with-you');
-  const received = shared.getByRole('row').filter({ hasText: connectionName });
+  const received = shared.getByRole('row').filter({ hasText: accountName });
   await expect(received).toContainText(E2E_SHARE_OWNER.email);
   await expect(received).toContainText(`2 of ${GITHUB_PERMISSIONS}`);
   // The exact list, on demand.
@@ -197,7 +197,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await snap(joan, 'shares-received');
   // The account is not hers: she owns none, and its own page does not exist for her.
   await expect(joan.getByTestId('accounts-yours')).toHaveCount(0);
-  for (const path of [`/accounts/${connectionId}`, `/accounts/${connectionId}/share`]) {
+  for (const path of [`/accounts/${accountId}`, `/accounts/${accountId}/share`]) {
     const foreign = await joan.goto(path);
     expect(foreign?.status(), path).toBe(404);
   }
@@ -205,16 +205,16 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── …and issues a mission within it ─────────────────────────────────────
   await joan.goto('/missions/new');
   await joan.getByLabel('Mission name').fill('Read ines-org');
-  await addAccount(joan, `GitHub · ${connectionName}`);
+  await addAccount(joan, `GitHub · ${accountName}`);
   // A macro-action she may allow nothing of cannot be ticked; its (i) says why, permission
   // by permission, with no behaviour to choose.
-  const card = cardOf(joan, `GitHub · ${connectionName}`);
-  await expect(joan.getByLabel(`Ship on GitHub · ${connectionName}`)).toBeDisabled();
+  const card = cardOf(joan, `GitHub · ${accountName}`);
+  await expect(joan.getByLabel(`Ship on GitHub · ${accountName}`)).toBeDisabled();
   await card.getByRole('button', { name: 'About Ship' }).hover();
   const merge = permissionRow(card.getByTestId('info-ship'), 'github.merge-protected');
   await expect(merge).toContainText('outside what you may allow');
   await expect(merge.getByRole('radio')).toHaveCount(0);
-  await allowOnly(joan, `GitHub · ${connectionName}`, 'Read', [READ_CODE]);
+  await allowOnly(joan, `GitHub · ${accountName}`, 'Read', [READ_CODE]);
   const token = await createMission(joan);
 
   const executor = (agent = await connectAgent(token));
@@ -224,7 +224,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   // ── The owner revokes the share ─────────────────────────────────────────
   // The page names the mission that runs on her account, though it is not hers to open.
-  await ines.goto(`/accounts/${connectionId}`);
+  await ines.goto(`/accounts/${accountId}`);
   const missions = ines.getByTestId('account-missions');
   await expect(missions).toContainText('Read ines-org');
   await expect(missions).toContainText(E2E_SHARE_TARGET.email);
@@ -328,7 +328,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(joan.getByText('brought a mission back').first()).toBeVisible();
 
   // ── The owner revokes the share again, then closes the orphaned mission ──
-  await ines.goto(`/accounts/${connectionId}`);
+  await ines.goto(`/accounts/${accountId}`);
   await expect(missions).toContainText('Read ines-org');
   await expect(missions).not.toContainText('Needs an owner');
   await removeAccess(ines, 1);
@@ -336,11 +336,11 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(missions).toContainText('Needs an owner');
   await expect(missions).toContainText(E2E_SHARE_TARGET.email);
   await expect(missions).toContainText('its creator no longer holds the permissions it uses');
-  await snap(ines, 'connection-orphaned-missions');
+  await snap(ines, 'account-orphaned-missions');
   await missions.getByRole('button', { name: 'Close mission Read ines-org' }).click();
   const closing = ines.getByRole('dialog').filter({ hasText: 'Close Read ines-org?' });
   await closing.getByRole('textbox').fill('Read ines-org');
-  await snap(ines, 'connection-close-orphaned-confirm');
+  await snap(ines, 'account-close-orphaned-confirm');
   await closing.getByRole('button', { name: 'Close mission', exact: true }).click();
   // Closed for good: it is no longer among the missions that run or wait, only among the ended ones.
   await expect(missions).not.toContainText('Needs an owner');
@@ -359,19 +359,17 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   expect(await read()).toMatchObject({ outcome: 'refused' });
 
   // ── Disconnecting the account says what becomes of the access at the service ──
-  await ines.goto(`/accounts/${connectionId}`);
+  await ines.goto(`/accounts/${accountId}`);
   await ines.getByTestId('disconnect-account').click();
-  const disconnecting = ines
-    .getByRole('dialog')
-    .filter({ hasText: `Disconnect ${connectionName}?` });
+  const disconnecting = ines.getByRole('dialog').filter({ hasText: `Disconnect ${accountName}?` });
   // A pasted token is not deleted at GitHub by the gateway: the owner is told so first.
   await expect(disconnecting).toContainText('The gateway cannot withdraw the access at GitHub');
   await expect(disconnecting).toContainText('This cannot be undone');
-  await snap(ines, 'connection-revoke-dialog');
+  await snap(ines, 'account-revoke-dialog');
   // The button answers only once the name is typed.
   const disconnect = disconnecting.getByRole('button', { name: 'Disconnect', exact: true });
   await expect(disconnect).toBeDisabled();
-  await disconnecting.getByRole('textbox').fill(connectionName);
+  await disconnecting.getByRole('textbox').fill(accountName);
   await disconnect.click();
   await expect(ines.getByText('Account disconnected', { exact: true })).toBeVisible();
   // What is left to do at the service is said once: by the note of the act…
@@ -381,9 +379,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(ines.getByRole('main')).not.toContainText('by hand');
   // …which also says the credential is erased: the page does not say it a second time.
   await expect(ines.getByTestId('account-disconnected')).toHaveCount(0);
-  await snap(ines, 'connection-revoked-provider-grant');
+  await snap(ines, 'account-revoked-provider-grant');
   // …and, on every later visit, by the page itself.
-  await ines.goto(`/accounts/${connectionId}`);
+  await ines.goto(`/accounts/${accountId}`);
   await expect(ines.getByText('Account disconnected', { exact: true })).toHaveCount(0);
   await expect(ines.getByTestId('account-disconnected')).toBeVisible();
   await expect(ines.getByTestId('provider-grant')).toContainText(/Delete the token at GitHub/);
@@ -396,7 +394,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(
     ines.getByText('None of your accounts is connected.', { exact: false }),
   ).toBeVisible();
-  const listed = ines.getByRole('link', { name: connectionName, exact: true });
+  const listed = ines.getByRole('link', { name: accountName, exact: true });
   await expect(listed).toHaveCount(0);
   const disconnectedList = ines.getByTestId('accounts-disconnected');
   await disconnectedList
@@ -405,13 +403,13 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(listed).toBeVisible();
 });
 
-test('transfer to a group; the group empties; the operator reassigns the connection', async ({
+test('transfer to a group; the group empties; the operator reassigns the account', async ({
   browser,
   request,
 }) => {
-  const connectionName = 'ines-team-org';
+  const accountName = 'ines-team-org';
   const group = 'ines-team';
-  const { connection_id: connectionId } = await seedShareScenario(request, connectionName);
+  const { account_id: accountId } = await seedShareScenario(request, accountName);
 
   // ── The administrator keeps a local team ────────────────────────────────
   const ops = await browserOf(browser, request, E2E_OPERATOR, '/admin/groups');
@@ -429,7 +427,7 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await snap(ops, 'admin-groups');
 
   // ── The owner transfers her account to it ───────────────────────────────
-  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${accountId}`);
   await ines.getByRole('button', { name: 'Transfer ownership' }).click();
   // The transfer is asked first, with what it gives the team.
   const transfer = ines.getByTestId('transfer-dialog');
@@ -454,7 +452,7 @@ test('transfer to a group; the group empties; the operator reassigns the connect
 
   // Nobody owns it: it left the former owner's list.
   await ines.goto('/accounts');
-  await expect(ines.getByText(connectionName)).toHaveCount(0);
+  await expect(ines.getByText(accountName)).toHaveCount(0);
 
   // ── The administrator names a new owner ─────────────────────────────────
   // Setup says so, and leads there.
@@ -463,20 +461,20 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await ops.getByTestId('setup-ownerless').getByRole('link', { name: 'Name an owner' }).click();
   await expect(ops).toHaveURL(/\/accounts#without-owner$/);
   await expect(ops.getByRole('heading', { name: 'Accounts without owner' })).toBeVisible();
-  const ownerless = ops.getByRole('row').filter({ hasText: connectionName });
+  const ownerless = ops.getByRole('row').filter({ hasText: accountName });
   await expect(ownerless).toContainText(`the ${group} team`);
   await expect(ownerless).toContainText('Needs an owner');
   await snap(ops, 'accounts-without-owner');
   await ops.getByLabel(/^Email/).fill(E2E_SHARE_OWNER.email);
   await ops.getByRole('button', { name: 'Name an owner' }).click();
-  await expect(ops.getByText(`${connectionName} has a new owner`)).toBeVisible();
+  await expect(ops.getByText(`${accountName} has a new owner`)).toBeVisible();
   // Every account has an owner again: the region is gone, the old address lands on Accounts.
   await expect(ops.getByTestId('ownerless-accounts-section')).toHaveCount(0);
   await ops.goto('/admin/connections');
   await expect(ops).toHaveURL(/\/accounts#without-owner$/);
 
-  await ines.goto(`/accounts/${connectionId}`);
-  await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
+  await ines.goto(`/accounts/${accountId}`);
+  await expect(ines.getByRole('heading', { name: accountName, level: 1 })).toBeVisible();
   await expect(ines.getByText('you own it').first()).toBeVisible();
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toBeVisible();
 });
@@ -485,13 +483,13 @@ test('disconnecting one account of a two-account mission takes that account only
   browser,
   request,
 }) => {
-  const connectionName = 'ines-two-accounts';
+  const accountName = 'ines-two-accounts';
   const seeded = await request.post(controlUrl('/partial-loss-scenario'), {
-    data: { name: connectionName },
+    data: { name: accountName },
   });
   expect(seeded.ok()).toBe(true);
   const scenario = (await seeded.json()) as {
-    connection_id: string;
+    account_id: string;
     mission_id: string;
     mission_name: string;
     token: string;
@@ -506,16 +504,14 @@ test('disconnecting one account of a two-account mission takes that account only
     browser,
     request,
     E2E_SHARE_OWNER,
-    `/accounts/${scenario.connection_id}`,
+    `/accounts/${scenario.account_id}`,
   );
   await ines.getByTestId('disconnect-account').click();
-  const disconnecting = ines
-    .getByRole('dialog')
-    .filter({ hasText: `Disconnect ${connectionName}?` });
+  const disconnecting = ines.getByRole('dialog').filter({ hasText: `Disconnect ${accountName}?` });
   await expect(disconnecting).toContainText(
     'one that uses only this account stops, one that uses others keeps running on them',
   );
-  await disconnecting.getByRole('textbox').fill(connectionName);
+  await disconnecting.getByRole('textbox').fill(accountName);
   await disconnecting.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await expect(ines.getByText('Account disconnected', { exact: true })).toBeVisible();
   // The page of the disconnected account says the mission no longer uses it.
@@ -532,8 +528,8 @@ test('disconnecting one account of a two-account mission takes that account only
   });
   if (refused.outcome !== 'refused') throw new Error('a call through a lost account passed');
   expect(refused.refusal).toMatchObject({
-    code: 'connection-revoked',
-    cause: 'connection-revoked',
+    code: 'account-revoked',
+    cause: 'account-revoked',
     final: true,
   });
   expect(refused.refusal.hint).toContain('other accounts');
@@ -550,8 +546,8 @@ test('disconnecting one account of a two-account mission takes that account only
   await expect(ines.getByTestId('orphan-callout')).toHaveCount(0);
   const lost = ines.getByTestId('lost-accounts-callout');
   await expect(lost).toContainText('An account no longer serves this mission');
-  await expect(lost).toContainText(`“${connectionName}” was disconnected by its owner`);
+  await expect(lost).toContainText(`“${accountName}” was disconnected by its owner`);
   await expect(lost).toContainText('keeps running on its other accounts');
-  await expect(ines.getByTestId(`account-lost-${scenario.connection_id}`)).toBeVisible();
+  await expect(ines.getByTestId(`account-lost-${scenario.account_id}`)).toBeVisible();
   await snap(ines, 'mission-lost-an-account');
 });

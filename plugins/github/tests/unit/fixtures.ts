@@ -3,7 +3,7 @@
  * resources and a context builder. No network : every context carries a
  * `mockFetch`.
  */
-import type { ConnectionContext, ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
+import type { AccountContext, ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 /** A fine-grained token of the shape the field accepts ; it opens nothing. */
@@ -22,10 +22,10 @@ export const libRepo: Resource = {
   displayName: 'acme/lib',
 };
 
-export function connectionCtx(
+export function accountCtx(
   fetch: MockFetch,
-  overrides: Partial<ConnectionContext> = {},
-): ConnectionContext {
+  overrides: Partial<AccountContext> = {},
+): AccountContext {
   return { credential: tokenCredential, fetch, ...overrides };
 }
 
@@ -34,5 +34,5 @@ export function executeCtx(
   resources: readonly Resource[] = [appRepo],
   overrides: Partial<ExecuteContext> = {},
 ): ExecuteContext {
-  return { ...connectionCtx(fetch), resources, ...overrides };
+  return { ...accountCtx(fetch), resources, ...overrides };
 }

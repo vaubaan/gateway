@@ -23,11 +23,11 @@ const ACTIONS: MacroAction[] = [
     entries: [{ risk_id: 'acme.write', ...BUDGET }],
   },
 ];
-const MISSION: Pick<MissionRecord, 'createdAt' | 'connections'> = {
+const MISSION: Pick<MissionRecord, 'createdAt' | 'accounts'> = {
   createdAt: '2026-11-01T00:00:00.000Z',
-  connections: [
+  accounts: [
     {
-      connectionId: 'conn',
+      accountId: 'conn',
       resourceSets: [
         {
           id: 's1',

@@ -1,6 +1,6 @@
 /**
  * Authority (spec §3.1, §2.3 "orphaned" / "unowned"): what a user may accept on
- * a connection (owner, or the union of the shares they receive), whether a
+ * an account (owner, or the union of the shares they receive), whether a
  * mission is grounded right now (`orphaned` is that answer, derived on every
  * read and never stored), and what a membership change settles. Built
  * once by the composition root as `root.authority`.
@@ -11,13 +11,13 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
-import { ConnectionAuthorityService } from './authority-service';
+import { AccountAuthorityService } from './authority-service';
 import { MembershipSettler } from './membership';
 import { MissionGrounds } from './mission-grounds';
 import type { NotificationEvents } from '../notifications/events';
 
 export interface AuthorityModuleDeps {
-  readonly store: Pick<Store, 'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'audit'>;
+  readonly store: Pick<Store, 'users' | 'groups' | 'accounts' | 'shares' | 'missions' | 'audit'>;
   readonly registry: PluginRegistry;
   readonly logger: Logger;
   readonly clock?: Clock;
@@ -26,31 +26,31 @@ export interface AuthorityModuleDeps {
 }
 
 export interface AuthorityModule {
-  readonly service: ConnectionAuthorityService;
+  readonly service: AccountAuthorityService;
   readonly grounds: MissionGrounds;
   readonly membership: MembershipSettler;
 }
 
 export function createAuthorityModule(deps: AuthorityModuleDeps): AuthorityModule {
   const logger = deps.logger.child({ component: 'authority' });
-  const service = new ConnectionAuthorityService({
+  const service = new AccountAuthorityService({
     registry: deps.registry,
     users: deps.store.users,
     groups: deps.store.groups,
-    connections: deps.store.connections,
+    accounts: deps.store.accounts,
     shares: deps.store.shares,
   });
   const grounds = new MissionGrounds({
     authority: service,
     missions: deps.store.missions,
-    connections: deps.store.connections,
+    accounts: deps.store.accounts,
     audit: deps.store.audit,
     clock: deps.clock ?? systemClock,
     logger,
     notifications: deps.notifications,
   });
   const membership = new MembershipSettler({
-    connections: deps.store.connections,
+    accounts: deps.store.accounts,
     grounds,
     logger,
   });
@@ -58,7 +58,7 @@ export function createAuthorityModule(deps: AuthorityModuleDeps): AuthorityModul
 }
 
 export {
-  ConnectionAuthorityService,
+  AccountAuthorityService,
   type AuthorityBasis,
   type AuthorityGap,
   type AuthorityGaps,
@@ -66,8 +66,8 @@ export {
   type AuthorityRecheck,
   type AuthorityService,
   type Subject,
-  type ConnectionAuthority,
-  type ConnectionAuthorityDeps,
+  type AccountAuthority,
+  type AccountAuthorityDeps,
   type SupposedShare,
 } from './authority-service';
 export {

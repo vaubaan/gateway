@@ -9,7 +9,7 @@ import { CallPipeline } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { InstanceConfig } from '../config';
-import type { ConnectionsModule } from '../connections';
+import type { AccountsModule } from '../accounts';
 import type { ExecutionModule } from '../execution';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -24,7 +24,7 @@ export interface GitModuleDeps {
   readonly store: Pick<Store, 'pendingRefs'>;
   readonly registry: PluginRegistry;
   readonly execution: Pick<ExecutionModule, 'door' | 'stages' | 'credentialCache'>;
-  readonly connections: Pick<ConnectionsModule, 'credentials'>;
+  readonly accounts: Pick<AccountsModule, 'credentials'>;
   readonly logger: Logger;
   readonly clock?: Clock;
   /** Interval of the temporary-ref sweeper (tests). */
@@ -43,7 +43,7 @@ export function createGitModule(deps: GitModuleDeps): GitModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'git-remote' });
   const { stages, credentialCache } = deps.execution;
-  const credentials = deps.connections.credentials;
+  const credentials = deps.accounts.credentials;
   const jobs = new RelayJobs();
   const pipeline = new CallPipeline({
     ...stages,

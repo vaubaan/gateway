@@ -1,6 +1,6 @@
 /**
  * Shared rig of the audit suites: the real composition root on the `:memory:`
- * store (shipped plugins, seeded connections), a mission issued through the
+ * store (shipped plugins, seeded accounts), a mission issued through the
  * real `MissionService`, and calls seeded the way the execution door
  * produces them: `SessionService.recordCall` for the
  * session, counters and events, then the store's audit writer for the entry —
@@ -60,9 +60,9 @@ export async function openAuditRig(): Promise<OperatorRig> {
 export function githubDraft(rig: AuditRig, overrides: Partial<MissionDraft> = {}): MissionDraft {
   return {
     name: 'Ship the billing page',
-    connections: [
+    accounts: [
       {
-        connection_id: rig.seeded.github.connection.id,
+        account_id: rig.seeded.github.account.id,
         policy: [
           { risk_id: READ, quota: 5, rate_limit: { max: 50, window_seconds: 60 } },
           { risk_id: PR, quota: 2, rate_limit: { max: 50, window_seconds: 60 } },
@@ -103,8 +103,8 @@ export interface SeedCall {
    */
   readonly token?: TokenAttribution | null;
   readonly now?: Date;
-  /** Defaults to the mission's first connection. */
-  readonly connectionId?: string | null;
+  /** Defaults to the mission's first account. */
+  readonly accountId?: string | null;
   readonly resourceRef?: string | null;
   readonly upstreamError?: string | null;
 }
@@ -147,10 +147,8 @@ export async function seedCall(
     token_kind: token?.token_kind ?? null,
     token_holder: token?.holder ?? null,
     session_id: result.session_id,
-    connection_id:
-      call.connectionId === undefined
-        ? (mission.connections[0]?.connectionId ?? null)
-        : call.connectionId,
+    account_id:
+      call.accountId === undefined ? (mission.accounts[0]?.accountId ?? null) : call.accountId,
     resource_ref: call.resourceRef ?? 'acme/app',
     tool,
     arguments_hash: fingerprintArguments(args),
@@ -183,7 +181,7 @@ export const userViewer = (user: UserRecord, isOperator = false, groupIds: strin
 export const NO_FILTER = {
   missionId: null,
   user: null,
-  connectionId: null,
+  accountId: null,
   tool: null,
   decision: null,
   agentLabel: null,

@@ -24,7 +24,7 @@ import {
 } from '../../../src/server/audit';
 import type { PagePosition } from '../../../src/server/audit';
 import type { AuditCursor } from '../../../src/server/store';
-import { seedConnection } from '../../support/missions/testing';
+import { seedAccount } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -54,9 +54,9 @@ describe('audit search: visibility, filters, paging', () => {
     await rig.root.close();
   });
 
-  /** A mission Bob creates on a GitHub connection of his own: nothing of Ada's is in it. */
+  /** A mission Bob creates on a GitHub account of his own: nothing of Ada's is in it. */
   async function bobsMission(name = 'Bob own'): Promise<MissionRecord> {
-    const bobs = await seedConnection(rig.root.store, {
+    const bobs = await seedAccount(rig.root.store, {
       provider: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
@@ -66,7 +66,7 @@ describe('audit search: visibility, filters, paging', () => {
     return issueMission(rig, rig.seeded.bob, {
       ...draft,
       name,
-      connections: [{ ...draft.connections[0]!, connection_id: bobs.connection.id }],
+      accounts: [{ ...draft.accounts[0]!, account_id: bobs.account.id }],
     });
   }
 
@@ -116,37 +116,37 @@ describe('audit search: visibility, filters, paging', () => {
     expect(await search(userViewer(rig.seeded.bob))).toEqual([]);
   });
 
-  it('the owner of a connection sees the calls made through it by a mission they did not create', async () => {
-    // What a share will allow: Ada's mission calls through Bob's connection.
-    const bobs = await seedConnection(rig.root.store, {
+  it('the owner of an account sees the calls made through it by a mission they did not create', async () => {
+    // What a share will allow: Ada's mission calls through Bob's account.
+    const bobs = await seedAccount(rig.root.store, {
       provider: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
       resources: [],
     });
-    await seedCall(rig, mission, { connectionId: bobs.connection.id, resourceRef: 'bob/app' });
+    await seedCall(rig, mission, { accountId: bobs.account.id, resourceRef: 'bob/app' });
     await seedCall(rig, mission);
 
     const bob = calls(await search(userViewer(rig.seeded.bob)));
     expect(bob).toHaveLength(1);
-    expect(bob[0]?.connection).toEqual({
-      id: bobs.connection.id,
+    expect(bob[0]?.account).toEqual({
+      id: bobs.account.id,
       display_name: 'bob-org',
       provider: 'github',
     });
     expect(bob[0]?.resource_ref).toBe('bob/app');
   });
 
-  it('a member of the owning group sees the connection, a non-member does not', async () => {
+  it('a member of the owning group sees the account, a non-member does not', async () => {
     const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
-    const shared = await seedConnection(rig.root.store, {
+    const shared = await seedAccount(rig.root.store, {
       provider: 'github',
       owner: { kind: 'group', id: group.id },
       displayName: 'platform-org',
       resources: [],
     });
-    await seedCall(rig, mission, { connectionId: shared.connection.id });
+    await seedCall(rig, mission, { accountId: shared.account.id });
 
     expect(calls(await search(userViewer(rig.seeded.bob, false, [group.id])))).toHaveLength(1);
     expect(await search(userViewer(rig.seeded.bob))).toEqual([]);
@@ -247,11 +247,11 @@ describe('audit search: visibility, filters, paging', () => {
     });
   });
 
-  it('administrative entries: an operator sees them all, a user only those on their missions and connections', async () => {
+  it('administrative entries: an operator sees them all, a user only those on their missions and accounts', async () => {
     await configChange();
-    await rig.root.connections.service.updateResource(
+    await rig.root.accounts.service.updateResource(
       { user: rig.seeded.ada, groups: [] },
-      rig.seeded.github.connection.id,
+      rig.seeded.github.account.id,
       rig.seeded.github.resources[0]!.id,
       { hidden: true },
     );
@@ -280,15 +280,15 @@ describe('audit search: visibility, filters, paging', () => {
   });
 
   it('every dimension of the scope at once: created, member of, owned through a group — and nothing else', async () => {
-    // Bob created one mission, is a member of Ada's, and owns through a group a
-    // connection a third mission of Ada's calls through. A fourth mission is nobody's of his.
+    // Bob created one mission, is a member of Ada's, and owns through a group an
+    // account a third mission of Ada's calls through. A fourth mission is nobody's of his.
     const created = await bobsMission('Created by Bob');
     await rig.root.missions.team.addMember(rig.seeded.ada, mission.id, {
       email: rig.seeded.bob.email,
     });
     const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
-    const groupOwned = await seedConnection(rig.root.store, {
+    const groupOwned = await seedAccount(rig.root.store, {
       provider: 'github',
       owner: { kind: 'group', id: group.id },
       displayName: 'platform-org',
@@ -296,7 +296,7 @@ describe('audit search: visibility, filters, paging', () => {
     });
     const through = await issueMission(rig, rig.seeded.ada, {
       ...githubDraft(rig),
-      name: 'Through the group connection',
+      name: 'Through the group account',
     });
     const unrelated = await issueMission(rig, rig.seeded.ada, {
       ...githubDraft(rig),
@@ -306,7 +306,7 @@ describe('audit search: visibility, filters, paging', () => {
     await seedCall(rig, mission, { tool: 'github__list_branches' });
     await seedCall(rig, through, {
       tool: 'github__get_commit',
-      connectionId: groupOwned.connection.id,
+      accountId: groupOwned.account.id,
     });
     await seedCall(rig, unrelated, { tool: 'github__list_tags' });
 
@@ -315,7 +315,7 @@ describe('audit search: visibility, filters, paging', () => {
     expect(seen.map((c) => c.mission.name).sort()).toEqual([
       'Created by Bob',
       'Ship the billing page',
-      'Through the group connection',
+      'Through the group account',
     ]);
     // The fingerprint follows the standing, entry by entry.
     const shown: Record<string, boolean> = Object.fromEntries(
@@ -324,10 +324,10 @@ describe('audit search: visibility, filters, paging', () => {
     expect(shown).toEqual({
       'Created by Bob': true, // creator
       'Ship the billing page': false, // member only
-      'Through the group connection': true, // owner of the connection, through the group
+      'Through the group account': true, // owner of the account, through the group
     });
     expect(JSON.stringify(await search(bob))).not.toContain('Unrelated');
-    // Without the group, the connection's calls are gone; the two others stay.
+    // Without the group, the account's calls are gone; the two others stay.
     expect(
       calls(await search(userViewer(rig.seeded.bob)))
         .map((c) => c.mission.name)
@@ -402,17 +402,17 @@ describe('audit search: visibility, filters, paging', () => {
 
   it('names the object of every administrative entry, whatever its type', async () => {
     const { store } = rig.root;
-    const connection = rig.seeded.github.connection;
+    const account = rig.seeded.github.account;
     const group = await store.groups.createLocal('Platform');
     if (!group) throw new Error('expected a group');
     const toUser = await store.shares.create({
-      connectionId: connection.id,
+      accountId: account.id,
       target: { kind: 'user', id: rig.seeded.bob.id },
       restriction: [READ],
       createdByUserId: rig.seeded.ada.id,
     });
     const toGroup = await store.shares.create({
-      connectionId: connection.id,
+      accountId: account.id,
       target: { kind: 'group', id: group.id },
       restriction: [READ],
       createdByUserId: rig.seeded.ada.id,
@@ -430,7 +430,7 @@ describe('audit search: visibility, filters, paging', () => {
     // One entry per object type, with the act a real writer uses for it.
     const objects: readonly (readonly [AdminAct, AdminObjectType, string])[] = [
       ['mission-rotated', 'mission', mission.id],
-      ['resource-edited', 'connection', connection.id],
+      ['resource-edited', 'account', account.id],
       ['share-created', 'share', toUser.id],
       ['share-revoked', 'share', toGroup.id],
       ['group-created', 'group', group.id],
@@ -449,7 +449,7 @@ describe('audit search: visibility, filters, paging', () => {
       ['delegation-revoked', 'delegation', 'no-such-delegation'],
       ['request-refused', 'request', 'no-such-request'],
       ['user-reactivated', 'user', 'no-such-user'],
-      ['connection-revoked', 'connection', 'not-created:github'],
+      ['account-revoked', 'account', 'not-created:github'],
     ];
     const base = Date.now() + 1000;
     for (const [i, [act, type, id]] of objects.entries()) {
@@ -460,8 +460,8 @@ describe('audit search: visibility, filters, paging', () => {
         act,
         object: { type, id },
         before: null,
-        // A share entry names its connection, as the share service writes it.
-        after: type === 'share' ? { connection_id: connection.id } : null,
+        // A share entry names its account, as the share service writes it.
+        after: type === 'share' ? { account_id: account.id } : null,
         delegated_client_id: null,
       });
     }
@@ -474,9 +474,9 @@ describe('audit search: visibility, filters, paging', () => {
       .map((e) => [e.object.type, e.object.label]);
     expect(labels).toEqual([
       ['mission', 'Ship the billing page'],
-      ['connection', connection.displayName],
-      ['share', `${connection.displayName} → bob@example.com`],
-      ['share', `${connection.displayName} → Platform`],
+      ['account', account.displayName],
+      ['share', `${account.displayName} → bob@example.com`],
+      ['share', `${account.displayName} → Platform`],
       ['group', 'Platform'],
       ['oauth-client', null],
       ['delegation', null],
@@ -490,12 +490,12 @@ describe('audit search: visibility, filters, paging', () => {
       ['delegation', null],
       ['request', null],
       ['user', null],
-      ['connection', null],
+      ['account', null],
     ]);
     // Every object type has a row above: a type added to the union must be added here.
     const covered = new Set(objects.map(([, type]) => type));
     const every: Record<AdminObjectType, true> = {
-      connection: true,
+      account: true,
       share: true,
       mission: true,
       request: true,
@@ -534,7 +534,7 @@ describe('audit search: visibility, filters, paging', () => {
     const bob = userViewer(rig.seeded.bob);
     expect(await search(bob, { missionId: mission.id })).toEqual([]);
     expect(await search(bob, { user: 'ada@example.com' })).toEqual([]);
-    expect(await search(bob, { connectionId: rig.seeded.github.connection.id })).toEqual([]);
+    expect(await search(bob, { accountId: rig.seeded.github.account.id })).toEqual([]);
     expect(await search(bob, { kind: 'admin' })).toEqual([]);
   });
 
@@ -572,8 +572,8 @@ describe('audit search: visibility, filters, paging', () => {
     beforeEach(async () => {
       other = await issueMission(rig, rig.seeded.ada, {
         name: 'Rotate the keys',
-        connections: [
-          { connection_id: rig.seeded.supabase.connection.id, trust_levels: { query: 'trusting' } },
+        accounts: [
+          { account_id: rig.seeded.supabase.account.id, trust_levels: { query: 'trusting' } },
         ],
         period: { kind: 'one-off' },
         expires_at: null,
@@ -611,10 +611,10 @@ describe('audit search: visibility, filters, paging', () => {
       expect(acts(entries)).toEqual(['mission-issued']);
     });
 
-    it('by connection', async () => {
-      const entries = await search(ada(), { connectionId: rig.seeded.github.connection.id });
+    it('by account', async () => {
+      const entries = await search(ada(), { accountId: rig.seeded.github.account.id });
       expect(calls(entries)).toHaveLength(4);
-      expect(calls(entries).every((c) => c.connection?.provider === 'github')).toBe(true);
+      expect(calls(entries).every((c) => c.account?.provider === 'github')).toBe(true);
     });
 
     it('by tool, exact name', async () => {
@@ -888,17 +888,17 @@ describe('audit search: visibility, filters, paging', () => {
     });
   });
 
-  it('offers the viewer their own missions and connections as filter values', async () => {
+  it('offers the viewer their own missions and accounts as filter values', async () => {
     const options = await rig.root.audit.query.filterOptions(userViewer(rig.seeded.ada));
     expect(options.missions).toEqual([{ id: mission.id, name: 'Ship the billing page' }]);
-    expect(options.connections.map((c) => c.label)).toContain('github — acme-org');
+    expect(options.accounts.map((c) => c.label)).toContain('github — acme-org');
     expect(await rig.root.audit.query.filterOptions(userViewer(rig.seeded.bob))).toEqual({
       missions: [],
-      connections: [],
+      accounts: [],
     });
     expect(await rig.root.audit.query.filterOptions(BOOTSTRAP)).toEqual({
       missions: [],
-      connections: [],
+      accounts: [],
     });
   });
 });

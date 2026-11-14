@@ -20,7 +20,7 @@ multiplies one decision). Who it comes _from_ is the mission's scope, not a risk
 
 ## 1. Vocabulary
 
-- **Account** — what an API key authenticates; one connection.
+- **Account** — what an API key authenticates; one account.
 - **Sending domain** — a domain of the account to send from; a resource.
 - **Segment** — a named contact list broadcasts target; a resource.
 - **Contact** — a subscriber; personal data; in zero or more segments. **Member** — a contact as a
@@ -44,7 +44,7 @@ One plane, `email`: `domain` (with `dns-record`, and the synthetic `to-zone` and
 - **Contacts and sent emails are not confined by resource selection**: a contact risk reaches every
   contact of the account; only membership is confined to the selected segments.
 
-## 3. Connection and resources
+## 3. Account and resources
 
 ### 3.1 Credential
 

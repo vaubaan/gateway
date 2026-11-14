@@ -7,7 +7,7 @@
  * scope. The distinctive feature is the **`mode` (test/live) layer** marked
  * `envScopable` : a Stripe API key speaks to exactly one mode, the two
  * namespaces are disjoint upstream (`cus_*`, `prod_*`, `ch_*` never cross),
- * and the connection exposes one resource per mode (`acct_123/test`,
+ * and the account exposes one resource per mode (`acct_123/test`,
  * `acct_123/live`) whose `env` is that mode. The runtime qualifies
  * env-scoped risks as `stripe[live].refund-create` vs `stripe[test].refund-create`.
  *
@@ -47,7 +47,7 @@ export const stripeDataModel: DataModel = {
           cardinalities: ['one'],
           description:
             'The Stripe merchant account. The ref of a resource is `<account id>/<mode>` ; ' +
-            'a connection holds one account and up to two modes.',
+            'an account holds one account and up to two modes.',
         },
         {
           name: 'mode',

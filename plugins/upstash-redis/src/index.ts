@@ -79,7 +79,7 @@ export const upstashRedisPlugin = definePlugin({
   tools: upstashRedisTools,
   toolTitles: upstashRedisToolTitles,
   examples: upstashRedisExamples,
-  // A database is what an Upstash connection lists : a created one is
+  // A database is what an Upstash account lists : a created one is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createDatabase],
   // Read from the call's answer: the mission that created it reaches it at once

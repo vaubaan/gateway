@@ -22,7 +22,7 @@ prefixed `vaubaan__`:
 
 | Tool                            | Risk                         | Macro-action     |
 | ------------------------------- | ---------------------------- | ---------------- |
-| `vaubaan__list_my_connections`  | `vaubaan.read-setup`         | Read my setup    |
+| `vaubaan__list_my_accounts`     | `vaubaan.read-setup`         | Read my setup    |
 | `vaubaan__get_catalog`          | `vaubaan.read-setup`         | Read my setup    |
 | `vaubaan__preview_policy`       | `vaubaan.read-setup`         | Read my setup    |
 | `vaubaan__list_my_missions`     | `vaubaan.read-missions`      | Read my setup    |

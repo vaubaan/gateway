@@ -20,13 +20,13 @@ export const REFUSAL_CODES = [
   'resource-not-in-mission',
   /** Sliding-window rate limit of a risk exceeded. */
   'rate-limited',
-  /** The connection is `expired`: its owner reconnects it. */
-  'connection-unavailable',
+  /** The account is `expired`: its owner reconnects it. */
+  'account-unavailable',
   /**
-   * The connection no longer serves this mission: it was revoked (for good), or the
-   * creator's access to it was withdrawn. The mission still serves its other connections.
+   * The account no longer serves this mission: it was revoked (for good), or the
+   * creator's access to it was withdrawn. The mission still serves its other accounts.
    */
-  'connection-revoked',
+  'account-revoked',
   /** The mission is `expired`, `orphaned` or `revoked`. */
   'mission-inactive',
   /** A mission token on the management surface, or a delegated token on the execution surface. */

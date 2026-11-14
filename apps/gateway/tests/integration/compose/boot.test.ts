@@ -51,11 +51,11 @@ describe('composition root over the embedded SQLite store', () => {
 
     expect(existsSync(path)).toBe(true);
     expect(root.store.kind).toBe('sqlite');
-    expect(root.store.schemaVersion).toBe(35);
+    expect(root.store.schemaVersion).toBe(36);
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(35);
+    ).toBe(36);
     await expect(root.store.ping()).resolves.toBeUndefined();
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
 
@@ -68,7 +68,7 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":35');
+    expect(log).toContain('"schema_version":36');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
@@ -88,12 +88,12 @@ describe('composition root over the embedded SQLite store', () => {
 
     // Same master key (validEnv is stable per process), same file: the secret opens.
     const second = await boot(path);
-    expect(second.store.schemaVersion).toBe(35);
+    expect(second.store.schemaVersion).toBe(36);
     expect(
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(35);
+    ).toBe(36);
     await expect(second.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
       's3cret-value',
     );
@@ -106,7 +106,7 @@ describe('composition root over the embedded SQLite store', () => {
       subject: 'u1',
       email: 'u1@example.test',
     });
-    const connection = await root.store.connections.create({
+    const account = await root.store.accounts.create({
       provider: 'acme',
       owner: { kind: 'user', id: owner.id },
       displayName: 'Acme',
@@ -114,7 +114,7 @@ describe('composition root over the embedded SQLite store', () => {
     });
     await expect(
       root.store.shares.create({
-        connectionId: connection.id,
+        accountId: account.id,
         target: { kind: 'user', id: owner.id },
         restriction: ['acme.read-things'],
         createdByUserId: owner.id,

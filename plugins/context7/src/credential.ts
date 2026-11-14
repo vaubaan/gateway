@@ -1,10 +1,10 @@
 /**
  * Credential of the `context7` provider : a Context7 API key pasted by hand.
  *
- * Spec     : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2.
+ * Spec     : docs/spec/vaubaan-gateway.md §0 "Account", §7.2.
  * Handbook : docs/handbook/providers/context7.md.
  *
- * The key is kept by the gateway as a connection, encrypted ; it is never in
+ * The key is kept by the gateway as an account, encrypted ; it is never in
  * an environment variable or in an MCP client's configuration. It is sent
  * as `Authorization: Bearer <key>`, the documented form, to the MCP server
  * and to the REST API alike.
@@ -15,7 +15,7 @@
  * documented : removing an account says where to revoke the key.
  */
 
-import type { ApiKeyCredentialSpec, ConnectionContext, CredentialCheck } from '@vaubaan/plugin-sdk';
+import type { ApiKeyCredentialSpec, AccountContext, CredentialCheck } from '@vaubaan/plugin-sdk';
 
 import { API_KEY_FIELD } from './identity.ts';
 import { readPlan } from './usage.ts';
@@ -30,7 +30,7 @@ export const CONTEXT7_MANUAL_REVOCATION =
  * The key, asked about before anything is stored : `GET /v2/usage` answers
  * the plan of its teamspace, and is not counted on the quota.
  */
-export async function verifyContext7Key(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyContext7Key(ctx: AccountContext): Promise<CredentialCheck> {
   const plan = await readPlan(ctx);
   return { account: `Context7 ${plan} plan`, expiresAt: null };
 }

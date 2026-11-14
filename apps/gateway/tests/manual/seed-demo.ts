@@ -7,7 +7,7 @@
  * operator and a user would create through the interface:
  *
  *   - a user, as the IdP would announce them;
- *   - a GitHub connection owned by that user, with two repositories. Its
+ *   - a GitHub account owned by that user, with two repositories. Its
  *     credential is a placeholder token: enough to issue a mission and list
  *     tools, not to call GitHub;
  *   - a mission on one repository with the plugin's Read macro-action at
@@ -19,7 +19,7 @@
  *   npx tsx tests/manual/seed-demo.ts
  */
 import { buildRoot } from '../../src/server/compose/root';
-import { serializeSecret } from '../../src/server/connections';
+import { serializeSecret } from '../../src/server/accounts';
 
 async function main(): Promise<void> {
   const root = await buildRoot({ logWrite: () => undefined });
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
       email: 'demo@example.com',
       displayName: 'Demo user',
     });
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'acme-org',
@@ -41,15 +41,15 @@ async function main(): Promise<void> {
         metadata: {},
       }),
     });
-    await store.connections.syncDiscoveredResources(connection.id, [
+    await store.accounts.syncDiscoveredResources(account.id, [
       { ref: 'acme/app', displayName: 'acme/app', env: null },
       { ref: 'acme/infra', displayName: 'acme/infra', env: null },
     ]);
     const issued = await root.missions.service.issue(user, {
       name: 'Read the app repository',
-      connections: [
+      accounts: [
         {
-          connection_id: connection.id,
+          account_id: account.id,
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
           trust_levels: { read: 'careful' },
         },

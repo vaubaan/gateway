@@ -51,9 +51,11 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 7 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 8 (2026-11-14) : wording only, one word per thing (ADR
+#   one-word-per-thing-account-service-plugin).
 provider: miro
-catalog_version: 7
-catalog_date: 2026-11-13
+catalog_version: 8
+catalog_date: 2026-11-14
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -205,7 +207,7 @@ risks:
   - id: miro.board-create
     label: 'Create a board'
     reason: >-
-      Creates a new board in the team chosen at connection. It becomes a
+      Creates a new board in the team chosen when the account was connected. It becomes a
       resource of the account at once and is reached by the missions
       issued on the whole account. The board stays at Miro until someone
       deletes it there.

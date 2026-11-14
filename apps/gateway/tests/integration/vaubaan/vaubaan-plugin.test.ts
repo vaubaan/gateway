@@ -3,7 +3,7 @@
  * client holding the key of a platform management mission (spec §4.1 bis, §6,
  * §8, §10; ADR platform-management-is-a-plugin-on-the-execution-door).
  *
- * Ada owns the connections; Bob holds a share of her GitHub connection limited
+ * Ada owns the accounts; Bob holds a share of her GitHub account limited
  * to three risks. Each connects their Vaubaan account (one click), issues a
  * platform mission on it and hands its key to an agent; every assertion is
  * about what that agent can do **as its user and no more**, through the same
@@ -13,7 +13,7 @@ import type { VaubaanRefusal } from '@vaubaan/plugin-vaubaan';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
-  ConnectionsAnswer,
+  AccountsAnswer,
   IssuedMissionAnswer,
   MissionsAnswer,
   PreviewView,
@@ -37,7 +37,7 @@ import {
 const SHARED = ['github.read-code', 'github.read-meta', 'github.create-pr'] as const;
 const NOT_SHARED = 'github.feature-branch-write';
 const VAUBAAN_TOOLS = [
-  'vaubaan__list_my_connections',
+  'vaubaan__list_my_accounts',
   'vaubaan__get_catalog',
   'vaubaan__list_my_missions',
   'vaubaan__preview_policy',
@@ -54,11 +54,11 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
 
   beforeEach(async () => {
     rig = await openVaubaanRig();
-    github = rig.seeded.github.connection.id;
+    github = rig.seeded.github.account.id;
   });
   afterEach(() => rig.close());
 
-  /** Ada shares her GitHub connection with Bob, limited to `SHARED`. */
+  /** Ada shares her GitHub account with Bob, limited to `SHARED`. */
   async function shareWithBob(riskIds: readonly string[] = SHARED) {
     return rig.root.shares.service.share(await rig.actor(rig.seeded.ada), github, {
       target: { kind: 'user', email: rig.seeded.bob.email },
@@ -95,59 +95,59 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
 
   it('the Vaubaan account is one per person: connecting again hands back the same one', async () => {
     const actor = await rig.actor(rig.seeded.ada);
-    const first = await rig.root.connections.service.start(actor, 'vaubaan');
-    const second = await rig.root.connections.service.start(actor, 'vaubaan');
+    const first = await rig.root.accounts.service.start(actor, 'vaubaan');
+    const second = await rig.root.accounts.service.start(actor, 'vaubaan');
     if (first.kind !== 'connected' || second.kind !== 'connected') throw new Error('one click');
-    expect(second.connection.id).toBe(first.connection.id);
-    expect(first.connection).toMatchObject({
+    expect(second.account.id).toBe(first.account.id);
+    expect(first.account).toMatchObject({
       provider: 'vaubaan',
       owner: { kind: 'user', id: rig.seeded.ada.id },
       metadata: { credential_kind: 'host' },
     });
-    expect(await rig.root.connections.service.get(actor, first.connection.id)).toMatchObject({
+    expect(await rig.root.accounts.service.get(actor, first.account.id)).toMatchObject({
       resources: [],
     });
   });
 
   it('nobody can be given access to a Vaubaan account, nor can it be transferred', async () => {
     const actor = await rig.actor(rig.seeded.ada);
-    const started = await rig.root.connections.service.start(actor, 'vaubaan');
+    const started = await rig.root.accounts.service.start(actor, 'vaubaan');
     if (started.kind !== 'connected') throw new Error('one click');
-    const context = await rig.root.shares.service.contextFor(actor, started.connection.id);
-    expect(context.unshareable).toBe('connection-personal');
+    const context = await rig.root.shares.service.contextFor(actor, started.account.id);
+    expect(context.unshareable).toBe('account-personal');
     await expect(
-      rig.root.shares.service.share(actor, started.connection.id, {
+      rig.root.shares.service.share(actor, started.account.id, {
         target: { kind: 'user', email: rig.seeded.bob.email },
         riskIds: ['vaubaan.read-setup'],
       }),
-    ).rejects.toMatchObject({ code: 'connection-personal' });
-    expect(rig.root.connections.service.transferTargets(actor, started.connection)).toEqual([]);
+    ).rejects.toMatchObject({ code: 'account-personal' });
+    expect(rig.root.accounts.service.transferTargets(actor, started.account)).toEqual([]);
   });
 
   describe('reading the authority', () => {
-    it('an owner sees their connections, the Vaubaan account among them, with the whole catalog', async () => {
+    it('an owner sees their accounts, the Vaubaan account among them, with the whole catalog', async () => {
       const agent = await rig.agentOf(ADA);
-      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
-      expect(data.connections.map((c) => c.provider).sort()).toEqual([
+      const { data } = await agent.call<AccountsAnswer>('list_my_accounts');
+      expect(data.accounts.map((c) => c.provider).sort()).toEqual([
         'github',
         'gmail',
         'supabase',
         'vaubaan',
         'vercel',
       ]);
-      const gh = data.connections.find((c) => c.connection_id === github)!;
+      const gh = data.accounts.find((c) => c.account_id === github)!;
       expect(gh.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
       expect(gh.authority.risk_ids).toContain(NOT_SHARED);
       expect(gh.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/infra', 'acme/web']);
       await agent.close();
     });
 
-    it('a beneficiary sees the shared connection with the exact restriction, and nothing else of the owner', async () => {
+    it('a beneficiary sees the shared account with the exact restriction, and nothing else of the owner', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
-      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
-      expect(data.connections.map((c) => c.provider).sort()).toEqual(['github', 'vaubaan']);
-      const gh = data.connections.find((c) => c.provider === 'github')!;
+      const { data } = await agent.call<AccountsAnswer>('list_my_accounts');
+      expect(data.accounts.map((c) => c.provider).sort()).toEqual(['github', 'vaubaan']);
+      const gh = data.accounts.find((c) => c.provider === 'github')!;
       expect(gh.authority).toEqual({ basis: 'share', risk_ids: [...SHARED], whole_catalog: false });
       await agent.close();
     });
@@ -258,7 +258,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
       expect(answer.isError).toBe(true);
       expect(answer.data.error).toMatchObject({
         code: 'draft-refused',
-        uncovered: [{ connection_id: github, provider: 'github', risk_ids: [NOT_SHARED] }],
+        uncovered: [{ account_id: github, provider: 'github', risk_ids: [NOT_SHARED] }],
       });
       expect(await rig.root.store.missions.listForCreator(rig.seeded.bob.id)).toHaveLength(before);
       await agent.close();
@@ -267,10 +267,10 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     it('a mission issued here never carries a Vaubaan account (the self rule)', async () => {
       const agent = await rig.agentOf(ADA);
       const before = (await rig.root.store.missions.listForCreator(rig.seeded.ada.id)).length;
-      for (const vaubaan of [{ connection_id: agent.accountId }, { provider: 'vaubaan' }]) {
+      for (const vaubaan of [{ account_id: agent.accountId }, { provider: 'vaubaan' }]) {
         const answer = await agent.call<Refused>('issue_mission', {
           name: 'A second platform agent',
-          connections: [{ ...vaubaan, trust_levels: { read: 'careful' } }],
+          accounts: [{ ...vaubaan, trust_levels: { read: 'careful' } }],
           period: { kind: 'one-off' },
           expires_at: null,
         });
@@ -393,7 +393,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
         rotate: 'careful',
         stop: 'careful',
       });
-      expect((await agent.call('list_my_connections')).isError).toBe(false);
+      expect((await agent.call('list_my_accounts')).isError).toBe(false);
       const asked = await agent.call('issue_mission', draftOn(github, ['github.read-code']));
       expect(asked.protocolError).toBe(true);
       expect(asked.code).toBe('approval-required');
@@ -438,7 +438,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
 
     it('disconnecting the Vaubaan account stops the agent at its next call', async () => {
       const agent = await rig.agentOf(ADA);
-      await rig.root.connections.service.revoke(await rig.actor(rig.seeded.ada), agent.accountId);
+      await rig.root.accounts.service.revoke(await rig.actor(rig.seeded.ada), agent.accountId);
       const answer = await agent.call('list_my_missions');
       expect(answer.isError).toBe(true);
       expect(await executionSays(agent.token)).not.toBe('ok');
@@ -451,7 +451,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({
       error: 'management-door-retired',
-      hint: expect.stringContaining('vaubaan__list_my_connections') as string,
+      hint: expect.stringContaining('vaubaan__list_my_accounts') as string,
     });
   });
 });

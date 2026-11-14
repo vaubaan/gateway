@@ -2,7 +2,7 @@
  * The gateway's second factor, for every person whatever their sign-in provider (ADR
  * administrators-live-in-the-instance, §7): enrolled at the first sign-in, asked at
  * every one after, waived per provider by an administrator — always, or when the ID
- * token says `mfa` —, never for an administrator; the factors local accounts kept
+ * token says `mfa` —, never for an administrator; the factors sign-in accounts kept
  * move to their people at the boot.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -136,7 +136,7 @@ describe('a second factor for everyone', () => {
     expect(without.headers.get('location')).toBe('/login/second-factor');
   });
 
-  it('local accounts are never waived, GitHub only "always"; the change is audited', async () => {
+  it('sign-in accounts are never waived, GitHub only "always"; the change is audited', async () => {
     await root.auth.providers.save(
       {
         id: 'local',
@@ -190,7 +190,7 @@ describe('a second factor for everyone', () => {
     expect(acts).toContain('second-factor-waiver-changed');
   });
 
-  it('the factor a local account kept moves to its person at the boot, and still works', async () => {
+  it('the factor a sign-in account kept moves to its person at the boot, and still works', async () => {
     await root.auth.providers.save(
       {
         id: 'local',
@@ -204,22 +204,22 @@ describe('a second factor for everyone', () => {
       },
       'create',
     );
-    const account = await root.store.localAccounts.create({
+    const account = await root.store.signInAccounts.create({
       provider: 'local',
       email: 'eve@example.com',
     });
     const secret = root.auth.secondFactors.beginEnrolment('Test', 'eve@example.com').secret;
     // As a version before this one stored it: on the account.
-    await root.store.localAccounts.writeSecret(account!.id, 'totp', secret);
-    await root.store.localAccounts.writeSecret(account!.id, 'recovery', '[]');
-    await root.store.localAccounts.setTotp(account!.id, {
+    await root.store.signInAccounts.writeSecret(account!.id, 'totp', secret);
+    await root.store.signInAccounts.writeSecret(account!.id, 'recovery', '[]');
+    await root.store.signInAccounts.setTotp(account!.id, {
       confirmedAt: '2026-10-19T10:00:00.000Z',
       lastStep: 1,
     });
 
     expect(await root.auth.secondFactors.adoptLocalFactors(['local'])).toBe(1);
     expect(await root.auth.secondFactors.adoptLocalFactors(['local'])).toBe(0);
-    expect(await root.store.localAccounts.readSecret(account!.id, 'totp')).toBeNull();
+    expect(await root.store.signInAccounts.readSecret(account!.id, 'totp')).toBeNull();
     const user = await root.store.users.getByIdentity('urn:vaubaan:local:local', account!.id);
     expect(await root.auth.secondFactors.has(user!.id)).toBe(true);
     const bytes = base32Decode(secret)!;

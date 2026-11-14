@@ -48,7 +48,7 @@ and the call pipeline whose stages the application fills
 
 ## Traps
 
-- `BearerKind` (what opens a door) is not `CredentialKind` (how a connection
+- `BearerKind` (what opens a door) is not `CredentialKind` (how an account
   authenticates to its provider).
 - A stopped mission token (`token-rotated`, `holder-deactivated`, …) is an
   `AuthError` with a reason, not a refusal: one stopped token says nothing

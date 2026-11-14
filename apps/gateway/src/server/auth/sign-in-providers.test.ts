@@ -78,7 +78,7 @@ describe('SignInProvidersService', () => {
     expect(
       setUpElsewhere((await moved.views())[0]!, new URL('https://restored.example')),
     ).toBeNull();
-    // Local accounts are set up nowhere.
+    // Sign-in accounts are set up nowhere.
     await s.save({ ...GITHUB, id: 'local', kind: 'local', name: 'Local' }, 'create');
     expect((await s.state('local')).registeredFor).toBeNull();
   });

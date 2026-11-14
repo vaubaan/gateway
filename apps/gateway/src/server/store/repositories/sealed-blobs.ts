@@ -4,7 +4,7 @@
  *
  * Each column holds AEAD blobs, bound to its row by associated data:
  *
- *   connections.credential_blob              the connection id
+ *   accounts.credential_blob                 the account id (table `connections` before 0036)
  *   instance_config.secret_blob              `instance_config:<key>` (the VAPID key pair too)
  *   requests.args_blob                       `request:<id>`
  *   local_secrets.blob                       `local-secret:<id>`
@@ -29,16 +29,19 @@ import type { Encryptor } from '../encryptor.ts';
 import { secretAd } from './config.ts';
 import type { RepoContext } from './context.ts';
 import { requestAd } from './requests.ts';
-import { localSecretAd } from './local-accounts.ts';
+import { localSecretAd } from './sign-in-accounts.ts';
 import { secondFactorSecretAd } from './second-factors.ts';
 import { deviceSubscriptionAd } from './notification-devices.ts';
 import { addressUrlAd } from './notification-addresses.ts';
 
 export const SEALED_COLUMNS = [
   {
-    table: 'connections',
+    table: 'accounts',
+    /** Its name before migration 0036 (ADR one-word-per-thing-account-service-plugin). */
+    legacyTable: 'connections',
     idColumn: 'id',
     blobColumn: 'credential_blob',
+    /** The account id itself, byte for byte: never prefixed, never renamed. */
     associatedData: (id: string): string => id,
   },
   {
@@ -159,12 +162,27 @@ export function sealedVersionsOf(db: StoreDb): SealedVersionCount[] {
   return SEALED_COLUMNS.flatMap((column) =>
     db
       .prepare<[], { key_version: number; count: number }>(
-        `SELECT key_version, COUNT(*) AS count FROM ${column.table}
+        `SELECT key_version, COUNT(*) AS count FROM ${tableOf(db, column)}
          WHERE ${column.blobColumn} IS NOT NULL GROUP BY key_version ORDER BY key_version`,
       )
       .all()
       .map((row) => ({ table: column.table, keyVersion: row.key_version, count: row.count })),
   );
+}
+
+/**
+ * The name a sealed table has in this database: a copy written before migration 0036
+ * (a backup being restored) still names the accounts' table `connections`. Its rows,
+ * ids and blobs are the same; the boot's migration renames it once restored.
+ */
+function tableOf(db: StoreDb, column: (typeof SEALED_COLUMNS)[number]): string {
+  if (!('legacyTable' in column)) return column.table;
+  const found = db
+    .prepare<[string], { n: number }>(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ?",
+    )
+    .get(column.table);
+  return (found?.n ?? 0) > 0 ? column.table : column.legacyTable;
 }
 
 /** What opening every blob of one table and key version found. */
@@ -190,7 +208,7 @@ export async function openEverySealedBlobOf(
     const rows = db
       .prepare<[], SealedRow>(
         `SELECT ${column.idColumn} AS id, ${column.blobColumn} AS blob, key_version
-         FROM ${column.table} WHERE ${column.blobColumn} IS NOT NULL
+         FROM ${tableOf(db, column)} WHERE ${column.blobColumn} IS NOT NULL
          ORDER BY key_version, ${column.idColumn}`,
       )
       .all();

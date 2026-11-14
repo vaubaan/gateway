@@ -85,7 +85,7 @@ describe('notifications', () => {
       periodAnchor: '2026-11-01T00:00:00.000Z',
       periodSeconds: 86_400,
       expiresAt: null,
-      connections: [{ connectionId: seeded.github.connection.id, resourceIds: [] }],
+      accounts: [{ accountId: seeded.github.account.id, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 10, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: MERGE, quota: 1000, rateLimit: 1000, rateWindowSeconds: 60, gate: 'approval' },
@@ -171,7 +171,7 @@ describe('notifications', () => {
 
   it('tells the creator whose mission another person orphaned, not the one who did it', async () => {
     // Bob creates a mission on Ada's account through a share; Ada's own mission is on it too.
-    await root.shares.service.share({ user: seeded.ada, groups: [] }, seeded.github.connection.id, {
+    await root.shares.service.share({ user: seeded.ada, groups: [] }, seeded.github.account.id, {
       target: { kind: 'user', email: seeded.bob.email },
       riskIds: [READ, MERGE],
     });
@@ -181,15 +181,12 @@ describe('notifications', () => {
       periodAnchor: '2026-11-01T00:00:00.000Z',
       periodSeconds: 86_400,
       expiresAt: null,
-      connections: [{ connectionId: seeded.github.connection.id, resourceIds: [] }],
+      accounts: [{ accountId: seeded.github.account.id, resourceIds: [] }],
       policy: [{ riskId: READ, quota: 10, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     await addDevice(seeded.ada, 'ada-phone');
     await addDevice(seeded.bob, 'bob-phone');
-    await root.connections.service.revoke(
-      { user: seeded.ada, groups: [] },
-      seeded.github.connection.id,
-    );
+    await root.accounts.service.revoke({ user: seeded.ada, groups: [] }, seeded.github.account.id);
     await root.notifications.idle();
     expect(push.sent.map((s) => s.endpoint)).toEqual([
       'https://fcm.googleapis.com/fcm/send/bob-phone',

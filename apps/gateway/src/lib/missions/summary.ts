@@ -11,9 +11,9 @@ import { ratePerMinute, ROW_WORDS } from '@vaubaan/policy-engine';
 import { byRowWorstFirst, hardestToRepair } from './catalog-view';
 import type {
   CatalogRisk,
-  ConnectionPreview,
+  AccountPreview,
   DraftPeriod,
-  IssuanceConnection,
+  IssuanceAccount,
   MissionSummaryLines,
 } from './model';
 
@@ -23,9 +23,9 @@ const LABEL_MAX = 44;
 const SECONDS = { hour: 3600, day: 86_400, week: 604_800 } as const;
 
 export interface SummaryInput {
-  /** The issuance connections, index-aligned with `previews`. */
-  readonly connections: readonly IssuanceConnection[];
-  readonly previews: readonly ConnectionPreview[];
+  /** The issuance accounts, index-aligned with `previews`. */
+  readonly accounts: readonly IssuanceAccount[];
+  readonly previews: readonly AccountPreview[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
 }
@@ -69,9 +69,9 @@ function rowPhrase(risk: Pick<CatalogRisk, 'row'>): string {
   return ROW_WORDS[risk.row].toLowerCase();
 }
 
-function canLine(connection: IssuanceConnection, preview: ConnectionPreview): string | null {
+function canLine(account: IssuanceAccount, preview: AccountPreview): string | null {
   if (preview.passes.length === 0) return null;
-  const byId = new Map(connection.risks.map((r) => [r.risk_id, r]));
+  const byId = new Map(account.risks.map((r) => [r.risk_id, r]));
   // A risk accepted in several resource sets is one risk of the account.
   const accepted = [...new Set(preview.passes.map((p) => p.risk_id))].flatMap(
     (id) => byId.get(id) ?? [],
@@ -83,19 +83,17 @@ function canLine(connection: IssuanceConnection, preview: ConnectionPreview): st
       ? `the account${later}`
       : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}${later}`;
   const upTo = top ? `, up to "${shortLabel(top.label)}" (${rowPhrase(top)})` : '';
-  return `${connection.provider_label} "${connection.display_name}": ${plural(
+  return `${account.provider_label} "${account.display_name}": ${plural(
     accepted.length,
     'risk',
   )} on ${where}${upTo}`;
 }
 
-function cannotLine(connection: IssuanceConnection, preview: ConnectionPreview): string {
+function cannotLine(account: IssuanceAccount, preview: AccountPreview): string {
   const accepted = new Set(preview.passes.map((p) => p.risk_id));
-  const held = new Set(connection.authority);
+  const held = new Set(account.authority);
   const withheld = byRowWorstFirst(
-    connection.risks.filter(
-      (r) => held.has(r.risk_id) && !accepted.has(r.risk_id) && !r.deprecated,
-    ),
+    account.risks.filter((r) => held.has(r.risk_id) && !accepted.has(r.risk_id) && !r.deprecated),
   );
   const parts: string[] = [];
   const [worst] = withheld;
@@ -108,14 +106,14 @@ function cannotLine(connection: IssuanceConnection, preview: ConnectionPreview):
   }
   const leftOut = preview.resources_total - preview.resources.length;
   if (leftOut > 0) parts.push(`${plural(leftOut, 'resource')} left out`);
-  return `${connection.provider_label}: ${parts.join('; ')}`;
+  return `${account.provider_label}: ${parts.join('; ')}`;
 }
 
 function quantitiesLine(input: SummaryInput): string {
   const entries = input.previews.flatMap((p) => p.passes);
   if (entries.length === 0) return 'No budget yet.';
   const labels = new Map(
-    input.connections.flatMap((c) => c.risks.map((r) => [r.risk_id, r.label] as const)),
+    input.accounts.flatMap((c) => c.risks.map((r) => [r.risk_id, r.label] as const)),
   );
   let largest = entries[0]!;
   let fastest = entries[0]!;
@@ -143,20 +141,20 @@ export function summarize(input: SummaryInput): MissionSummaryLines {
   const can: string[] = [];
   const cannot: string[] = [];
   input.previews.forEach((preview, i) => {
-    const connection = input.connections[i];
-    if (!connection) return;
-    const line = canLine(connection, preview);
+    const account = input.accounts[i];
+    if (!account) return;
+    const line = canLine(account, preview);
     if (line) can.push(line);
-    cannot.push(cannotLine(connection, preview));
+    cannot.push(cannotLine(account, preview));
   });
   return {
     can:
       can.length === 0
-        ? 'Nothing yet — include a connection and tick a macro-action.'
+        ? 'Nothing yet — include an account and tick a macro-action.'
         : `${can.join(' · ')}.`,
     cannot:
       cannot.length === 0
-        ? 'Everything: no connection is included.'
+        ? 'Everything: no account is included.'
         : `${cannot.join(' · ')}. Anything outside the selected resources and the accepted risks is refused.`,
     quantities: quantitiesLine(input),
   };

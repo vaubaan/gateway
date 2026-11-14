@@ -32,7 +32,7 @@ Gmail zones by **identity**, not by containment: the risk of a read depends
 on the sender, the risk of a draft or a send on its recipients. The five synthetic
 entities are markers the classifier emits; the catalog matches them.
 
-The **resource** a connection exposes is the authenticated **mailbox**
+The **resource** an account exposes is the authenticated **mailbox**
 (`ref` = the lower-cased address of the credential, checked by an IMAP
 sign-in).
 Its `metadata` carries the zoning configuration the owner edits:
@@ -128,7 +128,7 @@ never by name: Gmail localizes them.
 | `list_labels`           | `INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`, then the user labels (folders without a special use)                                                                                                                                                   |
 | `label_*` / `unlabel_*` | `STORE ±X-GM-LABELS` (`UNREAD`: `∓\Seen`); a label that does not exist is never created                                                                                                                                                           |
 | `create_label`          | `CREATE`; refused when the name exists (any case) or is a system folder                                                                                                                                                                           |
-| `describe_zones`        | synthetic: the resource's zoning metadata, no connection                                                                                                                                                                                          |
+| `describe_zones`        | synthetic: the resource's zoning metadata, no account                                                                                                                                                                                             |
 
 `SENT`, `DRAFT`, `CHAT` and the `CATEGORY_*` tabs cannot be written over IMAP
 and are refused. The subject of a draft holds no line break or control

@@ -8,7 +8,7 @@
  * The threshold is 3 here (`VAUBAAN_TRUST_RAISE_AFTER_APPROVALS`); its default is
  * pinned by `config/trust-raise-config.test.ts`.
  */
-import { draftConnectionOf } from '@/lib/missions/mission-edit';
+import { draftAccountOf } from '@/lib/missions/mission-edit';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { MissionDraft } from '../../../src/server/missions';
@@ -40,9 +40,9 @@ describe('trust-raise proposals', () => {
   async function issue(level = 'careful'): Promise<IssuedMission> {
     const draft: MissionDraft = {
       name: 'Raise me',
-      connections: [
+      accounts: [
         {
-          connection_id: instance.connection.id,
+          account_id: instance.account.id,
           resources: { scope: 'selected', resource_refs: ['app-staging'] },
           policy: [line(READ), line(WRITE, 100, { gate: 'approval' })],
           trust_levels: { change: level },
@@ -149,8 +149,8 @@ describe('trust-raise proposals', () => {
     const service = instance.root.missions.service;
     const view = await service.editView(instance.ada, issued.mission.id);
     if (!view || view.blocked) throw new Error('edit view missing');
-    const [account] = view.snapshot.connections;
-    const draft = draftConnectionOf(account!);
+    const [account] = view.snapshot.accounts;
+    const draft = draftAccountOf(account!);
     const edited = await service.edit(instance.ada, issued.mission.id, {
       revision: view.revision,
       draft: {
@@ -158,7 +158,7 @@ describe('trust-raise proposals', () => {
         period: view.snapshot.period,
         expires_at: view.snapshot.expires_at,
         // A trust level moved alone is no edit (`hasChanges`): a raise rewrites its lines.
-        connections: [
+        accounts: [
           {
             ...draft,
             trust_levels: { change: 'trusting' },

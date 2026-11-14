@@ -1,5 +1,5 @@
 /**
- * `/accounts/<id>` — one account, for its owner (spec §0 "Connection",
+ * `/accounts/<id>` — one account, for its owner (spec §0 "Account",
  * "Resource", "Share"; §4.2; §7.2; §7.3): who has access and up to what, what
  * it reaches, the missions that use it. Anyone else reads "not found".
  *
@@ -16,8 +16,8 @@ import {
   firstParam,
   takeNotice,
   type PageSearchParams,
-} from '@/lib/connections/session';
-import { isConnectError } from '@/server/connections';
+} from '@/lib/accounts/session';
+import { isConnectError } from '@/server/accounts';
 
 import { ACCOUNT_PARAMS, AccountView, loadAccount, type AccountData } from './account-view';
 

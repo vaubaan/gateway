@@ -78,7 +78,7 @@ describe('requests', () => {
     expect(fetch.calls[0]!.headers.authorization).toBe('FlyV1 fm2_abcdefghijklmnopqrstuvwxyz');
   });
 
-  test('create_app forces the organization of the connection', async () => {
+  test('create_app forces the organization of the account', async () => {
     const { fetch, result } = run(
       [{ method: 'POST', url: `${API}/apps`, body: { id: 'new' } }],
       TOOL.createApp,
@@ -379,20 +379,20 @@ describe('image changes', () => {
     await textOf(result);
   });
 
-  test('the image guard holds in execute, from the connection prefixes', async () => {
+  test('the image guard holds in execute, from the account prefixes', async () => {
     const other = `ghcr.io/acme/app@sha256:${DIGEST}`;
     const wider = {
       ...acme,
       metadata: { ...acme.metadata, image_prefixes: 'ghcr.io/vaubaan/gateway,ghcr.io/acme/app' },
     };
-    // The resource says the image is allowed ; the connection's field does not.
+    // The resource says the image is allowed ; the account's field does not.
     const { fetch, result } = run(
       [appIdentityRoute([wider]), machineRoute(config(OLD_IMAGE))],
       TOOL.deployImage,
       { app: 'acme-gw', machine_id: 'm1', image: other },
       [wider],
     );
-    expect(await refusalText(result)).toMatch(/is not an image this connection may run/);
+    expect(await refusalText(result)).toMatch(/is not an image this account may run/);
     expect(fetch.calls.some((c) => c.method === 'POST')).toBe(false);
     const create = run(
       [appIdentityRoute([wider])],
@@ -400,7 +400,7 @@ describe('image changes', () => {
       { app: 'acme-gw', config: config(other), region: 'cdg' },
       [wider],
     );
-    expect(await refusalText(create.result)).toMatch(/is not an image this connection may run/);
+    expect(await refusalText(create.result)).toMatch(/is not an image this account may run/);
   });
 
   test('update_machine with a new image checks the snapshots ; with the same image it does not', async () => {
@@ -683,7 +683,7 @@ describe('the token check at paste', () => {
 });
 
 describe('the mission scope', () => {
-  test('an app of the connection outside the mission is never touched', async () => {
+  test('an app of the account outside the mission is never touched', async () => {
     const { fetch, result } = run([], TOOL.getApp, { app: 'canary-gw' });
     expect(await refusalText(result)).toBe("app 'canary-gw' is not an app of this mission");
     expect(fetch.calls).toHaveLength(0);

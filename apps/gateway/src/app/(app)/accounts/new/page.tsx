@@ -7,15 +7,15 @@
 import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { NoticeBanner } from '@/components/connections/parts';
-import { ServicePicker } from '@/components/connections/ServicePicker';
+import { NoticeBanner } from '@/components/accounts/parts';
+import { ServicePicker } from '@/components/accounts/ServicePicker';
 import { Hint, PageHeader, Section } from '@/components/ui';
 import {
   currentActor,
   firstParam,
   takeNotice,
   type PageSearchParams,
-} from '@/lib/connections/session';
+} from '@/lib/accounts/session';
 import { DOC_PAGES, ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
 import { PROVIDERS_PATH } from '@/lib/providers/links';
 
@@ -31,7 +31,7 @@ export default async function ConnectAccountPage({
   const { root, principal } = session;
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const providers = await root.connections.service.providers();
+  const providers = await root.accounts.service.providers();
 
   return (
     <>

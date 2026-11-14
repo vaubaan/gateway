@@ -10,16 +10,16 @@
  */
 import type { LimitsConfig } from '../config/types';
 
-export const CEILINGS = ['users', 'connections', 'active-missions'] as const;
+export const CEILINGS = ['users', 'accounts', 'active-missions'] as const;
 export type Ceiling = (typeof CEILINGS)[number];
 
 /** Every ceiling absent: what a module wired without limits enforces (nothing). */
-export const UNLIMITED: LimitsConfig = { users: null, connections: null, activeMissions: null };
+export const UNLIMITED: LimitsConfig = { users: null, accounts: null, activeMissions: null };
 
 /** The words of a count in a sentence, by ceiling: "3 people", "1 connected account". */
 const NOUNS: Readonly<Record<Ceiling, { readonly one: string; readonly many: string }>> = {
   users: { one: 'person', many: 'people' },
-  connections: { one: 'connected account', many: 'connected accounts' },
+  accounts: { one: 'connected account', many: 'connected accounts' },
   'active-missions': { one: 'active mission', many: 'active missions' },
 };
 
@@ -28,8 +28,8 @@ export function ceilingOf(limits: LimitsConfig, ceiling: Ceiling): number | null
   switch (ceiling) {
     case 'users':
       return limits.users;
-    case 'connections':
-      return limits.connections;
+    case 'accounts':
+      return limits.accounts;
     case 'active-missions':
       return limits.activeMissions;
   }

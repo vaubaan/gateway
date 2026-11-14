@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 
 # SSH provider plugin — handbook
 
-`@vaubaan/plugin-ssh`: one tool, `ssh__exec`, one shell line on one host per connection; the host is
+`@vaubaan/plugin-ssh`: one tool, `ssh__exec`, one shell line on one host per account; the host is
 the resource and its owner label (`dev | staging | prod`) its environment.
 
 ## Start here
@@ -71,7 +71,7 @@ the resource and its owner label (`dev | staging | prod`) its environment.
 ## Debug
 
 - `SshHostKeyMismatchError` → re-take the fingerprint from a trusted machine; a real change → the
-  owner updates the connection, otherwise an incident.
+  owner updates the account, otherwise an incident.
 - `ssh authentication failed` → public key not in `authorized_keys`, or the account locked.
 - A read lands in `W`, or a harmless line misses six risks → `profileCommandLine(cmd)` shows which
   class fired and `.opaque` why. Use literals, `printf '…' > file` instead of a here-document, a

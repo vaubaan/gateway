@@ -253,7 +253,7 @@ export function SignInProviderForm({
 }
 
 /**
- * The form of a local-accounts provider (ADR local-accounts-sign-in-provider):
+ * The form of a sign-in-accounts provider (ADR local-accounts-sign-in-provider):
  * an id and a name, nothing to register anywhere. The accounts themselves are
  * created from People (invitations) and from the setup.
  */

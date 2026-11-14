@@ -74,7 +74,7 @@ describe('editing a gate after issuance', () => {
         entry.riskId === READ ? { ...entry, gate: 'approval' } : entry,
       ),
     );
-    expect(after.connections).toEqual(before.connections);
+    expect(after.accounts).toEqual(before.accounts);
     expect(after.status).toBe('active');
 
     const refused = await call(READ, { n: 2 });

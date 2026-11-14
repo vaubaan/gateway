@@ -29,11 +29,14 @@ import {
 import { createApprovalsRepo, type ApprovalsRepo } from './repositories/approvals.ts';
 import { createAuditRepo, type AuditRepo } from './repositories/audit.ts';
 import { createConfigRepo, type ConfigRepo } from './repositories/config.ts';
-import { createConnectionsRepo, type ConnectionsRepo } from './repositories/connections.ts';
+import { createAccountsRepo, type AccountsRepo } from './repositories/accounts.ts';
 import type { RepoContext } from './repositories/context.ts';
 import { createGroupsRepo, type GroupsRepo } from './repositories/groups.ts';
 import { createInvitationsRepo, type InvitationsRepo } from './repositories/invitations.ts';
-import { createLocalAccountsRepo, type LocalAccountsRepo } from './repositories/local-accounts.ts';
+import {
+  createSignInAccountsRepo,
+  type SignInAccountsRepo,
+} from './repositories/sign-in-accounts.ts';
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import {
@@ -80,7 +83,7 @@ export interface Store {
   /** The administrators of the instance: users, pending addresses, groups (migration 0020). */
   readonly administrators: AdministratorsRepo;
   /** The accounts, secrets and links of a sign-in provider of kind `local`. */
-  readonly localAccounts: LocalAccountsRepo;
+  readonly signInAccounts: SignInAccountsRepo;
   /** The second factor of every person, whatever their provider (migration 0021). */
   readonly secondFactors: SecondFactorsRepo;
   /** The devices a person receives notifications on, subscriptions sealed (migration 0030). */
@@ -91,7 +94,7 @@ export interface Store {
   readonly notificationMail: NotificationMailRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
   readonly pendingRefs: PendingRefsRepo;
-  readonly connections: ConnectionsRepo;
+  readonly accounts: AccountsRepo;
   readonly shares: SharesRepo;
   readonly missions: MissionsRepo;
   readonly sessions: SessionsRepo;
@@ -146,13 +149,13 @@ export function openStore(options: StoreOptions): Store {
     groups: createGroupsRepo(ctx),
     invitations: createInvitationsRepo(ctx),
     administrators: createAdministratorsRepo(ctx),
-    localAccounts: createLocalAccountsRepo(ctx),
+    signInAccounts: createSignInAccountsRepo(ctx),
     secondFactors: createSecondFactorsRepo(ctx),
     notificationDevices: createNotificationDevicesRepo(ctx),
     notificationAddresses: createNotificationAddressesRepo(ctx),
     notificationMail: createNotificationMailRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
-    connections: createConnectionsRepo(ctx),
+    accounts: createAccountsRepo(ctx),
     shares: createSharesRepo(ctx),
     missions: createMissionsRepo(ctx),
     sessions: createSessionsRepo(ctx),
@@ -269,24 +272,20 @@ export {
 export {
   LOCAL_LINK_KINDS,
   LOCAL_SECRET_KINDS,
-  type LocalAccountRecord,
-  type LocalAccountsRepo,
+  type SignInAccountRecord,
+  type SignInAccountsRepo,
   type LocalLinkKind,
   type LocalLinkRecord,
   type LocalSecretKind,
   type LockoutRule,
-} from './repositories/local-accounts.ts';
+} from './repositories/sign-in-accounts.ts';
 export type {
   NewPendingRef,
   PendingRefRecord,
   PendingRefsRepo,
 } from './repositories/pending-refs.ts';
-export type {
-  ConnectionFilter,
-  ConnectionsRepo,
-  CreateConnectionInput,
-} from './repositories/connections.ts';
-export { FRESH_RESOURCE_STALE_GRACE_MS } from './repositories/connections.ts';
+export type { AccountFilter, AccountsRepo, CreateAccountInput } from './repositories/accounts.ts';
+export { FRESH_RESOURCE_STALE_GRACE_MS } from './repositories/accounts.ts';
 export type { CreateShareInput, SharesRepo } from './repositories/shares.ts';
 export type {
   AddedMissionResources,

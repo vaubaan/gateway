@@ -70,7 +70,7 @@ One resource, the mailbox; no environment. Rules common to every plugin:
   inside a fetch (bodies are downloaded after); it is external to the Next build
   (`apps/gateway/next.config.ts`, `scripts/build-commands.mjs`).
 - An SMTP sign-in refusal is the tool error `smtp_sign_in_refused`, never an `UpstreamAuthError`:
-  a Workspace admin can block SMTP while IMAP works, and the connection must not be marked to
+  a Workspace admin can block SMTP while IMAP works, and the account must not be marked to
   reconnect for it.
 - `smtp_unavailable` (timeout, reset) after the data was handed over may still mean sent: the agent
   checks `in:sent` before sending again.

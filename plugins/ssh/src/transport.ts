@@ -13,7 +13,7 @@
  *   - the host key is checked **before** authentication : a mismatch ends the
  *     handshake and surfaces as `SshHostKeyMismatchError`, never as a retry ;
  *   - an authentication failure is an `UpstreamAuthError` (the host marks the
- *     connection `expired` ; the owner reconnects with a new key pair) ;
+ *     account `expired` ; the owner reconnects with a new key pair) ;
  *   - a timeout, an unreachable host or a reset is a plain `Error` with an
  *     operator-readable message ;
  *   - stdout is capped at `MAX_STDOUT_BYTES`, stderr at `MAX_STDERR_BYTES` ;
@@ -62,8 +62,8 @@ export class SshHostKeyMismatchError extends Error {
     readonly actual: string,
   ) {
     super(
-      `ssh host '${host}' presented host key ${actual}, the connection pins ${expected} — refusing. ` +
-        'If the host was legitimately re-keyed, the owner must update the connection.',
+      `ssh host '${host}' presented host key ${actual}, the account pins ${expected} — refusing. ` +
+        'If the host was legitimately re-keyed, the owner must update the account.',
     );
     this.name = 'SshHostKeyMismatchError';
   }

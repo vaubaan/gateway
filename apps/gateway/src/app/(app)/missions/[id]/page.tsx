@@ -167,16 +167,16 @@ export default async function MissionPage({ params, searchParams }: Props) {
       }));
 
   const mark = missionMark(state, waiting.length, creatorName, detail.lost.length);
-  const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
+  const orphanExplanation = orphan && explainOrphan(orphan, detail.accounts);
   // An orphaned mission says why as a whole; a running one says which accounts it lost.
-  const lostExplanation = orphan ? null : explainLost(detail.lost, detail.connections);
+  const lostExplanation = orphan ? null : explainLost(detail.lost, detail.accounts);
   const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
   const period = periodWord(periodSeconds);
 
   const gitViews = missionGitViews({
     registry: root.registry,
     publicUrl: root.config.publicUrl,
-    connections: detail.connections,
+    accounts: detail.accounts,
     policy: detail.policy,
   });
   const missionPath = `${ROUTES.missions}/${mission.id}`;
@@ -299,12 +299,12 @@ export default async function MissionPage({ params, searchParams }: Props) {
           <>
             {createdBy(detail.creator.email, isCreator)}{' '}
             <RelativeTime at={mission.createdAt} now={now} testId="mission-created" />
-            {detail.connections
-              .filter((connection) => connection.lost)
-              .map((connection) => (
-                <span key={connection.id} data-testid={`account-lost-${connection.id}`}>
+            {detail.accounts
+              .filter((account) => account.lost)
+              .map((account) => (
+                <span key={account.id} data-testid={`account-lost-${account.id}`}>
                   {' · '}
-                  {connection.provider_label} {connection.display_name} (no longer serves)
+                  {account.provider_label} {account.display_name} (no longer serves)
                 </span>
               ))}
             {' · '}
@@ -460,13 +460,13 @@ export default async function MissionPage({ params, searchParams }: Props) {
         />
       </div>
       <div className={[cardStyles.cards, styles.block].join(' ')} data-testid="mission-cards">
-        {cards.map(({ connection, card, used, openUntil, lastCheckedAt }) => {
-          const service = serviceOf(connection.provider);
+        {cards.map(({ account, card, used, openUntil, lastCheckedAt }) => {
+          const service = serviceOf(account.provider);
           return (
             <MissionCard
               key={card.key}
               readOnly
-              connection={connection}
+              account={account}
               card={card}
               icon={service.icon}
               planes={service.planes}
@@ -481,7 +481,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
                   isCreator && detail.gates_editable ? { missionId: mission.id } : null,
                 raiseHrefs: raisable
                   ? Object.fromEntries(
-                      connection.macro_actions.map((action) => [
+                      account.macro_actions.map((action) => [
                         action.id,
                         `${missionPath}/edit?custom=${encodeURIComponent(card.id ?? '')}&action=${encodeURIComponent(action.id)}`,
                       ]),
@@ -492,7 +492,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
                 card.future ? (
                   <CheckNow
                     missionId={mission.id}
-                    connectionId={connection.id}
+                    accountId={account.id}
                     lastCheckedAt={lastCheckedAt}
                     now={now.toISOString()}
                     canCheck={isCreator && state.kind !== 'revoked'}

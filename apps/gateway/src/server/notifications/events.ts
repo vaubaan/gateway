@@ -21,8 +21,8 @@ export interface RequestOpenedEvent {
 export interface NotificationEvents {
   /** A request opened in its creator's inbox (claim, approval request, permission request). */
   requestOpened(event: RequestOpenedEvent): void;
-  /** A connection turned `expired`: its credential was rejected and could not be refreshed. */
-  accountNeedsReconnecting(connectionId: string): void;
+  /** An account turned `expired`: its credential was rejected and could not be refreshed. */
+  accountNeedsReconnecting(accountId: string): void;
   /**
    * A mission became orphaned through the act of `actorId` (its derived verdict changed); its
    * creator is told when it was somebody else's act.

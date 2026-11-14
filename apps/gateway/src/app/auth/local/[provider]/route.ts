@@ -1,5 +1,5 @@
 /**
- * `POST /auth/local/<provider>` — the password form of the local accounts: a
+ * `POST /auth/local/<provider>` — the password form of the sign-in accounts: a
  * session, or `/login?error=<code>`. Origin-checked, rate-limited.
  */
 import { getRoot } from '@/server/compose';

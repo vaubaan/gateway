@@ -1,13 +1,13 @@
 /**
  * Time-based one-time passwords (RFC 6238 over RFC 4226) and recovery codes,
- * for the second factor of the local accounts (ADR
+ * for the second factor of the sign-in accounts (ADR
  * local-accounts-sign-in-provider). Forty lines over `node:crypto`: HMAC-SHA-1,
  * six digits, thirty-second steps — what every authenticator app does by
  * default — and base32 (RFC 4648) for the secret in the `otpauth://` URL.
  *
  * Replay is the caller's business: `verifyTotp` returns the time step the code
  * matched, and the store refuses a step that is not later than the last one
- * accepted (`LocalAccountsRepo.advanceTotpStep`).
+ * accepted (`SignInAccountsRepo.advanceTotpStep`).
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 

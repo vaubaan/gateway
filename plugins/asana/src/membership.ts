@@ -13,7 +13,7 @@
  */
 
 import { ExecutorRefusal, UpstreamProtocolError, isList, isRecord } from '@vaubaan/plugin-sdk';
-import type { ConnectionContext } from '@vaubaan/plugin-sdk';
+import type { AccountContext } from '@vaubaan/plugin-sdk';
 
 import { getObject, type Json } from './api.ts';
 import { asanaGid } from './ids.ts';
@@ -56,7 +56,7 @@ export function projectGidsOf(task: Json): Set<string> {
  * a provider failure is thrown as it is.
  */
 export async function proveTaskInProject(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   task: string,
   project: string,
   fields: readonly string[] = [],
@@ -76,7 +76,7 @@ export async function proveTaskInProject(
 
 /** Proves `section` is a section of `project` ; throws `ExecutorRefusal` otherwise. */
 export async function proveSectionInProject(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   section: string,
   project: string,
 ): Promise<void> {

@@ -6,7 +6,7 @@
  * the user reads `orphaned` or `active` accordingly (`MissionGrounds`). Two
  * things are done here, around the change:
  *
- *   - a connection whose owner group has no member left becomes `unowned`, a
+ *   - an account whose owner group has no member left becomes `unowned`, a
  *     stored state (it keeps serving its missions; the operator reassigns an
  *     owner);
  *   - the missions of the user are watched across the change, so that the
@@ -20,19 +20,19 @@
  * mission, the execution door first: only the audit entry is missing.
  */
 import type { Logger } from '../logging';
-import type { ConnectionsRepo } from '../store/repositories/connections';
-import type { ConnectionRecord, MissionRecord } from '../store/types';
+import type { AccountsRepo } from '../store/repositories/accounts';
+import type { AccountRecord, MissionRecord } from '../store/types';
 import type { MissionGrounds } from './mission-grounds';
 
 export interface MembershipSettlerDeps {
-  readonly connections: Pick<ConnectionsRepo, 'markOwnerlessUnowned'>;
+  readonly accounts: Pick<AccountsRepo, 'markOwnerlessUnowned'>;
   readonly grounds: Pick<MissionGrounds, 'watchCreator'>;
   readonly logger: Logger;
 }
 
 export interface MembershipSettlement {
-  /** Connections that just lost their last owner. */
-  readonly unowned: readonly ConnectionRecord[];
+  /** Accounts that just lost their last owner. */
+  readonly unowned: readonly AccountRecord[];
   /** Missions of the user that the change left without grounds. */
   readonly orphaned: readonly MissionRecord[];
   /** Missions of the user whose grounds the change brought back. */
@@ -53,12 +53,12 @@ export class MembershipSettler {
     const missions = await this.deps.grounds.watchCreator(userId);
     return {
       settle: async (actorId) => {
-        const unowned = await this.deps.connections.markOwnerlessUnowned();
-        for (const connection of unowned) {
-          this.deps.logger.warn('connection has no owner left', {
-            connection_id: connection.id,
-            provider: connection.provider,
-            owner_group_id: connection.owner.id,
+        const unowned = await this.deps.accounts.markOwnerlessUnowned();
+        for (const account of unowned) {
+          this.deps.logger.warn('account has no owner left', {
+            account_id: account.id,
+            provider: account.provider,
+            owner_group_id: account.owner.id,
           });
         }
         return { unowned, ...(await missions.settle(actorId)) };

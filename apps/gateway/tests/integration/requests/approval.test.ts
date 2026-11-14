@@ -263,7 +263,7 @@ describe('approval gate: refusal, decision, replay', () => {
         token_kind: null,
         token_holder: null,
         session_id: result.session_id,
-        connection_id: f.connectionId,
+        account_id: f.accountId,
         resource_ref: 'acme/app',
         tool: TOOL,
         arguments_hash: result.fingerprint,

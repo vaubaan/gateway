@@ -1,7 +1,7 @@
 # `@vaubaan/plugin-github`
 
 GitHub provider plugin for Vaubaan Gateway, written against
-[`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One connection is one
+[`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One account is one
 **fine-grained personal access token**; one resource is one repository the
 token reaches (`owner/repo`); a mission picks repositories and macro-actions at
 a trust level, which write the risks it accepts. Public repositories, which
@@ -136,7 +136,7 @@ password. Two host-built tools are decided and audited like any call:
 | `github__git_fetch` | the object transfer of a clone or fetch | `{ repository, step: 'pack' }` — risk `read-code`                                           |
 | `github__git_push`  | one push, every ref of it               | `{ repository, updates[] }`, each `{ ref, old, new, kind, commits, files, workflow_files }` |
 
-- **Upstream credential** (`git-credential.ts`): the connection's token,
+- **Upstream credential** (`git-credential.ts`): the account's token,
   presented as `x-access-token`, in memory, never returned to the agent.
 - **Inspect** (`git-inspect.ts`), before the pack leaves: whether each
   update's tip changes `.github/workflows/`.

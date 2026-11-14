@@ -3,7 +3,7 @@
  * before the raw record. Pure.
  *
  * A change is stored as two JSON values, `before` and `after`, in the names of
- * the protocol (`connection_id`, `resource_ids`, `risk_id`, `quota`, `gate`…).
+ * the protocol (`account_id`, `resource_ids`, `risk_id`, `quota`, `gate`…).
  * That is the record and it stays available as it is ("Raw record"). A person
  * first reads lines: the account by its name, the resources by theirs, each
  * permission with its limits and whether it asks first.
@@ -81,7 +81,7 @@ const KEY_LABELS: Readonly<Record<string, string>> = {
   resource: 'For',
   ref: 'Resource',
   resource_id: 'Resource',
-  connection_id: 'Account',
+  account_id: 'Account',
   env: 'Environment',
   hidden: 'Hidden from missions',
   tokens_revoked: 'Keys revoked',
@@ -106,7 +106,7 @@ const SAID_BY: Readonly<Record<string, string>> = {
  */
 const STATE_WORDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   mission: { active: 'running', revoked: 'stopped', expired: 'ended', orphaned: 'cannot run' },
-  connection: {
+  account: {
     active: 'connected',
     revoked: 'disconnected',
     expired: 'needs reconnecting',
@@ -146,7 +146,7 @@ function valueWords(key: string, value: Json, names: ChangeNames, objectType: st
     return 'none';
   }
   switch (key) {
-    case 'connection_id':
+    case 'account_id':
     case 'resource_id':
       return nameOf(names, value);
     case 'owner':
@@ -188,10 +188,10 @@ function accountLines(value: Json, names: ChangeNames): ChangeLine[] {
     return {
       label: 'Account',
       value: [
-        nameOf(names, entry.connection_id),
-        // Entries before migration 0033 record `resource_scope` (`connection`: the whole
+        nameOf(names, entry.account_id),
+        // Entries before migration 0033 record `resource_scope` (`account`: the whole
         // account); later ones an explicit list with `future`.
-        entry.resource_scope === 'connection'
+        entry.resource_scope === 'account'
           ? MISSION_WORDS.wholeAccount
           : resources.length > 0
             ? `${listed(resources, 4)}${entry.future === true ? `, and ${MISSION_WORDS.futureResources}` : ''}`
@@ -239,7 +239,7 @@ function permissionLines(value: Json, period: Json, names: ChangeNames): ChangeL
  * either may be `null` (a creation, a removal) or not an object at all (then
  * there is nothing to say in lines and the raw record is the whole detail).
  * `objectType` is the kind of object the change is about (`mission`,
- * `connection`…): a stored status reads in that object's words.
+ * `account`…): a stored status reads in that object's words.
  */
 export function changeLines(
   before: Json,
@@ -257,7 +257,7 @@ export function changeLines(
     const saidBy = SAID_BY[key];
     if (saidBy !== undefined && subject[saidBy] !== undefined) continue;
     // Said by another line: the period is part of each permission's limit and of "Limits".
-    if (key === 'connections') {
+    if (key === 'accounts') {
       lines.push(...accountLines(value, names));
       continue;
     }

@@ -1,7 +1,7 @@
 /**
  * Credential declaration — how a plugin tells the host to connect a provider.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §2.4 (the executor
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §2.4 (the executor
  *        never sees a provider credential), §7.2 (connect a provider).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  *
@@ -20,7 +20,7 @@
 
 import type { CredentialKind } from '@vaubaan/shared';
 
-import type { ConnectionContext } from './plugin.ts';
+import type { AccountContext } from './plugin.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Form fields — shared by api-key and ssh-key forms
@@ -311,7 +311,7 @@ export interface ApiKeyCredentialSpec {
    * sentence ; a rejection otherwise throws `UpstreamAuthError` (nothing is
    * stored) ; an expiry in the past is refused by the host.
    */
-  verify(ctx: ConnectionContext): Promise<CredentialCheck>;
+  verify(ctx: AccountContext): Promise<CredentialCheck>;
 }
 
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
@@ -380,7 +380,7 @@ export interface OAuth2RegisteredClientSpec {
    * The provider lets a client register itself (RFC 7591 dynamic client
    * registration): the host registers this instance as a client the first
    * time someone connects, keeps the client (its secret sealed in the
-   * instance settings), reuses it for every connection of the instance, and
+   * instance settings), reuses it for every account of the instance, and
    * registers again when the provider rejects it or the instance's callback
    * address changed. Nobody declares anything: no administrator step, no
    * secret to paste (ADRs oauth-client-registered-by-the-gateway,
@@ -409,7 +409,7 @@ export interface OAuth2RegisteredClientSpec {
   /** Extra static query parameters (`access_type=offline`, `prompt=consent`). */
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;
   /**
-   * How the provider withdraws the grant when a connection is revoked (spec
+   * How the provider withdraws the grant when an account is revoked (spec
    * vaubaan-gateway §2.3). Declarative : the host sends the request, because
    * it may carry the app's client secret, which a plugin never sees. Absent
    * when the provider documents no such endpoint : the person removes the
@@ -461,7 +461,7 @@ export type OAuth2RevocationFormat = (typeof OAUTH2_REVOCATION_FORMATS)[number];
 export interface SshKeyCredentialSpec {
   readonly kind: 'ssh-key';
   readonly algorithm: 'ed25519';
-  /** Non-secret connection parameters the user fills in (host, port, user). */
+  /** Non-secret account parameters the user fills in (host, port, user). */
   readonly fields: readonly CredentialField[];
 }
 

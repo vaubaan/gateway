@@ -95,9 +95,9 @@ describe('PluginRegistry — derivations', () => {
 
   test('labels carry the summary of the provider reference when the plugin has one', () => {
     const withSummary = new PluginRegistry([
-      { ...acmePlugin, summary: 'One connection is one Acme account.' },
+      { ...acmePlugin, summary: 'One account is one Acme account.' },
     ]);
-    expect(withSummary.labels()[0]?.summary).toBe('One connection is one Acme account.');
+    expect(withSummary.labels()[0]?.summary).toBe('One account is one Acme account.');
   });
 
   test('labels carry the icon of the service when the plugin declares one, with its colour', () => {

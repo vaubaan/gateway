@@ -6,7 +6,7 @@ import { missionGitViews } from './git-view';
 
 const registry = new PluginRegistry([githubPlugin]);
 const publicUrl = new URL('https://gateway.acme.example');
-const connections = [{ provider: 'github', resources: [{ ref: 'acme/app' }, { ref: 'acme/app' }] }];
+const accounts = [{ provider: 'github', resources: [{ ref: 'acme/app' }, { ref: 'acme/app' }] }];
 
 describe('missionGitViews', () => {
   it('is empty without a repository on a provider the instance serves as a git remote', () => {
@@ -14,12 +14,12 @@ describe('missionGitViews', () => {
       missionGitViews({
         registry,
         publicUrl,
-        connections: [{ provider: 'github', resources: [] }],
+        accounts: [{ provider: 'github', resources: [] }],
         policy: [],
       }),
     ).toEqual([]);
     expect(
-      missionGitViews({ registry: new PluginRegistry([]), publicUrl, connections, policy: [] }),
+      missionGitViews({ registry: new PluginRegistry([]), publicUrl, accounts, policy: [] }),
     ).toEqual([]);
   });
 
@@ -27,7 +27,7 @@ describe('missionGitViews', () => {
     const [view, ...others] = missionGitViews({
       registry,
       publicUrl,
-      connections,
+      accounts,
       policy: [
         { risk_id: 'github.read-code', gate: 'auto' },
         { risk_id: 'github.git-push', gate: 'auto' },

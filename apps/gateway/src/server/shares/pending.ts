@@ -22,7 +22,7 @@ const ID_BYTES = 16;
 const ID_PATTERN = /^[A-Za-z0-9_-]{10,64}$/;
 
 export interface PendingShare {
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly input: ShareInput;
 }
 
@@ -49,7 +49,7 @@ export class PendingShareStore {
     if (!id || !ID_PATTERN.test(id)) return null;
     const stored = (await this.store.get(key(id))) as StoredPendingShare | null;
     if (!stored || stored.owner !== owner) return null;
-    return { connectionId: stored.connectionId, input: stored.input };
+    return { accountId: stored.accountId, input: stored.input };
   }
 }
 

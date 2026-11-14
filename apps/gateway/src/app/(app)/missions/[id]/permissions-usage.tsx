@@ -40,7 +40,7 @@ export function PermissionsUsage({
   periodSeconds,
   editable,
 }: {
-  detail: Pick<MissionDetail, 'mission' | 'policy' | 'connections'>;
+  detail: Pick<MissionDetail, 'mission' | 'policy' | 'accounts'>;
   /** The catalog row behind an id: what the permission means, not only what it is called. */
   explain: (riskId: string) => CatalogRisk | null;
   /** The length of the mission's period; `null` for limits that never reset. */
@@ -48,31 +48,31 @@ export function PermissionsUsage({
   /** The reader may change "ask me first" now. */
   editable: boolean;
 }) {
-  const { mission, policy, connections } = detail;
+  const { mission, policy, accounts } = detail;
   // One group per account; per resource set when an account has several (risk model §4.7).
-  const groups = connections
-    .flatMap((connection) => {
-      const several = connection.resource_sets.length > 1;
-      const sets = several ? connection.resource_sets : [null];
+  const groups = accounts
+    .flatMap((account) => {
+      const several = account.resource_sets.length > 1;
+      const sets = several ? account.resource_sets : [null];
       return sets.map((set) => ({
-        key: set ? `${connection.id}:${set.id}` : connection.id,
+        key: set ? `${account.id}:${set.id}` : account.id,
         title: set
-          ? `${connection.provider_label} · ${connection.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
-          : `${connection.provider_label} · ${connection.display_name}`,
+          ? `${account.provider_label} · ${account.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
+          : `${account.provider_label} · ${account.display_name}`,
         note: set
           ? reachedOnAccount(
               set.resources.map((r) => r.display_name || r.ref),
               set.future,
             )
           : reachedOnAccount(
-              connection.resources.map((r) => r.display_name || r.ref),
-              connection.future,
+              account.resources.map((r) => r.display_name || r.ref),
+              account.future,
             ),
         suffix: set && set.position > 1 ? `-set${set.position}` : '',
         entries: policy.filter((entry) =>
           set
             ? entry.resource_set_id === set.id
-            : parseRiskId(entry.risk_id)?.provider === connection.provider,
+            : parseRiskId(entry.risk_id)?.provider === account.provider,
         ),
       }));
     })

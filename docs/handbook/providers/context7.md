@@ -24,7 +24,7 @@ plugin: [providers README](README.md).
 
 ## Invariants
 
-- One resource per connection, constant ref `docs`: no REST answer names the teamspace. `library`
+- One resource per account, constant ref `docs`: no REST answer names the teamspace. `library`
   stays an entity so the audit names the library read; `resolve-library-id` is always `[*]`.
 - One risk for both tools, with the vector of a documentation read (`reversible`, `single`,
   `data`, `free`, `internal`: row 1, harmless). The disclosure of the agent's free text to a

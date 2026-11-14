@@ -4,14 +4,14 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, type AccountContext } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { PAT_FIELD } from '../../src/identity.ts';
 import { ASANA_DEVELOPER_CONSOLE, asanaCredential, verifyAsanaToken } from '../../src/index.ts';
 import { TOKEN, WORKSPACE, api } from './fixtures.ts';
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch): AccountContext => ({
   credential: { kind: 'api-key', fields: { [PAT_FIELD]: TOKEN }, metadata: {} },
   fetch,
 });

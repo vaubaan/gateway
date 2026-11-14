@@ -1,6 +1,6 @@
 /**
  * Shared fixture of the budget integration suites: an ephemeral `:memory:` store, one
- * creator, one connection, one mission with a three-risk policy, and a `SessionService`
+ * creator, one account, one mission with a three-risk policy, and a `SessionService`
  * over an in-memory sliding window.
  */
 // The store's camelCase policy line, inside its set: not the shared domain type.
@@ -33,14 +33,14 @@ export const DEFAULT_POLICY: readonly MissionPolicyEntryRecord[] = [
 export interface BudgetFixture extends TestStore {
   readonly store: Store;
   readonly creatorId: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly mission: BudgetMission;
-  /** The one resource set of the mission's connection. */
+  /** The one resource set of the mission's account. */
   readonly setId: string;
   readonly service: SessionService;
   readonly rateWindows: SlidingWindowRateLimiter;
   requestUrl(requestId: string): string;
-  /** Another mission for the same creator and connection. */
+  /** Another mission for the same creator and account. */
   createMission(input: {
     periodSeconds: number | null;
     policy?: readonly MissionPolicyEntryRecord[];
@@ -60,8 +60,8 @@ export async function openBudgetFixture(
       email: 'c@x',
     })
   ).id;
-  const connectionId = (
-    await store.connections.create({
+  const accountId = (
+    await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: creatorId },
       displayName: 'gh',
@@ -90,7 +90,7 @@ export async function openBudgetFixture(
       periodAnchor: ANCHOR,
       periodSeconds: input.periodSeconds,
       expiresAt: input.expiresAt ?? null,
-      connections: [{ connectionId, resourceIds: [] }],
+      accounts: [{ accountId, resourceIds: [] }],
       policy: input.policy ?? DEFAULT_POLICY,
     });
     return budgetMissionOf(record);
@@ -105,7 +105,7 @@ export async function openBudgetFixture(
     ...t,
     store,
     creatorId,
-    connectionId,
+    accountId,
     mission,
     setId: mission.policy[0]?.resource_set_id ?? '',
     service,
@@ -118,7 +118,7 @@ export async function openBudgetFixture(
 export const at = (iso: string): Date => new Date(iso);
 
 /**
- * A map keyed by line (`<set>::<risk>`, a mission with one set per connection) read by
+ * A map keyed by line (`<set>::<risk>`, a mission with one set per account) read by
  * risk: what a test about something else than sets compares.
  */
 export function byRisk<V>(

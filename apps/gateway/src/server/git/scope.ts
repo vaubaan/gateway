@@ -50,13 +50,13 @@ export function pushCall(scope: Scope, args: Record<string, unknown>): CallReque
   return gitCall(scope, scope.registered.plugin.gitRemote!.pushTool, args);
 }
 
-/** The target of an admitted call: the mission's connection to the plugin's provider. */
+/** The target of an admitted call: the mission's account to the plugin's provider. */
 export function targetOf(scope: Scope): GitTarget {
   const { plugin } = scope.registered;
-  const connection = scope.ctx.connections.find((c) => c.provider === plugin.id);
-  // The precheck's resource stage refuses a mission without this connection.
-  if (!connection) throw new Error('git door: a prechecked call without its connection');
-  return { plugin, remote: plugin.gitRemote!, connection, repository: scope.repository };
+  const account = scope.ctx.accounts.find((c) => c.provider === plugin.id);
+  // The precheck's resource stage refuses a mission without this account.
+  if (!account) throw new Error('git door: a prechecked call without its account');
+  return { plugin, remote: plugin.gitRemote!, account, repository: scope.repository };
 }
 
 /** Mission, resource and risk checks of a refs listing; the refusal, audited, or nothing. */

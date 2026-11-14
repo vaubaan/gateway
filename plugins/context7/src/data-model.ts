@@ -5,7 +5,7 @@
  * Handbook : docs/handbook/providers/context7.md.
  *
  * One plane, `docs` : the library index one Context7 key can query (the
- * resource, one per connection) and the libraries in it. Libraries are
+ * resource, one per account) and the libraries in it. Libraries are
  * global at Context7 (`/vercel/next.js` is the same for everyone) ; what a
  * key reaches is decided by its teamspace's policies, which no answer of
  * Context7 names. Nothing is written, so there is no verb leaf, and Context7

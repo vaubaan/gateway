@@ -16,9 +16,9 @@ export const EXAMPLE_DRAFT = {
   name: 'Fix the flaky test',
   period: { kind: 'one-off' },
   expires_at: null,
-  connections: [
+  accounts: [
     {
-      connection_id: '0193a4f2-0000-7000-8000-000000000001',
+      account_id: '0193a4f2-0000-7000-8000-000000000001',
       resources: { scope: 'selected', resource_refs: ['acme/app'] },
       trust_levels: { read: 'careful', 'pull-requests': 'careful' },
     },
@@ -26,10 +26,10 @@ export const EXAMPLE_DRAFT = {
 } as const;
 
 export const vaubaanExamples: ToolSamples = samplesOn([], {
-  [TOOL.listMyConnections]: [{ args: {} }],
+  [TOOL.listMyAccounts]: [{ args: {} }],
   [TOOL.getCatalog]: [
     { args: { provider: 'github' } },
-    { args: { provider: 'github', connection_id: '0193a4f2-0000-7000-8000-000000000001' } },
+    { args: { provider: 'github', account_id: '0193a4f2-0000-7000-8000-000000000001' } },
     { args: { provider: '' }, expectDenied: true },
   ],
   [TOOL.listMyMissions]: [

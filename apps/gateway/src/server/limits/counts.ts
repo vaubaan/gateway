@@ -5,13 +5,13 @@
  *
  *   users            people not removed (`users.status = 'active'`), signed in or not;
  *                    never an agent or a mission token
- *   connections      connected accounts not revoked, every owner together; an expired
+ *   accounts      connected accounts not revoked, every owner together; an expired
  *                    or ownerless one counts until it is revoked
  *   active missions  neither revoked nor past their end, orphaned ones included
  */
 import type { Store } from '../store';
 
-export interface ConnectionCounts {
+export interface AccountCounts {
   readonly total: number;
   /** Not revoked, by provider id; a provider with none is absent. */
   readonly byProvider: Readonly<Record<string, number>>;
@@ -19,17 +19,17 @@ export interface ConnectionCounts {
 
 export interface InstanceCounts {
   users(): Promise<number>;
-  connections(): Promise<ConnectionCounts>;
+  accounts(): Promise<AccountCounts>;
   activeMissions(now: Date): Promise<number>;
 }
 
-export type CountedStore = Pick<Store, 'users' | 'connections' | 'missions'>;
+export type CountedStore = Pick<Store, 'users' | 'accounts' | 'missions'>;
 
 export function storeCounts(store: CountedStore): InstanceCounts {
   return {
     users: () => store.users.countActive(),
-    async connections() {
-      const byProvider = await store.connections.countByProvider();
+    async accounts() {
+      const byProvider = await store.accounts.countByProvider();
       const total = Object.values(byProvider).reduce((sum, n) => sum + n, 0);
       return { total, byProvider };
     },

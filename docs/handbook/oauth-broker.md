@@ -63,7 +63,7 @@ without an enclave behind the platform's TLS (`unattested`). Spec:
 - `microsoft` has no `revokeEndpoint`: `/revoke` answers 204 without calling Microsoft (logged
   `reason: no_revoke_endpoint`). Microsoft also returns a new refresh token on each refresh, which
   `/token` does not pass on (spec open question 2): the instance keeps refreshing with the first
-  one until Microsoft lets it lapse, then the connection expires and the person reconnects.
+  one until Microsoft lets it lapse, then the account expires and the person reconnects.
 - `refresh-token-sealing-key` is never rotated by a new version while instances are enrolled:
   every token they hold would stop opening (spec open question).
 - Changing the enrollment is a restart: flows in progress are lost, and so is each instance's count

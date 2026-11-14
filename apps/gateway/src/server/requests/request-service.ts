@@ -12,7 +12,7 @@ import type { MissionService } from '../missions/mission-service';
  *
  * Access rule, the same everywhere: a request is addressed to the creator of
  * its mission. Any other identity — another user, an owner of the same
- * connection, an operator — gets `forbidden`, and so does an unknown id, so
+ * account, an operator — gets `forbidden`, and so does an unknown id, so
  * the answer says nothing about what exists. The arguments of an approval
  * request are opened in one place, `view()`, after that check and only while
  * the request is open: the creator is the only reader they ever have.

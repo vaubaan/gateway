@@ -67,7 +67,7 @@ describe('mission token', () => {
 describe('parseMissionDraft', () => {
   const valid = {
     name: 'm',
-    connections: [
+    accounts: [
       {
         provider: 'github',
         trust_levels: { read: 'trusting', propose: 'careful' },
@@ -82,8 +82,8 @@ describe('parseMissionDraft', () => {
   it('accepts a well-formed draft', () => {
     const parsed = parseMissionDraft(valid);
     expect(parsed.ok).toBe(true);
-    expect(parsed.ok && parsed.draft.connections[0]?.policy?.[0]?.gate).toBe('approval');
-    expect(parsed.ok && parsed.draft.connections[0]?.trust_levels).toEqual({
+    expect(parsed.ok && parsed.draft.accounts[0]?.policy?.[0]?.gate).toBe('approval');
+    expect(parsed.ok && parsed.draft.accounts[0]?.trust_levels).toEqual({
       read: 'trusting',
       propose: 'careful',
     });
@@ -92,39 +92,39 @@ describe('parseMissionDraft', () => {
   it('accepts the built-in everything-i-hold in place of trust levels', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ provider: 'github', everything_i_hold: true }],
+      accounts: [{ provider: 'github', everything_i_hold: true }],
     });
-    expect(parsed.ok && parsed.draft.connections[0]?.everything_i_hold).toBe(true);
+    expect(parsed.ok && parsed.draft.accounts[0]?.everything_i_hold).toBe(true);
   });
 
   it('refuses a trust level that is not one of the three', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ provider: 'github', trust_levels: { read: 'reckless' } }],
+      accounts: [{ provider: 'github', trust_levels: { read: 'reckless' } }],
     });
     expect(parsed.ok).toBe(false);
-    expect(!parsed.ok && parsed.problems.join(' ')).toContain('connections.0.trust_levels');
+    expect(!parsed.ok && parsed.problems.join(' ')).toContain('accounts.0.trust_levels');
   });
 
   it('refuses unknown keys, so a typo never drops a restriction silently', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ ...valid.connections[0], resource: { scope: 'all' } }],
+      accounts: [{ ...valid.accounts[0], resource: { scope: 'all' } }],
     });
     expect(parsed.ok).toBe(false);
-    expect(!parsed.ok && parsed.problems.join(' ')).toContain('connections.0');
+    expect(!parsed.ok && parsed.problems.join(' ')).toContain('accounts.0');
   });
 
   it('names every malformed field', () => {
     const parsed = parseMissionDraft({
       name: 3,
-      connections: [{ policy: [{ risk_id: 'a.b', gate: 'confirm' }] }],
+      accounts: [{ policy: [{ risk_id: 'a.b', gate: 'confirm' }] }],
       period: { kind: 'forever' },
     });
     expect(parsed.ok).toBe(false);
     const problems = parsed.ok ? [] : parsed.problems;
     expect(problems.some((p) => p.startsWith('name'))).toBe(true);
-    expect(problems.some((p) => p.startsWith('connections.0.policy.0.gate'))).toBe(true);
+    expect(problems.some((p) => p.startsWith('accounts.0.policy.0.gate'))).toBe(true);
     expect(problems.some((p) => p.startsWith('period'))).toBe(true);
     expect(problems.some((p) => p.startsWith('expires_at'))).toBe(true);
   });

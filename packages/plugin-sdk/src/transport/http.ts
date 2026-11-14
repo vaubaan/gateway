@@ -24,7 +24,7 @@ import { UpstreamProtocolError } from './errors.ts';
 import { DEFAULT_MAX_ANSWER_BYTES, readBoundedText, readPrefixText } from './read-bounded.ts';
 import { readShape, type Guard } from './shape.ts';
 
-/** What a call to a provider needs of the context : an `ExecuteContext` or a `ConnectionContext` is one. */
+/** What a call to a provider needs of the context : an `ExecuteContext` or a `AccountContext` is one. */
 export interface UpstreamIo {
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;

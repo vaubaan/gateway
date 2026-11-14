@@ -31,7 +31,7 @@ export const googleCalendarDataModel: DataModel = {
           // `bounded` : `list_calendars` names the calendars it reads as a list.
           cardinalities: ['one', 'bounded'],
           description:
-            'The resource a connection exposes: one calendar of the account (the primary one, a secondary or a shared one).',
+            'The resource an account exposes: one calendar of the account (the primary one, a secondary or a shared one).',
         },
         {
           name: 'event',

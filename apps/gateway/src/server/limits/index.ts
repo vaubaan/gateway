@@ -22,7 +22,7 @@ export {
   countsAsActiveMission,
   revivesEndedMission,
   storeCounts,
-  type ConnectionCounts,
+  type AccountCounts,
   type CountedMission,
   type CountedStore,
   type InstanceCounts,

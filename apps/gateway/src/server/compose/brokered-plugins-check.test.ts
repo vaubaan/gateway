@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { loadInstanceConfig } from '../config';
 import { validEnv } from '../../../tests/support/config/testing';
 import { memoryStoreDeps } from '../../../tests/support/compose/testing';
-import { fixturePlugin } from '../../../tests/support/connections/testing';
+import { fixturePlugin } from '../../../tests/support/accounts/testing';
 import { brokeredPluginProblems } from './registry';
 import { buildRoot } from './root';
 

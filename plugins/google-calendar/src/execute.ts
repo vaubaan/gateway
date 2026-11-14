@@ -37,7 +37,7 @@ import {
   isList,
   isRecord,
   jsonResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -89,12 +89,12 @@ type Args = Readonly<Record<string, unknown>>;
 type Forward = Extract<CalendarCall, { kind: 'forward' }>;
 type Query = Readonly<Record<string, string | number | boolean | undefined>>;
 
-function tokenOf(ctx: ConnectionContext): string {
+function tokenOf(ctx: AccountContext): string {
   return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
 }
 
 /** Refuses, before any request, a token Google issued with fewer scopes than asked. */
-function expectRequiredScopes(ctx: ConnectionContext): void {
+function expectRequiredScopes(ctx: AccountContext): void {
   const { scopes } = expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2');
   const missing = missingScopes(scopes);
   if (missing.length > 0) throw new CredentialRefusal(scopesNotGrantedMessage(missing), 403);
@@ -120,7 +120,7 @@ function queryString(query: Query): string {
 
 /** One request to the Calendar API; an answer without content (a deletion) is `null`. */
 async function request<T = unknown>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   options: { readonly query?: Query; readonly body?: unknown; readonly guard?: Guard<T> } = {},
@@ -332,7 +332,7 @@ function writableAttendee(attendee: AttendeeOfEvent): Record<string, unknown> {
 }
 
 async function readEvent(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   call: Forward,
   query: Query = {},
 ): Promise<EventOfCalendar> {
@@ -536,7 +536,7 @@ function isCalendarListPage(x: unknown): x is CalendarListPage {
  * gateway's words (`CredentialRefusal`).
  */
 export async function discoverGoogleCalendarResources(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
 ): Promise<readonly Resource[]> {
   expectRequiredScopes(ctx);
   const found = new Map<string, FoundCalendar>();
@@ -554,7 +554,7 @@ export async function discoverGoogleCalendarResources(
 }
 
 async function listCalendarPage(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   pageToken: string | undefined,
 ): Promise<CalendarListPage> {
   try {

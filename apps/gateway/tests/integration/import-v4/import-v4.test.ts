@@ -6,7 +6,7 @@
  * store with the real encryptor and the real plugins. Providers are a fake
  * `fetch`, the SSH host a fake transport: no network.
  *
- *   dry run (nothing written, no provider contacted) → apply (connections
+ *   dry run (nothing written, no provider contacted) → apply (accounts
  *   checked and sealed, labels carried, a mission issued, a deferred one, the
  *   key on stdout only, every entry marked) → GitHub connected by hand → rerun
  *   completes the deferred mission, duplicates nothing → a third run is a no-op.
@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RegistryCatalogIndex } from '../../../src/server/compose/registry';
 import { loadInstanceConfig, type LoadedConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import { createEncryptor } from '../../../src/server/crypto';
 import { runImportCli, type CliDeps } from '../../../src/server/import-v4';
 import { openMemoryStore, type Store } from '../../../src/server/store';
@@ -374,7 +374,7 @@ describe('import of a v4 organization', () => {
   }
 
   async function connectGithubByHand(): Promise<void> {
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: await ownerId() },
       displayName: 'GitHub',
@@ -385,7 +385,7 @@ describe('import of a v4 organization', () => {
       }),
       metadata: { credential_kind: 'api-key', fields: {} },
     });
-    await store.connections.syncDiscoveredResources(connection.id, [
+    await store.accounts.syncDiscoveredResources(account.id, [
       { ref: 'acme/web', displayName: 'acme/web', env: null, metadata: null },
     ]);
   }
@@ -407,7 +407,7 @@ describe('import of a v4 organization', () => {
     expect(stderr).toContain('2 project variable(s)');
     expect(calls).toEqual([]);
     expect(sshProbes).toBe(0);
-    expect(await store.connections.list()).toEqual([]);
+    expect(await store.accounts.list()).toEqual([]);
     expect(await store.missions.listForCreator(await ownerId())).toEqual([]);
     expect(adminEntries()).toBe(0);
     expect(databaseText()).toBe(before);
@@ -420,23 +420,23 @@ describe('import of a v4 organization', () => {
     const { code, stdout, stderr } = await run(['--owner', OWNER, '--apply']);
     expect(code).toBe(0);
 
-    const connections = await store.connections.list();
-    expect(connections.map((c) => c.provider).sort()).toEqual([
+    const accounts = await store.accounts.list();
+    expect(accounts.map((c) => c.provider).sort()).toEqual([
       'cloudflare-dns',
       'ssh',
       'stripe',
       'vercel',
     ]);
     const owner = await ownerId();
-    expect(connections.every((c) => c.owner.kind === 'user' && c.owner.id === owner)).toBe(true);
+    expect(accounts.every((c) => c.owner.kind === 'user' && c.owner.id === owner)).toBe(true);
     expect(sshProbes).toBe(1);
 
     // The Vercel project carried its `prod` label; the Cloudflare zone's `web` is not a v5 label.
-    const vercel = connections.find((c) => c.provider === 'vercel')!;
-    const [project] = await store.connections.listResources(vercel.id);
+    const vercel = accounts.find((c) => c.provider === 'vercel')!;
+    const [project] = await store.accounts.listResources(vercel.id);
     expect(project).toMatchObject({ ref: 'prj_web', env: 'prod', envSource: 'owner' });
-    const cloudflare = connections.find((c) => c.provider === 'cloudflare-dns')!;
-    expect((await store.connections.listResources(cloudflare.id))[0]?.env).toBeNull();
+    const cloudflare = accounts.find((c) => c.provider === 'cloudflare-dns')!;
+    expect((await store.accounts.listResources(cloudflare.id))[0]?.env).toBeNull();
     expect(stderr).toContain('zone_web: left unlabelled');
 
     // `web` waits for GitHub; `ops` is issued with both SSH risks: the fallback
@@ -488,7 +488,7 @@ describe('import of a v4 organization', () => {
       });
     }
     expect(entries.map((e) => e.act)).toEqual(
-      expect.arrayContaining(['connection-created', 'mission-issued']),
+      expect.arrayContaining(['account-created', 'mission-issued']),
     );
   });
 
@@ -512,7 +512,7 @@ describe('import of a v4 organization', () => {
     expect(missions.map((m) => m.name).sort()).toEqual(['ops', 'web']);
     const web = missions.find((m) => m.name === 'web')!;
     const providers = await Promise.all(
-      web.connections.map(async (c) => (await store.connections.getById(c.connectionId))?.provider),
+      web.accounts.map(async (c) => (await store.accounts.getById(c.accountId))?.provider),
     );
     expect(providers.sort()).toEqual(['cloudflare-dns', 'github', 'stripe', 'vercel']);
     expect(web.policy.map((p) => p.riskId).sort()).toEqual(
@@ -529,12 +529,12 @@ describe('import of a v4 organization', () => {
       .split('\n')
       .map((l) => JSON.parse(l) as Record<string, string>);
     expect(keys.map((k) => k.project)).toEqual(['web']);
-    expect((await store.connections.list()).length).toBe(5);
+    expect((await store.accounts.list()).length).toBe(5);
 
     const third = await run(['--owner', OWNER, '--apply']);
     expect(third.code).toBe(0);
     expect(third.stdout).toBe('');
-    expect((await store.connections.list()).length).toBe(5);
+    expect((await store.accounts.list()).length).toBe(5);
     expect((await store.missions.listForCreator(owner)).length).toBe(2);
   });
 
@@ -544,7 +544,7 @@ describe('import of a v4 organization', () => {
     expect(code).toBe(1);
     expect(stderr).toMatch(/cloudflare-dns ".*": refused, nothing stored — credential-rejected/);
     expect(stderr).not.toContain(CLOUDFLARE_TOKEN);
-    const providers = (await store.connections.list()).map((c) => c.provider).sort();
+    const providers = (await store.accounts.list()).map((c) => c.provider).sort();
     expect(providers).toEqual(['ssh', 'stripe', 'vercel']);
   });
 
@@ -553,7 +553,7 @@ describe('import of a v4 organization', () => {
     expect(code).toBe(67);
     expect(stderr).toContain('signs in once');
     expect(stdout).toBe('');
-    expect(await store.connections.list()).toEqual([]);
+    expect(await store.accounts.list()).toEqual([]);
   });
 
   /** The bundle of this suite, changed by `edit`. */
@@ -598,8 +598,8 @@ describe('import of a v4 organization', () => {
     const { code, stderr } = await run(['--owner', OWNER, '--apply'], { stdin });
     expect(code).toBe(0);
     expect(stderr).not.toContain(liveKey);
-    const stripe = (await store.connections.list()).find((c) => c.provider === 'stripe')!;
-    const refs = (await store.connections.listResources(stripe.id)).map((r) => r.ref).sort();
+    const stripe = (await store.accounts.list()).find((c) => c.provider === 'stripe')!;
+    const refs = (await store.accounts.listResources(stripe.id)).map((r) => r.ref).sort();
     expect(refs).toEqual(['acct_1Acme/live', 'acct_1Acme/test']);
     const policy = (await missionPolicy('web')()) ?? [];
     expect(policy.filter((id) => id.startsWith('stripe'))).toEqual(
@@ -617,12 +617,12 @@ describe('import of a v4 organization', () => {
     // The owner renames the imported mission, and makes one by hand named like
     // the v4 project still waiting for GitHub.
     store.db.prepare('UPDATE missions SET name = ? WHERE id = ?').run('ops (renamed)', ops.id);
-    const vercel = (await store.connections.list()).find((c) => c.provider === 'vercel')!;
+    const vercel = (await store.accounts.list()).find((c) => c.provider === 'vercel')!;
     const handMade = await store.missions.create({
       name: 'web',
       creatorUserId: owner,
       periodSeconds: null,
-      connections: [{ connectionId: vercel.id, resourceIds: [] }],
+      accounts: [{ accountId: vercel.id, resourceIds: [] }],
       policy: [],
     });
     await connectGithubByHand();
@@ -647,7 +647,7 @@ describe('import of a v4 organization', () => {
     const refused = await run(['--owner', OWNER, '--apply'], { stdin: stale });
     expect(refused.code).toBe(65);
     expect(refused.stderr).toContain('--allow-stale');
-    expect(await store.connections.list()).toEqual([]);
+    expect(await store.accounts.list()).toEqual([]);
     const allowed = await run(['--owner', OWNER, '--allow-stale'], { stdin: stale });
     expect(allowed.code).toBe(0);
     const future = bundleWith((b) => {
@@ -769,7 +769,7 @@ describe('import of a v4 organization', () => {
     // by hand, the Supabase project without a label. v4 bound it to `web` as `prod`.
     await run(['--owner', OWNER, '--apply']);
     await connectGithubByHand();
-    const supabase = await store.connections.create({
+    const supabase = await store.accounts.create({
       provider: 'supabase',
       owner: { kind: 'user', id: await ownerId() },
       displayName: 'Supabase',
@@ -780,7 +780,7 @@ describe('import of a v4 organization', () => {
       }),
       metadata: { credential_kind: 'api-key', fields: {} },
     });
-    await store.connections.syncDiscoveredResources(supabase.id, [
+    await store.accounts.syncDiscoveredResources(supabase.id, [
       { ref: 'sbref01', displayName: 'web-db', env: null, metadata: null },
     ]);
     const bundle = JSON.parse(bundleText) as {
@@ -807,13 +807,13 @@ describe('import of a v4 organization', () => {
     expect(dry.stderr).not.toContain('refused by the issuance check');
     expect(dry.code).toBe(0);
     // Read as set, never written.
-    expect((await store.connections.listResources(supabase.id))[0]?.env).toBeNull();
+    expect((await store.accounts.listResources(supabase.id))[0]?.env).toBeNull();
     expect(adminEntries()).toBe(entriesBefore);
 
     const applied = await run(['--owner', OWNER, '--apply'], { stdin });
     expect(applied.code).toBe(0);
     expect(applied.stderr).toContain('"web" (v4 token web-agent): issued');
-    expect((await store.connections.listResources(supabase.id))[0]?.env).toBe('prod');
+    expect((await store.accounts.listResources(supabase.id))[0]?.env).toBe('prod');
     const web = (await store.missions.listForCreator(await ownerId())).find(
       (m) => m.name === 'web',
     )!;
@@ -833,7 +833,7 @@ describe('import of a v4 organization', () => {
     expect(stderr).toContain(stranger);
     expect(stderr).toContain('Nothing was written');
     expect(stdout).toBe('');
-    expect(await store.connections.list()).toEqual([]);
+    expect(await store.accounts.list()).toEqual([]);
     expect(adminEntries()).toBe(0);
   });
 });

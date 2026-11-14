@@ -4,14 +4,14 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, type AccountContext } from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { TEMPLATE_API_BASE } from '../../src/execute.ts';
 import { API_KEY_FIELD } from '../../src/identity.ts';
 import { TEMPLATE_KEYS_PAGE, templateCredential, verifyTemplateKey } from '../../src/index.ts';
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch): AccountContext => ({
   credential: { kind: 'api-key', fields: { [API_KEY_FIELD]: 'k-123' }, metadata: {} },
   fetch,
 });

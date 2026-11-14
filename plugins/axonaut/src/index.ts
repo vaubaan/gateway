@@ -7,7 +7,7 @@
  * Handbook : docs/handbook/providers/axonaut.md ; guide : plugins/axonaut/README.md.
  *
  * Credential : `api-key`, the key of one Axonaut user (`credential.ts`). One
- * resource per connection: the Axonaut account the key opens. No environment:
+ * resource per account: the Axonaut account the key opens. No environment:
  * Axonaut has no test mode, and every risk is account-scoped.
  */
 

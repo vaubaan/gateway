@@ -10,7 +10,7 @@ import {
   UpstreamProtocolError,
   parseSlice,
   serializeSlice,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -840,7 +840,7 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
   const ctx = (
     fetch: typeof globalThis.fetch,
     token = 'cf_token_0123456789abcdef',
-  ): ConnectionContext => ({
+  ): AccountContext => ({
     credential: { kind: 'api-key', fields: { api_token: token }, metadata: {} },
     fetch,
   });

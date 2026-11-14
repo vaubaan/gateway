@@ -37,8 +37,8 @@ export interface CallAuditEntry {
   readonly token_holder: string | null;
   /** Null when the call was refused before the session was touched. */
   readonly session_id: string | null;
-  /** Connection and resource the call targeted, when resolved. */
-  readonly connection_id: string | null;
+  /** Account and resource the call targeted, when resolved. */
+  readonly account_id: string | null;
   readonly resource_ref: string | null;
   readonly tool: string;
   /** `fingerprintArguments(args)`: sha256 (64 hex) of the canonical JSON of
@@ -68,7 +68,7 @@ export interface CallAuditEntry {
    *  the least left in the resource sets it was charged on. Null when the budget
    *  was not consulted. */
   readonly remaining_budget: Readonly<Record<RiskId, number>> | null;
-  /** The resource sets of its connection the call was judged against (risk model
+  /** The resource sets of its account the call was judged against (risk model
    *  §4.7) and, when allowed, charged on. Absent or empty: the risk step did not run. */
   readonly resource_set_ids?: readonly string[];
   /** Free-form attribution label sent by the agent; no effect on
@@ -86,21 +86,21 @@ export interface CallAuditEntry {
 // Administrative entries
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Spec §8: "connection, share, revocation, issuance, extension, reset,
+/** Spec §8: "account, share, revocation, issuance, extension, reset,
  *  approval, rotation, delegation granted or revoked, configuration change". */
 export type AdminAct =
-  | 'connection-created'
-  | 'connection-reconnected'
+  | 'account-created'
+  | 'account-reconnected'
   /** A connect attempt the host refused before anything was stored (kept for
    *  the entries of the GitHub App installations of earlier builds). */
-  | 'connection-refused'
-  | 'connection-transferred'
-  /** The operator gave an owner to a connection that had none left (spec §2.3:
+  | 'account-refused'
+  | 'account-transferred'
+  /** The operator gave an owner to an account that had none left (spec §2.3:
    *  "the operator's only act on the domain"). `before` / `after` carry the owner. */
-  | 'connection-reassigned'
-  | 'connection-revoked'
-  /** A connection's resources were discovered again: the outcome (count or the
-   *  provider's error), never the resource list. Object: the connection.
+  | 'account-reassigned'
+  | 'account-revoked'
+  /** An account's resources were discovered again: the outcome (count or the
+   *  provider's error), never the resource list. Object: the account.
    *  `after.cause` says who ran it: `by-owner` ("Refresh", the actor is the
    *  owner) or `after-a-call` (the gateway, after a call that created a
    *  resource; the actor is the human behind the call's key, `after` adds
@@ -108,13 +108,13 @@ export type AdminAct =
    *  created-resources-join-the-mission. */
   | 'resources-discovered'
   /** The owner edited one resource (name, environment label, hidden flag,
-   *  editable settings). Object: the connection; `before` / `after` name the
+   *  editable settings). Object: the account; `before` / `after` name the
    *  resource and carry the edited fields. */
   | 'resource-edited'
-  /** The owner set or cleared the connection's default environment label for its
-   *  unlabelled resources. Object: the connection; `before` / `after` carry
+  /** The owner set or cleared the account's default environment label for its
+   *  unlabelled resources. Object: the account; `before` / `after` carry
    *  `default_env` (a label or null). */
-  | 'connection-default-env-set'
+  | 'account-default-env-set'
   | 'share-created'
   | 'share-revoked'
   | 'mission-issued'
@@ -138,24 +138,24 @@ export type AdminAct =
   | 'mission-closed'
   /** The authority behind a mission went missing (spec §2.3 "orphaned", a state
    *  derived on every read and never stored). The entry names the human whose
-   *  act removed it (the owner who revoked a share or a connection, the operator
+   *  act removed it (the owner who revoked a share or an account, the operator
    *  who edited a group, the user whose sign-in changed their groups); `after`
    *  carries the cause and the uncovered risks. */
   | 'mission-orphaned'
   /** The authority behind an orphaned mission came back: it serves calls again,
    *  session and counters intact. The entry names the human whose act returned
-   *  it (the owner who shared again, the operator who reassigned the connection
+   *  it (the owner who shared again, the operator who reassigned the account
    *  or added a group member, the user whose sign-in carried the group again);
    *  `before` carries the cause the mission was orphaned for. */
   | 'mission-restored'
-  /** A connection of a mission that keeps serving through its others stopped serving it
+  /** An account of a mission that keeps serving through its others stopped serving it
    *  (ADR orphaned-missions-and-ownerless-connections, amendment 2026-10-21): it was
    *  revoked, or the creator's access to it was withdrawn. The entry names the human
-   *  whose act did it; `after.newly_lost` lists the connections and their cause. */
-  | 'mission-connection-lost'
-  /** A connection whose access had been withdrawn serves a mission again (a share made
-   *  again, a membership back). `after.restored` lists the connections. */
-  | 'mission-connection-restored'
+   *  whose act did it; `after.newly_lost` lists the accounts and their cause. */
+  | 'mission-account-lost'
+  /** An account whose access had been withdrawn serves a mission again (a share made
+   *  again, a membership back). `after.restored` lists the accounts. */
+  | 'mission-account-restored'
   | 'budget-extended'
   | 'period-reset'
   | 'expiry-extended'
@@ -169,26 +169,26 @@ export type AdminAct =
   /** Resources joined the mission's selection. `after.cause` says how:
    *  `created-by-the-mission` — the mission created them through a creating call
    *  and reaches them at once (ADR created-resources-join-the-mission); the actor is
-   *  the human behind the call's key, `after` carries `connection_id`, `tool`,
+   *  the human behind the call's key, `after` carries `account_id`, `tool`,
    *  `refs`, `resource_set_ids` and `added_to_selection` (the refs written now; one
    *  already in a set is not). Object: the mission. */
   | 'mission-resources-added'
   /** A resource joined a resource set with future on after issuance (ADR
    *  resource-set-is-one-environment-with-optional-future-resources): it appeared on the
-   *  connection (`after.reason` `discovered`) or was relabelled into the set's
-   *  environment (`relabelled`). `after` carries `connection_id`, `resource_set_id`,
+   *  account (`after.reason` `discovered`) or was relabelled into the set's
+   *  environment (`relabelled`). `after` carries `account_id`, `resource_set_id`,
    *  `refs`, `reason`. The actor is the human whose act caused it (an owner's relabel or
    *  refresh, a creator's "check now"), or `DISCOVERY_ACTOR_ID`. Object: the mission. */
   | 'mission-resource-joined'
   /** A resource left a resource set because its environment is no longer the set's (a
-   *  relabel, or a change of the connection's default environment); it may join the set
+   *  relabel, or a change of the account's default environment); it may join the set
    *  of its new environment in the same act (`mission-resource-joined`). Same `after`
    *  as `mission-resource-joined`. Object: the mission. */
   | 'mission-resource-left'
   | 'permission-requested'
   | 'limits-changed'
   /** The creator edited the mission (ADR mission-editable-after-issuance): `before` and
-   *  `after` hold the sections that moved — `name`, `expires_at`, `connections`,
+   *  `after` hold the sections that moved — `name`, `expires_at`, `accounts`,
    *  `resources`, `permissions` — each in full; `after.requests_closed` lists the
    *  requests the edit made moot. */
   | 'mission-changed'
@@ -224,22 +224,22 @@ export type AdminAct =
   | 'invitation-added'
   /** An administrator removed an address from the invitation list; `before.email`. */
   | 'invitation-removed'
-  /** A single-use link was made for a local account (ADR local-accounts-sign-in-provider):
+  /** A single-use link was made for a sign-in account (ADR local-accounts-sign-in-provider):
    *  an invitation to create one, or a password reset. Object: `instance-config` /
-   *  `local-account:<provider>`; `after` carries the kind, the address and the expiry —
+   *  `sign-in-account:<provider>`; `after` carries the kind, the address and the expiry —
    *  never the link. The actor is the administrator, `bootstrap`, or the person
    *  (`self`, a reset asked from the sign-in page). */
   | 'local-link-created'
-  /** A local account was created: by its person through an invitation link (the actor
+  /** A sign-in account was created: by its person through an invitation link (the actor
    *  is who invited), or by the setup for the first administrator. `after`: the address. */
-  | 'local-account-created'
-  /** The password of a local account was set again, through a reset link or from Settings. */
+  | 'sign-in-account-created'
+  /** The password of a sign-in account was set again, through a reset link or from Settings. */
   | 'local-password-changed'
-  /** The second factor of a local account was enrolled, replaced or reset (by the person,
+  /** The second factor of a sign-in account was enrolled, replaced or reset (by the person,
    *  or by an administrator for them: `after.by`). Never the secret. */
   | 'local-second-factor-changed'
-  /** An administrator removed a local account; the person can no longer sign in through it. */
-  | 'local-account-removed'
+  /** An administrator removed a sign-in account; the person can no longer sign in through it. */
+  | 'sign-in-account-removed'
   /** An administrator downloaded the master key file (the setup's handover, or
    *  Administration → Encryption). Object: `instance-config` / `master-key`;
    *  `after` carries the key version and the page it was asked from. Never the key. */
@@ -299,7 +299,7 @@ export type AdminAct =
   | 'config-changed';
 
 export type AdminObjectType =
-  | 'connection'
+  | 'account'
   | 'share'
   | 'mission'
   | 'request'
@@ -312,7 +312,7 @@ export type AdminObjectType =
 /**
  * The `user_id` of administrative entries written by the bootstrap operator:
  * the holder of the one-time bootstrap token, who has no user row yet. One
- * constant for every writer (auth, connections) and every reader (audit).
+ * constant for every writer (auth, accounts) and every reader (audit).
  */
 export const BOOTSTRAP_ACTOR_ID = 'bootstrap';
 
@@ -342,7 +342,7 @@ export const SCHEDULE_ACTOR_LABEL = 'The backup schedule';
 
 /**
  * The `user_id` of entries the gateway's own discovery writes: the hourly discovery of
- * the connections a mission's future resources depend on, and the discovery after a
+ * the accounts a mission's future resources depend on, and the discovery after a
  * creating call (ADR resource-set-is-one-environment-with-optional-future-resources).
  */
 export const DISCOVERY_ACTOR_ID = 'discovery';

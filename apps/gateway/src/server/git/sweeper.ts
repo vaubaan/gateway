@@ -12,7 +12,7 @@
  *              interval: it goes to the back of the queue instead of heading
  *              every batch
  *   giving up  a row older than `PENDING_REF_GIVE_UP_MS` is dropped (logged)
- *   gone       a connection that is gone (revoked, expired, deleted) cannot
+ *   gone       an account that is gone (revoked, expired, deleted) cannot
  *              delete anything: its rows are dropped
  *
  * Several replicas may each run a sweeper: a second delete of a deleted ref
@@ -20,8 +20,8 @@
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
-import { ConnectionUnavailableError, type CredentialBroker } from '../connections';
-import type { ConnectionCredentialCache } from '../execution';
+import { AccountUnavailableError, type CredentialBroker } from '../accounts';
+import type { AccountCredentialCache } from '../execution';
 import { errorFields, type Logger } from '../logging';
 import type { PendingRefRecord, PendingRefsRepo } from '../store';
 import type { Clock } from '../store/clock';
@@ -40,7 +40,7 @@ export interface PendingRefSweeperDeps {
   readonly pendingRefs: PendingRefsRepo;
   readonly registry: PluginRegistry;
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'contextOf'>;
-  readonly credentialCache: ConnectionCredentialCache;
+  readonly credentialCache: AccountCredentialCache;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly intervalMs?: number;
@@ -53,25 +53,25 @@ export interface PendingRefSweeper {
 }
 
 function groupKey(row: PendingRefRecord): string {
-  return `${row.connectionId}\n${row.repository}`;
+  return `${row.accountId}\n${row.repository}`;
 }
 
 export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefSweeper {
   const intervalMs = deps.intervalMs ?? PENDING_REF_SWEEP_INTERVAL_MS;
   let running = false;
 
-  /** The refs of `rows` the provider confirmed gone (all of them for a connection that is gone). */
+  /** The refs of `rows` the provider confirmed gone (all of them for an account that is gone). */
   async function sweepGroup(rows: readonly PendingRefRecord[]): Promise<Set<string>> {
     const [first] = rows;
     if (!first) return new Set();
     try {
-      const resolved = await deps.credentials.resolve(first.connectionId);
+      const resolved = await deps.credentials.resolve(first.accountId);
       const remote = resolved.plugin.gitRemote;
       if (!remote) return new Set(rows.map((r) => r.ref));
       const ctx = {
         ...deps.credentials.contextOf(resolved, AbortSignal.timeout(CLEANUP_TIMEOUT_MS)),
         resources: [],
-        credentialCache: deps.credentialCache.scopeFor(resolved.connection),
+        credentialCache: deps.credentialCache.scopeFor(resolved.account),
       };
       const upstream = await remote.upstream(ctx, first.repository, 'write');
       return await deleteTemporaryRefs(
@@ -80,9 +80,9 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
         rows.map((r) => ({ temporary: r.ref, objectId: r.objectId })),
       );
     } catch (err) {
-      if (err instanceof ConnectionUnavailableError) return new Set(rows.map((r) => r.ref));
+      if (err instanceof AccountUnavailableError) return new Set(rows.map((r) => r.ref));
       deps.logger.warn('temporary refs not deleted at the provider', {
-        connection_id: first.connectionId,
+        account_id: first.accountId,
         refs: rows.length,
         error: errorName(err),
       });
@@ -103,7 +103,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
       );
       if (tooOld.length > 0) {
         deps.logger.warn('temporary refs given up: the provider kept them', {
-          connection_id: group[0]?.connectionId,
+          account_id: group[0]?.accountId,
           refs: tooOld.length,
         });
       }

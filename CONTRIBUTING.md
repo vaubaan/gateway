@@ -84,7 +84,7 @@ Nothing leaves your machine, and the data is deleted when you stop it with
 [`docs/handbook/demo-mode.md`](docs/handbook/demo-mode.md).
 
 It is the fastest way to understand the vocabulary used everywhere else
-(connection, resource, share, mission, risk, budget, gate, request).
+(account, resource, share, mission, risk, budget, gate, request).
 
 To run a real instance with your own identity provider, follow
 [`deploy/README.md`](deploy/README.md) (Docker Compose). You do not need one

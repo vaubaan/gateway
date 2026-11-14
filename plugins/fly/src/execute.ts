@@ -11,7 +11,7 @@
  *   - the app is still the one discovery saw (same id, same organization)
  *     before any write on it : app names are freed when an app is destroyed ;
  *   - every image a machine is given is pinned by digest and under the
- *     connection's prefixes, read from the credential this time ;
+ *     account's prefixes, read from the credential this time ;
  *   - changing the image of a machine needs, for every volume it mounts, a
  *     snapshot created in the last hour ;
  *   - a volume is restored only from a snapshot or a volume of the same app ;
@@ -29,7 +29,7 @@ import {
   isRecord,
   jsonResult,
   readShape,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
   type ExecuteContext,
   type McpToolResult,
@@ -540,8 +540,8 @@ function isAppPage(x: unknown): x is AppPageDto {
   return isRecord(x) && isList(x.apps) && x.apps.every(isAppDto);
 }
 
-/** Every app of the connection's organization, page by page, up to the ceiling. */
-async function allApps(ctx: ConnectionContext): Promise<AppDto[]> {
+/** Every app of the account's organization, page by page, up to the ceiling. */
+async function allApps(ctx: AccountContext): Promise<AppDto[]> {
   const org = orgSlugOf(ctx.credential);
   const apps: AppDto[] = [];
   let cursor: string | undefined;
@@ -559,7 +559,7 @@ async function allApps(ctx: ConnectionContext): Promise<AppDto[]> {
 }
 
 /** One resource per app of the organization. */
-export async function discoverFlyResources(ctx: ConnectionContext): Promise<readonly Resource[]> {
+export async function discoverFlyResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const org = orgSlugOf(ctx.credential);
   const prefixes = imagePrefixesOfCredential(ctx.credential);
   if (!prefixes)
@@ -600,12 +600,12 @@ function query(values: Readonly<Record<string, unknown>>): string {
   return built ? `?${built}` : '';
 }
 
-function get(ctx: ConnectionContext, path: string, search = ''): Promise<unknown> {
+function get(ctx: AccountContext, path: string, search = ''): Promise<unknown> {
   return flyJson(ctx, 'GET', `${FLY_API_BASE}${path}${search}`, anyJson);
 }
 
 /** `get`, where Fly's 404 is the answer : `null`, nothing found. */
-async function lookup(ctx: ConnectionContext, path: string): Promise<unknown> {
+async function lookup(ctx: AccountContext, path: string): Promise<unknown> {
   try {
     return await get(ctx, path);
   } catch (error) {
@@ -615,7 +615,7 @@ async function lookup(ctx: ConnectionContext, path: string): Promise<unknown> {
 }
 
 function send(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: string,
   path: string,
   body?: unknown,
@@ -625,13 +625,13 @@ function send(
 }
 
 /**
- * One request to Fly with the connection's token, through the SDK's
+ * One request to Fly with the account's token, through the SDK's
  * `httpJson` : 401 / 403 `UpstreamAuthError`, another failed status
  * `UpstreamHttpError`, an answer that is not JSON or not what `guard` accepts
  * `UpstreamProtocolError`, an empty answer `null`.
  */
 function flyJson<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: string,
   url: string,
   guard: Guard<T>,

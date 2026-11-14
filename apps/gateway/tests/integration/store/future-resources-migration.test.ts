@@ -87,7 +87,12 @@ describe('mission resource sets written before migration 0033', () => {
 
   it('writes the whole connection out as its list with future on, and gives every set its environment', () => {
     seedAtVersion32();
-    runMigrations(db, loadMigrations(), clock);
+    // Up to the last migration before the rename of 0036, whose names this test reads.
+    runMigrations(
+      db,
+      loadMigrations().filter((m) => m.version < 36),
+      clock,
+    );
 
     expect(
       db
@@ -127,7 +132,12 @@ describe('mission resource sets written before migration 0033', () => {
 
   it('drops the scope and its index; `future` is a source, another value is refused', () => {
     seedAtVersion32();
-    runMigrations(db, loadMigrations(), clock);
+    // Up to the last migration before the rename of 0036, whose names this test reads.
+    runMigrations(
+      db,
+      loadMigrations().filter((m) => m.version < 36),
+      clock,
+    );
     const columns = db
       .prepare<[], { name: string }>("SELECT name FROM pragma_table_info('mission_resource_sets')")
       .all()

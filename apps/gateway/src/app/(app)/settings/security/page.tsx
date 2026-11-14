@@ -1,13 +1,13 @@
 /**
  * `/settings/security` — a person's own second factor, whatever their sign-in
  * provider (ADR administrators-live-in-the-instance, §7), and the password of a
- * local account (ADR local-accounts-sign-in-provider). The recovery codes of a new
+ * sign-in account (ADR local-accounts-sign-in-provider). The recovery codes of a new
  * second factor arrive here as a one-time notice.
  */
 import { headers } from 'next/headers';
 
 import { EnrolSecondFactor } from '@/components/auth/SecondFactorForms';
-import { NoticeBanner } from '@/components/connections/parts';
+import { NoticeBanner } from '@/components/accounts/parts';
 import styles from '@/components/settings/settings.module.css';
 import { SettingsFrame } from '@/components/shell/AppShell';
 import {
@@ -23,8 +23,8 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
-import { ENROL_PARAM, localAccountIdOf, safeReturnTo, SECURITY_PAGE } from '@/server/auth';
+import { takeNotice, type PageSearchParams } from '@/lib/accounts/session';
+import { ENROL_PARAM, signInAccountIdOf, safeReturnTo, SECURITY_PAGE } from '@/server/auth';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 import { otpauthUrl } from '@/server/crypto/totp';
 import { DOC_PAGES } from '@/lib/vocabulary';
@@ -39,8 +39,8 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
   const notice = await takeNotice(root, principal.sessionId, params);
   const providers = await root.auth.providers.views();
   const local = providers.find((p) => p.kind === 'local') ?? null;
-  const accountId = local ? localAccountIdOf(principal, local) : null;
-  const account = accountId ? await root.auth.accounts.accountById(accountId) : null;
+  const accountId = local ? signInAccountIdOf(principal, local) : null;
+  const account = accountId ? await root.auth.signInAccounts.signInAccountById(accountId) : null;
   const hasFactor = await root.auth.secondFactors.has(principal.user.id);
   const codesLeft = hasFactor
     ? await root.auth.secondFactors.recoveryCodesLeft(principal.user.id)

@@ -12,7 +12,7 @@ last_reviewed: 2026-10-27
 
 `@vaubaan/plugin-fly`: native plugin on the Machines REST API (`https://api.machines.dev/v1`) and
 the logs endpoint `fly logs` uses. Fly hosts no MCP server (`fly mcp server` is a local flyctl
-process), hence native. The resource is a Fly app of the connection's organization; its
+process), hence native. The resource is a Fly app of the account's organization; its
 environment is the owner's label, never parsed from the name. Rules common to every plugin:
 [providers README](README.md).
 
@@ -29,16 +29,16 @@ environment is the owner's label, never parsed from the name. Rules common to ev
 
 - **Nothing hands out a Fly credential**: `deploy_token`, `/tokens/*` (beyond the paste check),
   `/secretkeys/*`, custom certificate upload and organization-wide lists stay out.
-- **The organization is the connection's** `org_slug`, never an argument: `create_app` and
+- **The organization is the account's** `org_slug`, never an argument: `create_app` and
   discovery cannot leave it. It changes what a refusal or audit line says, never which risk is
   touched (every pattern matches `org[*]`).
 - **App names are reused after destruction**: before every write the executor reads the app and
   declines when its id or organization differs from the recorded `app_id`, or none is recorded.
 - **Image guard**: every image a call gives a machine (`deploy_image`, a config's `image`,
   `containers[].image`, `files[].image_config`) is `<repo>[:tag]@sha256:<64 hex>` under one of the
-  connection's `image_prefixes` (default `ghcr.io/vaubaan/gateway`) at a path boundary
+  account's `image_prefixes` (default `ghcr.io/vaubaan/gateway`) at a path boundary
   (`…/gateway-evil` refused, registry with a port refused). Classify checks the copy discovery puts
-  in metadata; execute checks again against the connection field.
+  in metadata; execute checks again against the account field.
 - **Image changes need a fresh snapshot**: each mounted volume must have one from the last 60
   minutes; `deploy_image` and `scale_machine` write under a lease, released even on failure.
 - **Secret values never come back**: `show_secrets` is no argument and every secret answer passes an

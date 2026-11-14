@@ -27,7 +27,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import type { AuthorityModule } from '../authority';
 import type { SessionService } from '../budget';
-import type { ConnectionsModule } from '../connections';
+import type { AccountsModule } from '../accounts';
 import type { ExecutionModule } from '../execution';
 import type { GroupsModule } from '../groups';
 import type { MissionService } from '../missions';
@@ -54,8 +54,8 @@ type Forbidden =
   | SessionService
   | ExecutionModule
   | ExecutionModule[keyof ExecutionModule]
-  | ConnectionsModule
-  | ConnectionsModule['service']
+  | AccountsModule
+  | AccountsModule['service']
   | SharesModule
   | SharesModule['service']
   | GroupsModule
@@ -112,7 +112,7 @@ describe('vaubaan plugin — hard deny, by imports', () => {
     'requests',
     'budget',
     'execution',
-    'connections',
+    'accounts',
     'shares',
     'groups',
     'authority',
@@ -187,7 +187,7 @@ describe('vaubaan plugin — hard deny, by surface', () => {
 
   it('the tools are the seven acts, in order, prefixed `vaubaan__`', () => {
     expect(vaubaanTools.map((tool) => tool.name)).toEqual([
-      'vaubaan__list_my_connections',
+      'vaubaan__list_my_accounts',
       'vaubaan__get_catalog',
       'vaubaan__list_my_missions',
       'vaubaan__preview_policy',
@@ -201,8 +201,8 @@ describe('vaubaan plugin — hard deny, by surface', () => {
 
   it('no tool is named after an act of a forbidden family', () => {
     for (const act of Object.values(ACT)) {
-      // `list_my_connections` reads connections; it is the one name that carries such a word.
-      const name = act === 'list_my_connections' ? 'list_my' : act;
+      // `list_my_accounts` reads accounts; it is the one name that carries such a word.
+      const name = act === 'list_my_accounts' ? 'list_my' : act;
       for (const word of FORBIDDEN_WORDS) {
         expect(name.includes(word), `${act} contains "${word}"`).toBe(false);
       }

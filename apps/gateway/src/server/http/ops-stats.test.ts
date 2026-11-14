@@ -15,12 +15,12 @@ const URL_ = 'https://gateway.example.com/ops/stats';
 const STATS: OpsStats = {
   generated_at: '2026-10-31T15:30:00.000Z',
   users: 3,
-  connections: { total: 1, by_provider: { github: 1 } },
+  accounts: { total: 1, by_provider: { github: 1 } },
   active_missions: 1,
   calls_today: { since: '2026-10-31T00:00:00.000Z', allowed: 2, refused: 0 },
   store: { kind: 'memory', bytes: 4096 },
   keys: { current_version: 1, sealed_by_version: { '1': 1 } },
-  limits: { users: null, connections: null, active_missions: null },
+  limits: { users: null, accounts: null, active_missions: null },
 };
 
 function request(authorization?: string): Request {

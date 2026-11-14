@@ -27,7 +27,7 @@ deployed.
 - **Nothing under `apps/gateway/src/` knows the demo**: no flag, option or variable; only pre-existing injection points of the root are used. Held by `demo-safety.test.ts`, which also checks that no `tests/` file is in `.next/standalone` and no built file names `/__demo`.
 - **The launcher refuses a real environment**: `NODE_ENV=production`, `VAUBAAN_CONFIG_FILE` or `VAUBAAN_PUBLIC_URL` set → exit 2 before anything opens (`guards.ts`).
 - **Nothing leaves the machine**: the listener binds `127.0.0.1`; provider calls go to `providers.ts`; telemetry and client-document fetches refuse; the global `fetch` refuses any non-loopback host; SSH is not registered.
-- **The seed writes nothing to the store directly**: sign-ins, connections, shares, missions, the OAuth handshake and the calls all go through the application's handlers and services, so every seeded state is one the application can reach. The surface rate limits are lifted while it runs only.
+- **The seed writes nothing to the store directly**: sign-ins, accounts, shares, missions, the OAuth handshake and the calls all go through the application's handlers and services, so every seeded state is one the application can reach. The surface rate limits are lifted while it runs only.
 - **No lasting secret or data**: keys generated per run, the SQLite file in a `mkdtemp` directory deleted on exit unless `DEMO_KEEP=1`.
 
 ## Traps

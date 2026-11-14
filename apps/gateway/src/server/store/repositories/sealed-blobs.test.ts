@@ -39,20 +39,23 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
   });
   const ids: string[] = [];
   for (const credential of ['first-credential', 'second-credential']) {
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: credential,
       credential,
     });
-    ids.push(connection.id);
+    ids.push(account.id);
   }
   await store.config.setSecret('idp.client_secret', 'company-secret');
   await store.config.set('telemetry', '{"enabled":false}');
-  const account = await store.localAccounts.create({ provider: 'local', email: 'u2@example.com' });
-  if (!account) throw new Error('no account');
-  await store.localAccounts.writeSecret(account.id, 'password', '$argon2id$stand-in');
-  ids.push(account.id);
+  const signInAccount = await store.signInAccounts.create({
+    provider: 'local',
+    email: 'u2@example.com',
+  });
+  if (!signInAccount) throw new Error('no account');
+  await store.signInAccounts.writeSecret(signInAccount.id, 'password', '$argon2id$stand-in');
+  ids.push(signInAccount.id);
   // A device's push subscription (migration 0030): its endpoint is a capability URL.
   const { device } = await store.notificationDevices.add({
     userId: user.id,
@@ -78,7 +81,7 @@ describe('sealed blobs: the master-key re-seal', () => {
   it('counts the blobs per table and version', async () => {
     const { store } = await seeded();
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
-      'connections@1=2',
+      'accounts@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
@@ -93,7 +96,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     expect(report.apply).toBe(false);
     expect(report.tables).toEqual([
       {
-        table: 'connections',
+        table: 'accounts',
         current: 0,
         currentUnreadable: 0,
         resealed: 2,
@@ -150,7 +153,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
-      'connections@1=2',
+      'accounts@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
@@ -164,7 +167,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     const report = await store.sealedBlobs.reseal({ apply: true });
     expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0, 1, 1]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
-      'connections@2=2',
+      'accounts@2=2',
       'instance_config@2=1',
       'local_secrets@2=1',
       'notification_devices@2=1',
@@ -173,10 +176,10 @@ describe('sealed blobs: the master-key re-seal', () => {
 
     // Without the previous key, everything still opens: it was sealed again.
     encryptor.inner = await v2Alone();
-    expect(await store.connections.getCredential(ids[0] ?? '')).toBe('first-credential');
-    expect(await store.connections.getCredential(ids[1] ?? '')).toBe('second-credential');
+    expect(await store.accounts.getCredential(ids[0] ?? '')).toBe('first-credential');
+    expect(await store.accounts.getCredential(ids[1] ?? '')).toBe('second-credential');
     expect(await store.config.getSecret('idp.client_secret')).toBe('company-secret');
-    expect(await store.localAccounts.readSecret(ids[2] ?? '', 'password')).toBe(
+    expect(await store.signInAccounts.readSecret(ids[2] ?? '', 'password')).toBe(
       '$argon2id$stand-in',
     );
     const [subscription] = await store.notificationDevices.subscriptionsOf(ids[3] ?? '');
@@ -192,7 +195,7 @@ describe('sealed blobs: the master-key re-seal', () => {
     const again = await store.sealedBlobs.reseal({ apply: true });
     expect(again.tables).toEqual([
       {
-        table: 'connections',
+        table: 'accounts',
         current: 2,
         currentUnreadable: 0,
         resealed: 0,
@@ -264,7 +267,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       [0, 1],
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
-      'connections@1=2',
+      'accounts@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
@@ -295,14 +298,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         const plain = await v2.decrypt(ad, sealed);
         if (!rewritten && ad === ids[0]) {
           rewritten = true;
-          await store.connections.refreshCredential(ids[0], 'refreshed-credential');
+          await store.accounts.refreshCredential(ids[0], 'refreshed-credential');
         }
         return plain;
       },
     };
     const report = await store.sealedBlobs.reseal({ apply: true });
     expect(report.tables[0]).toEqual({
-      table: 'connections',
+      table: 'accounts',
       current: 0,
       currentUnreadable: 0,
       resealed: 1,
@@ -310,6 +313,6 @@ describe('sealed blobs: the master-key re-seal', () => {
       changed: 1,
     });
     encryptor.inner = await v2Alone();
-    expect(await store.connections.getCredential(ids[0] ?? '')).toBe('refreshed-credential');
+    expect(await store.accounts.getCredential(ids[0] ?? '')).toBe('refreshed-credential');
   });
 });

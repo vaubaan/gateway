@@ -20,7 +20,7 @@ export const BLOCK = id('4');
 export const DB = id('5');
 export const DS = id('6');
 export const ENTRY = id('7');
-/** Another root of the connection, outside the mission. */
+/** Another root of the account, outside the mission. */
 export const OTHER_ROOT = id('8');
 export const DISCUSSION = id('a');
 

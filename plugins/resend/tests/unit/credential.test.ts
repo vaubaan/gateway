@@ -8,7 +8,7 @@ import {
   CredentialRefusal,
   UpstreamAuthError,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
 } from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
 
@@ -22,7 +22,7 @@ import {
 
 const DOMAINS = `${RESEND_API_BASE}/domains`;
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch): AccountContext => ({
   credential: { kind: 'api-key', fields: { api_key: 're_secret_0123' }, metadata: {} },
   fetch,
 });

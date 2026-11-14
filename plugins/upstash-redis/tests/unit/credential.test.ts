@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, type AccountContext } from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -17,7 +17,7 @@ import {
 
 const TEAMS = `${UPSTASH_MANAGEMENT_API}/teams`;
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch): AccountContext => ({
   credential: {
     kind: 'api-key',
     fields: { email: 'ops@acme.example', api_key: 'key-0123' },

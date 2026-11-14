@@ -38,7 +38,7 @@ it('revokes the active argon2id tokens, and only them', async () => {
       subject: 'owner',
       email: 'owner@example.com',
     });
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       displayName: 'GitHub',
       owner: { kind: 'user', id: user.id },
@@ -48,7 +48,7 @@ it('revokes the active argon2id tokens, and only them', async () => {
       name: 'Existing mission',
       creatorUserId: user.id,
       periodSeconds: null,
-      connections: [{ connectionId: connection.id, resourceIds: [] }],
+      accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',

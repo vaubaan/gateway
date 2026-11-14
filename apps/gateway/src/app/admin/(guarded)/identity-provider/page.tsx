@@ -50,7 +50,7 @@ function first(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
-const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub', local: 'Local accounts' } as const;
+const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub', local: 'Sign-in accounts' } as const;
 
 /** Who a provider admits, in words. */
 function admits(provider: SignInProviderView): string {
@@ -188,7 +188,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                   Add GitHub
                 </ButtonLink>,
                 <ButtonLink key="local" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=local`}>
-                  Add local accounts
+                  Add sign-in accounts
                 </ButtonLink>,
               ]
         }
@@ -259,8 +259,9 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             testId="no-sign-in-provider"
           >
             Your company’s directory through OpenID Connect (Entra ID, Google Workspace, Okta,
-            Keycloak), GitHub for people who sign in with their own account, or local accounts kept
-            by this gateway — an email, a password and a second factor — when there is no directory.
+            Keycloak), GitHub for people who sign in with their own account, or sign-in accounts
+            kept by this gateway — an email, a password and a second factor — when there is no
+            directory.
           </EmptyState>
         ) : (
           <DataTable

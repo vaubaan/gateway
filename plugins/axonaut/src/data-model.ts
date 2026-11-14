@@ -4,7 +4,7 @@
  * Spec : docs/spec/gateway-risk-model.md §2 ; handbook docs/handbook/providers/axonaut.md §1.
  *
  * One plane, `erp`, rooted at the `account` — the Axonaut company account an
- * API key opens, and the one resource of a connection. Axonaut's REST API is
+ * API key opens, and the one resource of an account. Axonaut's REST API is
  * flat (`/companies/{id}`, `/employees/{id}`, `/invoices/{id}`…): a contact's
  * company or an invoice's customer is a field of the record, never a segment
  * of its path. The model says so: every entity is a direct child of the
@@ -40,7 +40,7 @@ export const axonautDataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Axonaut account the API key opens: the resource of a connection, one per key.',
+            'The Axonaut account the API key opens: the resource of an account, one per key.',
         },
         collection('company', 'A company of the CRM: a customer, a prospect or a supplier.'),
         collection('contact', 'A contact person of a company (an Axonaut "employee").'),

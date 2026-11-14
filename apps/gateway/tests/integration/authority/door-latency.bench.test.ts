@@ -36,7 +36,7 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
     rig = await authorityRig({ env: UNLIMITED });
     const { store, shares, groups } = rig.root;
 
-    // 1. The creator owns the connection in their own name.
+    // 1. The creator owns the account in their own name.
     shapes.push({
       name: 'owner (user)',
       mission: await rig.issueFor(rig.ada, [READ], 'Owner', roomy),
@@ -48,7 +48,7 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
       await store.groups.addMember(group.id, rig.bob.id);
     }
     const readers = (await store.groups.getByName('readers'))!;
-    await shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    await shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'group', groupId: readers.id },
       riskIds: [READ],
     });
@@ -57,23 +57,21 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
       mission: await rig.issueFor(rig.bob, [READ], 'Shared', roomy),
     });
 
-    // 3. The creator owns a second connection through a group.
+    // 3. The creator owns a second account through a group.
     const owners = await groups.service.create(rig.operator.id, 'owners');
     await groups.service.addMember(rig.operator.id, owners.id, 'ops@example.com');
-    const second = await store.connections.create({
-      provider: rig.connection.provider,
+    const second = await store.accounts.create({
+      provider: rig.account.provider,
       owner: { kind: 'group', id: owners.id },
       displayName: 'Depot of the group',
-      credential: await store.connections.getCredential(rig.connection.id),
+      credential: await store.accounts.getCredential(rig.account.id),
     });
-    await store.connections.syncDiscoveredResources(second.id, [
+    await store.accounts.syncDiscoveredResources(second.id, [
       { ref: 'scratch', displayName: 'scratch' },
     ]);
     const issued = await rig.root.missions.service.issue(rig.operator, {
       name: 'Group owner',
-      connections: [
-        { connection_id: second.id, resources: { scope: 'all' }, policy: [roomy(READ)] },
-      ],
+      accounts: [{ account_id: second.id, resources: { scope: 'all' }, policy: [roomy(READ)] }],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     });

@@ -1,6 +1,6 @@
 /**
  * The community validation status of a service's plugin (spec §9 "the
- * instance's interface shows this status on each connection").
+ * instance's interface shows this status on each account").
  *
  * Renders nothing when there is no status to show: telemetry off, no
  * collector, no report yet for the plugin version this gateway runs, or a

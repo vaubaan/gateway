@@ -12,9 +12,9 @@
  * `createGmailPlugin({ transport })` takes a fake. Rules of the real one :
  *   - one session is one connection : opened, used by `work`, logged out ;
  *   - a refused sign-in is an `UpstreamAuthError` (the host marks the
- *     connection "needs reconnecting" ; the owner pastes a new app password) ;
+ *     account "needs reconnecting" ; the owner pastes a new app password) ;
  *   - the caller's `AbortSignal` and the session deadline close the
- *     connection and reject with a plain `Error` ;
+ *     account and reject with a plain `Error` ;
  *   - a mailbox's special use is the one the server reports (SPECIAL-USE),
  *     never one guessed from its name : Gmail localizes its folder names ;
  *   - ids cross this interface as the decimal strings IMAP uses
@@ -211,7 +211,7 @@ function humanize(err: unknown, account: GmailAccount): Error {
     return new Error(`gmail: ${GMAIL_IMAP_HOST} cannot be resolved.`);
   }
   if (/ECONNREFUSED|ECONNRESET/.test(message)) {
-    return new Error(`gmail: the connection to ${GMAIL_IMAP_HOST} was refused or reset.`);
+    return new Error(`gmail: the account to ${GMAIL_IMAP_HOST} was refused or reset.`);
   }
   if (/timeout|timed out|ETIMEDOUT/i.test(message) || e?.code === 'CONNECT_TIMEOUT') {
     return new Error(`gmail: ${GMAIL_IMAP_HOST} did not answer in time.`);
@@ -516,7 +516,7 @@ export function createImapflowTransport(
       });
       // An 'error' event without a listener would crash the process.
       client.on('error', (err: Error) => {
-        options.logger?.warn('gmail imap connection error', { error_class: err.name });
+        options.logger?.warn('gmail imap account error', { error_class: err.name });
       });
 
       let stop: ((err: Error) => void) | null = null;

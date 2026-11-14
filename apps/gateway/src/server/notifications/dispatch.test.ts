@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createLogger } from '../logging';
-import type { ConnectionRecord, MissionRecord, UserRecord } from '../store/types';
+import type { AccountRecord, MissionRecord, UserRecord } from '../store/types';
 import { createBackgroundRunner } from './background';
 import { createNotificationDispatch } from './dispatch';
 import type { Notification } from './notification';
@@ -35,7 +35,7 @@ function setup() {
     ['m1', { id: 'm1', name: 'Release train', creatorUserId: 'ada' }],
     ['m2', { id: 'm2', name: 'Old one', creatorUserId: 'gone' }],
   ]);
-  const connections = new Map<string, Pick<ConnectionRecord, 'id' | 'displayName' | 'owner'>>([
+  const accounts = new Map<string, Pick<AccountRecord, 'id' | 'displayName' | 'owner'>>([
     ['c1', { id: 'c1', displayName: 'acme-org', owner: { kind: 'user', id: 'ada' } }],
     ['c2', { id: 'c2', displayName: 'team account', owner: { kind: 'group', id: 'g1' } }],
   ]);
@@ -48,8 +48,8 @@ function setup() {
     },
     runner,
     missions: { getById: async (id) => (missions.get(id) as MissionRecord | undefined) ?? null },
-    connections: {
-      getById: async (id) => (connections.get(id) as ConnectionRecord | undefined) ?? null,
+    accounts: {
+      getById: async (id) => (accounts.get(id) as AccountRecord | undefined) ?? null,
     },
     users: { getById: async (id) => users.get(id) ?? null },
     groups: { listMembers: async () => [user('bob'), user('cyd'), user('gone', 'removed')] },
@@ -124,7 +124,7 @@ describe('notification dispatch', () => {
     const { events, recipients } = setup();
     events.missionOrphaned('m2', 'bob');
     events.missionOrphaned('no-such-mission', 'bob');
-    events.accountNeedsReconnecting('no-such-connection');
+    events.accountNeedsReconnecting('no-such-account');
     expect(await recipients()).toEqual([]);
   });
 });

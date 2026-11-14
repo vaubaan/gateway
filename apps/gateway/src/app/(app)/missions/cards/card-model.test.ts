@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { ACME_RESOURCES, acmeConnection } from '../../../../../tests/support/missions/testing';
+import { ACME_RESOURCES, acmeAccount } from '../../../../../tests/support/missions/testing';
 
 import {
   addCard,
@@ -36,7 +36,7 @@ import {
 } from './card-model';
 import { detailCards } from './detail-cards';
 
-const acme = acmeConnection();
+const acme = acmeAccount();
 const context = [acme];
 const noun = acme.resource_noun;
 
@@ -64,10 +64,8 @@ describe('a card’s words', () => {
 
   it('shows the environment only where it comes from resource labels', () => {
     expect(showsEnv(acme)).toBe(true);
-    expect(showsEnv(acmeConnection({ derives_env: true }))).toBe(false);
-    expect(showsEnv(acmeConnection({ risks: acme.risks.filter((r) => r.env === null) }))).toBe(
-      false,
-    );
+    expect(showsEnv(acmeAccount({ derives_env: true }))).toBe(false);
+    expect(showsEnv(acmeAccount({ risks: acme.risks.filter((r) => r.env === null) }))).toBe(false);
   });
 
   it('labels the four segments from the trust levels, plus Custom', () => {
@@ -112,7 +110,7 @@ describe('"+ Add an account": resources grouped by environment', () => {
       env: 'staging',
       hidden,
     });
-    const many = acmeConnection({
+    const many = acmeAccount({
       resources: [staging('a', false), staging('b', false), staging('h', true)],
     });
     const [group] = resourceGroups(many, stateOf(), null);
@@ -120,7 +118,7 @@ describe('"+ Add an account": resources grouped by environment', () => {
     expect(group?.hidden.map((r) => r.resource.id)).toEqual(['h']);
     expect(defaultTicked(group)).toEqual([]);
     expect(freeIdsOf(group)).toEqual(['a', 'b']);
-    const one = acmeConnection({ resources: [staging('a', false), staging('h', true)] });
+    const one = acmeAccount({ resources: [staging('a', false), staging('h', true)] });
     expect(defaultTicked(resourceGroups(one, stateOf(), null)[0])).toEqual(['a']);
     // Another card holds the only listed one: nothing is free, nothing ticked.
     const held = stateOf(card(['a'], 'staging', 'x'));
@@ -128,7 +126,7 @@ describe('"+ Add an account": resources grouped by environment', () => {
   });
 
   it('lets unlabelled resources in where the provider reads the environment from the call', () => {
-    const vercelLike = acmeConnection({ derives_env: true });
+    const vercelLike = acmeAccount({ derives_env: true });
     const groups = resourceGroups(vercelLike, stateOf(), null);
     expect(groups.find((g) => g.env === null)?.selectable).toBe(true);
   });
@@ -147,7 +145,7 @@ describe('"+ Add an account": resources grouped by environment', () => {
   });
 
   it('reaches an account without resources as itself', () => {
-    const bare = acmeConnection({ resources: [] });
+    const bare = acmeAccount({ resources: [] });
     expect(
       reachesAccountItself(
         bare,
@@ -226,7 +224,7 @@ describe('the gauge of a macro-action', () => {
     const cards = detailCards(
       {
         policy: [line],
-        connections: [
+        accounts: [
           {
             id: acme.id,
             provider: 'acme',

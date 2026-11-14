@@ -14,7 +14,7 @@
  */
 
 import type {
-  ConnectionStatus,
+  AccountStatus,
   Gate,
   GroupSource,
   Iso8601,
@@ -29,7 +29,7 @@ import type {
 } from '@vaubaan/shared';
 
 export type {
-  ConnectionStatus,
+  AccountStatus,
   Gate,
   GroupSource,
   MissionStatus,
@@ -84,10 +84,10 @@ export interface GroupRecord {
   readonly createdAt: Iso;
 }
 
-// --- connections, resources, shares -------------------------------------------------
+// --- accounts, resources, shares -------------------------------------------------
 
 /**
- * What became of the grant at the provider when a connection was revoked.
+ * What became of the grant at the provider when an account was revoked.
  * `revoked`: the provider confirmed the withdrawal. `manual`: the gateway
  * cannot withdraw it for this provider. `failed`: it asked and was refused or
  * not answered. In the last two cases the person removes the grant by hand.
@@ -95,12 +95,12 @@ export interface GroupRecord {
 export const PROVIDER_GRANT_OUTCOMES = ['revoked', 'manual', 'failed'] as const;
 export type ProviderGrantOutcome = (typeof PROVIDER_GRANT_OUTCOMES)[number];
 
-export interface ConnectionRecord {
+export interface AccountRecord {
   readonly id: string;
   readonly provider: string;
   readonly owner: Principal;
   readonly displayName: string;
-  readonly status: ConnectionStatus;
+  readonly status: AccountStatus;
   /** Master-key version the credential blob was sealed with; null when no credential. */
   readonly keyVersion: number | null;
   readonly credentialExpiresAt: Iso | null;
@@ -109,24 +109,24 @@ export interface ConnectionRecord {
   readonly updatedAt: Iso;
   readonly revokedAt: Iso | null;
   /**
-   * Null for a connection that is not revoked, and for one revoked before the
+   * Null for an account that is not revoked, and for one revoked before the
    * gateway asked providers anything (nothing is known: remove it by hand).
    */
   readonly providerGrant: ProviderGrantOutcome | null;
   /**
    * The environment label its owner chose for the resources that carry none of
    * their own (migration 0017); `null` when none was chosen. Resources read
-   * through the repository already carry it (`envSource: 'connection-default'`).
+   * through the repository already carry it (`envSource: 'account-default'`).
    */
   readonly defaultEnv: string | null;
 }
 
-export interface ConnectionResourceRecord {
+export interface AccountResourceRecord {
   readonly id: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly ref: string;
   /**
-   * The effective environment label: the resource's own, else its connection's
+   * The effective environment label: the resource's own, else its account's
    * `defaultEnv`, else `null` (`effectiveResourceEnv`). Every reader of
    * environments reads this one.
    */
@@ -135,8 +135,8 @@ export interface ConnectionResourceRecord {
   readonly discoveredAt: Iso;
   /**
    * Who set `env`: the plugin at discovery (read-only for the owner), the owner, or
-   * the connection's default (`connection-default`: the resource has no label of its
-   * own). An unlabelled resource on a connection without a default reads `owner`.
+   * the account's default (`account-default`: the resource has no label of its
+   * own). An unlabelled resource on an account without a default reads `owner`.
    */
   readonly envSource: ResourceEnvSource;
   /** Effective metadata: the provider facts of the last discovery overlaid by the owner's edits. */
@@ -156,11 +156,11 @@ export interface ConnectionResourceRecord {
   readonly staleSince: Iso | null;
 }
 
-/** The values `connection_resources.env_source` stores (migration 0004's `CHECK`). */
+/** The values `account_resources.env_source` stores (migration 0004's `CHECK`). */
 export const RESOURCE_ENV_SOURCES = ['owner', 'plugin'] as const;
 export type StoredResourceEnvSource = (typeof RESOURCE_ENV_SOURCES)[number];
 /** Where a resource's effective label comes from; the default is never stored on the resource. */
-export type ResourceEnvSource = StoredResourceEnvSource | 'connection-default';
+export type ResourceEnvSource = StoredResourceEnvSource | 'account-default';
 
 export interface DiscoveredResource {
   readonly ref: string;
@@ -175,7 +175,7 @@ export interface DiscoveredResource {
 
 export interface ShareRecord {
   readonly id: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly target: Principal;
   /** Explicit enumeration, one row per risk in the store. Never a wildcard. */
   readonly restriction: readonly RiskId[];
@@ -190,7 +190,7 @@ export interface ShareRecord {
 /** `exhausted` is per risk and derived from counters; it is never a stored status. The
  *  status set and `Gate` are `@vaubaan/shared`'s. */
 export interface MissionPolicyEntry {
-  /** The resource set of its connection the line belongs to (risk model §4.7, migration 0029). */
+  /** The resource set of its account the line belongs to (risk model §4.7, migration 0029). */
   readonly resourceSetId: string;
   readonly riskId: RiskId;
   /** Actions per period. Always a number: no infinite budget (spec §3.2). */
@@ -227,21 +227,21 @@ export interface MissionTrustMarkRecord {
 }
 
 /**
- * One resource set of a connection of a mission (risk model §4.7, ADRs
+ * One resource set of an account of a mission (risk model §4.7, ADRs
  * resource-sets-partition-a-mission-connection and
  * resource-set-is-one-environment-with-optional-future-resources, migrations 0029 and
  * 0033): an explicit list of resources of one environment, and the lines of the
- * mission's policy that name it. A resource is in exactly one set of its connection.
+ * mission's policy that name it. A resource is in exactly one set of its account.
  * What a mission reaches is these lists only (`reachedResources`).
  */
 export interface MissionResourceSetRecord {
   readonly id: string;
-  /** Its place among the sets of the connection, from 1: "Resource set 1", "Resource set 2". */
+  /** Its place among the sets of the account, from 1: "Resource set 1", "Resource set 2". */
   readonly position: number;
   /** The resource ids of the set; may be empty (none known, or every one left it). */
   readonly resourceIds: readonly string[];
   /**
-   * True when a resource that later appears on the connection with `env` (discovered,
+   * True when a resource that later appears on the account with `env` (discovered,
    * or relabelled into it) is written into `resourceIds`, unless another set of the
    * mission holds it.
    */
@@ -250,7 +250,7 @@ export interface MissionResourceSetRecord {
   readonly env: string | null;
   /**
    * Legacy (migration 0033): stored before the one-environment rule with resources of
-   * several environments, or as a whole connection with none. `env` is `null`; with
+   * several environments, or as a whole account with none. `env` is `null`; with
    * `future`, a later resource of any environment joins it, and a relabel moves nothing
    * out of it, until the creator's next edit splits it.
    */
@@ -267,9 +267,9 @@ export interface MissionResourceSetRecord {
   readonly trustLevels?: Readonly<Record<string, string>>;
 }
 
-export interface MissionConnectionRecord {
-  readonly connectionId: string;
-  /** The sets of the connection, by `position`; never empty. */
+export interface MissionAccountRecord {
+  readonly accountId: string;
+  /** The sets of the account, by `position`; never empty. */
   readonly resourceSets: readonly MissionResourceSetRecord[];
 }
 
@@ -289,14 +289,14 @@ export interface MissionResourceSetInput {
 }
 
 /**
- * One connection as a writer gives it: its sets, each with its lines, or — the shape of
- * a mission with one set per connection — the selection directly, the lines then given
+ * One account as a writer gives it: its sets, each with its lines, or — the shape of
+ * a mission with one set per account — the selection directly, the lines then given
  * once for the whole mission (`CreateMissionInput.policy`) and placed by provider.
  */
-export type MissionConnectionInput =
-  | { readonly connectionId: string; readonly resourceSets: readonly MissionResourceSetInput[] }
+export type MissionAccountInput =
+  | { readonly accountId: string; readonly resourceSets: readonly MissionResourceSetInput[] }
   | {
-      readonly connectionId: string;
+      readonly accountId: string;
       readonly resourceIds: readonly string[];
       readonly future?: boolean;
       readonly env?: string | null;
@@ -322,7 +322,7 @@ export interface MissionRecord {
   readonly createdAt: Iso;
   readonly updatedAt: Iso;
   readonly closedAt: Iso | null;
-  readonly connections: readonly MissionConnectionRecord[];
+  readonly accounts: readonly MissionAccountRecord[];
   readonly policy: readonly MissionPolicyEntry[];
 }
 

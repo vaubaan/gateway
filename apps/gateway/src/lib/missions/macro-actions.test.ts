@@ -11,13 +11,9 @@ import {
   prefillOfTrustLevels,
   unknownMacroActions,
 } from './macro-actions';
-import {
-  ACME_CATALOG,
-  ACME_RESOURCES,
-  acmeConnection,
-} from '../../../tests/support/missions/testing';
+import { ACME_CATALOG, ACME_RESOURCES, acmeAccount } from '../../../tests/support/missions/testing';
 
-const acme = acmeConnection();
+const acme = acmeAccount();
 
 function action(id: string) {
   const found = acme.macro_actions.find((a) => a.id === id);
@@ -25,7 +21,7 @@ function action(id: string) {
   return found;
 }
 
-describe('macro-actions of a connection', () => {
+describe('macro-actions of an account', () => {
   it('adds "Anything else" with the fallback at the default base budget, and only when there is one', () => {
     const anything = action('anything-else');
     expect(anything.entries).toEqual([
@@ -52,7 +48,7 @@ describe('macro-actions of a connection', () => {
       'acme[staging].write',
       'acme[staging].bulk-delete',
     ]);
-    const narrow = acmeConnection({ authority: ['acme.read'] });
+    const narrow = acmeAccount({ authority: ['acme.read'] });
     expect(expandMacroAction(narrow, action('change'), 'autonomous', ACME_RESOURCES).lines).toEqual(
       [],
     );
@@ -78,7 +74,7 @@ describe('macro-actions of a connection', () => {
     });
   });
 
-  it('keeps only trust levels, and only for macro-actions the connection has', () => {
+  it('keeps only trust levels, and only for macro-actions the account has', () => {
     expect(trustLevelsOf({ read: 'trusting', change: 'reckless', admin: 3 })).toEqual({
       read: 'trusting',
     });
@@ -95,7 +91,7 @@ describe('macro-actions of a connection', () => {
   });
 
   it('says what the trust levels leave out, and why', () => {
-    const narrow = acmeConnection({ authority: ['acme.read', 'acme[staging].write'] });
+    const narrow = acmeAccount({ authority: ['acme.read', 'acme[staging].write'] });
     const prodOnly = ACME_RESOURCES.filter((r) => r.env !== 'staging');
     const { lines, left_out } = prefillOfTrustLevels(
       narrow,

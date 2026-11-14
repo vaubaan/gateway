@@ -73,8 +73,8 @@ describe('organization tools', () => {
   });
 });
 
-describe("the connection's organization", () => {
-  const connection = { fields: { org_slug: 'vaubaan', image_prefixes: 'ghcr.io/vaubaan/' } };
+describe("the account's organization", () => {
+  const account = { fields: { org_slug: 'vaubaan', image_prefixes: 'ghcr.io/vaubaan/' } };
   const cite = (
     tool: string,
     args: Record<string, unknown>,
@@ -86,16 +86,16 @@ describe("the connection's organization", () => {
     return out.slices.map(serializeSlice);
   };
 
-  test('a creation in a mission with no app names the organization of the connection', () => {
+  test('a creation in a mission with no app names the organization of the account', () => {
     // The dogfood refusal of 2026-10-16 cited `fly.org[*].app.W`.
-    expect(cite(TOOL.createApp, { name: 'beta-gw', network: 'beta-net' }, [], connection)).toEqual([
+    expect(cite(TOOL.createApp, { name: 'beta-gw', network: 'beta-net' }, [], account)).toEqual([
       'fly.org[vaubaan].app.W',
     ]);
-    expect(cite(TOOL.listRegions, {}, [], connection)).toEqual(['fly.org[vaubaan].region[*].R']);
+    expect(cite(TOOL.listRegions, {}, [], account)).toEqual(['fly.org[vaubaan].region[*].R']);
   });
 
   test('the risk touched is the same whatever the organization is called', () => {
-    const named = classifyFly(TOOL.createApp, { name: 'b', network: 'n' }, [], connection);
+    const named = classifyFly(TOOL.createApp, { name: 'b', network: 'n' }, [], account);
     const any = classifyFly(TOOL.createApp, { name: 'b', network: 'n' }, []);
     if ('denied' in named || 'denied' in any) throw new Error('refused');
     expect([...risksTouchedByAll(named.slices, flyCatalog.indexed)]).toEqual([
@@ -103,7 +103,7 @@ describe("the connection's organization", () => {
     ]);
   });
 
-  test("the connection's organization is the one an app call cites", () => {
+  test("the account's organization is the one an app call cites", () => {
     expect(cite(TOOL.getApp, {}, [acme], { fields: { org_slug: 'vaubaan' } })).toEqual([
       'fly.org[vaubaan].app[acme-gw].R',
     ]);

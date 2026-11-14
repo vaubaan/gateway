@@ -57,7 +57,7 @@ describe('the counters endpoint', () => {
     expect((await seedCall(rig, mission, { risks: [READ] })).result.outcome).toBe('allowed');
     const revoked = await issueMission(rig, rig.seeded.ada, githubDraft(rig));
     await root.missions.service.revoke(rig.seeded.ada, revoked.id);
-    await root.store.connections.revoke(rig.seeded.gmail.connection.id);
+    await root.store.accounts.revoke(rig.seeded.gmail.account.id);
 
     const res = await read(`Bearer ${TOKEN}`);
     expect(res.status).toBe(200);
@@ -66,18 +66,18 @@ describe('the counters endpoint', () => {
     const body = JSON.parse(text) as OpsStats;
     expect(body).toMatchObject({
       users: 2,
-      connections: { total: 3, by_provider: { github: 1, supabase: 1, vercel: 1 } },
+      accounts: { total: 3, by_provider: { github: 1, supabase: 1, vercel: 1 } },
       active_missions: 1,
       calls_today: { allowed: 1, refused: 0 },
       store: { kind: 'memory' },
       keys: { current_version: 1 },
-      limits: { users: 10, connections: null, active_missions: 5 },
+      limits: { users: 10, accounts: null, active_missions: 5 },
     });
     expect(Object.keys(body).sort()).toEqual(
       [
         'active_missions',
         'calls_today',
-        'connections',
+        'accounts',
         'generated_at',
         'keys',
         'limits',
@@ -88,7 +88,7 @@ describe('the counters endpoint', () => {
     expect(body.store.bytes).toBeGreaterThan(0);
     expect(Date.parse(body.calls_today.since)).toBeLessThanOrEqual(Date.parse(body.generated_at));
     expect(body.calls_today.since).toMatch(/T00:00:00\.000Z$/);
-    // The sealed credentials of the three live connections, under version 1.
+    // The sealed credentials of the three live accounts, under version 1.
     expect(body.keys.sealed_by_version['1']).toBeGreaterThanOrEqual(3);
 
     // Counts only: no person, item, resource or configuration value.
@@ -98,8 +98,8 @@ describe('the counters endpoint', () => {
       rig.seeded.bob.email,
       mission.id,
       mission.name,
-      rig.seeded.github.connection.id,
-      rig.seeded.github.connection.displayName,
+      rig.seeded.github.account.id,
+      rig.seeded.github.account.displayName,
       ...rig.seeded.github.resources.map((r) => r.ref),
       'gateway.example.com',
       TOKEN,
@@ -109,19 +109,19 @@ describe('the counters endpoint', () => {
 
   it('the telemetry profile and the ceilings read the same counts', async () => {
     await issueMission(rig, rig.seeded.ada, githubDraft(rig));
-    const listed = (await root.store.connections.list()).filter((c) => c.status !== 'revoked');
+    const listed = (await root.store.accounts.list()).filter((c) => c.status !== 'revoked');
     const byProvider: Record<string, number> = {};
     for (const c of listed) byProvider[c.provider] = (byProvider[c.provider] ?? 0) + 1;
     const users = (await root.store.users.list()).filter((u) => u.status === 'active').length;
 
     expect(await root.limits.counts.users()).toBe(users);
-    expect(await root.limits.counts.connections()).toEqual({
+    expect(await root.limits.counts.accounts()).toEqual({
       total: listed.length,
       byProvider,
     });
     expect(await root.limits.usage()).toEqual([
       { ceiling: 'users', count: users, limit: 10 },
-      { ceiling: 'connections', count: listed.length, limit: null },
+      { ceiling: 'accounts', count: listed.length, limit: null },
       { ceiling: 'active-missions', count: 1, limit: 5 },
     ]);
   });

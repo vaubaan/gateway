@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/shares` — shares the connection to a user or a group, or
+ * `POST /accounts/<id>/shares` — shares the account to a user or a group, or
  * replaces the restriction that target already holds.
  * One-line adapter over the host-agnostic handler.
  */

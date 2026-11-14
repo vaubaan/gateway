@@ -12,8 +12,8 @@ import {
   UpstreamRefusalError,
 } from '../../src/pipeline.ts';
 
-const refusal = refuse.connectionUnavailable({
-  connection: { id: 'c1', name: 'acme' },
+const refusal = refuse.accountUnavailable({
+  account: { id: 'c1', name: 'acme' },
   status: 'expired',
   owner: { kind: 'user', display: 'ada' },
 });

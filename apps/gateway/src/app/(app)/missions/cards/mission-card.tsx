@@ -20,7 +20,7 @@ import {
   TRUST_LEVELS,
   type TrustLevel,
 } from '@/lib/missions/macro-actions';
-import type { IssuanceConnection } from '@/lib/missions/model';
+import type { IssuanceAccount } from '@/lib/missions/model';
 import type { RiskPlanes } from '@/lib/providers/planes';
 
 import { cardResources, type CardState } from '../new/form-state';
@@ -64,7 +64,7 @@ export interface CardToday {
 const LEVELS: readonly CardLevel[] = [...TRUST_LEVELS, 'custom'];
 
 export function MissionCard({
-  connection,
+  account,
   card,
   icon,
   planes,
@@ -78,7 +78,7 @@ export function MissionCard({
   onChange,
   onRemove,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   card: CardState;
   icon: ServiceMarkIcon | null;
   planes: RiskPlanes | null;
@@ -95,27 +95,27 @@ export function MissionCard({
   onChange?: () => void;
   onRemove?: () => void;
 }) {
-  const rows = actionRows(connection, card);
+  const rows = actionRows(account, card);
   const digest = cardDigest(rows);
-  const account = accountLabel(connection);
-  const where = card.env && showsEnv(connection) ? `${account} (${card.env})` : account;
+  const label = accountLabel(account);
+  const where = card.env && showsEnv(account) ? `${label} (${card.env})` : label;
   return (
     <section
       className={styles.card}
       aria-label={where}
-      data-testid={`card-${connection.provider}`}
+      data-testid={`card-${account.provider}`}
       data-env={card.env ?? undefined}
     >
       <div className={styles.head}>
-        <ServiceMark name={connection.provider_label} icon={icon} />
-        <span className={styles.account}>{account}</span>
-        {card.env && showsEnv(connection) && <EnvTag env={card.env} />}
+        <ServiceMark name={account.provider_label} icon={icon} />
+        <span className={styles.account}>{label}</span>
+        {card.env && showsEnv(account) && <EnvTag env={card.env} />}
         <span className={styles.resources} data-testid="card-resources">
           {resourcesLine(
-            connection.resource_noun,
-            cardResources(connection, card),
+            account.resource_noun,
+            cardResources(account, card),
             card.future,
-            reachesAccountItself(connection, card),
+            reachesAccountItself(account, card),
           )}
         </span>
         <span className={styles.headEnd}>
@@ -169,7 +169,7 @@ export function MissionCard({
           {rows.map((row) => (
             <ActionRowView
               key={row.id}
-              connection={connection}
+              account={account}
               card={card}
               row={row}
               where={where}
@@ -191,7 +191,7 @@ export function MissionCard({
 }
 
 function ActionRowView({
-  connection,
+  account,
   card,
   row,
   where,
@@ -202,7 +202,7 @@ function ActionRowView({
   onLevel,
   onCustom,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   card: CardState;
   row: ActionRow;
   where: string;
@@ -218,7 +218,7 @@ function ActionRowView({
   return (
     <tr
       className={[styles.row, ticked ? '' : styles.rowOff].join(' ')}
-      data-testid={`macro-${connection.provider}-${row.id}`}
+      data-testid={`macro-${account.provider}-${row.id}`}
       data-level={row.level ?? 'off'}
     >
       <td className={styles.tick}>
@@ -246,13 +246,7 @@ function ActionRowView({
           onLevel={onLevel}
           onCustom={onCustom}
         />
-        <RowInfo
-          connection={connection}
-          card={card}
-          row={row}
-          planes={planes}
-          limitLabel={limitLabel}
-        />
+        <RowInfo account={account} card={card} row={row} planes={planes} limitLabel={limitLabel} />
       </td>
       {today && (
         <td className={styles.today}>
@@ -316,19 +310,19 @@ function TrustControl({
 
 /** The (i) of a row: the Custom modal's content, read-only, on hover or focus. */
 function RowInfo({
-  connection,
+  account,
   card,
   row,
   planes,
   limitLabel,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   card: CardState;
   row: ActionRow;
   planes: RiskPlanes | null;
   limitLabel: string;
 }) {
-  const view = customView(connection, card, row.id, planes);
+  const view = customView(account, card, row.id, planes);
   const heading = [row.label, row.level ? levelLabel(row.level) : null, card.env]
     .filter(Boolean)
     .join(' · ');
@@ -350,7 +344,7 @@ function RowInfo({
           </span>
         )}
         <CustomTable
-          connection={connection}
+          account={account}
           card={card}
           view={view}
           lines={customDraftOf(card, view)}

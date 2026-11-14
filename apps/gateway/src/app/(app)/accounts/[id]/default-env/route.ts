@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/default-env` — the owner's default environment label
+ * `POST /accounts/<id>/default-env` — the owner's default environment label
  * for the account's unlabelled resources (ADR connect-driver-and-resource-curation).
  * One-line adapter over the host-agnostic handler.
  */
@@ -12,5 +12,5 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return (await getRoot()).connections.handlers.setDefaultEnv(request, (await params).id);
+  return (await getRoot()).accounts.handlers.setDefaultEnv(request, (await params).id);
 }

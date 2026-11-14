@@ -1,6 +1,6 @@
 /**
  * Discovery (top-level detection, ceilings, unknown payloads) and the check
- * of a pasted token (`verify` : internal connections only).
+ * of a pasted token (`verify` : internal accounts only).
  */
 import { describe, expect, test } from 'vitest';
 
@@ -149,7 +149,7 @@ describe('discoverResources', () => {
   });
 });
 
-describe('verify : internal connection tokens only', () => {
+describe('verify : internal account tokens only', () => {
   const verify = notionCredential.verify;
   const me = (body: unknown) =>
     mockFetch([{ method: 'GET', url: `${NOTION_API_BASE}/users/me`, body }]);

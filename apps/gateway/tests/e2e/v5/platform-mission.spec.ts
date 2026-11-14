@@ -8,7 +8,7 @@
  * management mission the page offers (the creation form prefilled, every
  * macro-action at Careful) and hands its key to an agent: the official MCP
  * client on `/mcp`, which reads the person's accounts with
- * `vaubaan__list_my_connections` and is asked to wait for a yes before it
+ * `vaubaan__list_my_accounts` and is asked to wait for a yes before it
  * issues anything. Settings no longer has Connected apps.
  */
 import { expect, test } from '@playwright/test';
@@ -52,15 +52,15 @@ test('connect Vaubaan in one click, create the platform mission, and its key rea
   const agent = await connectAgent(key, 'planner');
   try {
     const tools = await agent.listTools();
-    expect(tools).toContain('vaubaan__list_my_connections');
+    expect(tools).toContain('vaubaan__list_my_accounts');
     expect(tools).toContain('vaubaan__issue_mission');
-    const listed = await agent.call('vaubaan__list_my_connections', {});
+    const listed = await agent.call('vaubaan__list_my_accounts', {});
     expect(listed.outcome).toBe('allowed');
     if (listed.outcome === 'allowed') expect(listed.text).toContain('"provider": "vaubaan"');
     // At Careful, issuing asks the person first.
     const asked = await agent.call('vaubaan__issue_mission', {
       name: 'Nothing yet',
-      connections: [{ provider: 'github', trust_levels: { read: 'careful' } }],
+      accounts: [{ provider: 'github', trust_levels: { read: 'careful' } }],
       period: { kind: 'one-off' },
       expires_at: null,
     });

@@ -232,7 +232,7 @@ describe('executeSupabase — data plane through service_role', () => {
       'supabase__list_users',
       { per_page: 25 },
     );
-    // First call : the connection's access token against the Management API.
+    // First call : the account's access token against the Management API.
     expect(keys.headers.authorization).toBe('Bearer sbp_access');
     // Second call : the service_role key against the project host.
     expect(call.url).toBe(`${DATA}/auth/v1/admin/users?page=1&per_page=25`);

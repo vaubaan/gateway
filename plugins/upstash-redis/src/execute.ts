@@ -18,7 +18,7 @@
  *   - both surfaces are called with the SDK's `httpJson` : a provider failure
  *     is **thrown**, never returned — 401 / 403 from either surface →
  *     `UpstreamAuthError` (the host treats a 401 as a rejected credential —
- *     the connection ends up `expired` — and a 403 as a failed call), any
+ *     the account ends up `expired` — and a 403 as a failed call), any
  *     other failed status → `UpstreamHttpError` (a Redis command the database
  *     refuses is its HTTP 400 `{ error }`), an answer that is not JSON or not
  *     the expected shape → `UpstreamProtocolError`, a network failure → the
@@ -55,7 +55,7 @@ import {
   refusalResult,
   textResult,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -139,11 +139,11 @@ export async function executeUpstashRedis(
  * Resources reachable with this credential : one `Resource` per Redis
  * database of the account (`GET /v2/redis/databases`, unpaged upstream,
  * capped at `MAX_DISCOVERED_DATABASES` with a logger warning). The owner
- * labels `env` on the connection page ; the classifier then resolves
+ * labels `env` on the account page ; the classifier then resolves
  * env-scoped risks through the `database[<id>]` segment.
  */
 export async function discoverUpstashRedisResources(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
 ): Promise<readonly Resource[]> {
   const call: UpstashCall = {
     fetch: ctx.fetch,

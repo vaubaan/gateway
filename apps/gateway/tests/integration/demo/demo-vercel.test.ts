@@ -1,5 +1,5 @@
 /**
- * The demo simulates Vercel (handbook demo-mode): a connection made with the
+ * The demo simulates Vercel (handbook demo-mode): an account made with the
  * tour's values discovers the simulated team's two projects, and the shipped
  * plugin's tools are answered from memory. Runs the shipped plugin against the
  * demo's `fetch` double: no build, no listener.

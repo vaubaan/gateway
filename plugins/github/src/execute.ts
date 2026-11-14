@@ -5,7 +5,7 @@
  *        decrypted in the context, is used for one call, and is never
  *        returned to the executor.
  *
- * Every call sends the connection's token as the bearer and dispatches over
+ * Every call sends the account's token as the bearer and dispatches over
  * Octokit with the injected `fetch`. What the token may do is what its owner
  * ticked at GitHub, which GitHub enforces : 401 / 403 from GitHub →
  * `UpstreamAuthError`.
@@ -20,7 +20,7 @@ import {
   isList,
   isRecord,
   jsonResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type PluginLogger,
@@ -117,7 +117,7 @@ function refusalOf(tool: string, denied: string): string {
 }
 
 /**
- * Resources reachable through the connection : one `Resource` per
+ * Resources reachable through the account : one `Resource` per
  * repository the token reaches (`GET /user/repos`, a bare list), paged by
  * `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`. The owner labels the
  * environment later. A public repository the token most likely cannot act on
@@ -125,9 +125,7 @@ function refusalOf(tool: string, denied: string): string {
  * list is GitHub's failure (`UpstreamProtocolError`), not an account without
  * repositories.
  */
-export async function discoverGithubResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverGithubResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const token = githubTokenOf(ctx);
   const fineGrained = token.startsWith(FINE_GRAINED_PREFIX);
   const headers = githubApiHeaders(token);

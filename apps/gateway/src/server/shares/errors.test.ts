@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ConnectError, isConnectError } from '../connections';
+import { ConnectError, isConnectError } from '../accounts';
 import { isShareError, SHARE_ERROR_CODES, SHARE_ERROR_MESSAGES, ShareError } from './errors';
 
 /**
@@ -38,7 +38,7 @@ describe('errors recognised by shape, for the pages', () => {
   it('does the same for a ConnectError', () => {
     expect(isConnectError(new ConnectError('not-found'), 'not-found')).toBe(true);
     expect(isConnectError(fromAnotherGraph('ConnectError', 'not-found'), 'not-found')).toBe(true);
-    expect(isConnectError(new ConnectError('connection-revoked'), 'not-found')).toBe(false);
+    expect(isConnectError(new ConnectError('account-revoked'), 'not-found')).toBe(false);
     expect(isConnectError(fromAnotherGraph('ShareError', 'not-found'), 'not-found')).toBe(false);
     // Without a code: any ConnectError, and nothing else.
     expect(isConnectError(fromAnotherGraph('ConnectError', 'rate-limited'))).toBe(true);

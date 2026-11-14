@@ -2,11 +2,11 @@
  * AEAD core — XChaCha20-Poly1305 (libsodium), moved from the v4
  * `web/lib/crypto/provider-secrets.ts` and adapted to v5 (spec §6):
  *
- * - the key is derived **per connection** from a master key with a keyed
- *   BLAKE2b hash of the connection id (`crypto_generichash`), so two
- *   connections never share a key;
- * - the connection id is also the **associated data**, so a blob moved to
- *   another connection row fails to open;
+ * - the key is derived **per account** from a master key with a keyed
+ *   BLAKE2b hash of the account id (`crypto_generichash`), so two
+ *   accounts never share a key;
+ * - the account id is also the **associated data**, so a blob moved to
+ *   another account row fails to open;
  * - the blob is `format(1) || nonce(24) || ciphertext`. The master key
  *   version is not inside the blob: the store keeps it in a `key_version`
  *   column next to the blob (see `Encryptor`).
@@ -19,6 +19,12 @@ import sodium from 'libsodium-wrappers-sumo';
 export const KEY_BYTES = 32;
 export const NONCE_BYTES = 24;
 export const BLOB_FORMAT_V1 = 0x01;
+/**
+ * Fed to the KDF before the account id: these bytes derive the key of every stored
+ * credential. They keep the word of the time they were chosen ("connection", ADR
+ * one-word-per-thing-account-service-plugin) and never change: another string would
+ * derive other keys, and no stored credential would open.
+ */
 const KDF_CONTEXT = 'vaubaan/connection-key/v1:';
 
 export class CryptoError extends Error {
@@ -38,11 +44,11 @@ export function assertKeyLength(key: Uint8Array, what: string): void {
   }
 }
 
-/** Per-connection subkey: BLAKE2b(context || connectionId) keyed with the master key. */
-export function deriveConnectionKey(masterKey: Uint8Array, connectionId: string): Uint8Array {
+/** Per-account subkey: BLAKE2b(context || accountId) keyed with the master key. */
+export function deriveAccountKey(masterKey: Uint8Array, accountId: string): Uint8Array {
   assertKeyLength(masterKey, 'master key');
-  if (connectionId.length === 0) throw new CryptoError('connection id must not be empty');
-  const input = new TextEncoder().encode(KDF_CONTEXT + connectionId);
+  if (accountId.length === 0) throw new CryptoError('account id must not be empty');
+  const input = new TextEncoder().encode(KDF_CONTEXT + accountId);
   return sodium.crypto_generichash(KEY_BYTES, input, masterKey);
 }
 
@@ -51,7 +57,7 @@ export function seal(
   plaintext: Uint8Array,
   associatedData: Uint8Array,
 ): Uint8Array {
-  assertKeyLength(key, 'connection key');
+  assertKeyLength(key, 'account key');
   const nonce = sodium.randombytes_buf(NONCE_BYTES);
   const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plaintext,
@@ -68,7 +74,7 @@ export function seal(
 }
 
 export function open(key: Uint8Array, blob: Uint8Array, associatedData: Uint8Array): Uint8Array {
-  assertKeyLength(key, 'connection key');
+  assertKeyLength(key, 'account key');
   if (blob.length < 1 + NONCE_BYTES + sodium.crypto_aead_xchacha20poly1305_ietf_ABYTES) {
     throw new CryptoError('ciphertext too short');
   }
@@ -87,7 +93,7 @@ export function open(key: Uint8Array, blob: Uint8Array, associatedData: Uint8Arr
     );
   } catch {
     // libsodium's message is generic on purpose; so is ours (no oracle).
-    throw new CryptoError('decryption failed: wrong key, wrong connection or tampered blob');
+    throw new CryptoError('decryption failed: wrong key, wrong account or tampered blob');
   }
 }
 

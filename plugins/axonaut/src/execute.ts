@@ -30,7 +30,7 @@ import {
   isRecord,
   jsonResult,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -101,14 +101,12 @@ function projectMe(answer: Record<string, unknown>): AxonautMe {
 }
 
 /** `GET /me`, projected: the user's name and e-mail address and the account, never the key. */
-export async function readMe(ctx: ConnectionContext): Promise<AxonautMe> {
+export async function readMe(ctx: AccountContext): Promise<AxonautMe> {
   return projectMe(await request(ctx, 'GET', '/me', isMeAnswer));
 }
 
-/** The one resource of a connection: the Axonaut account the key opens. */
-export async function discoverAxonautResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+/** The one resource of an account: the Axonaut account the key opens. */
+export async function discoverAxonautResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const me = await readMe(ctx);
   if (me.account === null) {
     throw new CredentialRefusal('This Axonaut key opens no company account.');
@@ -141,16 +139,16 @@ export interface RequestOptions {
   readonly body?: unknown;
 }
 
-function keyOf(ctx: ConnectionContext): string {
+function keyOf(ctx: AccountContext): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const key = secret.fields[API_KEY_FIELD];
   if (!key) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
   return key;
 }
 
-/** One call to Axonaut with the connection's key, its answer read through `guard`. */
+/** One call to Axonaut with the account's key, its answer read through `guard`. */
 export async function request<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: Method,
   path: string,
   guard: Guard<T>,

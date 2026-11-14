@@ -8,7 +8,7 @@
  * host of the credential, then runs the command line through the transport.
  * `discoverResources` connects once — which verifies the pinned host key and
  * the key pair — runs `uname` to name the host, and returns the host as the
- * connection's single resource.
+ * account's single resource.
  *
  * No `ctx.fetch` here : the upstream is SSH, injected as an `SshTransport`
  * (`createSshRuntime({ transport })`) so tests never open a socket.
@@ -16,7 +16,7 @@
 
 import {
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
@@ -42,7 +42,7 @@ export interface SshRuntime {
     tool: string,
     args: Readonly<Record<string, unknown>>,
   ): Promise<McpToolResult>;
-  discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
+  discoverResources(ctx: AccountContext): Promise<readonly Resource[]>;
 }
 
 export function createSshRuntime(options: SshRuntimeOptions = {}): SshRuntime {
@@ -57,7 +57,7 @@ export function createSshRuntime(options: SshRuntimeOptions = {}): SshRuntime {
       if ('denied' in exec) return refusalResult(exec.denied);
       if (exec.host !== target.host) {
         return refusalResult(
-          `host '${exec.host}' is not the host of this connection ('${target.host}')`,
+          `host '${exec.host}' is not the host of this account ('${target.host}')`,
         );
       }
       const timeoutS = Math.min(exec.timeoutS ?? DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S);

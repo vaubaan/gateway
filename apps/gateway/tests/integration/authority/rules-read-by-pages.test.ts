@@ -5,46 +5,46 @@
  * the view it already loads. These tests tie the two ends: what the reader
  * says and what the act then answers, on the same state.
  *
- *   - a revoked or unowned connection takes no owner act
+ *   - a revoked or unowned account takes no owner act
  *       `ownerActRefusal` → `ShareContext.unshareable`, `transferTargets`
  *   - the gates of a revoked or orphaned mission are not edited
  *       `gateEditBlockedBy` → `MissionDetail.gates_editable`
  *   - a group without member is not named owner
- *       `ConnectionService.reassignTargets`
+ *       `AccountService.reassignTargets`
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ownerActRefusal } from '../../../src/server/connections';
+import { ownerActRefusal } from '../../../src/server/accounts';
 import { gateEditBlockedBy } from '../../../src/server/missions/mission-service';
 import { unshareableReason } from '../../../src/server/shares';
 import { MISSION_STATUSES } from '../../../src/server/store/repositories/enums';
-import type { ConnectionRecord, GroupRecord } from '../../../src/server/store/types';
+import type { AccountRecord, GroupRecord } from '../../../src/server/store/types';
 import { authorityRig, READ, type AuthorityRig } from './support';
 
-type ConnectionStatus = ConnectionRecord['status'];
+type AccountStatus = AccountRecord['status'];
 
-/** Keyed by status: a new connection status fails to compile until it is listed here. */
-const EVERY_CONNECTION_STATUS: Readonly<Record<ConnectionStatus, true>> = {
+/** Keyed by status: a new account status fails to compile until it is listed here. */
+const EVERY_ACCOUNT_STATUS: Readonly<Record<AccountStatus, true>> = {
   active: true,
   expired: true,
   revoked: true,
   unowned: true,
 };
-const CONNECTION_STATUSES = Object.keys(EVERY_CONNECTION_STATUS) as ConnectionStatus[];
+const ACCOUNT_STATUSES = Object.keys(EVERY_ACCOUNT_STATUS) as AccountStatus[];
 
 describe('the predicates, on every status', () => {
-  it('a connection takes no owner act once revoked or unowned, and only then', () => {
+  it('an account takes no owner act once revoked or unowned, and only then', () => {
     const refused = Object.fromEntries(
-      CONNECTION_STATUSES.map((status) => [status, ownerActRefusal({ status, metadata: null })]),
+      ACCOUNT_STATUSES.map((status) => [status, ownerActRefusal({ status, metadata: null })]),
     );
     expect(refused).toEqual({
       active: null,
       expired: null,
-      revoked: 'connection-revoked',
-      unowned: 'connection-unowned',
+      revoked: 'account-revoked',
+      unowned: 'account-unowned',
     });
-    // The share codes are the connection's own.
-    for (const status of CONNECTION_STATUSES) {
+    // The share codes are the account's own.
+    for (const status of ACCOUNT_STATUSES) {
       expect(unshareableReason({ status, metadata: null })).toBe(
         ownerActRefusal({ status, metadata: null }),
       );
@@ -53,10 +53,10 @@ describe('the predicates, on every status', () => {
 
   it('a host account (the Vaubaan account) takes no owner act while it serves: it is its person’s own', () => {
     const host = { credential_kind: 'host' };
-    expect(ownerActRefusal({ status: 'active', metadata: host })).toBe('connection-personal');
-    expect(unshareableReason({ status: 'active', metadata: host })).toBe('connection-personal');
+    expect(ownerActRefusal({ status: 'active', metadata: host })).toBe('account-personal');
+    expect(unshareableReason({ status: 'active', metadata: host })).toBe('account-personal');
     // Revoked is final first.
-    expect(ownerActRefusal({ status: 'revoked', metadata: host })).toBe('connection-revoked');
+    expect(ownerActRefusal({ status: 'revoked', metadata: host })).toBe('account-revoked');
   });
 
   it('the gates of a mission are not edited once it is revoked or orphaned, and only then', () => {
@@ -88,87 +88,79 @@ describe('what the page reads is what the act answers', () => {
   });
 
   const ada = () => rig.actor(rig.ada);
-  const connection = async () => (await rig.root.store.connections.getById(rig.connection.id))!;
+  const account = async () => (await rig.root.store.accounts.getById(rig.account.id))!;
   const toBob = { target: { kind: 'user', email: 'bob@example.com' }, riskIds: [READ] } as const;
 
-  it('an owned connection: shareable, and transferable to the groups of its owner', async () => {
-    const { connections, shares } = rig.root;
-    expect(
-      (await shares.service.contextFor(await ada(), rig.connection.id)).unshareable,
-    ).toBeNull();
-    expect(
-      connections.service.transferTargets(await ada(), await connection()).map((g) => g.id),
-    ).toEqual([admins.id]);
+  it('an owned account: shareable, and transferable to the groups of its owner', async () => {
+    const { accounts, shares } = rig.root;
+    expect((await shares.service.contextFor(await ada(), rig.account.id)).unshareable).toBeNull();
+    expect(accounts.service.transferTargets(await ada(), await account()).map((g) => g.id)).toEqual(
+      [admins.id],
+    );
+    await expect(shares.service.share(await ada(), rig.account.id, toBob)).resolves.toBeDefined();
     await expect(
-      shares.service.share(await ada(), rig.connection.id, toBob),
-    ).resolves.toBeDefined();
-    await expect(
-      connections.service.transfer(await ada(), rig.connection.id, admins.id),
+      accounts.service.transfer(await ada(), rig.account.id, admins.id),
     ).resolves.toMatchObject({ owner: { kind: 'group', id: admins.id } });
   });
 
-  it('an unowned connection: the context names the refusal of share, and no transfer target is offered', async () => {
-    const { connections, groups, shares } = rig.root;
+  it('an unowned account: the context names the refusal of share, and no transfer target is offered', async () => {
+    const { accounts, groups, shares } = rig.root;
     const others = await groups.service.create(rig.operator.id, 'others');
     await groups.service.addMember(rig.operator.id, others.id, 'ada@example.com');
-    await connections.service.transfer(await ada(), rig.connection.id, admins.id);
+    await accounts.service.transfer(await ada(), rig.account.id, admins.id);
     await groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
-    // Ada joins the emptied owner group again: she reads the connection, which stays unowned.
+    // Ada joins the emptied owner group again: she reads the account, which stays unowned.
     await groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
-    expect((await connection()).status).toBe('unowned');
+    expect((await account()).status).toBe('unowned');
 
-    const context = await shares.service.contextFor(await ada(), rig.connection.id);
-    expect(context.unshareable).toBe('connection-unowned');
-    await expect(shares.service.share(await ada(), rig.connection.id, toBob)).rejects.toMatchObject(
-      {
-        code: context.unshareable,
-      },
-    );
+    const context = await shares.service.contextFor(await ada(), rig.account.id);
+    expect(context.unshareable).toBe('account-unowned');
+    await expect(shares.service.share(await ada(), rig.account.id, toBob)).rejects.toMatchObject({
+      code: context.unshareable,
+    });
     // She belongs to another group, yet it is not offered: `transfer` would refuse it.
-    expect(connections.service.transferTargets(await ada(), await connection())).toEqual([]);
+    expect(accounts.service.transferTargets(await ada(), await account())).toEqual([]);
     await expect(
-      connections.service.transfer(await ada(), rig.connection.id, others.id),
-    ).rejects.toMatchObject({ code: 'connection-unowned' });
+      accounts.service.transfer(await ada(), rig.account.id, others.id),
+    ).rejects.toMatchObject({ code: 'account-unowned' });
   });
 
-  it('a revoked connection: the same, with the revoked code', async () => {
-    const { connections, shares } = rig.root;
-    await connections.service.revoke(await ada(), rig.connection.id);
+  it('a revoked account: the same, with the revoked code', async () => {
+    const { accounts, shares } = rig.root;
+    await accounts.service.revoke(await ada(), rig.account.id);
 
-    const context = await shares.service.contextFor(await ada(), rig.connection.id);
-    expect(context.unshareable).toBe('connection-revoked');
-    await expect(shares.service.share(await ada(), rig.connection.id, toBob)).rejects.toMatchObject(
-      {
-        code: context.unshareable,
-      },
-    );
-    expect(connections.service.transferTargets(await ada(), await connection())).toEqual([]);
+    const context = await shares.service.contextFor(await ada(), rig.account.id);
+    expect(context.unshareable).toBe('account-revoked');
+    await expect(shares.service.share(await ada(), rig.account.id, toBob)).rejects.toMatchObject({
+      code: context.unshareable,
+    });
+    expect(accounts.service.transferTargets(await ada(), await account())).toEqual([]);
     await expect(
-      connections.service.transfer(await ada(), rig.connection.id, admins.id),
-    ).rejects.toMatchObject({ code: 'connection-revoked' });
+      accounts.service.transfer(await ada(), rig.account.id, admins.id),
+    ).rejects.toMatchObject({ code: 'account-revoked' });
   });
 
   it('reassignTargets lists the groups reassign accepts: the ones that have a member', async () => {
-    const { connections, groups } = rig.root;
+    const { accounts, groups } = rig.root;
     const empty = await groups.service.create(rig.operator.id, 'empty');
     const staffed = await groups.service.create(rig.operator.id, 'staffed');
     await groups.service.addMember(rig.operator.id, staffed.id, 'bob@example.com');
-    await connections.service.transfer(await ada(), rig.connection.id, admins.id);
+    await accounts.service.transfer(await ada(), rig.account.id, admins.id);
     await groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
 
     // `depot-admins` just emptied: it is not offered either.
-    const targets = await connections.service.reassignTargets();
+    const targets = await accounts.service.reassignTargets();
     expect(targets.map((g) => g.name)).toEqual(['staffed']);
     for (const refused of [empty, admins]) {
       await expect(
-        connections.service.reassign(rig.operator.id, rig.connection.id, {
+        accounts.service.reassign(rig.operator.id, rig.account.id, {
           kind: 'group',
           groupId: refused.id,
         }),
       ).rejects.toMatchObject({ code: 'owner-group-empty' });
     }
     await expect(
-      connections.service.reassign(rig.operator.id, rig.connection.id, {
+      accounts.service.reassign(rig.operator.id, rig.account.id, {
         kind: 'group',
         groupId: targets[0]!.id,
       }),
@@ -177,7 +169,7 @@ describe('what the page reads is what the act answers', () => {
 
   it('gates_editable follows setGate: off while the mission is orphaned, back with the authority, off for good once revoked', async () => {
     const { missions, shares } = rig.root;
-    const { share } = await shares.service.share(await ada(), rig.connection.id, toBob);
+    const { share } = await shares.service.share(await ada(), rig.account.id, toBob);
     const issued = await rig.issueFor(rig.bob, [READ]);
     const editable = async () =>
       (await missions.service.get(rig.bob, issued.mission.id))?.gates_editable;
@@ -187,11 +179,11 @@ describe('what the page reads is what the act answers', () => {
     expect(await editable()).toBe(true);
     expect(await setGate('approval')).toMatchObject({ ok: true });
 
-    await shares.service.revoke(await ada(), share.id, share.connectionId);
+    await shares.service.revoke(await ada(), share.id, share.accountId);
     expect(await editable()).toBe(false);
     expect(await setGate('auto')).toEqual({ ok: false, reason: 'inactive', state: 'orphaned' });
 
-    await shares.service.share(await ada(), rig.connection.id, toBob);
+    await shares.service.share(await ada(), rig.account.id, toBob);
     expect(await editable()).toBe(true);
     expect(await setGate('auto')).toMatchObject({ ok: true });
 

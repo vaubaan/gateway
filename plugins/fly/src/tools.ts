@@ -27,7 +27,7 @@ const HOSTNAME: Schema = {
 const IMAGE: Schema = {
   type: 'string',
   description:
-    'Image reference pinned by digest, under an allowed prefix of the connection: ' +
+    'Image reference pinned by digest, under an allowed prefix of the account: ' +
     '`ghcr.io/vaubaan/gateway:1.4.0@sha256:<64 hex>`. A tag alone is refused.',
 };
 const CONFIG: Schema = {
@@ -69,7 +69,7 @@ export const flyTools: readonly McpToolDeclaration[] = [
   tool(TOOL.getApp, 'Read one app: id, status, network, organization.', { app: APP }),
   tool(
     TOOL.createApp,
-    'Create an app in the connection organization, on a private network of its own. ' +
+    'Create an app in the account organization, on a private network of its own. ' +
       'The new app is not part of this mission until its owner labels it and adds it.',
     {
       name: { type: 'string', description: 'The new app name (lower case, digits, hyphens).' },

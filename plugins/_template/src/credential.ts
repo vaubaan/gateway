@@ -16,7 +16,7 @@
 import {
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type TokenPermission,
 } from '@vaubaan/plugin-sdk';
@@ -108,7 +108,7 @@ export const templateCredential: ApiKeyCredentialSpec = {
  * the plugin can name throws `CredentialRefusal` with its own sentence ; a
  * rejected key is the `UpstreamAuthError` `request` throws.
  */
-export async function verifyTemplateKey(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyTemplateKey(ctx: AccountContext): Promise<CredentialCheck> {
   const me = await request(ctx, 'GET', '/me', isRecord);
   return { account: typeof me.name === 'string' ? me.name : null, expiresAt: null };
 }

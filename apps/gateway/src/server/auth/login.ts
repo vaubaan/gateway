@@ -41,7 +41,7 @@ export interface LoginDeps {
   /**
    * Called before the sign-in replaces the user's IdP-sourced memberships;
    * the function it returns is called once they are replaced. What the
-   * change did is settled between the two: a connection left without owner
+   * change did is settled between the two: an account left without owner
    * becomes `unowned`, and the user's missions that a lost membership left
    * orphaned, or a regained one grounds again, are audited. A failure of
    * either call is logged and does not fail the sign-in: every authority

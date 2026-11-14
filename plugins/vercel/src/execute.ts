@@ -15,7 +15,7 @@
  * Rules :
  *   - `fetch` and the signal come from the context, never from the global ;
  *   - a provider failure is **thrown**, never returned : 401 / 403 from
- *     either surface → `UpstreamAuthError` (the host marks the connection
+ *     either surface → `UpstreamAuthError` (the host marks the account
  *     `expired` on a 401), any other failed status → `UpstreamHttpError`, a
  *     JSON-RPC error frame, an answer that is not JSON or not of the
  *     expected shape → `UpstreamProtocolError`, a network failure → the error
@@ -27,7 +27,7 @@
  *     argument that is not exactly that value (another string, a non-string)
  *     is refused before any network call, and the value sent upstream is
  *     always written from the credential, on both surfaces ;
- *   - a connection scoped to one project (`project_id`, ADR
+ *   - an account scoped to one project (`project_id`, ADR
  *     one-place-to-authorize-services-token-first, amendment 2026-11-11)
  *     refuses every `teamId` argument and names no team to the REST API
  *     (Vercel infers it from the token) ; the rewrapped tools, whose upstream
@@ -56,7 +56,7 @@ import {
   isList,
   isRecord,
   jsonResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -91,7 +91,7 @@ export const DISCOVERY_MAX_PAGES = 10;
 
 /**
  * Rewrapped tools whose upstream schema is closed and has no `teamId` : the
- * forward cannot carry the connection's team. Each one is reviewed here, with
+ * forward cannot carry the account's team. Each one is reviewed here, with
  * the reason the call stays inside the pinned team. A rewrapped tool in that
  * situation and absent from this list is refused by `execute`.
  */
@@ -114,7 +114,7 @@ const HTTP_NOT_FOUND = 404;
 interface VercelCall {
   readonly io: UpstreamIo;
   readonly token: string;
-  /** The connection's team ; `null` for a token scoped to one project (Vercel infers it). */
+  /** The account's team ; `null` for a token scoped to one project (Vercel infers it). */
   readonly teamId: string | null;
 }
 
@@ -122,7 +122,7 @@ function callOf(io: UpstreamIo, auth: VercelAuth): VercelCall {
   return { io, token: auth.token, teamId: auth.mode === 'team' ? auth.teamId : null };
 }
 
-/** The `teamId` query a REST request carries : the connection's team, or none for a project token. */
+/** The `teamId` query a REST request carries : the account's team, or none for a project token. */
 function teamQuery(call: VercelCall): Record<string, string> {
   return call.teamId === null ? {} : { teamId: call.teamId };
 }
@@ -154,7 +154,7 @@ export async function executeVercel(
  * Resources reachable with this credential : for a token scoped to one
  * project, that project alone (`GET /v9/projects/{id}`, its `accountId` kept
  * as `team_id`) ; otherwise one `Resource` per project of
- * the connection's team, paged (`DISCOVERY_PAGE_SIZE` × `DISCOVERY_MAX_PAGES`).
+ * the account's team, paged (`DISCOVERY_PAGE_SIZE` × `DISCOVERY_MAX_PAGES`).
  * The team is read first, which also validates the token. A token scoped to
  * some projects is refused every team-level read (403) : the team's name and
  * slug are then left out, and the project listing validates the token. The environment
@@ -162,9 +162,7 @@ export async function executeVercel(
  * environments, noted in `metadata.environments`, and the classifier derives
  * the one a call touches from its arguments.
  */
-export async function discoverVercelResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverVercelResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const auth = vercelAuth(ctx.credential);
   const call = callOf(ctx, auth);
   if (auth.mode === 'project') return [await discoverOneProject(call, auth.projectId)];
@@ -186,7 +184,7 @@ export async function discoverVercelResources(
   }
 
   // A ref the classifier would refuse is of no use to a mission : say so at
-  // connection time instead of listing a resource no call can name.
+  // account time instead of listing a resource no call can name.
   const unusable = projects.find((p) => pathIdent(p.id) === null);
   if (unusable) {
     throw new Error(
@@ -318,19 +316,19 @@ function pinArgs(
   }
   if (auth.mode === 'project' && args.teamId !== undefined) {
     throw new ExecutorRefusal(
-      `teamId : this connection is scoped to the vercel project '${auth.projectId}' and Vercel infers its team — omit the argument.`,
+      `teamId : this account is scoped to the vercel project '${auth.projectId}' and Vercel infers its team — omit the argument.`,
     );
   }
   if (auth.mode === 'team' && args.teamId !== undefined && args.teamId !== auth.teamId) {
     throw new ExecutorRefusal(
-      `teamId is fixed by the connection ('${auth.teamId}') : the value given is not the team of this connection — omit the argument.`,
+      `teamId is fixed by the account ('${auth.teamId}') : the value given is not the team of this account — omit the argument.`,
     );
   }
   const project = resolveProject(args, resources, !isAccountTool(tool));
   if ('denied' in project) throw new ExecutorRefusal(project.denied);
   if (auth.mode === 'project' && project.ref !== null && project.ref !== auth.projectId) {
     throw new ExecutorRefusal(
-      `vercel project '${project.ref}' is not the project this connection is scoped to ('${auth.projectId}').`,
+      `vercel project '${project.ref}' is not the project this account is scoped to ('${auth.projectId}').`,
     );
   }
   // Everything else is forwarded as given : only what the tool declares may be there.
@@ -349,7 +347,7 @@ function pinArgs(
     if (team !== null) out.teamId = team;
   } else if (!Object.hasOwn(TEAMLESS_UPSTREAM_TOOLS, tool)) {
     throw new ExecutorRefusal(
-      `${tool}: the upstream tool cannot carry the team of this connection and has not been reviewed — refused.`,
+      `${tool}: the upstream tool cannot carry the team of this account and has not been reviewed — refused.`,
     );
   }
   if (project.ref !== null && !isAccountTool(tool) && toolAcceptsArgument(tool, 'projectId')) {
@@ -396,7 +394,7 @@ async function verifiedDeploymentId(
   key: string,
   projectRef: string,
 ): Promise<string> {
-  const unverified = `deployment '${key}' could not be verified as a deployment of vercel project '${projectRef}' in the team of this connection`;
+  const unverified = `deployment '${key}' could not be verified as a deployment of vercel project '${projectRef}' in the team of this account`;
   let body: unknown;
   try {
     // Read field by field below : a lookup that does not name its project is a refusal.
@@ -408,7 +406,7 @@ async function verifiedDeploymentId(
       anyJson,
     );
   } catch (e) {
-    // 403 / 404 : the team of this connection cannot see that deployment. Any
+    // 403 / 404 : the team of this account cannot see that deployment. Any
     // other failure (401, 5xx, the network) is the provider's and is thrown as is.
     const hidden =
       (e instanceof UpstreamAuthError && e.upstreamStatus === HTTP_FORBIDDEN) ||
@@ -468,7 +466,7 @@ async function bindDeployments(
 
 type RestMethod = 'GET' | 'PATCH' | 'POST' | 'DELETE';
 
-/** One request to the REST API under the connection's bearer, its answer read through `guard`. */
+/** One request to the REST API under the account's bearer, its answer read through `guard`. */
 async function rest<T>(
   call: VercelCall,
   method: RestMethod,

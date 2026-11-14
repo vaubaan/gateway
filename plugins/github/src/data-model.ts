@@ -4,8 +4,8 @@
  * Spec : docs/spec/gateway-risk-model.md §2.
  * Handbook : docs/handbook/providers/github.md.
  *
- * One plane, `repo`, with two roots. `repo` : one `Resource` of a
- * connection is one repository (`owner/name`) ; its `ref` is the first
+ * One plane, `repo`, with two roots. `repo` : one `Resource` of an
+ * account is one repository (`owner/name`) ; its `ref` is the first
  * bracketed segment of every slice under it. `search` : GitHub's global
  * search, which reaches every repository the token reaches, beyond those of
  * a mission — not a resource, never selected, decided by its own risk
@@ -51,7 +51,7 @@ export const githubDataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The repository itself — root of the plane and the resource a connection ' +
+            'The repository itself — root of the plane and the resource an account ' +
             'exposes (`<owner>/<repo>`). Not creatable via Vaubaan tools (out of scope).',
         },
         {

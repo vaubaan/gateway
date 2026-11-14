@@ -9,7 +9,7 @@
  *   - missions      `MissionService.list` — the ones the person created, and the
  *                   ones shared with them as a member;
  *   - what waits    `RequestService.waiting` — the creator's open requests;
- *   - accounts      `ConnectionService.listFor` and `ShareService.received`;
+ *   - accounts      `AccountService.listFor` and `ShareService.received`;
  *   - counts        the audit's per-holder activity of each of those missions
  *                   (a member reads the session of a mission shared with them,
  *                   spec §0 "Mission member").
@@ -21,7 +21,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { Iso8601, MissionTokenKind, RiskId } from '@vaubaan/shared';
 
-import type { Actor, ConnectionService } from '../connections';
+import type { Actor, AccountService } from '../accounts';
 import type { MissionOverview, MissionRole, MissionService, TrustRaiseOffer } from '../missions';
 import { riskExplainer } from '../../lib/providers/reference';
 import { issuerName } from '../../lib/vocabulary';
@@ -42,12 +42,12 @@ export const STOPPED_SHOWN = 3;
 export interface NowDeps {
   readonly store: Pick<
     Store,
-    'missions' | 'users' | 'sessions' | 'audit' | 'requests' | 'connections'
+    'missions' | 'users' | 'sessions' | 'audit' | 'requests' | 'accounts'
   >;
   readonly registry: PluginRegistry;
   readonly missions: Pick<MissionService, 'list' | 'trustRaisesFor'>;
   readonly requests: Pick<RequestService, 'waiting'>;
-  readonly connections: Pick<ConnectionService, 'listFor'>;
+  readonly accounts: Pick<AccountService, 'listFor'>;
   readonly shares: Pick<ShareService, 'received'>;
   readonly clock: Clock;
 }
@@ -97,7 +97,7 @@ export interface StoppedMission {
 
 /** An account someone gave the reader access to: enough to start a mission on. */
 export interface SharedAccount {
-  readonly connection_id: string;
+  readonly account_id: string;
   readonly name: string;
   readonly service: string;
   readonly owner: string;
@@ -176,14 +176,14 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
   const serviceNames = new Map<string, string | null>();
   async function servicesOf(overview: MissionOverview): Promise<string[]> {
     const services: string[] = [];
-    for (const { connectionId } of overview.mission.connections) {
-      let service = serviceNames.get(connectionId);
+    for (const { accountId } of overview.mission.accounts) {
+      let service = serviceNames.get(accountId);
       if (service === undefined) {
-        const connection = await store.connections.getById(connectionId);
-        service = connection
-          ? (deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider)
+        const account = await store.accounts.getById(accountId);
+        service = account
+          ? (deps.registry.get(account.provider)?.plugin.displayName ?? account.provider)
           : null;
-        serviceNames.set(connectionId, service);
+        serviceNames.set(accountId, service);
       }
       if (service !== null && !services.includes(service)) services.push(service);
     }
@@ -286,21 +286,21 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
     });
   }
 
-  const owned = (await deps.connections.listFor(actor)).filter(
-    (view) => view.connection.status !== 'revoked',
+  const owned = (await deps.accounts.listFor(actor)).filter(
+    (view) => view.account.status !== 'revoked',
   );
   const received = await deps.shares.received(actor);
   const sharedPermissions = new Map<string, Set<RiskId>>();
   const sharedAccounts = new Map<string, Omit<SharedAccount, 'permissions'>>();
   for (const share of received) {
-    if (share.connection.status === 'revoked') continue;
+    if (share.account.status === 'revoked') continue;
     // Several shares of one account add up: the reader holds the union.
-    const permissions = sharedPermissions.get(share.connection.id) ?? new Set<RiskId>();
+    const permissions = sharedPermissions.get(share.account.id) ?? new Set<RiskId>();
     for (const risk of share.risks) permissions.add(risk.risk_id);
-    sharedPermissions.set(share.connection.id, permissions);
-    sharedAccounts.set(share.connection.id, {
-      connection_id: share.connection.id,
-      name: share.connection.displayName,
+    sharedPermissions.set(share.account.id, permissions);
+    sharedAccounts.set(share.account.id, {
+      account_id: share.account.id,
+      name: share.account.displayName,
       service: share.providerLabel,
       owner: share.ownerLabel,
     });
@@ -317,12 +317,12 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       calls_last_day: callsLastDay,
       refused_last_hour: refusedLastHour,
       accounts: owned.length,
-      accounts_to_reconnect: owned.filter((view) => view.connection.status === 'expired').length,
+      accounts_to_reconnect: owned.filter((view) => view.account.status === 'expired').length,
     },
     first_run: !overviews.some((overview) => overview.role === 'creator'),
     shared_accounts: [...sharedAccounts.values()].map((account) => ({
       ...account,
-      permissions: sharedPermissions.get(account.connection_id)?.size ?? 0,
+      permissions: sharedPermissions.get(account.account_id)?.size ?? 0,
     })),
     shared_missions: sharedMissions,
     trust_raises: await deps.missions.trustRaisesFor(actor.user),

@@ -161,11 +161,11 @@ describe('RequestService', () => {
       expect(await requests.view(bob, 'no-such-request')).toEqual({ outcome: 'forbidden' });
     });
 
-    it('a beneficiary of a share on the same connection is refused', async () => {
+    it('a beneficiary of a share on the same account is refused', async () => {
       const id = await exhaust();
       const bob = await otherUser('bob@x');
       await f.store.shares.create({
-        connectionId: f.connectionId,
+        accountId: f.accountId,
         target: { kind: 'user', id: bob.id },
         restriction: [READ, WRITE, MERGE],
         createdByUserId: f.creatorId,
@@ -177,13 +177,13 @@ describe('RequestService', () => {
       });
     });
 
-    it('a co-owner of the connection through its owner group is refused', async () => {
+    it('a co-owner of the account through its owner group is refused', async () => {
       const id = await exhaust();
       const bob = await otherUser('bob@x');
       const group = await f.store.groups.getOrCreate('platform', 'idp', 'idp');
       await f.store.groups.addMember(group.id, bob.id);
       await f.store.groups.addMember(group.id, f.creatorId);
-      await f.store.connections.transferOwner(f.connectionId, { kind: 'group', id: group.id });
+      await f.store.accounts.transferOwner(f.accountId, { kind: 'group', id: group.id });
       expect(await requests.view(bob, id)).toEqual({ outcome: 'forbidden' });
       // The creator still is the creator.
       expect((await requests.view(creator(), id)).outcome).toBe('ok');

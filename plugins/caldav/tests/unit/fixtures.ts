@@ -1,10 +1,5 @@
 /** Resources, credentials and contexts shared by the `caldav` tests. */
-import type {
-  ApiKeySecret,
-  ConnectionContext,
-  ExecuteContext,
-  Resource,
-} from '@vaubaan/plugin-sdk';
+import type { ApiKeySecret, AccountContext, ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 
 import { PASSWORD, USER, type FakeCaldavServer } from './fake-caldav.ts';
 
@@ -44,7 +39,7 @@ export const secret = (fields: Record<string, string> = {}): ApiKeySecret => ({
 export const connCtx = (
   server: FakeCaldavServer,
   fields: Record<string, string> = {},
-): ConnectionContext => ({
+): AccountContext => ({
   credential: secret({
     server_url: server.options.origin,
     username: server.options.username,

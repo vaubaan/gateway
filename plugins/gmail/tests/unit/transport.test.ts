@@ -1,8 +1,8 @@
 /**
  * The real transport, `imapflowTransport`, over a fake `imapflow` client (its factory injected, no module mock) :
- * the connection options (Gmail's host, implicit TLS, bounded timeouts, no
+ * the account options (Gmail's host, implicit TLS, bounded timeouts, no
  * logger), a refused sign-in as `UpstreamAuthError`, logout after the work,
- * the abort signal and the deadline closing the connection, special use only
+ * the abort signal and the deadline closing the account, special use only
  * as the server reports it, and the commands each session method sends.
  */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
@@ -149,7 +149,7 @@ describe('imapflowTransport', () => {
     expect(clients[0]!.close).toHaveBeenCalled();
   });
 
-  test('an aborted call closes the connection', async () => {
+  test('an aborted call closes the account', async () => {
     const controller = new AbortController();
     const pending = imapflowTransport.session(
       account,
@@ -175,7 +175,7 @@ describe('imapflowTransport', () => {
     expect(clients).toHaveLength(0);
   });
 
-  test('the session deadline closes the connection', async () => {
+  test('the session deadline closes the account', async () => {
     vi.useFakeTimers();
     try {
       const pending = imapflowTransport.session(

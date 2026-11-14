@@ -23,7 +23,7 @@ import type { MissionRecord, MissionTrustMarkRecord, RequestRecord } from '../st
 
 /** One offer to raise one macro-action of one set by one trust level. */
 export interface TrustRaiseOffer {
-  readonly connection_id: string;
+  readonly account_id: string;
   /** The account's display name. */
   readonly account_name: string;
   readonly resource_set_id: string;
@@ -40,12 +40,12 @@ export interface TrustRaiseOffer {
 }
 
 export interface TrustRaiseInput {
-  readonly mission: Pick<MissionRecord, 'createdAt' | 'connections'>;
+  readonly mission: Pick<MissionRecord, 'createdAt' | 'accounts'>;
   /**
-   * The connection's name and macro-actions ("Anything else" included), or `null` when
-   * the connection or its plugin is gone.
+   * The account's name and macro-actions ("Anything else" included), or `null` when
+   * the account or its plugin is gone.
    */
-  readonly accountOf: (connectionId: string) => {
+  readonly accountOf: (accountId: string) => {
     readonly name: string;
     readonly macroActions: readonly MacroAction[];
   } | null;
@@ -77,12 +77,12 @@ export function trustRaiseOffers(input: TrustRaiseInput): TrustRaiseOffer[] {
   const marks = new Map(input.marks.map((m) => [`${m.resourceSetId}::${m.macroActionId}`, m]));
   const approvals = requests.filter((r) => r.kind === 'approval' && r.decidedAt !== null);
   const offers: TrustRaiseOffer[] = [];
-  for (const connection of mission.connections) {
-    const account = input.accountOf(connection.connectionId);
-    if (!account) continue;
-    const actions = account.macroActions;
-    const several = connection.resourceSets.length > 1;
-    for (const set of connection.resourceSets) {
+  for (const account of mission.accounts) {
+    const known = input.accountOf(account.accountId);
+    if (!known) continue;
+    const actions = known.macroActions;
+    const several = account.resourceSets.length > 1;
+    for (const set of account.resourceSets) {
       for (const [actionId, level] of Object.entries(set.trustLevels ?? {})) {
         if (!isTrustLevel(level)) continue;
         const to = nextTrustLevel(level);
@@ -106,8 +106,8 @@ export function trustRaiseOffers(input: TrustRaiseInput): TrustRaiseOffer[] {
         ).length;
         if (granted < threshold) continue;
         offers.push({
-          connection_id: connection.connectionId,
-          account_name: account.name,
+          account_id: account.accountId,
+          account_name: known.name,
           resource_set_id: set.id,
           resource_set_position: set.position,
           several_sets: several,

@@ -10,7 +10,7 @@
  *     caller's `signal` come from the context (tests inject `mockFetch`, the
  *     host a fetch with its own timeouts and proxy), the answer is bounded,
  *     and a failure is thrown typed — 401 / 403 `UpstreamAuthError` (on a
- *     401 the host tries `refresh` and otherwise marks the connection
+ *     401 the host tries `refresh` and otherwise marks the account
  *     `expired`), any other failed status `UpstreamHttpError`, an answer
  *     that is not what the guard says `UpstreamProtocolError`. The host
  *     records it as `upstream_error` in the audit.
@@ -36,7 +36,7 @@ import {
   isRecord,
   jsonResult,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -95,12 +95,10 @@ export async function executeTemplate(
 }
 
 /** Resources reachable with this credential : one `Resource` per workspace. */
-export async function discoverTemplateResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverTemplateResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const workspaces = await request(ctx, 'GET', '/workspaces', isWorkspaceDtoList);
   // A ref the classifier would refuse is of no use to a mission : say so at
-  // connection time instead of listing a resource no call can name.
+  // account time instead of listing a resource no call can name.
   const unusable = workspaces.find((w) => pathIdent(w.id) === null);
   if (unusable) {
     throw new UpstreamProtocolError(
@@ -119,11 +117,11 @@ function isWorkspaceDto(x: unknown): x is WorkspaceDto {
 }
 
 /**
- * One call to the provider with the connection's key, its answer read
+ * One call to the provider with the account's key, its answer read
  * through `guard` ; a failure is thrown, typed (`httpJson`).
  */
 export async function request<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: string,
   path: string,
   guard: Guard<T>,

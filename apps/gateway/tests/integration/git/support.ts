@@ -19,17 +19,17 @@ import { githubPlugin } from '@vaubaan/plugin-github';
 import { parseReceivePackResult } from '@vaubaan/plugin-sdk/git';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import {
   executionInstance,
   type ExecutionInstance,
   type IssuedMission,
 } from '../../support/execution/testing';
-import type { ConnectionRecord } from '../../../src/server/store/types';
+import type { AccountRecord } from '../../../src/server/store/types';
 import { FakeGithubHost, isolatedGitEnv } from './fake-github-host';
 
 /** The fine-grained token of Ada's GitHub account, accepted by the host with every permission. */
-export const CONNECTION_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghijklmnopqrstuv';
+export const ACCOUNT_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghijklmnopqrstuv';
 export const REPOSITORY = 'acme/app';
 export const OTHER_REPOSITORY = 'acme/lib';
 /**
@@ -55,12 +55,12 @@ export interface GitResult {
 
 export interface GitRig extends ExecutionInstance {
   readonly host: FakeGithubHost;
-  readonly github: ConnectionRecord;
+  readonly github: AccountRecord;
   /** `http://127.0.0.1:<port>/git/github/` — the remote base the agent uses. */
   readonly remoteBase: string;
   readonly logs: string[];
   remote(repository?: string): string;
-  /** A mission on the GitHub connection: macro-actions at their trust levels, or an explicit policy. */
+  /** A mission on the GitHub account: macro-actions at their trust levels, or an explicit policy. */
   mission(input: {
     readonly trustLevels?: Readonly<Record<string, string>>;
     readonly policy?: readonly MissionPolicyEntry[];
@@ -70,10 +70,10 @@ export interface GitRig extends ExecutionInstance {
   tokenHolding(
     token: string,
     permissions: Readonly<Record<string, string>>,
-  ): Promise<ConnectionRecord>;
-  /** A mission on another connection, from macro-actions at their trust levels or an explicit policy. */
+  ): Promise<AccountRecord>;
+  /** A mission on another account, from macro-actions at their trust levels or an explicit policy. */
   missionOn(
-    connection: ConnectionRecord,
+    account: AccountRecord,
     composition: Readonly<Record<string, string>> | readonly MissionPolicyEntry[],
   ): Promise<IssuedMission>;
   /** The agent's git: `key` in `VAUBAAN_MISSION_TOKEN`, nothing else configured. */
@@ -125,18 +125,18 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
     deps: { providerFetch: host.fetch, logWrite: (_level, text) => logs.push(text) },
   });
   const { store } = instance.root;
-  host.acceptToken(CONNECTION_TOKEN, { metadata: 'read', contents: 'write', workflows: 'write' });
-  const github = await store.connections.create({
+  host.acceptToken(ACCOUNT_TOKEN, { metadata: 'read', contents: 'write', workflows: 'write' });
+  const github = await store.accounts.create({
     provider: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
       kind: 'api-key',
-      fields: { token: CONNECTION_TOKEN },
+      fields: { token: ACCOUNT_TOKEN },
       metadata: {},
     }),
   });
-  await store.connections.syncDiscoveredResources(github.id, [
+  await store.accounts.syncDiscoveredResources(github.id, [
     { ref: REPOSITORY, displayName: REPOSITORY, env: null },
     { ref: OTHER_REPOSITORY, displayName: OTHER_REPOSITORY, env: null },
   ]);
@@ -157,20 +157,20 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
     remote: (repository = REPOSITORY) => `${remoteBase}${repository}.git`,
     async mission(input) {
       const repositories = input.repositories ?? [REPOSITORY];
-      const connection = input.trustLevels
+      const account = input.trustLevels
         ? {
-            connection_id: github.id,
+            account_id: github.id,
             trust_levels: input.trustLevels,
             resources: { scope: 'selected' as const, resource_refs: [...repositories] },
           }
         : {
-            connection_id: github.id,
+            account_id: github.id,
             resources: { scope: 'selected' as const, resource_refs: [...repositories] },
             policy: [...(input.policy ?? [])],
           };
       const issued = await instance.root.missions.service.issue(instance.ada, {
         name: 'Develop acme/app with git',
-        connections: [connection],
+        accounts: [account],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });
@@ -179,28 +179,28 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
     },
     async tokenHolding(token, permissions) {
       host.acceptToken(token, permissions);
-      const connection = await store.connections.create({
+      const account = await store.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: instance.ada.id },
         displayName: `acme-${token.slice(-6)}`,
         credential: serializeSecret({ kind: 'api-key', fields: { token }, metadata: {} }),
       });
-      await store.connections.syncDiscoveredResources(connection.id, [
+      await store.accounts.syncDiscoveredResources(account.id, [
         { ref: REPOSITORY, displayName: REPOSITORY, env: null },
       ]);
-      return connection;
+      return account;
     },
-    async missionOn(connection, composition) {
+    async missionOn(account, composition) {
       const entry = isPolicy(composition)
         ? {
-            connection_id: connection.id,
+            account_id: account.id,
             resources: { scope: 'selected' as const, resource_refs: [REPOSITORY] },
             policy: [...composition],
           }
-        : { connection_id: connection.id, trust_levels: composition };
+        : { account_id: account.id, trust_levels: composition };
       const issued = await instance.root.missions.service.issue(instance.ada, {
-        name: `On ${connection.displayName}`,
-        connections: [entry],
+        name: `On ${account.displayName}`,
+        accounts: [entry],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });

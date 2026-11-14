@@ -4,7 +4,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * of a risk edited after issuance (spec §3.1, §3.2, §3.5, §7.4, §7.8; pivot
  * ADR D4).
  *
- * Reads connections and resources through the store repositories only, asks
+ * Reads accounts and resources through the store repositories only, asks
  * the `AuthorityService` what the creator may accept, and leaves the decision
  * to the pure `previewDraft`. A mission is persisted as an explicit
  * enumeration: explicit resource ids (even for "all"), explicit policy
@@ -13,14 +13,14 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * `MissionTeamService`'s (`team-service.ts`); this service says who may read a
  * mission (`access`) and what a presented token is worth (`verifyToken`).
  *
- * One rule for what a mission reaches on a connection, shared with the
+ * One rule for what a mission reaches on an account, shared with the
  * execution door (`execution/mission-context.ts`): exactly the resource ids
  * stored at issuance that discovery still returns. Scope `all` with an empty
  * list means "none known at issuance", never "everything discovered later";
  * the detail page and the bootstrap kit read it the same way.
  *
  * Store records are translated by `budget/mapping.ts` and
- * `connections/mapping.ts` only; no record is written into an audit payload.
+ * `accounts/mapping.ts` only; no record is written into an audit payload.
  */
 import type { TokenHolder } from '@vaubaan/gateway-core';
 import type { PluginRegistry, ResourceNoun } from '@vaubaan/plugin-sdk';
@@ -65,7 +65,7 @@ import {
   type SessionService,
 } from '../budget';
 import { isSelfResource, type SelfResource } from '../config';
-import { connectionSummaryOf, lastDiscoveryAt } from '../connections/mapping';
+import { accountSummaryOf, lastDiscoveryAt } from '../accounts/mapping';
 import { revivesEndedMission, type CeilingCheck, type LimitReached } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -74,10 +74,10 @@ import { isOnMission, membershipOf, type Membership } from '../store/membership'
 import { reachedResourcesBySet, takesFutureResources } from '../store/mission-reach';
 import { toIso, type Clock } from '../store/clock';
 import type {
-  ConnectionRecord,
-  ConnectionResourceRecord,
-  MissionConnectionInput,
-  MissionConnectionRecord,
+  AccountRecord,
+  AccountResourceRecord,
+  MissionAccountInput,
+  MissionAccountRecord,
   MissionRecord,
   MissionResourceSetInput,
   MissionResourceSetRecord,
@@ -97,17 +97,17 @@ import { macroActionsOf } from '../../lib/missions/macro-actions';
 import { resourceNounOf } from '../../lib/providers/resource-noun';
 import type {
   CatalogRisk,
-  DraftConnection,
+  DraftAccount,
   DraftPeriod,
   DraftResourceSet,
-  IssuanceConnection,
+  IssuanceAccount,
   IssuanceResource,
   MissionDraft,
   MissionIssuer,
   MissionPreview,
   PreviewIssue,
   PreviewNotice,
-  ResolvedDraftConnection,
+  ResolvedDraftAccount,
   ResolvedDraftSet,
   Row,
 } from '../../lib/missions/model';
@@ -121,7 +121,7 @@ import {
   revisionOf,
   type MissionChanges,
   type MissionSnapshot,
-  type MissionSnapshotConnection,
+  type MissionSnapshotAccount,
 } from '../../lib/missions/mission-edit';
 import { checkPolicyLines, previewDraft } from '../../lib/missions/preview';
 import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
@@ -135,7 +135,7 @@ const COPY_SUFFIX = ' (copy)';
 export interface MissionServiceDeps {
   readonly store: Pick<
     Store,
-    'missions' | 'connections' | 'sessions' | 'users' | 'auditWriter' | 'requests'
+    'missions' | 'accounts' | 'sessions' | 'users' | 'auditWriter' | 'requests'
   >;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
@@ -182,7 +182,7 @@ const DEFAULT_TRUST_RAISE_AFTER_APPROVALS = 10;
 export interface PreviewOptions {
   /**
    * Environment labels to read as set, by resource id, without writing them.
-   * Only the label changes: the connections, the authority and the catalog are
+   * Only the label changes: the accounts, the authority and the catalog are
    * the store's.
    */
   readonly assumedEnvs?: ReadonlyMap<string, string>;
@@ -190,13 +190,13 @@ export interface PreviewOptions {
 
 /** The issuance context with some resources read under the labels a dry run would set. */
 export function withAssumedEnvs(
-  connections: IssuanceConnection[],
+  accounts: IssuanceAccount[],
   assumed: ReadonlyMap<string, string> | undefined,
-): IssuanceConnection[] {
-  if (!assumed || assumed.size === 0) return connections;
-  return connections.map((connection) => ({
-    ...connection,
-    resources: connection.resources.map((resource) => {
+): IssuanceAccount[] {
+  if (!assumed || assumed.size === 0) return accounts;
+  return accounts.map((account) => ({
+    ...account,
+    resources: account.resources.map((resource) => {
       const env = assumed.get(resource.id);
       return env === undefined ? resource : { ...resource, env };
     }),
@@ -258,8 +258,8 @@ export type RevokeResult =
   | { readonly ok: true; readonly mission: MissionRecord; readonly tokensRevoked: number }
   | { readonly ok: false; readonly reason: 'not-found' };
 
-/** An orphaned mission as an owner of one of its connections reads it. */
-export interface OrphanedOnConnection {
+/** An orphaned mission as an owner of one of its accounts reads it. */
+export interface OrphanedOnAccount {
   readonly id: string;
   readonly name: string;
   /** Who issued it: the only other person who can close it. */
@@ -268,12 +268,12 @@ export interface OrphanedOnConnection {
 }
 
 /**
- * A mission as an owner of one of its connections reads it on the page of that
- * connection ("Missions using this account"). An owner already reads the audit
- * entries of their connection, mission names included (spec §8); this is the same
- * disclosure as a list. Nothing of another connection of the mission is in it.
+ * A mission as an owner of one of its accounts reads it on the page of that
+ * account ("Missions using this account"). An owner already reads the audit
+ * entries of their account, mission names included (spec §8); this is the same
+ * disclosure as a list. Nothing of another account of the mission is in it.
  */
-export interface MissionOnConnection {
+export interface MissionOnAccount {
   readonly id: string;
   readonly name: string;
   /** Who issued it; `label` is the email, or "unknown user" when the row is gone. */
@@ -286,15 +286,15 @@ export interface MissionOnConnection {
   /** Why it reads `orphaned`; `null` otherwise. */
   readonly orphan_cause: OrphanCause | null;
   /**
-   * Set when THIS connection no longer serves the mission (revoked, or the creator's
+   * Set when THIS account no longer serves the mission (revoked, or the creator's
    * access withdrawn) while the mission may still serve through its others.
    */
   readonly part_lost: PartLossCause | null;
-  /** The resources of THIS connection the mission was issued on: explicit ids. */
+  /** The resources of THIS account the mission was issued on: explicit ids. */
   readonly resource_ids: readonly string[];
   /** True when a set of it takes the resources that later appear in its environment. */
   readonly future: boolean;
-  /** Accepted risks that belong to this connection's provider. */
+  /** Accepted risks that belong to this account's provider. */
   readonly permissions: number;
   /** How many of them wait for the creator's approval. */
   readonly asks_first: number;
@@ -305,7 +305,7 @@ export interface MissionOnConnection {
 
 /** Who may close a mission, and on what ground (spec §2.3). */
 type Closer =
-  { readonly as: 'creator' } | { readonly as: 'connection-owner'; readonly connectionId: string };
+  { readonly as: 'creator' } | { readonly as: 'account-owner'; readonly accountId: string };
 
 export type SetGateResult =
   | {
@@ -456,8 +456,8 @@ function revisionOfRecord(mission: MissionRecord): string {
     name: mission.name,
     expires_at: mission.expiresAt,
     period: statedPeriodOf(mission),
-    connections: mission.connections.map((c) => ({
-      connection_id: c.connectionId,
+    accounts: mission.accounts.map((c) => ({
+      account_id: c.accountId,
       resource_sets: c.resourceSets.map((set) => ({
         id: set.id,
         position: set.position,
@@ -516,13 +516,13 @@ export interface MissionAccess extends InspectedMission {
 }
 
 /**
- * A connection of a mission that no longer serves it (ADR
+ * An account of a mission that no longer serves it (ADR
  * orphaned-missions-and-ownerless-connections, amendment 2026-10-21): the mission
- * keeps serving through its other connections, and nothing is ever added back in
+ * keeps serving through its other accounts, and nothing is ever added back in
  * its place.
  */
-export interface MissionLostConnection {
-  readonly connection_id: string;
+export interface MissionLostAccount {
+  readonly account_id: string;
   readonly cause: PartLossCause;
   /** True when it never comes back (revoked or gone); false while the access may return. */
   readonly final: boolean;
@@ -531,8 +531,8 @@ export interface MissionLostConnection {
 /** Why a mission reads `orphaned` right now (handbook authority, Invariants). */
 export interface MissionOrphanReason {
   readonly cause: OrphanCause;
-  /** The connection the cause was met on; `null` when the creator is gone. */
-  readonly connection_id: string | null;
+  /** The account the cause was met on; `null` when the creator is gone. */
+  readonly account_id: string | null;
   /** The accepted risks the creator no longer covers. */
   readonly uncovered: readonly RiskId[];
 }
@@ -547,8 +547,8 @@ export interface MissionOverview {
   readonly state: MissionState;
   /** Set while the mission is orphaned; `null` as soon as the authority is back. */
   readonly orphan: MissionOrphanReason | null;
-  /** The connections that no longer serve it, in the mission's order; empty when all serve. */
-  readonly lost: readonly MissionLostConnection[];
+  /** The accounts that no longer serve it, in the mission's order; empty when all serve. */
+  readonly lost: readonly MissionLostAccount[];
   /**
    * The public part of the reader's own active token of this mission; `null`
    * when they have none (a member who has not generated theirs, a revoked token).
@@ -558,7 +558,7 @@ export interface MissionOverview {
   readonly issued_via: MissionIssuer | null;
 }
 
-/** One resource set of a connection of a mission, as its page reads it (risk model §4.7). */
+/** One resource set of an account of a mission, as its page reads it (risk model §4.7). */
 export interface MissionDetailSet {
   readonly id: string;
   /** From 1: "Resource set 2". */
@@ -575,7 +575,7 @@ export interface MissionDetailSet {
   readonly trust_levels?: Readonly<Record<string, string>>;
 }
 
-export interface MissionDetailConnection {
+export interface MissionDetailAccount {
   readonly id: string;
   readonly provider: string;
   readonly provider_label: string;
@@ -588,13 +588,13 @@ export interface MissionDetailConnection {
   /** A set of it takes the resources that later appear in its environment. */
   readonly future: boolean;
   /**
-   * When discovery last ran on the connection (any trigger: connect, refresh, after a
+   * When discovery last ran on the account (any trigger: connect, refresh, after a
    * creating call, hourly, "check now"); `null` when never.
    */
   readonly last_checked_at: Iso8601 | null;
-  /** Its resource sets, in order; one for a connection given without sets. */
+  /** Its resource sets, in order; one for an account given without sets. */
   readonly resource_sets: readonly MissionDetailSet[];
-  /** Why this connection no longer serves the mission; `null` while it serves. */
+  /** Why this account no longer serves the mission; `null` while it serves. */
   readonly lost: PartLossCause | null;
   /**
    * The ids among `resources` the mission created itself and reaches since (ADR
@@ -638,7 +638,7 @@ export interface MissionDetail extends MissionOverview {
    * gates (the creator, on a mission that can serve again).
    */
   readonly limits_editable: boolean;
-  readonly connections: readonly MissionDetailConnection[];
+  readonly accounts: readonly MissionDetailAccount[];
   readonly policy: readonly MissionDetailRisk[];
   readonly period: DraftPeriod;
   /** The kit with the masked prefix; `null` when no token is active. */
@@ -652,8 +652,8 @@ export interface MissionDetail extends MissionOverview {
 
 /** The reached resources the mission created itself, as `created_resource_ids` (or nothing). */
 function createdIdsOf(
-  selection: MissionConnectionRecord,
-  reached: readonly Pick<ConnectionResourceRecord, 'id'>[],
+  selection: MissionAccountRecord,
+  reached: readonly Pick<AccountResourceRecord, 'id'>[],
 ): { readonly created_resource_ids?: readonly string[] } {
   const sources = new Map(
     selection.resourceSets.flatMap((set) => Object.entries(set.resourceSources ?? {})),
@@ -662,7 +662,7 @@ function createdIdsOf(
   return ids.length > 0 ? { created_resource_ids: ids } : {};
 }
 
-function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): IssuanceResource {
+function toIssuanceResource(r: AccountResourceRecord, self: boolean): IssuanceResource {
   return {
     id: r.id,
     ref: r.ref,
@@ -687,10 +687,10 @@ function setInputOf(resolved: ResolvedDraftSet): MissionResourceSetInput {
   };
 }
 
-/** What a mission stores per connection: its sets, each with its lines. */
-function connectionInputOf(resolved: ResolvedDraftConnection): MissionConnectionInput {
+/** What a mission stores per account: its sets, each with its lines. */
+function accountInputOf(resolved: ResolvedDraftAccount): MissionAccountInput {
   return {
-    connectionId: resolved.connection_id,
+    accountId: resolved.account_id,
     resourceSets: resolved.resource_sets.map(setInputOf),
   };
 }
@@ -703,11 +703,11 @@ function connectionInputOf(resolved: ResolvedDraftConnection): MissionConnection
 export interface MissionIssuedAudit {
   readonly [key: string]: unknown;
   readonly name: string;
-  readonly connections: readonly {
-    readonly connection_id: string;
+  readonly accounts: readonly {
+    readonly account_id: string;
     /** Every set's explicit ids together. */
     readonly resource_ids: readonly string[];
-    /** The resource sets of the connection (risk model §4.7). */
+    /** The resource sets of the account (risk model §4.7). */
     readonly resource_sets: readonly {
       readonly resource_set_id: string;
       readonly position: number;
@@ -727,8 +727,8 @@ export interface MissionIssuedAudit {
 function issuedAuditOf(mission: MissionRecord, tokenPrefix: string): MissionIssuedAudit {
   return {
     name: mission.name,
-    connections: mission.connections.map((c) => ({
-      connection_id: c.connectionId,
+    accounts: mission.accounts.map((c) => ({
+      account_id: c.accountId,
       resource_ids: c.resourceSets.flatMap((set) => [...set.resourceIds]),
       resource_sets: c.resourceSets.map((set) => ({
         resource_set_id: set.id,
@@ -764,42 +764,42 @@ export class MissionService {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * The connections the user may build a mission from: every non-revoked
-   * connection on which they hold a non-empty authority, with its resources,
+   * The accounts the user may build a mission from: every non-revoked
+   * account on which they hold a non-empty authority, with its resources,
    * its catalog as explicit ids and its macro-actions.
    */
-  async issuanceContext(user: Subject): Promise<IssuanceConnection[]> {
-    const candidates = await this.deps.authority.connectionsOf(user);
-    const context: IssuanceConnection[] = [];
-    for (const connection of candidates) {
-      if (connection.status === 'revoked') continue;
-      const built = await this.issuanceConnection(user, connection);
+  async issuanceContext(user: Subject): Promise<IssuanceAccount[]> {
+    const candidates = await this.deps.authority.accountsOf(user);
+    const context: IssuanceAccount[] = [];
+    for (const account of candidates) {
+      if (account.status === 'revoked') continue;
+      const built = await this.issuanceAccount(user, account);
       if (built) context.push(built);
     }
     return context;
   }
 
-  private async issuanceConnection(
+  private async issuanceAccount(
     user: Subject,
-    connection: ConnectionRecord,
-  ): Promise<IssuanceConnection | null> {
-    const registered = this.deps.registry.get(connection.provider);
+    account: AccountRecord,
+  ): Promise<IssuanceAccount | null> {
+    const registered = this.deps.registry.get(account.provider);
     if (!registered) return null;
-    const authority = await this.deps.authority.authorityOf(user, connection);
+    const authority = await this.deps.authority.authorityOf(user, account);
     if (authority.basis === 'none' || authority.riskIds.length === 0) return null;
-    const resources = await this.deps.store.connections.listResources(connection.id);
+    const resources = await this.deps.store.accounts.listResources(account.id);
     const { plugin } = registered;
     return {
-      ...connectionSummaryOf(connection),
+      ...accountSummaryOf(account),
       provider_label: plugin.displayName,
       resource_noun: resourceNounOf(plugin),
       derives_env: typeof plugin.envOf === 'function',
-      default_env: connection.defaultEnv,
+      default_env: account.defaultEnv,
       basis: authority.basis,
-      resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
-      risks: this.risksOf(connection.provider),
+      resources: resources.map((r) => toIssuanceResource(r, this.isSelf(account.provider, r))),
+      risks: this.risksOf(account.provider),
       authority: authority.riskIds,
-      macro_actions: this.macroActionsOf(connection.provider),
+      macro_actions: this.macroActionsOf(account.provider),
     };
   }
 
@@ -832,8 +832,8 @@ export class MissionService {
     draft: MissionDraft,
     options: PreviewOptions = {},
   ): Promise<MissionPreview> {
-    const connections = withAssumedEnvs(await this.issuanceContext(user), options.assumedEnvs);
-    return previewDraft({ connections, now: this.deps.clock.now() }, draft);
+    const accounts = withAssumedEnvs(await this.issuanceContext(user), options.assumedEnvs);
+    return previewDraft({ accounts, now: this.deps.clock.now() }, draft);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -846,7 +846,7 @@ export class MissionService {
     options: IssueOptions = {},
   ): Promise<IssueResult> {
     const context = await this.issuanceContext(user);
-    const preview = previewDraft({ connections: context, now: this.deps.clock.now() }, draft);
+    const preview = previewDraft({ accounts: context, now: this.deps.clock.now() }, draft);
     if (!preview.ok) return { ok: false, reason: 'refused', preview };
     const ceiling = await this.activeMissionCeiling();
     if (ceiling) return ceiling;
@@ -857,7 +857,7 @@ export class MissionService {
       periodSeconds: draft.period.kind === 'recurring' ? draft.period.length_seconds : null,
       expiresAt: draft.expires_at === null ? null : new Date(draft.expires_at).toISOString(),
       issuedByMissionId: options.issuedBy?.missionId ?? null,
-      connections: preview.resolved.map(connectionInputOf),
+      accounts: preview.resolved.map(accountInputOf),
     });
     // The creator is a member by construction: the mission is born with their own token.
     const token = await this.issueCreatorToken(mission);
@@ -875,7 +875,7 @@ export class MissionService {
     this.deps.logger.info('mission issued', {
       mission_id: mission.id,
       creator_id: user.id,
-      connections: mission.connections.length,
+      accounts: mission.accounts.length,
       risks: mission.policy.length,
       token_prefix: token.prefix,
       issued_by_mission_id: options.issuedBy?.missionId ?? null,
@@ -892,35 +892,35 @@ export class MissionService {
 
   /**
    * The draft that re-issues an existing mission of the user: same
-   * connections, resources still present, same explicit policy, same period;
+   * accounts, resources still present, same explicit policy, same period;
    * no expiry carried over (a past date would refuse the copy). `null` when
    * the mission is not theirs.
    *
    * Each set is drafted as a set: its surviving resources, `future` and, when
    * it lists none, its environment; a set that lists none and takes nothing later
    * is drafted `{ scope: 'all' }`, resolved against the resources known at the copy. A legacy set mixing environments (migration
-   * 0033) is drafted the legacy way — `{ scope: 'connection' }` when it took future
+   * 0033) is drafted the legacy way — `{ scope: 'account' }` when it took future
    * resources, its resources otherwise — so that the copy is split by environment
    * (or refused as mixed, inside `resource_sets`): never wider than its source.
    */
   async draftFrom(user: Subject, missionId: string): Promise<MissionDraft | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
-    const connections: DraftConnection[] = [];
+    const accounts: DraftAccount[] = [];
     const policy = mission.policy.map(policyEntryOf);
-    for (const c of mission.connections) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
-      if (!connection) continue;
-      const provider = connection.provider;
+    for (const c of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
+      if (!account) continue;
+      const provider = account.provider;
       const sets: DraftResourceSet[] = [];
       for (const set of c.resourceSets) {
-        const ids = await this.survivingResources(c.connectionId, set, provider);
+        const ids = await this.survivingResources(c.accountId, set, provider);
         const legacyWhole = set.mixedEnv && set.future;
         // A set that holds nothing and takes nothing later: "all", resolved at the copy.
         const nothing = ids.length === 0 && !set.future;
         sets.push({
           resources: legacyWhole
-            ? { scope: 'connection' }
+            ? { scope: 'account' }
             : nothing
               ? { scope: 'all' }
               : { scope: 'selected', resource_ids: ids },
@@ -938,25 +938,25 @@ export class MissionService {
       const flat = c.resourceSets.length === 1 && c.resourceSets[0]?.mixedEnv === true && only;
       if (flat) {
         const { future: _future, env: _env, ...fields } = only;
-        connections.push({ connection_id: c.connectionId, ...fields });
+        accounts.push({ account_id: c.accountId, ...fields });
       } else {
-        connections.push({ connection_id: c.connectionId, resource_sets: sets });
+        accounts.push({ account_id: c.accountId, resource_sets: sets });
       }
     }
     return {
       name: `${mission.name}${COPY_SUFFIX}`,
-      connections,
+      accounts,
       period: statedPeriodOf(mission),
       expires_at: null,
     };
   }
 
   private async survivingResources(
-    connectionId: string,
+    accountId: string,
     set: MissionResourceSetRecord,
     provider: string,
   ): Promise<string[]> {
-    const current = await this.deps.store.connections.listResources(connectionId);
+    const current = await this.deps.store.accounts.listResources(accountId);
     // A stale resource would refuse the copy: it is dropped like a vanished one.
     // So is one of the instance's own resources, which no mission may reach.
     const known = new Set(
@@ -966,7 +966,7 @@ export class MissionService {
   }
 
   /** True when the resource is one of this instance's own (`selfResources`). */
-  private isSelf(provider: string, resource: Pick<ConnectionResourceRecord, 'ref'>): boolean {
+  private isSelf(provider: string, resource: Pick<AccountResourceRecord, 'ref'>): boolean {
     return isSelfResource(this.deps.selfResources, provider, resource.ref);
   }
 
@@ -1073,16 +1073,16 @@ export class MissionService {
   }
 
   /**
-   * The orphaned missions that carry a connection, for someone who owns that
-   * connection now (spec §2.3: "the creator, or an owner of the connection, may close
+   * The orphaned missions that carry an account, for someone who owns that
+   * account now (spec §2.3: "the creator, or an owner of the account, may close
    * it"). Anyone else reads none. Derived at this instant, like every reading of
    * `orphaned`.
    */
-  async orphanedOn(user: Subject, connectionId: string): Promise<OrphanedOnConnection[]> {
-    const connection = await this.deps.store.connections.getById(connectionId);
-    if (!connection || !(await this.owns(user, connection))) return [];
-    const orphaned: OrphanedOnConnection[] = [];
-    for (const mission of await this.deps.store.missions.listForConnection(connectionId)) {
+  async orphanedOn(user: Subject, accountId: string): Promise<OrphanedOnAccount[]> {
+    const account = await this.deps.store.accounts.getById(accountId);
+    if (!account || !(await this.owns(user, account))) return [];
+    const orphaned: OrphanedOnAccount[] = [];
+    for (const mission of await this.deps.store.missions.listForAccount(accountId)) {
       const { orphan } = await this.deps.grounds.inspect(mission);
       if (!orphan) continue;
       const creator = await this.deps.store.users.getById(mission.creatorUserId);
@@ -1097,24 +1097,24 @@ export class MissionService {
   }
 
   /**
-   * Every mission that carries a connection, newest first, for someone who owns that
-   * connection now. Anyone else reads none, like `orphanedOn`. Read-only: the page of
-   * the connection lists them, so that its owner knows what removing an access or
+   * Every mission that carries an account, newest first, for someone who owns that
+   * account now. Anyone else reads none, like `orphanedOn`. Read-only: the page of
+   * the account lists them, so that its owner knows what removing an access or
    * disconnecting would stop.
    */
-  async onConnection(user: Subject, connectionId: string): Promise<MissionOnConnection[]> {
-    const connection = await this.deps.store.connections.getById(connectionId);
-    if (!connection || !(await this.owns(user, connection))) return [];
-    const listed: MissionOnConnection[] = [];
-    for (const stored of await this.deps.store.missions.listForConnection(connectionId)) {
+  async onAccount(user: Subject, accountId: string): Promise<MissionOnAccount[]> {
+    const account = await this.deps.store.accounts.getById(accountId);
+    if (!account || !(await this.owns(user, account))) return [];
+    const listed: MissionOnAccount[] = [];
+    for (const stored of await this.deps.store.missions.listForAccount(accountId)) {
       const { mission, orphan, lost } = await this.deps.grounds.inspect(stored);
       const state = await this.stateOf(mission);
       const creator = await this.deps.store.users.getById(mission.creatorUserId);
       const membership = await this.membershipOf(mission, user.id);
       const accepted = mission.policy.filter(
-        (entry) => parseRiskId(entry.riskId)?.provider === connection.provider,
+        (entry) => parseRiskId(entry.riskId)?.provider === account.provider,
       );
-      const selection = mission.connections.find((c) => c.connectionId === connectionId);
+      const selection = mission.accounts.find((c) => c.accountId === accountId);
       listed.push({
         id: mission.id,
         name: mission.name,
@@ -1123,7 +1123,7 @@ export class MissionService {
         exhausted: state.kind === 'active' ? state.exhausted.length : 0,
         expires_at: mission.expiresAt,
         orphan_cause: orphan?.cause ?? null,
-        part_lost: lost.find((part) => part.connectionId === connectionId)?.cause ?? null,
+        part_lost: lost.find((part) => part.accountId === accountId)?.cause ?? null,
         resource_ids: selection?.resourceSets.flatMap((set) => [...set.resourceIds]) ?? [],
         future: selection ? takesFutureResources(selection) : false,
         permissions: accepted.length,
@@ -1143,7 +1143,7 @@ export class MissionService {
    * closed for good (the stored status goes `active` → `revoked`).
    *
    * Who may (spec §2.3): the creator, always; and, **only while the mission is
-   * orphaned**, an owner of one of its connections — the authority that grounded it is
+   * orphaned**, an owner of one of its accounts — the authority that grounded it is
    * gone, and it would serve again, with the token its agent holds, the day a share is
    * made again. A mission that serves is its creator's alone. A mission acting through
    * the `vaubaan` plugin acts for its creator only.
@@ -1171,8 +1171,8 @@ export class MissionService {
         status: revoked.status,
         tokens_revoked: tokensRevoked,
         // Named only when it is not the creator: the entry says on what ground they acted.
-        ...(closer.as === 'connection-owner'
-          ? { closed_as: closer.as, connection_id: closer.connectionId }
+        ...(closer.as === 'account-owner'
+          ? { closed_as: closer.as, account_id: closer.accountId }
           : {}),
       },
       via_mission_id: options.issuedBy?.missionId ?? null,
@@ -1193,7 +1193,7 @@ export class MissionService {
   /**
    * The mission as derived now, when `user` may close it, and on what ground.
    * `null` — "not found" — for everyone else, so that an owner learns nothing about
-   * the missions of their connection that serve.
+   * the missions of their account that serve.
    */
   private async closableBy(
     user: Subject,
@@ -1208,18 +1208,18 @@ export class MissionService {
     if (options.issuedBy) return null;
     // Orphaned now; or already closed, which is answered the same to who could close it.
     if (mission.status !== 'orphaned' && mission.status !== 'revoked') return null;
-    for (const { connectionId } of stored.connections) {
-      const connection = await this.deps.store.connections.getById(connectionId);
-      if (connection && (await this.owns(user, connection))) {
-        return { mission, closer: { as: 'connection-owner', connectionId } };
+    for (const { accountId } of stored.accounts) {
+      const account = await this.deps.store.accounts.getById(accountId);
+      if (account && (await this.owns(user, account))) {
+        return { mission, closer: { as: 'account-owner', accountId } };
       }
     }
     return null;
   }
 
-  /** The one definition of "owns the connection now": the authority's (`basis: 'owner'`). */
-  private async owns(user: Subject, connection: ConnectionRecord): Promise<boolean> {
-    return (await this.deps.authority.authorityOf(user, connection)).basis === 'owner';
+  /** The one definition of "owns the account now": the authority's (`basis: 'owner'`). */
+  private async owns(user: Subject, account: AccountRecord): Promise<boolean> {
+    return (await this.deps.authority.authorityOf(user, account)).basis === 'owner';
   }
 
   /**
@@ -1310,7 +1310,7 @@ export class MissionService {
    * is no delegated variant: the management door is not handed this method.
    *
    * A value that moves is judged by issuance's own check of a policy line
-   * (`checkPolicyLines`): inside the creator's authority on the connection NOW, a whole
+   * (`checkPolicyLines`): inside the creator's authority on the account NOW, a whole
    * number of at least one, a rate under the catalog's ceiling. Whatever caps a creation
    * caps the change; a value that does not move is not judged again.
    *
@@ -1424,7 +1424,7 @@ export class MissionService {
   async permissionOptions(user: Subject, missionId: string) {
     const mission = await this.ownMission(user, missionId);
     if (!mission || gateEditBlockedBy(mission)) return null;
-    const reached = await this.detailConnections(mission);
+    const reached = await this.detailAccounts(mission);
     const candidates: {
       risk_id: string;
       /** The set the line would join (risk model §4.7). */
@@ -1437,13 +1437,13 @@ export class MissionService {
       available: boolean;
       ceiling: number | null;
     }[] = [];
-    for (const selected of mission.connections) {
-      const connection = await this.deps.store.connections.getById(selected.connectionId);
-      // A revoked connection serves the mission no more: nothing is added on it.
-      if (!connection || connection.status === 'revoked') continue;
-      const context = await this.issuanceConnection(user, connection);
+    for (const selected of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(selected.accountId);
+      // A revoked account serves the mission no more: nothing is added on it.
+      if (!account || account.status === 'revoked') continue;
+      const context = await this.issuanceAccount(user, account);
       if (!context) continue;
-      const sets = reached.find((r) => r.id === connection.id)?.resource_sets ?? [];
+      const sets = reached.find((r) => r.id === account.id)?.resource_sets ?? [];
       for (const set of sets) {
         for (const risk of context.risks) {
           const line: MissionPolicyEntry = {
@@ -1489,10 +1489,10 @@ export class MissionService {
       ? ((await this.deps.store.requests.getById(edit.request_id))?.lines ?? [])
       : [];
     const firstSets = new Map<string, string>();
-    for (const c of mission.connections) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
+    for (const c of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
       const first = c.resourceSets[0];
-      if (connection && first) firstSets.set(connection.provider, first.id);
+      if (account && first) firstSets.set(account.provider, first.id);
     }
     const expected = placeLines(mission, edit.expected_policy, asked, firstSets);
     const policy = placeLines(mission, edit.policy, asked, firstSets);
@@ -1545,13 +1545,13 @@ export class MissionService {
   /** The mission as everything an edit may move, its policy partitioned per account. */
   private async snapshotOf(mission: MissionRecord): Promise<MissionSnapshot> {
     const policy = mission.policy.map(policyEntryOf);
-    const connections: MissionSnapshotConnection[] = [];
-    for (const c of mission.connections) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
-      connections.push({
-        connection_id: c.connectionId,
-        provider: connection?.provider ?? '',
-        display_name: connection?.displayName ?? c.connectionId,
+    const accounts: MissionSnapshotAccount[] = [];
+    for (const c of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
+      accounts.push({
+        account_id: c.accountId,
+        provider: account?.provider ?? '',
+        display_name: account?.displayName ?? c.accountId,
         resource_sets: c.resourceSets.map((set) => ({
           key: set.id,
           id: set.id,
@@ -1568,7 +1568,7 @@ export class MissionService {
       name: mission.name,
       expires_at: mission.expiresAt,
       period: statedPeriodOf(mission),
-      connections,
+      accounts,
     };
   }
 
@@ -1600,8 +1600,8 @@ export class MissionService {
       return { ok: false as const, reason: 'invalid-edit' as const, problems: body.problems };
     }
     const snapshot = await this.snapshotOf(mission);
-    const connections = await this.issuanceContext(user);
-    const judgement = judgeEdit({ connections, now: this.deps.clock.now() }, snapshot, body.draft);
+    const accounts = await this.issuanceContext(user);
+    const judgement = judgeEdit({ accounts, now: this.deps.clock.now() }, snapshot, body.draft);
     return {
       ok: true as const,
       mission,
@@ -1663,8 +1663,8 @@ export class MissionService {
       unchanged: (current) => revisionOfRecord(current) === revision,
       name: after.name,
       expiresAt: after.expires_at,
-      connections: after.connections.map((c) => ({
-        connectionId: c.connection_id,
+      accounts: after.accounts.map((c) => ({
+        accountId: c.account_id,
         resourceSets: c.resource_sets.map((set) => ({
           ...(set.id !== null ? { id: set.id } : {}),
           resourceIds: [...set.resource_ids],
@@ -1696,8 +1696,8 @@ export class MissionService {
     });
     this.deps.logger.info('mission edited', {
       mission_id: mission.id,
-      connections_added: changes.connections_added.length,
-      connections_removed: changes.connections_removed.length,
+      accounts_added: changes.accounts_added.length,
+      accounts_removed: changes.accounts_removed.length,
       permissions_added: changes.permissions_added.length,
       permissions_removed: changes.permissions_removed.length,
       permissions_changed: changes.permissions_changed.length,
@@ -1707,8 +1707,8 @@ export class MissionService {
   }
 
   /**
-   * Why issuance would refuse these lines on the mission's connections now: each line
-   * checked against the creator's authority on the connection of its provider, on the
+   * Why issuance would refuse these lines on the mission's accounts now: each line
+   * checked against the creator's authority on the account of its provider, on the
    * resources the mission reaches there. Empty when every line passes.
    */
   private async limitIssues(
@@ -1719,31 +1719,29 @@ export class MissionService {
     if (lines.length === 0) return [];
     const issues: PreviewIssue[] = [];
     const judged = new Set<RiskId>();
-    const reached = await this.detailConnections(mission);
-    for (const [index, c] of mission.connections.entries()) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
-      if (!connection) continue;
-      const own = lines.filter(
-        (line) => parseRiskId(line.risk_id)?.provider === connection.provider,
-      );
+    const reached = await this.detailAccounts(mission);
+    for (const [index, c] of mission.accounts.entries()) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
+      if (!account) continue;
+      const own = lines.filter((line) => parseRiskId(line.risk_id)?.provider === account.provider);
       if (own.length === 0) continue;
       for (const line of own) judged.add(line.risk_id);
-      // A revoked connection's part of the mission is lost for good: nothing widens on it.
+      // A revoked account's part of the mission is lost for good: nothing widens on it.
       const context =
-        connection.status === 'revoked' ? null : await this.issuanceConnection(user, connection);
+        account.status === 'revoked' ? null : await this.issuanceAccount(user, account);
       if (!context) {
         issues.push({
           code: 'exceeds-authority',
-          message: `Outside your authority on "${connection.displayName}": ${own
+          message: `Outside your authority on "${account.displayName}": ${own
             .map((line) => line.risk_id)
             .join(', ')}.`,
           risk_ids: own.map((line) => line.risk_id),
-          connection_index: index,
-          connection_id: connection.id,
+          account_index: index,
+          account_id: account.id,
         });
         continue;
       }
-      const sets = reached.find((r) => r.id === connection.id)?.resource_sets ?? [];
+      const sets = reached.find((r) => r.id === account.id)?.resource_sets ?? [];
       for (const set of sets) {
         const ofSet = own.filter((line) => (line.resource_set_id ?? set.id) === set.id);
         if (ofSet.length === 0) continue;
@@ -1752,7 +1750,7 @@ export class MissionService {
     }
     const unplaced = lines.filter((line) => !judged.has(line.risk_id)).map((l) => l.risk_id);
     if (unplaced.length > 0) {
-      // A risk of a provider none of the mission's connections is for: nothing grounds it.
+      // A risk of a provider none of the mission's accounts is for: nothing grounds it.
       issues.push({
         code: 'exceeds-authority',
         message: `No account of this mission carries ${unplaced.join(', ')}.`,
@@ -1896,9 +1894,9 @@ export class MissionService {
     const { mission } = inspected;
     const issuers = await this.issuersOf([mission]);
     const overview = await this.overviewOf(inspected, user, issuers.get(mission.id) ?? null);
-    const connections = await this.detailConnections(mission, inspected.lost);
+    const accounts = await this.detailAccounts(mission, inspected.lost);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
-    const rows = this.catalogRowsOf(connections);
+    const rows = this.catalogRowsOf(accounts);
     const openUntil = await this.openGatesOf(mission, overview.state);
     const policy: MissionDetailRisk[] = mission.policy.map(policyEntryOf).map((entry) => {
       const row = rows.get(entry.risk_id);
@@ -1915,11 +1913,11 @@ export class MissionService {
       ...overview,
       gates_editable: editable,
       limits_editable: editable,
-      connections,
+      accounts,
       policy,
       period: statedPeriodOf(mission),
       kit: overview.token
-        ? await this.kitOf(mission, { prefix: overview.token.prefix }, connections)
+        ? await this.kitOf(mission, { prefix: overview.token.prefix }, accounts)
         : null,
       trust_raises:
         inspected.role === 'creator' && overview.state.kind === 'active'
@@ -1996,17 +1994,17 @@ export class MissionService {
 
   private async trustRaisesOf(mission: MissionRecord): Promise<TrustRaiseOffer[]> {
     const accounts = new Map<string, { name: string; macroActions: readonly MacroAction[] }>();
-    for (const c of mission.connections) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
-      if (!connection || !this.deps.registry.get(connection.provider)) continue;
-      accounts.set(c.connectionId, {
-        name: connection.displayName,
-        macroActions: this.macroActionsOf(connection.provider),
+    for (const c of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
+      if (!account || !this.deps.registry.get(account.provider)) continue;
+      accounts.set(c.accountId, {
+        name: account.displayName,
+        macroActions: this.macroActionsOf(account.provider),
       });
     }
     return trustRaiseOffers({
       mission,
-      accountOf: (connectionId) => accounts.get(connectionId) ?? null,
+      accountOf: (accountId) => accounts.get(accountId) ?? null,
       requests: await this.deps.store.requests.listForMission(mission.id),
       marks: await this.deps.store.missions.trustMarks(mission.id),
       threshold: this.deps.trustRaiseAfterApprovals ?? DEFAULT_TRUST_RAISE_AFTER_APPROVALS,
@@ -2064,11 +2062,11 @@ export class MissionService {
       state: await this.stateOf(mission),
       orphan: orphan && {
         cause: orphan.cause,
-        connection_id: orphan.connectionId,
+        account_id: orphan.accountId,
         uncovered: [...orphan.uncovered],
       },
       lost: lost.map((part) => ({
-        connection_id: part.connectionId,
+        account_id: part.accountId,
         cause: part.cause,
         final: isFinalLoss(part.cause),
       })),
@@ -2174,33 +2172,31 @@ export class MissionService {
   }
 
   /**
-   * The connections of a mission with the resources it reaches — the rule of
+   * The accounts of a mission with the resources it reaches — the rule of
    * `loadMissionContext`, the same function (`reachedResources`): the ids its
    * resource sets store, never the ones discovery no longer returns nor the
    * instance's own.
    */
-  private async detailConnections(
+  private async detailAccounts(
     mission: MissionRecord,
     lost: readonly LostPart[] = [],
-  ): Promise<MissionDetailConnection[]> {
-    const details: MissionDetailConnection[] = [];
-    for (const c of mission.connections) {
-      const connection = await this.deps.store.connections.getById(c.connectionId);
-      if (!connection) continue;
-      const discovered = await this.deps.store.connections.listResources(c.connectionId);
-      const bySet = reachedResourcesBySet(c, discovered, (r) =>
-        this.isSelf(connection.provider, r),
-      );
+  ): Promise<MissionDetailAccount[]> {
+    const details: MissionDetailAccount[] = [];
+    for (const c of mission.accounts) {
+      const account = await this.deps.store.accounts.getById(c.accountId);
+      if (!account) continue;
+      const discovered = await this.deps.store.accounts.listResources(c.accountId);
+      const bySet = reachedResourcesBySet(c, discovered, (r) => this.isSelf(account.provider, r));
       const reachedIds = new Set([...bySet.values()].flat().map((r) => r.id));
       const reached = discovered.filter((r) => reachedIds.has(r.id));
       details.push({
-        ...connectionSummaryOf(connection),
+        ...accountSummaryOf(account),
         provider_label:
-          this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
-        resource_noun: resourceNounOf(this.deps.registry.get(connection.provider)?.plugin ?? null),
+          this.deps.registry.get(account.provider)?.plugin.displayName ?? account.provider,
+        resource_noun: resourceNounOf(this.deps.registry.get(account.provider)?.plugin ?? null),
         resources: reached.map((r) => toIssuanceResource(r, false)),
         future: takesFutureResources(c),
-        last_checked_at: lastDiscoveryAt(connection),
+        last_checked_at: lastDiscoveryAt(account),
         resource_sets: c.resourceSets.map((set) => ({
           id: set.id,
           position: set.position,
@@ -2210,7 +2206,7 @@ export class MissionService {
           mixed_env: set.mixedEnv,
           ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
         })),
-        lost: lost.find((part) => part.connectionId === c.connectionId)?.cause ?? null,
+        lost: lost.find((part) => part.accountId === c.accountId)?.cause ?? null,
         ...createdIdsOf(c, reached),
       });
     }
@@ -2218,10 +2214,10 @@ export class MissionService {
   }
 
   private catalogRowsOf(
-    connections: readonly Pick<MissionDetailConnection, 'provider'>[],
+    accounts: readonly Pick<MissionDetailAccount, 'provider'>[],
   ): Map<string, CatalogRisk> {
     return new Map(
-      connections.flatMap((c) => this.risksOf(c.provider).map((r) => [r.risk_id, r] as const)),
+      accounts.flatMap((c) => this.risksOf(c.provider).map((r) => [r.risk_id, r] as const)),
     );
   }
 
@@ -2234,16 +2230,15 @@ export class MissionService {
   async kitOf(
     mission: MissionRecord,
     token: { secret: string } | { prefix: string },
-    known?: readonly MissionDetailConnection[],
+    known?: readonly MissionDetailAccount[],
   ): Promise<BootstrapKit> {
-    // A connection that no longer serves the mission is not handed to its agents.
-    const connections = (
-      known ??
-      (await this.detailConnections(mission, (await this.deps.grounds.inspect(mission)).lost))
-    ).filter((connection) => connection.lost === null);
-    const rows = this.catalogRowsOf(connections);
+    // An account that no longer serves the mission is not handed to its agents.
+    const accounts = (
+      known ?? (await this.detailAccounts(mission, (await this.deps.grounds.inspect(mission)).lost))
+    ).filter((account) => account.lost === null);
+    const rows = this.catalogRowsOf(accounts);
     const setLabel = new Map(
-      connections.flatMap((c) =>
+      accounts.flatMap((c) =>
         c.resource_sets.length > 1
           ? c.resource_sets.map((set) => [set.id, `resource set ${set.position}`] as const)
           : [],
@@ -2264,7 +2259,7 @@ export class MissionService {
         period: statedPeriodOf(mission),
         expires_at: mission.expiresAt,
       },
-      connections: connections.map((c) => ({
+      accounts: accounts.map((c) => ({
         provider_label: c.provider_label,
         display_name: c.display_name,
         resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
@@ -2281,17 +2276,17 @@ export class MissionService {
       })),
       policy,
       token,
-      git: this.gitRemotesOf(connections),
+      git: this.gitRemotesOf(accounts),
     });
   }
 
   /** The git remotes of the kit: per provider whose plugin declares one, the mission's repositories there. */
-  private gitRemotesOf(connections: readonly MissionDetailConnection[]): readonly KitGitRemote[] {
-    const providers = [...new Set(connections.map((c) => c.provider))];
+  private gitRemotesOf(accounts: readonly MissionDetailAccount[]): readonly KitGitRemote[] {
+    const providers = [...new Set(accounts.map((c) => c.provider))];
     return providers.flatMap((providerId) => {
       const remote = this.deps.registry.gitRemoteOf(providerId)?.plugin.gitRemote;
       if (!remote) return [];
-      const repositories = connections
+      const repositories = accounts
         .filter((c) => c.provider === providerId)
         .flatMap((c) => c.resources.map((r) => r.ref));
       if (repositories.length === 0) return [];

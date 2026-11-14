@@ -30,7 +30,7 @@ export const templateDataModel: DataModel = {
           name: 'workspace',
           parent: null,
           cardinalities: ['one'],
-          description: 'The resource a connection exposes ; labelled prod / staging by its owner.',
+          description: 'The resource an account exposes ; labelled prod / staging by its owner.',
           envScopable: true,
         },
         {

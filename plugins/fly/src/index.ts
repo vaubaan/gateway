@@ -42,7 +42,7 @@ export const flyPlugin = definePlugin({
   toolTitles: flyToolTitles,
   examples: flyExamples,
   secretArguments: { [TOOL.setSecrets]: ['values'] },
-  // An app is what a Fly connection lists : a created app is discovered at once
+  // An app is what a Fly account lists : a created app is discovered at once
   // (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createApp],
   // Read from the call's answer: the mission that created it reaches it at once

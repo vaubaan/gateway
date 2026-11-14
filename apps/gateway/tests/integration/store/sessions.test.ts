@@ -46,7 +46,7 @@ describe('sessions repository', () => {
         email: 'c@x',
       })
     ).id;
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
@@ -57,7 +57,7 @@ describe('sessions repository', () => {
       creatorUserId: creator,
       periodAnchor: PERIOD,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceIds: [] }],
+      accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
@@ -65,7 +65,7 @@ describe('sessions repository', () => {
       ],
     });
     missionId = mission.id;
-    setId = mission.connections[0]?.resourceSets[0]?.id ?? '';
+    setId = mission.accounts[0]?.resourceSets[0]?.id ?? '';
   });
   afterEach(() => store.close());
 
@@ -131,7 +131,7 @@ describe('sessions repository', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it('two connections on one file: the second decision waits on the first transaction (SQLITE_BUSY)', async () => {
+  it('two accounts on one file: the second decision waits on the first transaction (SQLITE_BUSY)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'vbn-sessions-'));
     const path = join(dir, 'gateway.sqlite');
     const open = (busyTimeoutMs: number) =>
@@ -151,7 +151,7 @@ describe('sessions repository', () => {
           email: 'c@x',
         })
       ).id;
-      const connection = await a.connections.create({
+      const account = await a.accounts.create({
         provider: 'github',
         owner: { kind: 'user', id: user },
         displayName: 'gh',
@@ -162,7 +162,7 @@ describe('sessions repository', () => {
         creatorUserId: user,
         periodAnchor: PERIOD,
         periodSeconds: 86_400,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [{ riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' }],
       });
       // A holds the write lock; B's decision cannot even read the counters until A commits.
@@ -405,7 +405,7 @@ describe('sessions repository', () => {
         token_kind: null,
         token_holder: null,
         session_id: r.session.id,
-        connection_id: null,
+        account_id: null,
         resource_ref: null,
         tool: 'github__get_file',
         arguments_hash: `h${i}`,

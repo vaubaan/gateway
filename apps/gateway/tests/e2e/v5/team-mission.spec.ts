@@ -34,7 +34,7 @@ import {
 
 const READ_CODE = 'github.read-code';
 const MISSION = 'Ship the docs together';
-const CONNECTION = 'team-org';
+const ACCOUNT = 'team-org';
 const CI = 'CI runner';
 type User = typeof E2E_SHARE_OWNER | typeof E2E_SHARE_TARGET;
 
@@ -118,14 +118,14 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   browser,
   request,
 }) => {
-  await seedShareScenario(request, CONNECTION);
+  await seedShareScenario(request, ACCOUNT);
 
   // ── Ines creates the mission ────────────────────────────────────────────
   const ines = await browserOf(browser, request, E2E_SHARE_OWNER, '/missions/new');
   await ines.getByLabel('Mission name').fill(MISSION);
-  await addAccount(ines, `GitHub · ${CONNECTION}`);
+  await addAccount(ines, `GitHub · ${ACCOUNT}`);
   // Custom: the permissions of Read one by one, only one of them allowed.
-  await allowOnly(ines, `GitHub · ${CONNECTION}`, 'Read', [READ_CODE]);
+  await allowOnly(ines, `GitHub · ${ACCOUNT}`, 'Read', [READ_CODE]);
   const inesToken = await createMission(ines);
   // Right after creating, the page says how to work with others.
   await expect(ines.getByTestId('created')).toContainText('Add a teammate');
@@ -245,9 +245,9 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(joan.getByRole('button', { name: /^Revoke the / })).toHaveCount(0);
   await expect(joan.getByRole('button', { name: /^Replace the machine key/ })).toHaveCount(0);
   // She reads the cards, frozen, and changes none: no "Edit mission" for her.
-  await expect(joan.getByLabel(`Read on GitHub · ${CONNECTION}`)).toBeChecked();
-  await expect(joan.getByLabel(`Read on GitHub · ${CONNECTION}`)).toBeDisabled();
-  await expect(trustLevelChoice(joan, `GitHub · ${CONNECTION}`, 'Read', 'Custom')).toBeDisabled();
+  await expect(joan.getByLabel(`Read on GitHub · ${ACCOUNT}`)).toBeChecked();
+  await expect(joan.getByLabel(`Read on GitHub · ${ACCOUNT}`)).toBeDisabled();
+  await expect(trustLevelChoice(joan, `GitHub · ${ACCOUNT}`, 'Read', 'Custom')).toBeDisabled();
   await expect(joan.getByTestId('edit-mission')).toHaveCount(0);
   await expect(joan.getByRole('switch')).toHaveCount(0);
   await expect(machineRow(joan, CI)).toBeVisible();
@@ -377,7 +377,7 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   expect(await ines.getByRole('main').innerText()).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{4}|\b[AP]M\b/);
 
   await ines.goto('/activity');
-  // Her audit also holds other missions on her connections: this one only, at once
+  // Her audit also holds other missions on her accounts: this one only, at once
   // (once the filters are live: before, the form waits for its button).
   await expect(ines.locator('form[data-live="true"]')).toHaveCount(1);
   await ines.locator('select[name="mission"]').selectOption({ label: MISSION });

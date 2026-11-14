@@ -21,7 +21,7 @@ import {
   isList,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type TokenPermission,
 } from '@vaubaan/plugin-sdk';
@@ -140,7 +140,7 @@ const GET: Endpoint = { method: 'GET', payload: 'query' };
  * accounts of the zones it lists. A token that is not active, or that lists
  * no zone (none reached, or no zone read), is refused with what to change.
  */
-export async function verifyCloudflareToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyCloudflareToken(ctx: AccountContext): Promise<CredentialCheck> {
   const token = tokenOf(ctx);
   const verified = (
     await callCloudflareApi(ctx, token, GET, '/user/tokens/verify', {}, isVerifyAnswer)
@@ -161,7 +161,7 @@ const NO_ZONE =
   'Cloudflare: this token lists no zone. Give it Zone · Zone · Read and, in a zone policy, Include, All zones.';
 
 /** The first page of zones ; a token refused there lacks the zone read, which is said. */
-async function listZones(ctx: ConnectionContext, token: string): Promise<readonly unknown[]> {
+async function listZones(ctx: AccountContext, token: string): Promise<readonly unknown[]> {
   try {
     const args = { page: 1, per_page: ZONES_SAMPLE };
     return (await callCloudflareApi(ctx, token, GET, '/zones', args, isZonesAnswer)).result;

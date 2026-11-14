@@ -1,28 +1,28 @@
 /**
  * Shares (spec §0 "Share", "Restriction"; §2.3; §3.1; §7.3; §7.8).
  *
- * A share is `(connection, target, restriction)`: the owner of a connection
+ * A share is `(account, target, restriction)`: the owner of an account
  * grants a user or a group the right to accept, in their missions, a subset
  * of an explicit list of `RiskId`s of the provider's catalog.
  *
  * Rules held here (spec §11.2 v1 assumptions):
  *
  *   - only an owner shares (no transitive sharing): every write starts from
- *     `ConnectionService.get(actor, …)`, which answers "not found" to anyone
- *     who does not own the connection now;
+ *     `AccountService.get(actor, …)`, which answers "not found" to anyone
+ *     who does not own the account now;
  *   - a restriction carries risks only: no quantity, no gate, no resource;
  *   - never a wildcard: the ids are checked one by one against the provider's
  *     catalog, and an empty list is refused rather than stored;
- *   - never to someone who owns the connection now — its owner, or a current
+ *   - never to someone who owns the account now — its owner, or a current
  *     member of the group that owns it: such a share grants nothing today and
  *     would only outlive the membership (see
  *     docs/spec/vaubaan-gateway.md);
- *   - one active share per `(connection, target)`: sharing again to the same
+ *   - one active share per `(account, target)`: sharing again to the same
  *     target replaces the previous restriction (that is how it is edited);
  *   - a share that is revoked or narrowed leaves the missions it grounded
  *     `orphaned`, at once; a share made again brings them back. The state
  *     is derived (`MissionGrounds`): this service only watches the missions
- *     of the connection around its act, so that each change is audited;
+ *     of the account around its act, so that each change is audited;
  *   - a share that would bring orphaned missions back names them first
  *     (`forecast`): the dialog lists them and the owner confirms that list
  *     (spec §2.3; `handlers.ts` holds the confirmation).
@@ -39,7 +39,7 @@ import {
   type GroundsShift,
   type MissionGrounds,
 } from '../authority';
-import { ConnectError, ownerActRefusal, type Actor, type ConnectionService } from '../connections';
+import { ConnectError, ownerActRefusal, type Actor, type AccountService } from '../accounts';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import type { CatalogRisk } from '../../lib/missions/model';
@@ -47,8 +47,8 @@ import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import { InvariantError } from '../store/errors';
 import type {
-  ConnectionRecord,
-  ConnectionResourceRecord,
+  AccountRecord,
+  AccountResourceRecord,
   GroupRecord,
   Principal,
   ShareRecord,
@@ -73,36 +73,36 @@ export interface ShareView {
   readonly targetLabel: string;
 }
 
-/** What the Share dialog of one connection needs. */
+/** What the Share dialog of one account needs. */
 export interface ShareContext {
-  readonly connection: ConnectionRecord;
+  readonly account: AccountRecord;
   readonly providerLabel: string;
   /** The whole catalog as explicit ids, catalog order. */
   readonly risks: readonly CatalogRisk[];
   /** Every group of the instance: a share may target any of them. */
   readonly groups: readonly GroupRecord[];
   readonly labelling: EnvLabelling;
-  /** The active shares of the connection. */
+  /** The active shares of the account. */
   readonly shares: readonly ShareView[];
-  /** Why `share` would refuse this connection whatever is asked; `null` when it can be shared. */
+  /** Why `share` would refuse this account whatever is asked; `null` when it can be shared. */
   readonly unshareable: UnshareableReason | null;
 }
 
-/** The two refusals of `share` that depend on the connection alone. */
+/** The two refusals of `share` that depend on the account alone. */
 export type UnshareableReason = Extract<
   ShareErrorCode,
-  'connection-revoked' | 'connection-unowned' | 'connection-personal'
+  'account-revoked' | 'account-unowned' | 'account-personal'
 >;
 
 /**
- * Why nobody shares this connection (spec §2.3), or `null`. The connection's own rule
+ * Why nobody shares this account (spec §2.3), or `null`. The account's own rule
  * (`ownerActRefusal`) under the share codes: `share` refuses on it and the Share
  * dialog reads it from `ShareContext.unshareable`.
  */
 export function unshareableReason(
-  connection: Pick<ConnectionRecord, 'status' | 'metadata'>,
+  account: Pick<AccountRecord, 'status' | 'metadata'>,
 ): UnshareableReason | null {
-  return ownerActRefusal(connection);
+  return ownerActRefusal(account);
 }
 
 export interface ShareOutcome {
@@ -114,7 +114,7 @@ export interface ShareOutcome {
   readonly orphaned: number;
   /**
    * Missions this share makes serve again: orphaned ones it grounds, and ones whose part
-   * on this connection it brings back (their other connections kept serving meanwhile).
+   * on this account it brings back (their other accounts kept serving meanwhile).
    */
   readonly restored: number;
 }
@@ -141,7 +141,7 @@ export interface RevokeOutcome {
   readonly targetLabel: string;
   /** Missions that had nothing else to serve with: every call is refused. */
   readonly orphaned: number;
-  /** Missions that lost this connection and keep serving through their others. */
+  /** Missions that lost this account and keep serving through their others. */
   readonly partsLost: number;
 }
 
@@ -155,7 +155,7 @@ export interface ReceivedRisk {
 
 export interface ReceivedShare {
   readonly share: ShareRecord;
-  readonly connection: Pick<ConnectionRecord, 'id' | 'displayName' | 'provider' | 'status'>;
+  readonly account: Pick<AccountRecord, 'id' | 'displayName' | 'provider' | 'status'>;
   readonly providerLabel: string;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
   readonly providerIcon: ServiceIcon | null;
@@ -167,8 +167,8 @@ export interface ReceivedShare {
 }
 
 /**
- * Who holds a connection, or a part of it, said in names: what the page of the
- * connection prints under "Who has access". Owner only, like every read here.
+ * Who holds an account, or a part of it, said in names: what the page of the
+ * account prints under "Who has access". Owner only, like every read here.
  */
 export interface HolderView {
   /** `unknown`: the user or the group no longer exists. */
@@ -201,19 +201,19 @@ export interface HeldShare extends ShareView {
   readonly givenBy: string;
 }
 
-export interface ConnectionHolders {
+export interface AccountHolders {
   readonly owner: HolderView;
   /** The active shares, oldest first. */
   readonly shares: readonly HeldShare[];
 }
 
 export interface ShareServiceDeps {
-  readonly store: Pick<Store, 'shares' | 'connections' | 'users' | 'groups'>;
+  readonly store: Pick<Store, 'shares' | 'accounts' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
-  readonly connections: Pick<ConnectionService, 'get'>;
-  /** The one definition of "owns the connection now" (`basis: 'owner'`). */
+  readonly accounts: Pick<AccountService, 'get'>;
+  /** The one definition of "owns the account now" (`basis: 'owner'`). */
   readonly authority: Pick<AuthorityService, 'authorityOf'>;
-  readonly grounds: Pick<MissionGrounds, 'watchConnection' | 'forecastShare'>;
+  readonly grounds: Pick<MissionGrounds, 'watchAccount' | 'forecastShare'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -223,21 +223,21 @@ export class ShareService {
   constructor(private readonly deps: ShareServiceDeps) {}
 
   /** Owner only. The catalog, the possible group targets, the current shares. */
-  async contextFor(actor: Actor, connectionId: string): Promise<ShareContext> {
-    const detail = await this.owned(actor, connectionId);
-    const { connection } = detail;
-    const registered = this.deps.registry.get(connection.provider);
-    const shares = (await this.deps.store.shares.listForConnection(connection.id)).filter(
+  async contextFor(actor: Actor, accountId: string): Promise<ShareContext> {
+    const detail = await this.owned(actor, accountId);
+    const { account } = detail;
+    const registered = this.deps.registry.get(account.provider);
+    const shares = (await this.deps.store.shares.listForAccount(account.id)).filter(
       (share) => share.status === 'active',
     );
     return {
-      connection,
+      account,
       providerLabel: detail.provider_label,
       risks: registered ? enumerateCatalog(registered.plugin.catalog) : [],
       groups: await this.deps.store.groups.list(),
       labelling: labellingOf(detail.resources, typeof registered?.plugin.envOf === 'function'),
       shares: await Promise.all(shares.map((share) => this.view(share))),
-      unshareable: unshareableReason(connection),
+      unshareable: unshareableReason(account),
     };
   }
 
@@ -246,14 +246,14 @@ export class ShareService {
    * then the orphaned missions the share would bring back (spec §2.3: they serve calls
    * again with the token their agent holds, so the owner reads their names first).
    */
-  async forecast(actor: Actor, connectionId: string, input: ShareInput): Promise<ShareForecast> {
-    const { connection } = await this.owned(actor, connectionId);
-    const unshareable = unshareableReason(connection);
+  async forecast(actor: Actor, accountId: string, input: ShareInput): Promise<ShareForecast> {
+    const { account } = await this.owned(actor, accountId);
+    const unshareable = unshareableReason(account);
     if (unshareable) throw new ShareError(unshareable);
-    const restriction = this.restrictionOf(connection, input.riskIds);
-    const target = await this.targetOf(connection, input.target);
+    const restriction = this.restrictionOf(account, input.riskIds);
+    const target = await this.targetOf(account, input.target);
     const restored = await this.deps.grounds.forecastShare({
-      connectionId: connection.id,
+      accountId: account.id,
       target,
       restriction,
     });
@@ -276,20 +276,20 @@ export class ShareService {
   }
 
   /**
-   * Shares the connection to a target, or replaces the restriction the target
-   * already holds. Refused on a connection that is revoked or has no owner
+   * Shares the account to a target, or replaces the restriction the target
+   * already holds. Refused on an account that is revoked or has no owner
    * (spec §2.3: "nobody can share … until the operator reassigns an owner").
    */
-  async share(actor: Actor, connectionId: string, input: ShareInput): Promise<ShareOutcome> {
-    const { connection } = await this.owned(actor, connectionId);
-    const unshareable = unshareableReason(connection);
+  async share(actor: Actor, accountId: string, input: ShareInput): Promise<ShareOutcome> {
+    const { account } = await this.owned(actor, accountId);
+    const unshareable = unshareableReason(account);
     if (unshareable) throw new ShareError(unshareable);
-    const restriction = this.restrictionOf(connection, input.riskIds);
-    const target = await this.targetOf(connection, input.target);
+    const restriction = this.restrictionOf(account, input.riskIds);
+    const target = await this.targetOf(account, input.target);
 
-    const watch = await this.deps.grounds.watchConnection(connection.id);
+    const watch = await this.deps.grounds.watchAccount(account.id);
     const { created, replaced } = await this.deps.store.shares.replaceForTarget({
-      connectionId: connection.id,
+      accountId: account.id,
       target,
       restriction,
       createdByUserId: actor.user.id,
@@ -309,7 +309,7 @@ export class ShareService {
         object: { type: 'share', id: created.id },
         before: replaced ? { share_id: replaced.id, restriction: replaced.restriction } : null,
         after: {
-          connection_id: connection.id,
+          account_id: account.id,
           target: created.target,
           restriction: created.restriction,
         },
@@ -319,8 +319,8 @@ export class ShareService {
     }
     const { orphaned } = settled;
     const restored = [...settled.restored, ...settled.partsRestored];
-    this.deps.logger.info('connection shared', {
-      connection_id: connection.id,
+    this.deps.logger.info('account shared', {
+      account_id: account.id,
       share_id: created.id,
       target_kind: target.kind,
       risks: created.restriction.length,
@@ -339,27 +339,27 @@ export class ShareService {
 
   /**
    * Terminal for the share (spec §2.3). A mission it grounded loses its part on this
-   * connection and serves through its others; one with nothing else reads `orphaned`.
-   * Both serve again on this connection when a new share covers them.
+   * account and serves through its others; one with nothing else reads `orphaned`.
+   * Both serve again on this account when a new share covers them.
    */
-  async revoke(actor: Actor, shareId: string, connectionId: string): Promise<RevokeOutcome> {
-    // The route names the connection in its URL: a share of another connection is not there.
-    const share = await this.deps.store.shares.get({ connectionId, shareId });
+  async revoke(actor: Actor, shareId: string, accountId: string): Promise<RevokeOutcome> {
+    // The route names the account in its URL: a share of another account is not there.
+    const share = await this.deps.store.shares.get({ accountId, shareId });
     if (!share) throw new ShareError('not-found');
-    await this.owned(actor, share.connectionId);
+    await this.owned(actor, share.accountId);
     const targetLabel = await principalLabel(this.deps.store, share.target);
     if (share.status === 'revoked') return { share, targetLabel, orphaned: 0, partsLost: 0 };
 
-    const watch = await this.deps.grounds.watchConnection(share.connectionId);
+    const watch = await this.deps.grounds.watchAccount(share.accountId);
     let revoked: ShareRecord;
     try {
-      revoked = await this.deps.store.shares.revoke({ connectionId, shareId: share.id });
+      revoked = await this.deps.store.shares.revoke({ accountId, shareId: share.id });
     } catch (err) {
       // Another revocation won between the read above and the conditional UPDATE: the
       // share is revoked, by the act that wrote its entry. Same answer as a repeat.
       const current =
         err instanceof InvariantError
-          ? await this.deps.store.shares.get({ connectionId, shareId: share.id })
+          ? await this.deps.store.shares.get({ accountId, shareId: share.id })
           : null;
       if (current?.status !== 'revoked') throw err;
       return { share: current, targetLabel, orphaned: 0, partsLost: 0 };
@@ -374,7 +374,7 @@ export class ShareService {
     }
     const { orphaned, partsLost } = settled;
     this.deps.logger.info('share revoked', {
-      connection_id: share.connectionId,
+      account_id: share.accountId,
       share_id: share.id,
       missions_orphaned: orphaned.length,
       missions_part_lost: partsLost.length,
@@ -388,12 +388,12 @@ export class ShareService {
   }
 
   /**
-   * Who holds the connection: its owner and every active share, each with the people
+   * Who holds the account: its owner and every active share, each with the people
    * behind it. Owner only. Read-only: nothing here decides — `authorityOf` does.
    */
-  async holders(actor: Actor, connectionId: string): Promise<ConnectionHolders> {
-    const { connection } = await this.owned(actor, connectionId);
-    const shares = (await this.deps.store.shares.listForConnection(connection.id)).filter(
+  async holders(actor: Actor, accountId: string): Promise<AccountHolders> {
+    const { account } = await this.owned(actor, accountId);
+    const shares = (await this.deps.store.shares.listForAccount(account.id)).filter(
       (share) => share.status === 'active',
     );
     const held: HeldShare[] = [];
@@ -406,7 +406,7 @@ export class ShareService {
       });
     }
     return {
-      owner: await this.holderOf(actor, connection.owner),
+      owner: await this.holderOf(actor, account.owner),
       shares: held.sort((a, b) =>
         a.share.createdAt < b.share.createdAt ? -1 : a.share.createdAt > b.share.createdAt ? 1 : 0,
       ),
@@ -482,16 +482,16 @@ export class ShareService {
     ];
     const received: ReceivedShare[] = [];
     for (const share of await this.deps.store.shares.listActiveForTargets(principals)) {
-      const connection = await this.deps.store.connections.getById(share.connectionId);
-      if (!connection) continue;
-      const registered = this.deps.registry.get(connection.provider);
+      const account = await this.deps.store.accounts.getById(share.accountId);
+      if (!account) continue;
+      const registered = this.deps.registry.get(account.provider);
       const rows = registered ? enumerateCatalog(registered.plugin.catalog) : [];
       received.push({
         share,
-        connection,
-        providerLabel: registered?.plugin.displayName ?? connection.provider,
+        account,
+        providerLabel: registered?.plugin.displayName ?? account.provider,
         providerIcon: registered ? serviceIconOf(registered.plugin) : null,
-        ownerLabel: await principalLabel(this.deps.store, connection.owner),
+        ownerLabel: await principalLabel(this.deps.store, account.owner),
         via:
           share.target.kind === 'user'
             ? 'you'
@@ -502,10 +502,10 @@ export class ShareService {
     return received;
   }
 
-  /** The connection when the actor owns it now; anyone else reads "not found". */
-  private async owned(actor: Actor, connectionId: string) {
+  /** The account when the actor owns it now; anyone else reads "not found". */
+  private async owned(actor: Actor, accountId: string) {
     try {
-      return await this.deps.connections.get(actor, connectionId);
+      return await this.deps.accounts.get(actor, accountId);
     } catch (err) {
       if (err instanceof ConnectError && err.code === 'not-found')
         throw new ShareError('not-found');
@@ -514,8 +514,8 @@ export class ShareService {
   }
 
   /** The ids as a restriction: non-empty, each one an explicit id of the provider's catalog. */
-  private restrictionOf(connection: ConnectionRecord, riskIds: readonly RiskId[]): RiskId[] {
-    const registered = this.deps.registry.get(connection.provider);
+  private restrictionOf(account: AccountRecord, riskIds: readonly RiskId[]): RiskId[] {
+    const registered = this.deps.registry.get(account.provider);
     if (!registered) throw new ShareError('provider-unknown');
     const asked = [...new Set(riskIds)];
     if (asked.length === 0) throw new ShareError('restriction-empty');
@@ -529,10 +529,7 @@ export class ShareService {
     return catalog.filter((id) => chosen.has(id));
   }
 
-  private async targetOf(
-    connection: ConnectionRecord,
-    input: ShareTargetInput,
-  ): Promise<Principal> {
+  private async targetOf(account: AccountRecord, input: ShareTargetInput): Promise<Principal> {
     let target: Principal;
     if (input.kind === 'user') {
       const lookup = await findActiveUserByEmail(this.deps.store.users, input.email);
@@ -546,7 +543,7 @@ export class ShareService {
       target = { kind: 'group', id: group.id };
     }
     // The owner holds the full catalog already: a share to the owner would grant nothing.
-    if (target.kind === connection.owner.kind && target.id === connection.owner.id) {
+    if (target.kind === account.owner.kind && target.id === account.owner.id) {
       throw new ShareError('target-is-owner');
     }
     // Neither would a share to a current member of the owner group — except later: it
@@ -554,7 +551,7 @@ export class ShareService {
     // authority itself, so "owner" has one meaning here and at every check.
     if (
       target.kind === 'user' &&
-      (await this.deps.authority.authorityOf({ id: target.id }, connection)).basis === 'owner'
+      (await this.deps.authority.authorityOf({ id: target.id }, account)).basis === 'owner'
     ) {
       throw new ShareError('target-is-owner');
     }
@@ -577,7 +574,7 @@ export class ShareService {
       act: 'share-revoked',
       object: { type: 'share', id: share.id },
       before: {
-        connection_id: share.connectionId,
+        account_id: share.accountId,
         target: share.target,
         restriction: share.restriction,
       },
@@ -595,9 +592,9 @@ function nameOf(user: Pick<UserRecord, 'displayName' | 'email'>): string {
   return user.displayName?.trim() || user.email;
 }
 
-/** What the reachable resources of a connection say about environments. */
+/** What the reachable resources of an account say about environments. */
 export function labellingOf(
-  resources: readonly Pick<ConnectionResourceRecord, 'env' | 'staleSince'>[],
+  resources: readonly Pick<AccountResourceRecord, 'env' | 'staleSince'>[],
   derivesEnv: boolean,
 ): EnvLabelling {
   const reachable = resources.filter((resource) => resource.staleSince === null);

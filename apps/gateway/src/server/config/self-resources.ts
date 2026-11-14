@@ -1,9 +1,9 @@
 /**
  * Self resources — the provider resources that host or run this instance
- * (SEC 2026-10-15 H1). A Railway connection lists the project the gateway
+ * (SEC 2026-10-15 H1). A Railway account lists the project the gateway
  * runs in; a mission on it with `railway.read-variables` would read
  * `VAUBAAN_MASTER_KEY`. The host therefore keeps a set of resources no
- * mission can reach, whatever the plugin, the connection or the policy says.
+ * mission can reach, whatever the plugin, the account or the policy says.
  *
  * Two sources, merged:
  *

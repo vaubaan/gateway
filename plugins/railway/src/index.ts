@@ -53,7 +53,7 @@ export const railwayPlugin = definePlugin({
   tools: railwayTools,
   toolTitles: railwayToolTitles,
   examples: railwayExamples,
-  // A project is what a Railway connection lists : a created project is
+  // A project is what a Railway account lists : a created project is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createProject],
   // Read from the call's answer: the mission that created it reaches it at once

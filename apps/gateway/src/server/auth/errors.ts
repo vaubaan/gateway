@@ -95,37 +95,38 @@ export class IdpSettingsError extends Error {
 }
 
 /** A local-account act refused (ADR local-accounts-sign-in-provider): a closed code and its sentence. */
-export const LOCAL_ACCOUNT_ERROR_CODES = [
+export const SIGN_IN_ACCOUNT_ERROR_CODES = [
   'no-local-provider',
   'link-invalid',
-  'account-exists',
-  'account-not-found',
+  'sign-in-account-exists',
+  'sign-in-account-not-found',
   'password-weak',
   'address-invalid',
   'not-admitted',
 ] as const;
-export type LocalAccountErrorCode = (typeof LOCAL_ACCOUNT_ERROR_CODES)[number];
+export type SignInAccountErrorCode = (typeof SIGN_IN_ACCOUNT_ERROR_CODES)[number];
 
-export const LOCAL_ACCOUNT_ERROR_MESSAGES: Readonly<Record<LocalAccountErrorCode, string>> = {
-  'no-local-provider': 'This gateway keeps no local accounts.',
+export const SIGN_IN_ACCOUNT_ERROR_MESSAGES: Readonly<Record<SignInAccountErrorCode, string>> = {
+  'no-local-provider': 'This gateway keeps no sign-in accounts.',
   'link-invalid':
     'This link is not valid any more: it was used, it expired, or a newer one replaced it. Ask for another one.',
-  'account-exists': 'An account already exists for this address. Sign in, or reset its password.',
-  'account-not-found': 'No local account has this address.',
+  'sign-in-account-exists':
+    'An account already exists for this address. Sign in, or reset its password.',
+  'sign-in-account-not-found': 'No sign-in account has this address.',
   'password-weak': 'The password is too short or too long.',
   'address-invalid': 'This is not an email address.',
   'not-admitted':
     'This address is not invited to this gateway any more. Ask an administrator to invite it again.',
 };
 
-export class LocalAccountError extends Error {
-  readonly code: LocalAccountErrorCode;
+export class SignInAccountError extends Error {
+  readonly code: SignInAccountErrorCode;
   /** The sentence for the form: the code's, or a more precise one (a password's problem). */
   readonly sentence: string;
-  constructor(code: LocalAccountErrorCode, sentence?: string) {
+  constructor(code: SignInAccountErrorCode, sentence?: string) {
     super(sentence ? `${code}: ${sentence}` : code);
-    this.name = 'LocalAccountError';
+    this.name = 'SignInAccountError';
     this.code = code;
-    this.sentence = sentence ?? LOCAL_ACCOUNT_ERROR_MESSAGES[code];
+    this.sentence = sentence ?? SIGN_IN_ACCOUNT_ERROR_MESSAGES[code];
   }
 }

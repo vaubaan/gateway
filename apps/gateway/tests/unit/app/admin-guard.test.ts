@@ -107,7 +107,7 @@ describe('the Administration surface authorizes in every page and route', () => 
       expect(await outcomeOf(requireOperator)).toEqual({ kind: 'not-found' });
     });
 
-    // The first `requireOperator()` loads the connection service and its plugins cold: about
+    // The first `requireOperator()` loads the account service and its plugins cold: about
     // 5 s with 19 plugins, so the default 5 s timeout is flaky in CI (as in app-guard.test.ts).
     it('returns the root and the principal to an operator', { timeout: 30_000 }, async () => {
       await signInUser('ops', [ADMIN_GROUP]);

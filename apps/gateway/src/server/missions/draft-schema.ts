@@ -15,7 +15,7 @@ import { z } from 'zod';
 
 import type { MissionDraft } from '../../lib/missions/model';
 
-const MAX_CONNECTIONS = 32;
+const MAX_ACCOUNTS = 32;
 const MAX_ENTRIES = 2000;
 const MAX_RESOURCES = 5000;
 const MAX_RESOURCE_SETS = 32;
@@ -33,13 +33,13 @@ const rateLimitSchema = z
 const entrySchema = z
   .object({
     risk_id: text.describe(
-      'One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern.',
+      'One explicit RiskId of the account’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern.',
     ),
     quota: z
       .number()
       .optional()
       .describe(
-        'Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.',
+        'Actions allowed per period on this risk. Mandatory unless the account gives `everything_i_hold: true`, which then supplies it.',
       ),
     rate_limit: rateLimitSchema.optional(),
     gate: z
@@ -56,10 +56,10 @@ const resourcesSchema = z.discriminatedUnion('scope', [
     .object({ scope: z.literal('all') })
     .strict()
     .describe(
-      'Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions.',
+      'Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions.',
     ),
   z
-    .object({ scope: z.literal('connection') })
+    .object({ scope: z.literal('account') })
     .strict()
     .describe(
       'Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so.',
@@ -72,11 +72,11 @@ const resourcesSchema = z.discriminatedUnion('scope', [
         .array(text)
         .max(MAX_RESOURCES)
         .optional()
-        .describe('Resource refs as `list_my_connections` shows them, e.g. `acme/app`.'),
+        .describe('Resource refs as `list_my_accounts` shows them, e.g. `acme/app`.'),
     })
     .strict()
     .describe(
-      'Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment.',
+      'Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the account they are split into one set per environment.',
     ),
 ]);
 
@@ -92,7 +92,7 @@ const futureField = () =>
     .boolean()
     .optional()
     .describe(
-      '`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.',
+      '`true`: a resource that later appears on the account with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.',
     );
 
 const envField = () =>
@@ -111,7 +111,7 @@ const everythingField = () =>
     .boolean()
     .optional()
     .describe(
-      '`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
+      '`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the account that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the account (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
     );
 
 const policyField = () =>
@@ -119,7 +119,7 @@ const policyField = () =>
     .array(entrySchema)
     .max(MAX_ENTRIES)
     .optional()
-    .describe('Exactly the risks the mission accepts on this connection, each with its budget.');
+    .describe('Exactly the risks the mission accepts on this account, each with its budget.');
 
 const trustLevelsField = () =>
   z
@@ -143,18 +143,16 @@ const resourceSetSchema = z
   })
   .strict()
   .describe(
-    'One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget.',
+    'One resource set: resources of one environment of the account, optionally those that appear there later, with their own policy and budget.',
   );
 
-const connectionSchema = z
+const accountSchema = z
   .object({
-    connection_id: text
-      .optional()
-      .describe('Id of one of the user’s connections (`list_my_connections`).'),
+    account_id: text.optional().describe('Id of one of the user’s accounts (`list_my_accounts`).'),
     provider: text
       .optional()
       .describe(
-        'Instead of `connection_id`, when the user holds exactly one usable connection of that provider.',
+        'Instead of `account_id`, when the user holds exactly one usable account of that provider.',
       ),
     resources: resourcesField(),
     future: futureField(),
@@ -168,7 +166,7 @@ const connectionSchema = z
       .max(MAX_RESOURCE_SETS)
       .optional()
       .describe(
-        'Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.',
+        'Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this account, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `account` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the account is split into one set per environment of its resources, each with the policy lines that apply there.',
       ),
   })
   .strict();
@@ -187,14 +185,14 @@ const periodSchema = z.discriminatedUnion('kind', [
     .describe('Quotas reload at every period.'),
 ]);
 
-/** A mission draft: name, connections with their policy, period, expiry. */
+/** A mission draft: name, accounts with their policy, period, expiry. */
 export const missionDraftSchema = z
   .object({
     name: z.string().max(1000).describe('What the mission is for, as the user will read it.'),
-    connections: z
-      .array(connectionSchema)
-      .max(MAX_CONNECTIONS)
-      .describe('At least one connection; at most one connection per provider.'),
+    accounts: z
+      .array(accountSchema)
+      .max(MAX_ACCOUNTS)
+      .describe('At least one account; at most one account per provider.'),
     period: periodSchema,
     expires_at: z
       .string()

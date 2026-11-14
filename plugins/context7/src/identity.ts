@@ -56,9 +56,9 @@ export const TOOL = {
 } as const;
 
 /**
- * The ref of the one resource of a connection : the library index its key
+ * The ref of the one resource of an account : the library index its key
  * can query. A constant, because no answer of Context7 identifies the
  * teamspace a key belongs to (handbook) ; resources are unique per
- * connection, so two connections each have their own.
+ * account, so two accounts each have their own.
  */
 export const INDEX_REF = 'docs';

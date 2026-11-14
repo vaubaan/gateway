@@ -11,7 +11,7 @@
  * without `classify`.
  *
  * Every slice is rooted at `axonaut.account[<ref>]`, the one resource of the
- * connection. Axonaut's endpoints are flat, so every record is a direct child
+ * account. Axonaut's endpoints are flat, so every record is a direct child
  * of the account. A list filtered on a company (or an invoice) also reads that
  * record (`company[<id>].R`). A deletion is a write on the record and on its
  * `delete` leaf (layered). An outcome (won / lost, accepted / refused) is the

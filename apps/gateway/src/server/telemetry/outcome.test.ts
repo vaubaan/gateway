@@ -69,8 +69,8 @@ describe('classifyOutcome', () => {
     [
       'a credential refused for good',
       new UpstreamRefusalError(
-        refuse.connectionUnavailable({
-          connection: { id: 'con_1', name: SECRET },
+        refuse.accountUnavailable({
+          account: { id: 'con_1', name: SECRET },
           status: 'expired',
           owner: { kind: 'user', display: 'ada@example.com' },
         }),

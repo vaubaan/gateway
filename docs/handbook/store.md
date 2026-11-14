@@ -54,11 +54,19 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
 - The `Encryptor` port is async and transactions are sync: a repository seals **before**
   `BEGIN IMMEDIATE` and opens **after** `COMMIT`. Decision callbacks (`decideAndDecrement`,
   `decideClaim`, `decideApproval`) must stay synchronous: they run inside the transaction.
-- One key per connection, derived from the master key: ADR
+- One key per account, derived from the master key: ADR
   [per-org-encryption-app-level](../decisions/per-org-encryption-app-level.md) (slug kept from v4).
 - Postgres portability: no parameter whose only use is a `NULL` comparison (untypable there; two
   statements instead); `appendUnlessLatest` would need `SERIALIZABLE` or an advisory lock.
-- `0019_local_accounts` enforces no foreign keys: removing an account deletes its secrets itself.
+- `0019_local_accounts` enforces no foreign keys: removing a sign-in account deletes its secrets
+  itself.
+- **Migration 0036 renamed the store in place** (ADR one-word-per-thing-account-service-plugin):
+  `accounts`, `account_resources`, `mission_accounts`, `sign_in_accounts`, every `account_id`
+  column, and the stored acts, refusal codes and JSON fields of the audit, the session events and
+  the decisions of requests. Ids, associated data and the KDF context `vaubaan/connection-key/v1:`
+  (`crypto/aead.ts`) never move: change one byte and no stored credential opens. A test that
+  seeds an older version writes the old names and stops before 0036; `SEALED_COLUMNS` reads a
+  restored copy's accounts table under its pre-0036 name (`pre-rename-backup.test.ts`).
 - `issueToken` re-checks membership and mission status inside the insert transaction
   (`TokenNotIssuableError`), because hashing the secret leaves time for a revocation.
 

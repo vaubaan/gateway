@@ -1,8 +1,8 @@
 /**
  * Closing an orphaned mission (spec §2.3: "the creator, or an owner of the
- * connection, may close it").
+ * account, may close it").
  *
- *   - an owner of a connection the mission carries revokes it while it is orphaned,
+ *   - an owner of an account the mission carries revokes it while it is orphaned,
  *     and only then: a mission that serves is its creator's alone, and reads
  *     "not found" to everyone else;
  *   - the entry names who closed it and on what ground;
@@ -29,16 +29,16 @@ describe('closing an orphaned mission', () => {
   });
 
   const shareToBob = async (riskIds: readonly string[]) =>
-    rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+    rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
       target: { kind: 'user', email: 'bob@example.com' },
       riskIds,
     });
 
-  /** Bob's mission on Ada's connection, orphaned by the revocation of the share. */
+  /** Bob's mission on Ada's account, orphaned by the revocation of the share. */
   async function orphaned() {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ], 'Bob reads');
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.accountId);
     expect(await rig.statusOf(mission)).toBe('orphaned');
     return mission;
   }
@@ -46,7 +46,7 @@ describe('closing an orphaned mission', () => {
   const revoke = (user: UserRecord, missionId: string) =>
     rig.root.missions.service.revoke(user, missionId);
 
-  it('an owner of the connection closes it: revoked, every token stopped, the entry says who and why', async () => {
+  it('an owner of the account closes it: revoked, every token stopped, the entry says who and why', async () => {
     const mission = await orphaned();
 
     const result = await revoke(rig.ada, mission.mission.id);
@@ -66,8 +66,8 @@ describe('closing an orphaned mission', () => {
       after: {
         status: 'revoked',
         tokens_revoked: 1,
-        closed_as: 'connection-owner',
-        connection_id: rig.connection.id,
+        closed_as: 'account-owner',
+        account_id: rig.account.id,
       },
       delegated_client_id: null,
     });
@@ -79,7 +79,7 @@ describe('closing an orphaned mission', () => {
 
     const forecast = await rig.root.shares.service.forecast(
       await rig.actor(rig.ada),
-      rig.connection.id,
+      rig.account.id,
       { target: { kind: 'user', email: 'bob@example.com' }, riskIds: [READ] },
     );
     expect(forecast.restores).toEqual([]);
@@ -97,7 +97,7 @@ describe('closing an orphaned mission', () => {
     expect(await rig.adminEntries('mission-revoked')).toEqual([]);
   });
 
-  it('someone who owns none of its connections reads "not found", orphaned or not', async () => {
+  it('someone who owns none of its accounts reads "not found", orphaned or not', async () => {
     const mission = await orphaned();
     expect(await revoke(rig.operator, mission.mission.id)).toEqual({
       ok: false,
@@ -115,15 +115,11 @@ describe('closing an orphaned mission', () => {
     expect(entry?.after).toEqual({ status: 'revoked', tokens_revoked: 1 });
   });
 
-  it('every member of the group that owns the connection may close it; a former member may not', async () => {
+  it('every member of the group that owns the account may close it; a former member may not', async () => {
     const team = await rig.root.groups.service.create(rig.operator.id, 'depot-owners');
     await rig.root.groups.service.addMember(rig.operator.id, team.id, rig.ada.email);
     await rig.root.groups.service.addMember(rig.operator.id, team.id, rig.operator.email);
-    await rig.root.connections.service.transfer(
-      await rig.actor(rig.ada),
-      rig.connection.id,
-      team.id,
-    );
+    await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, team.id);
     const mission = await orphaned();
 
     await rig.root.groups.service.removeMember(rig.operator.id, team.id, rig.ada.id);
@@ -131,7 +127,7 @@ describe('closing an orphaned mission', () => {
     expect(await revoke(rig.operator, mission.mission.id)).toMatchObject({ ok: true });
     expect((await rig.adminEntries('mission-revoked'))[0]).toMatchObject({
       user_id: rig.operator.id,
-      after: { closed_as: 'connection-owner' },
+      after: { closed_as: 'account-owner' },
     });
   });
 
@@ -145,7 +141,7 @@ describe('closing an orphaned mission', () => {
     expect(await rig.adminEntries('mission-revoked')).toHaveLength(1);
   });
 
-  it('a mission acting through the `vaubaan` plugin acts for its creator only, never as an owner of the connection', async () => {
+  it('a mission acting through the `vaubaan` plugin acts for its creator only, never as an owner of the account', async () => {
     const mission = await orphaned();
     const result = await rig.root.missions.service.revoke(rig.ada, mission.mission.id, {
       issuedBy: { missionId: 'mission-calling' },
@@ -154,37 +150,37 @@ describe('closing an orphaned mission', () => {
     expect(await rig.storedStatusOf(mission)).toBe('active');
   });
 
-  it('closes the missions a revoked connection left orphaned', async () => {
+  it('closes the missions a revoked account left orphaned', async () => {
     await shareToBob([READ, WRITE_STAGING]);
     const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-    await rig.root.connections.service.revoke(await rig.actor(rig.ada), rig.connection.id);
+    await rig.root.accounts.service.revoke(await rig.actor(rig.ada), rig.account.id);
     expect(await rig.statusOf(mission)).toBe('orphaned');
 
-    expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([
+    expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.account.id)).toEqual([
       {
         id: mission.mission.id,
         name: mission.mission.name,
         creator_label: 'bob@example.com',
-        cause: 'connection-revoked',
+        cause: 'account-revoked',
       },
     ]);
     expect(await revoke(rig.ada, mission.mission.id)).toMatchObject({ ok: true });
-    expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([]);
+    expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.account.id)).toEqual([]);
   });
 
-  describe('what the connection page lists', () => {
-    it('the orphaned missions of the connection, to its owners only, and none that serves', async () => {
+  describe('what the account page lists', () => {
+    it('the orphaned missions of the account, to its owners only, and none that serves', async () => {
       await shareToBob([READ]);
       const serving = await rig.issueFor(rig.bob, [READ], 'Serving');
-      expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([]);
+      expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.account.id)).toEqual([]);
 
-      const [share] = await rig.root.store.shares.listForConnection(rig.connection.id);
+      const [share] = await rig.root.store.shares.listForAccount(rig.account.id);
       await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         share?.id ?? '',
-        share?.connectionId ?? '',
+        share?.accountId ?? '',
       );
-      expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([
+      expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.account.id)).toEqual([
         {
           id: serving.mission.id,
           name: 'Serving',
@@ -192,11 +188,9 @@ describe('closing an orphaned mission', () => {
           cause: 'authority-lost',
         },
       ]);
-      // Not to the creator, not to a stranger, not for an unknown connection.
-      expect(await rig.root.missions.service.orphanedOn(rig.bob, rig.connection.id)).toEqual([]);
-      expect(await rig.root.missions.service.orphanedOn(rig.operator, rig.connection.id)).toEqual(
-        [],
-      );
+      // Not to the creator, not to a stranger, not for an unknown account.
+      expect(await rig.root.missions.service.orphanedOn(rig.bob, rig.account.id)).toEqual([]);
+      expect(await rig.root.missions.service.orphanedOn(rig.operator, rig.account.id)).toEqual([]);
       expect(await rig.root.missions.service.orphanedOn(rig.ada, 'nope')).toEqual([]);
     });
   });
@@ -217,7 +211,7 @@ describe('closing an orphaned mission', () => {
       );
     }
 
-    it('answers the owner of the connection 200 on an orphaned mission, and 404 on one that serves', async () => {
+    it('answers the owner of the account 200 on an orphaned mission, and 404 on one that serves', async () => {
       const mission = await orphaned();
       const closed = await post(rig.ada, mission.mission.id);
       expect(closed.status).toBe(200);

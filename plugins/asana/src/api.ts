@@ -21,7 +21,7 @@ import {
   httpJson,
   isList,
   isRecord,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
@@ -68,7 +68,7 @@ export interface RequestOptions {
   readonly body?: Json;
 }
 
-function tokenOf(ctx: ConnectionContext): string {
+function tokenOf(ctx: AccountContext): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const token = secret.fields[PAT_FIELD];
   if (!token) throw new Error(`${PROVIDER_ID}: the credential has no '${PAT_FIELD}' field`);
@@ -77,7 +77,7 @@ function tokenOf(ctx: ConnectionContext): string {
 
 /** One request whose failure is thrown ; its answer through `guard`. A network failure propagates. */
 export async function request<T>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: Method,
   path: string,
   guard: Guard<T>,
@@ -118,7 +118,7 @@ export async function request<T>(
 
 /** A GET of one object : its `data`. */
 export async function getObject(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   path: string,
   fields: readonly string[],
 ): Promise<Json> {

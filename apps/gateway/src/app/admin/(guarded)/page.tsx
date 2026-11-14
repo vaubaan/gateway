@@ -6,7 +6,7 @@
  *
  * Each line is read from the service that owns the fact: sign-in from the
  * identity-provider settings, the
- * accounts without owner from `ConnectionService.listOwnerless`, the apps that
+ * accounts without owner from `AccountService.listOwnerless`, the apps that
  * wait from the client registry, telemetry from its overview, the name from
  * `InstanceNameService`. Nothing is decided here.
  *
@@ -38,9 +38,9 @@ import {
   type CheckState,
 } from '@/components/ui';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
-import { NoticeBanner } from '@/components/connections/parts';
+import { NoticeBanner } from '@/components/accounts/parts';
 import { requireOperator } from '@/lib/auth/session';
-import { takeNotice } from '@/lib/connections/session';
+import { takeNotice } from '@/lib/accounts/session';
 import {
   DOC_PAGES,
   CONFIG_WORDS,
@@ -53,7 +53,7 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import { isOperator, setUpElsewhere, type SignInProviderView } from '@/server/auth';
-import { OWNERLESS_CONNECTIONS_PAGE } from '@/server/connections';
+import { OWNERLESS_ACCOUNTS_PAGE } from '@/server/accounts';
 import {
   INSTANCE_NAME_MAX_LENGTH,
   INSTANCE_NAME_PROBLEMS,
@@ -180,7 +180,7 @@ export default async function SetupPage({ searchParams }: Props) {
       root.auth.providers.views(),
       root.auth.administrators.current(),
       root.auth.bootstrap.state(),
-      root.connections.service.listOwnerless(),
+      root.accounts.service.listOwnerless(),
       root.telemetry.overview(),
       root.users.service.list(),
       root.instance.name.identity(),
@@ -211,7 +211,7 @@ export default async function SetupPage({ searchParams }: Props) {
       ),
   );
   const host = root.config.publicUrl.host;
-  // Local accounts: the setup creates the first administrator's account, for any address,
+  // Sign-in accounts: the setup creates the first administrator's account, for any address,
   // and names them administrator (ADR administrators-live-in-the-instance, §4).
   const local = providers.find((provider) => provider.kind === 'local') ?? null;
   const firstAdministrator: 'done' | 'todo' | null =
@@ -279,7 +279,7 @@ export default async function SetupPage({ searchParams }: Props) {
             description:
               firstAdministrator === 'done'
                 ? 'An administrator is named. Its first sign-in sets the second factor up; then finish the setup.'
-                : 'Local accounts are set up: create the first administrator’s account, then sign in with it.',
+                : 'Sign-in accounts are set up: create the first administrator’s account, then sign in with it.',
             action:
               firstAdministrator === 'todo'
                 ? { label: 'Create the account', href: FIRST_ADMINISTRATOR_PAGE }
@@ -318,8 +318,8 @@ export default async function SetupPage({ searchParams }: Props) {
             counted: false,
             state: 'todo' as const,
             title: SETTINGS_PAGES.ownerless.title,
-            description: `${count(ownerless.length, TERMS.connection)} ${ownerless.length === 1 ? 'has' : 'have'} no owner left: nobody can reconnect ${ownerless.length === 1 ? 'it' : 'them'} or give access.`,
-            action: { label: SETTINGS_ACTIONS.nameOwner, href: OWNERLESS_CONNECTIONS_PAGE },
+            description: `${count(ownerless.length, TERMS.account)} ${ownerless.length === 1 ? 'has' : 'have'} no owner left: nobody can reconnect ${ownerless.length === 1 ? 'it' : 'them'} or give access.`,
+            action: { label: SETTINGS_ACTIONS.nameOwner, href: OWNERLESS_ACCOUNTS_PAGE },
           },
         ]
       : []),

@@ -341,7 +341,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   await page.getByLabel('Agent proposal (JSON)').fill(
     JSON.stringify({
       name: 'Review the pricing PR',
-      connections: [
+      accounts: [
         {
           provider: 'github',
           resources: { scope: 'selected', resource_refs: ['acme/app'] },

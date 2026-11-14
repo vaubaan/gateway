@@ -106,7 +106,7 @@ No tool reaches the fallback (`fallbackHits` is empty in `plugin.test.ts`).
   which is a rewrite too). Assignee, dates, completion and section are undone by setting them back;
   a description Asana keeps no history of is not. A deletion never emits the rewrite leaf.
 - **401 versus 403**: the SDK maps both to `UpstreamAuthError`, and Asana answers 403 for an object
-  the account cannot open as well as for a refused token. The gateway expires a connection on 401
+  the account cannot open as well as for a refused token. The gateway expires an account on 401
   only, so a 403 on one task leaves the account connected.
 - **`me` as assignee** is passed to Asana as the literal `me`, the connected account. Any other
   assignee is a user gid: the classifier never parses an email address.

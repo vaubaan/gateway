@@ -101,7 +101,7 @@ export class FakeGithubHost {
   }
 
   /**
-   * Accept a token that was not minted here: the token of a token connection
+   * Accept a token that was not minted here: the token of a token account
    * (a fine-grained personal access token), with the permissions it carries.
    */
   acceptToken(token: string, permissions: Readonly<Record<string, string>>): void {

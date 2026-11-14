@@ -86,9 +86,7 @@ export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
     logger: deps.logger.child({ component: 'vaubaan-plugin' }),
   });
   const ports: VaubaanPorts = {
-    listMyConnections: portOf(VAUBAAN_INPUTS.listMyConnections, (caller) =>
-      acts.listMyConnections(caller),
-    ),
+    listMyAccounts: portOf(VAUBAAN_INPUTS.listMyAccounts, (caller) => acts.listMyAccounts(caller)),
     getCatalog: portOf(VAUBAAN_INPUTS.getCatalog, (caller, input) =>
       acts.getCatalog(caller, input),
     ),
@@ -122,7 +120,7 @@ export {
   type ActOutcome,
   type ActRefusal,
   type BootstrapKitView,
-  type ConnectionsAnswer,
+  type AccountsAnswer,
   type IssuedMissionAnswer,
   type MissionsAnswer,
   type RevealedTokenView,
@@ -142,13 +140,13 @@ export {
 } from './ports';
 export {
   catalogView,
-  connectionView,
+  accountView,
   missionDetailView,
   missionView,
   previewView,
   uncoveredOfPreview,
   type CatalogView,
-  type ConnectionView,
+  type AccountView,
   type MissionDetailView,
   type MissionView,
   type OrphanView,

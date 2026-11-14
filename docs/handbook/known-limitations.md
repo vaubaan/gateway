@@ -26,7 +26,7 @@ in the change that removes it.
 ## Never run for real
 
 - **Keycloak sign-in has never been run.** Tests and the demo use a simulated provider; live instances sign in through GitHub, Google and Entra ID. → [authentication](authentication.md)
-- **Most plugins have never executed a tool on their service.** Tests answer with doubles. Live: GitHub (REST and git remote) and Fly.io ran real tools; Supabase, Vercel and Cloudflare DNS ran discovery only; the others have no live run. → [connections](connections.md)
+- **Most plugins have never executed a tool on their service.** Tests answer with doubles. Live: GitHub (REST and git remote) and Fly.io ran real tools; Supabase, Vercel and Cloudflare DNS ran discovery only; the others have no live run. → [accounts](accounts.md)
 - **Miro's tool calls have not run live**: sign-in and the tool list were verified on a real account; every discovery logs a difference from the captured list. → [miro](providers/miro.md)
 - **Railway account tokens were not checked against Railway's MCP server** (a workspace token was): a refusal fails the call naming the token kind, the account stays usable. → [railway](providers/railway.md)
 - **The git remote has not seen every move live**: a fast-forward of an existing branch and a force-push were not; tests run the real `git` client against `git http-backend`. → [git-remote](git-remote.md)
@@ -44,7 +44,7 @@ in the change that removes it.
 
 ## One process
 
-- **Single process**: rate windows, the derived-credential cache, per-connection refresh, pending connect attempts and consents, the IdP discovery cache, the telemetry queue and the timers live in one Node process (`// single-process only`); a second process would share none of it. → [configuration](configuration.md)
+- **Single process**: rate windows, the derived-credential cache, per-account refresh, pending connect attempts and consents, the IdP discovery cache, the telemetry queue and the timers live in one Node process (`// single-process only`); a second process would share none of it. → [configuration](configuration.md)
 - **No high availability**: one image, one process, one SQLite file; a restart or a lost host is an outage, and what changed since the last scheduled backup is lost with the host. → [store](store.md)
 
 ## Backups

@@ -13,7 +13,7 @@ import {
   GatewayError,
   REFUSAL_RPC_CODE,
   isRefusal,
-  isUnavailableConnectionStatus,
+  isUnavailableAccountStatus,
   refuse,
   refusalToRpcError,
   rpcError,
@@ -60,7 +60,7 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
   'resource-not-in-mission': () =>
     refuse.resourceNotInMission({
       cited_ref: 'acme/billing',
-      connection: { id: 'con_1', name: 'GitHub (acme)' },
+      account: { id: 'con_1', name: 'GitHub (acme)' },
       allowed_resources: [
         { ref: 'acme/api', env: null, display_name: 'API' },
         { ref: 'acme/web', env: 'prod', display_name: null },
@@ -72,14 +72,14 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
       limit: { max: 60, window_seconds: 60 },
       retry_after_seconds: 12,
     }),
-  'connection-revoked': () =>
-    refuse.connectionRevoked({
-      connection: { id: 'con_1', name: 'GitHub (acme)' },
-      cause: 'connection-revoked',
+  'account-revoked': () =>
+    refuse.accountRevoked({
+      account: { id: 'con_1', name: 'GitHub (acme)' },
+      cause: 'account-revoked',
     }),
-  'connection-unavailable': () =>
-    refuse.connectionUnavailable({
-      connection: { id: 'con_1', name: 'GitHub (acme)' },
+  'account-unavailable': () =>
+    refuse.accountUnavailable({
+      account: { id: 'con_1', name: 'GitHub (acme)' },
       status: 'expired',
       owner: { kind: 'group', display: 'GitHub admins' },
     }),
@@ -174,11 +174,11 @@ describe('refusal fields', () => {
     expect(r.hint).toMatch(/Nothing was executed and nothing is held/);
   });
 
-  test('resource-not-in-mission: cited ref, connection, allowed resources listed in the hint', () => {
+  test('resource-not-in-mission: cited ref, account, allowed resources listed in the hint', () => {
     const r = SAMPLES['resource-not-in-mission']();
     if (r.code !== 'resource-not-in-mission') throw new Error('wrong code');
     expect(r.cited_ref).toBe('acme/billing');
-    expect(r.connection).toEqual({ id: 'con_1', name: 'GitHub (acme)' });
+    expect(r.account).toEqual({ id: 'con_1', name: 'GitHub (acme)' });
     expect(r.allowed_resources.map((x) => x.ref)).toEqual(['acme/api', 'acme/web']);
     expect(r.hint).toContain('acme/billing');
     expect(r.hint).toContain('acme/api, acme/web');
@@ -187,7 +187,7 @@ describe('refusal fields', () => {
   test('resource-not-in-mission: empty selection says "no resource"', () => {
     const r = refuse.resourceNotInMission({
       cited_ref: 'x',
-      connection: { id: 'c', name: 'C' },
+      account: { id: 'c', name: 'C' },
       allowed_resources: [],
     });
     expect(r.hint).toContain('no resource');
@@ -196,7 +196,7 @@ describe('refusal fields', () => {
   test('resource-not-in-mission: a selection says the creator can add the resource to the same mission', () => {
     const r = refuse.resourceNotInMission({
       cited_ref: 'new-board',
-      connection: { id: 'con_1', name: 'Miro (acme)' },
+      account: { id: 'con_1', name: 'Miro (acme)' },
       allowed_resources: [{ ref: 'old-board', env: null, display_name: null }],
     });
     expect(r.hint).toContain(
@@ -210,7 +210,7 @@ describe('refusal fields', () => {
   test('resource-not-in-mission: a mission with future resources says when a new resource is reached', () => {
     const r = refuse.resourceNotInMission({
       cited_ref: 'new-app',
-      connection: { id: 'con_1', name: 'Fly (acme)' },
+      account: { id: 'con_1', name: 'Fly (acme)' },
       allowed_resources: [{ ref: 'web', env: null, display_name: null }],
       takes_future_resources: true,
     });
@@ -235,19 +235,19 @@ describe('refusal fields', () => {
     expect(r.hint).toContain('12s');
   });
 
-  test('connection-unavailable: connection, status, owner to contact', () => {
-    const r = SAMPLES['connection-unavailable']();
-    if (r.code !== 'connection-unavailable') throw new Error('wrong code');
-    expect(r.connection).toEqual({ id: 'con_1', name: 'GitHub (acme)' });
+  test('account-unavailable: account, status, owner to contact', () => {
+    const r = SAMPLES['account-unavailable']();
+    if (r.code !== 'account-unavailable') throw new Error('wrong code');
+    expect(r.account).toEqual({ id: 'con_1', name: 'GitHub (acme)' });
     expect(r.status).toBe('expired');
     expect(r.owner).toEqual({ kind: 'group', display: 'GitHub admins' });
     expect(r.hint).toContain('GitHub admins');
     expect(r.hint).toContain('expired');
   });
 
-  test('connection-unavailable: a user owner is named by email', () => {
-    const r = refuse.connectionUnavailable({
-      connection: { id: 'c', name: 'Vercel' },
+  test('account-unavailable: a user owner is named by email', () => {
+    const r = refuse.accountUnavailable({
+      account: { id: 'c', name: 'Vercel' },
       status: 'revoked',
       owner: { kind: 'user', display: 'ana@example.test' },
     });
@@ -297,12 +297,12 @@ describe('isRefusal', () => {
   });
 });
 
-describe('connection statuses', () => {
-  test('only expired and revoked make a connection unavailable', () => {
-    expect(isUnavailableConnectionStatus('expired')).toBe(true);
-    expect(isUnavailableConnectionStatus('revoked')).toBe(true);
-    expect(isUnavailableConnectionStatus('active')).toBe(false);
-    expect(isUnavailableConnectionStatus('unowned')).toBe(false);
+describe('account statuses', () => {
+  test('only expired and revoked make an account unavailable', () => {
+    expect(isUnavailableAccountStatus('expired')).toBe(true);
+    expect(isUnavailableAccountStatus('revoked')).toBe(true);
+    expect(isUnavailableAccountStatus('active')).toBe(false);
+    expect(isUnavailableAccountStatus('unowned')).toBe(false);
   });
 });
 
@@ -369,22 +369,22 @@ describe('a mission token that stopped working', () => {
   });
 });
 
-describe('connection-revoked', () => {
+describe('account-revoked', () => {
   test('says whether the account comes back, and to keep using the other accounts', () => {
-    const removed = refuse.connectionRevoked({
-      connection: { id: 'con_1', name: 'GitHub (acme)' },
-      cause: 'connection-revoked',
+    const removed = refuse.accountRevoked({
+      account: { id: 'con_1', name: 'GitHub (acme)' },
+      cause: 'account-revoked',
     });
-    expect(removed).toMatchObject({ code: 'connection-revoked', final: true });
+    expect(removed).toMatchObject({ code: 'account-revoked', final: true });
     expect(removed.hint).toMatch(/never comes back/);
     expect(removed.hint).toMatch(/other accounts/);
     expect(removed.hint).toMatch(/new mission/);
 
-    const withdrawn = refuse.connectionRevoked({
-      connection: { id: 'con_1', name: 'GitHub (acme)' },
+    const withdrawn = refuse.accountRevoked({
+      account: { id: 'con_1', name: 'GitHub (acme)' },
       cause: 'access-withdrawn',
     });
-    expect(withdrawn).toMatchObject({ code: 'connection-revoked', final: false });
+    expect(withdrawn).toMatchObject({ code: 'account-revoked', final: false });
     expect(withdrawn.hint).toMatch(/same token works on it again/);
   });
 });

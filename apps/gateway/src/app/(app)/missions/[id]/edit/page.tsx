@@ -115,7 +115,7 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
         ...(offer
           ? {
               raise: {
-                connectionId: offer.connection_id,
+                accountId: offer.account_id,
                 resourceSetId: offer.resource_set_id,
                 macroActionId: offer.macro_action_id,
                 to: offer.to,

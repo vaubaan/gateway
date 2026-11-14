@@ -45,7 +45,7 @@ describe('requests repository', () => {
         email: 'o@x',
       })
     ).id;
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
@@ -56,7 +56,7 @@ describe('requests repository', () => {
         name: 'm',
         creatorUserId: creator,
         periodSeconds: null,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [
           { riskId: MERGE, quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
         ],
@@ -195,7 +195,7 @@ describe('approvals repository', () => {
   let missionId: string;
   let requestId: string;
   let creator: string;
-  let connectionId: string;
+  let accountId: string;
 
   beforeEach(async () => {
     t = openTestStore();
@@ -207,19 +207,19 @@ describe('approvals repository', () => {
         email: 'c@x',
       })
     ).id;
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
       credential: null,
     });
-    connectionId = connection.id;
+    accountId = account.id;
     missionId = (
       await store.missions.create({
         name: 'm',
         creatorUserId: creator,
         periodSeconds: null,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [
           { riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
         ],
@@ -317,7 +317,7 @@ describe('approvals repository', () => {
       name: 'other',
       creatorUserId: creator,
       periodSeconds: null,
-      connections: [{ connectionId, resourceIds: [] }],
+      accounts: [{ accountId, resourceIds: [] }],
       policy: [{ riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' }],
     });
     const stolen = await store.sessions.decideAndDecrement(

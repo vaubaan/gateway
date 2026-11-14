@@ -8,7 +8,7 @@ last_reviewed: 2026-10-27
 
 # Stripe provider plugin — handbook
 
-`@vaubaan/plugin-stripe`: one connection holds an optional test key and an optional live key;
+`@vaubaan/plugin-stripe`: one account holds an optional test key and an optional live key;
 discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).
 
 ## Start here
@@ -62,7 +62,7 @@ discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).
 
 - `account: argument missing and the mission touches 2 Stripe resources` → the mission holds test
   and live; pass `account`.
-- `this connection has no live-mode key` → re-run discovery.
+- `this account has no live-mode key` → re-run discovery.
 - `… is a live-mode resource but its environment label is not 'live'` → label and key mode diverge;
   re-run discovery.
 - `list_invoices` refused with `read-customer-pii` missing → the PII overlay; `read-only` leaves it

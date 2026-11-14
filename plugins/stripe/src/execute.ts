@@ -37,7 +37,7 @@ import {
   isRecord,
   jsonResult,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -139,7 +139,7 @@ const ROUTES: Readonly<Record<string, Route>> = {
 
 /**
  * What this executor declines itself — an undeclared argument, an account outside
- * the mission, a malformed identifier, a mode the connection holds no key for —
+ * the mission, a malformed identifier, a mode the account holds no key for —
  * is an `ExecutorRefusal`,
  * returned as an `isError` result : no request left, nothing failed at Stripe.
  */
@@ -195,7 +195,7 @@ interface AccountDto {
   readonly settings?: { readonly dashboard?: { readonly display_name?: string | null } } | null;
 }
 
-/** The Stripe account one key of the connection opens. */
+/** The Stripe account one key of the account opens. */
 export interface StripeAccount {
   readonly mode: StripeMode;
   readonly id: string;
@@ -209,7 +209,7 @@ export interface StripeAccount {
  * as the test key) is refused before any call ; a key Stripe will not let
  * describe its account (a restricted key) is refused with the fix.
  */
-export async function stripeAccounts(ctx: ConnectionContext): Promise<readonly StripeAccount[]> {
+export async function stripeAccounts(ctx: AccountContext): Promise<readonly StripeAccount[]> {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const accounts: StripeAccount[] = [];
   for (const mode of STRIPE_MODES) {
@@ -233,7 +233,7 @@ export async function stripeAccounts(ctx: ConnectionContext): Promise<readonly S
 }
 
 async function readAccount(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   key: string,
   mode: StripeMode,
 ): Promise<AccountDto> {
@@ -257,9 +257,7 @@ async function readAccount(
  * One resource per mode the credential carries a key for (`stripeAccounts`) :
  * `ref` = `<account id>/<mode>`, `env` = the mode.
  */
-export async function discoverStripeResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverStripeResources(ctx: AccountContext): Promise<readonly Resource[]> {
   return (await stripeAccounts(ctx)).map(({ mode, id, label }) => ({
     provider: PROVIDER_ID,
     ref: stripeResourceRef(id, mode),
@@ -277,10 +275,10 @@ function isAccountDto(value: unknown): value is AccountDto {
   return isRecord(value) && typeof value.id === 'string' && value.id !== '';
 }
 
-function keyFor(ctx: ConnectionContext, mode: StripeMode): string {
+function keyFor(ctx: AccountContext, mode: StripeMode): string {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const key = secret.fields[KEY_FIELD_BY_MODE[mode]];
-  if (!key) throw new ExecutorRefusal(`stripe: this connection has no ${mode}-mode key`);
+  if (!key) throw new ExecutorRefusal(`stripe: this account has no ${mode}-mode key`);
   return key;
 }
 

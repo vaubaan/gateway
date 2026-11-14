@@ -19,8 +19,8 @@
  *                 the execution door refuses them from the deactivation itself,
  *                 since it reads the holder's status on every call. They stay
  *                 members: a reactivated user generates a new token
- *   memberships   removed from every group, local and IdP-sourced; a
- *                 connection whose owner group empties, or that the user owned
+ *   memberships   removed from every group, local and IdP-sourced; an
+ *                 account whose owner group empties, or that the user owned
  *                 in their own name, becomes `unowned` — the operator
  *                 reassigns it
  *   missions      nothing is written on them: they follow the derived rule and
@@ -30,10 +30,10 @@
  * Reactivation first closes again whatever a half-failed deactivation left open
  * (`closeHeldBy`: nothing to do when the deactivation completed, and a failure
  * there stops the reactivation), then restores the status and nothing else: the
- * missions whose authority still stands (a share made to the user, a
- * connection they still own) serve again by the same derived rule, with their
+ * missions whose authority still stands (a share made to the user, an
+ * account they still own) serve again by the same derived rule, with their
  * `mission-restored` entry; IdP groups return at the next sign-in; local
- * groups and reassigned connections do not come back by
+ * groups and reassigned accounts do not come back by
  * themselves.
  *
  * This service does not authorize: its callers do
@@ -72,7 +72,7 @@ export interface Deactivation {
   readonly memberTokensRevoked: number;
   /** Missions of the user that read `orphaned` from now on. */
   readonly orphaned: number;
-  /** Connections that have no owner left with this deactivation. */
+  /** Accounts that have no owner left with this deactivation. */
   readonly unowned: number;
 }
 
@@ -203,7 +203,7 @@ export class UserAdminService {
       groups_left: groupsLeft.length,
       member_tokens_revoked: memberTokensRevoked,
       missions_orphaned: settlement.orphaned.length,
-      connections_unowned: settlement.unowned.length,
+      accounts_unowned: settlement.unowned.length,
     });
     return {
       user: removed,

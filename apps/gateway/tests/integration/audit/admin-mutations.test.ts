@@ -3,7 +3,7 @@
  * "every admin mutation path writes an admin audit entry — the test
  * enumerates the service methods").
  *
- * The public methods of every class under `server/{connections,
+ * The public methods of every class under `server/{accounts,
  * missions,auth,requests,telemetry,instance,authority,shares,groups,users,vaubaan}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
@@ -29,7 +29,7 @@ import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
-import { generateEd25519KeyPair, type Actor } from '../../../src/server/connections';
+import { generateEd25519KeyPair, type Actor } from '../../../src/server/accounts';
 import {
   API_KEY_SPEC,
   SSH_KEY_SPEC,
@@ -37,15 +37,15 @@ import {
   OAUTH_SPEC,
   seedRegisteredClient,
   stateOf,
-} from '../../support/connections/testing';
+} from '../../support/accounts/testing';
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
-import type { LocalAccountRecord } from '../../../src/server/store';
+import type { SignInAccountRecord } from '../../../src/server/store';
 import { VaubaanActs } from '../../../src/server/vaubaan';
 import { saveTestOidcProvider } from '../../support/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
-  ConnectionRecord,
+  AccountRecord,
   GroupRecord,
   MissionRecord,
   UserRecord,
@@ -53,7 +53,7 @@ import type {
 
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
 const SCANNED = [
-  'connections',
+  'accounts',
   'missions',
   'auth',
   'requests',
@@ -120,7 +120,7 @@ interface Rig {
   readonly alice: Actor;
   /** Same-origin form POST carrying the operator's session. */
   operatorPost(path: string, fields: Record<string, string>): Promise<Request>;
-  connectByKey(): Promise<ConnectionRecord>;
+  connectByKey(): Promise<AccountRecord>;
   registerOAuthApp(): Promise<void>;
   issue(): Promise<MissionRecord>;
   /** An open claim on a mission of Alice whose risk has consumed one action. */
@@ -130,12 +130,12 @@ interface Rig {
   /** A user who signed in once: the target of a share, a member to add. */
   bob(): Promise<UserRecord>;
   /**
-   * A mission of Alice on a connection owned by a local group she belongs to: her
+   * A mission of Alice on an account owned by a local group she belongs to: her
    * authority there is that membership, which a test removes or returns.
    */
   groupGrounded(): Promise<{ mission: MissionRecord; group: GroupRecord }>;
-  /** A connection of Alice, transferred to a local group that then lost its only member. */
-  ownerless(): Promise<ConnectionRecord>;
+  /** An account of Alice, transferred to a local group that then lost its only member. */
+  ownerless(): Promise<AccountRecord>;
   /**
    * Alice's platform management mission on her Vaubaan account, as the `vaubaan`
    * plugin's ports receive its calls (ADR platform-management-is-a-plugin-on-the-execution-door).
@@ -215,12 +215,12 @@ async function openRig(): Promise<Rig> {
       });
     },
     async connectByKey() {
-      const started = await root.connections.service.start(alice, 'keyco', {
+      const started = await root.accounts.service.start(alice, 'keyco', {
         displayName: 'Key account',
         fields: { token: 'key-0123456789', team_id: 'team_abc' },
       });
-      if (started.kind !== 'connected') throw new Error('expected an immediate connection');
-      return started.connection;
+      if (started.kind !== 'connected') throw new Error('expected an immediate account');
+      return started.account;
     },
     async registerOAuthApp() {
       // The client the gateway would have registered at the provider (not what is audited here).
@@ -228,15 +228,15 @@ async function openRig(): Promise<Rig> {
         providerId: 'oauthco',
         clientId: 'cid',
         clientSecret: 'csecret',
-        redirectUri: root.connections.service.callbackUrl('oauthco').href,
+        redirectUri: root.accounts.service.callbackUrl('oauthco').href,
         at: new Date(),
       });
     },
     async issue() {
-      const connection = await rig.connectByKey();
+      const account = await rig.connectByKey();
       const result = await root.missions.service.issue(alice.user, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, trust_levels: { read: 'careful' } }],
+        accounts: [{ account_id: account.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });
@@ -289,34 +289,34 @@ async function openRig(): Promise<Rig> {
     },
     async groupGrounded() {
       const mission = await rig.issue();
-      const [carried] = mission.connections;
-      if (!carried) throw new Error('expected a connection');
+      const [carried] = mission.accounts;
+      if (!carried) throw new Error('expected an account');
       const group = await root.store.groups.getOrCreate('mission-owners', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
-      await root.store.connections.transferOwner(carried.connectionId, {
+      await root.store.accounts.transferOwner(carried.accountId, {
         kind: 'group',
         id: group.id,
       });
       return { mission, group };
     },
     async ownerless() {
-      const connection = await rig.connectByKey();
+      const account = await rig.connectByKey();
       const group = await root.store.groups.getOrCreate('key-admins', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
-      await root.store.connections.transferOwner(connection.id, { kind: 'group', id: group.id });
+      await root.store.accounts.transferOwner(account.id, { kind: 'group', id: group.id });
       await root.store.groups.removeMember(group.id, aliceUser.id);
-      const [unowned] = await root.store.connections.markOwnerlessUnowned();
-      if (!unowned) throw new Error('expected the connection to lose its owner');
+      const [unowned] = await root.store.accounts.markOwnerlessUnowned();
+      if (!unowned) throw new Error('expected the account to lose its owner');
       return unowned;
     },
     async platformCaller() {
-      const started = await root.connections.service.start(alice, 'vaubaan');
+      const started = await root.accounts.service.start(alice, 'vaubaan');
       if (started.kind !== 'connected') throw new Error('expected a host account at once');
       const issued = await root.missions.service.issue(alice.user, {
         name: 'Platform management',
-        connections: [
+        accounts: [
           {
-            connection_id: started.connection.id,
+            account_id: started.account.id,
             trust_levels: {
               read: 'careful',
               prepare: 'careful',
@@ -372,9 +372,9 @@ const SESSION_STATE =
 const SYSTEM_REFRESH =
   'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
 
-const connections = (root: GatewayRoot) => root.connections.service;
-const accounts = (root: GatewayRoot) => root.auth.accounts;
-const LOCAL_OBJECT = 'local-account:local';
+const accounts = (root: GatewayRoot) => root.accounts.service;
+const signInAccounts = (root: GatewayRoot) => root.auth.signInAccounts;
+const LOCAL_OBJECT = 'sign-in-account:local';
 const LOCAL_PASSWORD = 'a sentence long enough';
 
 /** A provider of kind `local`, added as Settings would. */
@@ -395,9 +395,9 @@ async function localProvider(rig: Rig): Promise<void> {
 }
 
 /** The provider and one account, created by the operator. */
-async function localAccount(rig: Rig): Promise<LocalAccountRecord> {
+async function signInAccount(rig: Rig): Promise<SignInAccountRecord> {
   await localProvider(rig);
-  return rig.root.auth.accounts.createAccount({
+  return rig.root.auth.signInAccounts.createSignInAccount({
     providerId: 'local',
     email: 'local@example.com',
     password: LOCAL_PASSWORD,
@@ -421,200 +421,199 @@ async function sharedWithBob(rig: Rig): Promise<{ mission: MissionRecord; bob: U
 }
 
 const RULES: Readonly<Record<string, Rule>> = {
-  // ── connections ───────────────────────────────────────────────────────────
-  'ConnectionService.providers': READ,
-  'ConnectionService.provider': READ,
-  'ConnectionService.listFor': READ,
-  'ConnectionService.get': READ,
-  'ConnectionService.defaultEnvChoices': READ,
-  'ConnectionService.setDefaultEnv': {
+  // ── accounts ───────────────────────────────────────────────────────────
+  'AccountService.providers': READ,
+  'AccountService.provider': READ,
+  'AccountService.listFor': READ,
+  'AccountService.get': READ,
+  'AccountService.defaultEnvChoices': READ,
+  'AccountService.setDefaultEnv': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.connectByKey(),
-    drive: (rig, connection: ConnectionRecord) =>
-      rig.root.connections.service.setDefaultEnv(rig.alice, connection.id, 'staging'),
-    writes: { act: 'connection-default-env-set', object: 'connection', actor: 'alice' },
+    drive: (rig, account: AccountRecord) =>
+      rig.root.accounts.service.setDefaultEnv(rig.alice, account.id, 'staging'),
+    writes: { act: 'account-default-env-set', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.callbackUrl': READ,
-  'ConnectionService.start': {
+  'AccountService.callbackUrl': READ,
+  'AccountService.start': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     drive: (rig) => rig.connectByKey(),
-    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+    writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.importPastedKey': {
+  'AccountService.importPastedKey': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     drive: (rig) =>
-      rig.root.connections.service.importPastedKey(rig.alice, 'keyco', {
+      rig.root.accounts.service.importPastedKey(rig.alice, 'keyco', {
         displayName: 'Imported key',
         fields: { token: 'key-0123456789', team_id: 'team_abc' },
         importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'provider_admins/1' },
       }),
-    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+    writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.importSshKey': {
+  'AccountService.importSshKey': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     drive: (rig) =>
-      rig.root.connections.service.importSshKey(rig.alice, {
+      rig.root.accounts.service.importSshKey(rig.alice, {
         providerId: 'sshco',
         displayName: 'vps',
         fields: { host: 'vps.example.com', user: 'dev' },
         keyPair: generateEd25519KeyPair('v4'),
         importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'ssh_bindings/acme/vps' },
       }),
-    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+    writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.complete': {
+  'AccountService.complete': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: async (rig) => {
       await rig.registerOAuthApp();
-      const started = await rig.root.connections.service.start(rig.alice, 'oauthco');
+      const started = await rig.root.accounts.service.start(rig.alice, 'oauthco');
       if (started.kind !== 'redirect') throw new Error('expected a redirect');
       return stateOf(started.url);
     },
     drive: (rig, state: string) =>
-      rig.root.connections.service.complete(
+      rig.root.accounts.service.complete(
         rig.alice,
         'oauthco',
         new URLSearchParams({ code: 'code-1', state }),
       ),
-    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+    writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.discover': {
+  'AccountService.discover': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.connectByKey(),
-    drive: (rig, connection: ConnectionRecord) =>
-      rig.root.connections.service.discover(rig.alice, connection.id),
-    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+    drive: (rig, account: AccountRecord) =>
+      rig.root.accounts.service.discover(rig.alice, account.id),
+    writes: { act: 'resources-discovered', object: 'account', actor: 'alice' },
   },
   // The gateway's own discovery after a call that created a resource (ADR
   // created-resources-join-the-mission): one entry per scheduled discovery,
   // written once its attempts are over; the actor is the human behind the key.
-  'ConnectionService.auditDiscoveryAfterCall': {
+  'AccountService.auditDiscoveryAfterCall': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.connectByKey(),
-    drive: async (rig, connection: ConnectionRecord) => {
+    drive: async (rig, account: AccountRecord) => {
       const cause = { missionId: 'mis_after_call', tool: 'keyco__create_thing' };
-      const outcome = await rig.root.connections.service.discoverAfterCall(connection.id, cause);
-      if (!outcome) throw new Error('expected the connection to serve');
-      return rig.root.connections.service.auditDiscoveryAfterCall(
-        connection.id,
+      const outcome = await rig.root.accounts.service.discoverAfterCall(account.id, cause);
+      if (!outcome) throw new Error('expected the account to serve');
+      return rig.root.accounts.service.auditDiscoveryAfterCall(
+        account.id,
         { ...cause, userId: rig.alice.user.id },
         { ...outcome, attempts: 1 },
       );
     },
-    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+    writes: { act: 'resources-discovered', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.discoverAfterCall': exempt(
-    'one attempt of the discovery DiscoveryAfterCall runs after a creating call; the scheduler audits its outcome once, through ConnectionService.auditDiscoveryAfterCall (resources-discovered, cause after-a-call)',
+  'AccountService.discoverAfterCall': exempt(
+    'one attempt of the discovery DiscoveryAfterCall runs after a creating call; the scheduler audits its outcome once, through AccountService.auditDiscoveryAfterCall (resources-discovered, cause after-a-call)',
   ),
   'DiscoveryAfterCall.afterCall': exempt(
-    'the execution door hook: it only schedules; the discovery it schedules is audited through ConnectionService.auditDiscoveryAfterCall',
+    'the execution door hook: it only schedules; the discovery it schedules is audited through AccountService.auditDiscoveryAfterCall',
   ),
   'DiscoveryAfterCall.schedule': exempt(
-    'queues a discovery for later; the discovery, once run, is audited through ConnectionService.auditDiscoveryAfterCall',
+    'queues a discovery for later; the discovery, once run, is audited through AccountService.auditDiscoveryAfterCall',
   ),
   'DiscoveryAfterCall.idle': READ,
   'DiscoveryAfterCall.stop': exempt(
     'the shutdown of the process (root.close): it schedules nothing more and waits for the discovery in flight, which audits itself',
   ),
   // "Check now" on a mission card: the creator (or an owner) runs the discovery.
-  'ConnectionService.checkForMission': {
+  'AccountService.checkForMission': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.issue(),
     drive: (rig, mission: MissionRecord) =>
-      rig.root.connections.service.checkForMission(
+      rig.root.accounts.service.checkForMission(
         rig.alice,
         mission.id,
-        mission.connections[0]!.connectionId,
+        mission.accounts[0]!.accountId,
       ),
-    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+    writes: { act: 'resources-discovered', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.discoverOnSchedule': exempt(
-    'the hourly discovery the gateway runs on its own schedule, no human actor: the joins and leaves it causes are audited (mission-resource-joined, mission-resource-left, actor `discovery`); a failure is recorded on the connection and logged',
+  'AccountService.discoverOnSchedule': exempt(
+    'the hourly discovery the gateway runs on its own schedule, no human actor: the joins and leaves it causes are audited (mission-resource-joined, mission-resource-left, actor `discovery`); a failure is recorded on the account and logged',
   ),
   'FutureResources.snapshot': READ,
   'FutureResources.settle': exempt(
-    'runs after an act that is audited itself (a discovery, a relabel, a default environment, a created resource) and writes one mission-resource-joined / mission-resource-left entry per move (tests/integration/connections/future-resources.test.ts)',
+    'runs after an act that is audited itself (a discovery, a relabel, a default environment, a created resource) and writes one mission-resource-joined / mission-resource-left entry per move (tests/integration/accounts/future-resources.test.ts)',
   ),
   'HourlyDiscovery.start': exempt('arms the timer of the hourly discovery at boot'),
   'HourlyDiscovery.stop': exempt(
     'the shutdown of the process (root.close): waits for a run in progress',
   ),
   'HourlyDiscovery.runOnce': exempt(
-    'one run of the hourly discovery: each discovery goes through ConnectionService.discoverOnSchedule',
+    'one run of the hourly discovery: each discovery goes through AccountService.discoverOnSchedule',
   ),
-  'ConnectionService.updateResource': {
+  'AccountService.updateResource': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.connectByKey(),
-    drive: async (rig, connection: ConnectionRecord) => {
-      const [resource] = await rig.root.store.connections.listResources(connection.id);
+    drive: async (rig, account: AccountRecord) => {
+      const [resource] = await rig.root.store.accounts.listResources(account.id);
       if (!resource) throw new Error('expected a discovered resource');
-      return rig.root.connections.service.updateResource(rig.alice, connection.id, resource.id, {
+      return rig.root.accounts.service.updateResource(rig.alice, account.id, resource.id, {
         displayName: 'Renamed',
         env: 'prod',
         hidden: true,
       });
     },
-    writes: { act: 'resource-edited', object: 'connection', actor: 'alice' },
+    writes: { act: 'resource-edited', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.revoke': {
+  'AccountService.revoke': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.connectByKey(),
-    drive: (rig, connection: ConnectionRecord) =>
-      rig.root.connections.service.revoke(rig.alice, connection.id),
-    writes: { act: 'connection-revoked', object: 'connection', actor: 'alice' },
+    drive: (rig, account: AccountRecord) => rig.root.accounts.service.revoke(rig.alice, account.id),
+    writes: { act: 'account-revoked', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.transferTargets': READ,
-  'ConnectionService.providerGrantOf': READ,
-  'ConnectionService.listOwnerless': READ,
-  'ConnectionService.reassignTargets': READ,
-  'ConnectionService.transfer': {
+  'AccountService.transferTargets': READ,
+  'AccountService.providerGrantOf': READ,
+  'AccountService.listOwnerless': READ,
+  'AccountService.reassignTargets': READ,
+  'AccountService.transfer': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: async (rig) => {
-      const connection = await rig.connectByKey();
+      const account = await rig.connectByKey();
       const group = await rig.root.store.groups.getOrCreate('key-admins', 'local', null);
       await rig.root.store.groups.addMember(group.id, rig.alice.user.id);
-      return { connection, group };
+      return { account, group };
     },
-    drive: (rig, prepared: { connection: ConnectionRecord; group: GroupRecord }) =>
-      rig.root.connections.service.transfer(
+    drive: (rig, prepared: { account: AccountRecord; group: GroupRecord }) =>
+      rig.root.accounts.service.transfer(
         { user: rig.alice.user, groups: [prepared.group] },
-        prepared.connection.id,
+        prepared.account.id,
         prepared.group.id,
       ),
-    writes: { act: 'connection-transferred', object: 'connection', actor: 'alice' },
+    writes: { act: 'account-transferred', object: 'account', actor: 'alice' },
   },
-  'ConnectionService.reassign': {
+  'AccountService.reassign': {
     kind: 'mutation',
-    target: connections,
+    target: accounts,
     prepare: (rig) => rig.ownerless(),
-    drive: (rig, connection: ConnectionRecord) =>
-      rig.root.connections.service.reassign(rig.operator.id, connection.id, {
+    drive: (rig, account: AccountRecord) =>
+      rig.root.accounts.service.reassign(rig.operator.id, account.id, {
         kind: 'user',
         email: rig.alice.user.email,
       }),
-    writes: { act: 'connection-reassigned', object: 'connection', actor: 'operator' },
+    writes: { act: 'account-reassigned', object: 'account', actor: 'operator' },
   },
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
   'CredentialBroker.forRevocation': READ,
   'CredentialBroker.withdrawAtProvider': exempt(
-    'a step of ConnectionService.revoke, whose connection-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
+    'a step of AccountService.revoke, whose account-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
   ),
   'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
   'OAuth2Clients.forTokenRequest': READ,
   'OAuth2Clients.forAuthorization': exempt(
-    "registers the instance's own OAuth client at a service that accepts dynamic registration, as a step of a person's connect (ADR oauth-client-registered-by-the-gateway): nobody chose it, and the connection-created entry follows; the instance log names the provider and the client id",
+    "registers the instance's own OAuth client at a service that accepts dynamic registration, as a step of a person's connect (ADR oauth-client-registered-by-the-gateway): nobody chose it, and the account-created entry follows; the instance log names the provider and the client id",
   ),
   'OAuth2Clients.rejected': exempt(
     'forgets a registered client the provider refused (invalid_client), during an exchange or a refresh, with no human act: the next connect registers again; the instance log says so',
@@ -622,14 +621,14 @@ const RULES: Readonly<Record<string, Rule>> = {
   'OAuthBrokers.forProvider': READ,
   'OAuthBrokers.byName': READ,
   'OAuthBrokerClient.startFlow': exempt(
-    "asks the OAuth broker to start a person's connect (ADR google-calendar-through-an-oauth-broker): nothing is written in the store; the connection-created entry follows",
+    "asks the OAuth broker to start a person's connect (ADR google-calendar-through-an-oauth-broker): nothing is written in the store; the account-created entry follows",
   ),
   'OAuthBrokerClient.redeem': exempt(
-    'a step of a person’s connect: the grant redeemed at the broker becomes the credential of the connection-created (or connection-reconnected) entry',
+    'a step of a person’s connect: the grant redeemed at the broker becomes the credential of the account-created (or account-reconnected) entry',
   ),
   'OAuthBrokerClient.token': exempt(SYSTEM_REFRESH),
   'OAuthBrokerClient.revoke': exempt(
-    'a step of ConnectionService.revoke, whose connection-revoked entry carries what the broker answered (after.provider_grant)',
+    'a step of AccountService.revoke, whose account-revoked entry carries what the broker answered (after.provider_grant)',
   ),
   'AttestationVerifier.verify': READ,
   'AttestedChannel.send': exempt(
@@ -662,12 +661,12 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.issue': {
     kind: 'mutation',
     target: missions,
-    // The connection is made first so that its own entry is not the one counted.
+    // The account is made first so that its own entry is not the one counted.
     prepare: (rig) => rig.connectByKey(),
-    drive: (rig, connection: ConnectionRecord) =>
+    drive: (rig, account: AccountRecord) =>
       rig.root.missions.service.issue(rig.alice.user, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, trust_levels: { read: 'careful' } }],
+        accounts: [{ account_id: account.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       }),
@@ -690,7 +689,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
   },
   'MissionService.orphanedOn': READ,
-  'MissionService.onConnection': READ,
+  'MissionService.onAccount': READ,
   'MissionService.revoke': {
     kind: 'mutation',
     target: missions,
@@ -880,9 +879,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
 
   // ── authority ─────────────────────────────────────────────────────────────
-  'ConnectionAuthorityService.authorityOf': READ,
-  'ConnectionAuthorityService.connectionsOf': READ,
-  'ConnectionAuthorityService.gapsOf': READ,
+  'AccountAuthorityService.authorityOf': READ,
+  'AccountAuthorityService.accountsOf': READ,
+  'AccountAuthorityService.gapsOf': READ,
   'MissionGrounds.check': READ,
   // `orphaned` is derived on every read and never stored (spec §2.3): the door's own
   // detection (`inspect`) and every reader's (`derive`) write nothing at all, in either
@@ -891,15 +890,15 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionGrounds.derive': READ,
   // What a share would restore, asked before it is made: nothing is written.
   'MissionGrounds.forecastShare': READ,
-  'MissionGrounds.watchConnection': {
+  'MissionGrounds.watchAccount': {
     kind: 'mutation',
     target: (root) => root.authority.grounds,
     prepare: (rig) => rig.issue(),
-    // The act: the connection is revoked. Loss of authority → `mission-orphaned`.
+    // The act: the account is revoked. Loss of authority → `mission-orphaned`.
     drive: async (rig, mission: MissionRecord) => {
-      const connectionId = mission.connections[0]?.connectionId ?? '';
-      const watch = await rig.root.authority.grounds.watchConnection(connectionId);
-      await rig.root.store.connections.revoke(connectionId);
+      const accountId = mission.accounts[0]?.accountId ?? '';
+      const watch = await rig.root.authority.grounds.watchAccount(accountId);
+      await rig.root.store.accounts.revoke(accountId);
       await watch.settle(rig.alice.user.id);
     },
     writes: { act: 'mission-orphaned', object: 'mission', actor: 'alice' },
@@ -946,8 +945,8 @@ const RULES: Readonly<Record<string, Rule>> = {
       await rig.bob();
       return rig.connectByKey();
     },
-    drive: (rig, connection: ConnectionRecord) =>
-      rig.root.shares.service.share(rig.alice, connection.id, {
+    drive: (rig, account: AccountRecord) =>
+      rig.root.shares.service.share(rig.alice, account.id, {
         target: { kind: 'user', email: 'bob@example.com' },
         riskIds: ['keyco.read-things'],
       }),
@@ -958,15 +957,15 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: (root) => root.shares.service,
     prepare: async (rig) => {
       await rig.bob();
-      const connection = await rig.connectByKey();
-      const { share } = await rig.root.shares.service.share(rig.alice, connection.id, {
+      const account = await rig.connectByKey();
+      const { share } = await rig.root.shares.service.share(rig.alice, account.id, {
         target: { kind: 'user', email: 'bob@example.com' },
         riskIds: ['keyco.read-things'],
       });
-      return { shareId: share.id, connectionId: connection.id };
+      return { shareId: share.id, accountId: account.id };
     },
-    drive: (rig, { shareId, connectionId }: { shareId: string; connectionId: string }) =>
-      rig.root.shares.service.revoke(rig.alice, shareId, connectionId),
+    drive: (rig, { shareId, accountId }: { shareId: string; accountId: string }) =>
+      rig.root.shares.service.revoke(rig.alice, shareId, accountId),
     writes: { act: 'share-revoked', object: 'share', actor: 'alice' },
   },
 
@@ -1199,10 +1198,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.bootstrap,
     // "Finish setup" revokes the bootstrap token (ADR administrators-live-in-the-instance, §8):
-    // an administrator with a way in exists (a local account named by the setup).
+    // an administrator with a way in exists (a sign-in account named by the setup).
     prepare: async (rig) => {
       await localProvider(rig);
-      const account = await rig.root.auth.accounts.createAccount({
+      const account = await rig.root.auth.signInAccounts.createSignInAccount({
         providerId: 'local',
         email: 'first@example.com',
         password: LOCAL_PASSWORD,
@@ -1335,15 +1334,15 @@ const RULES: Readonly<Record<string, Rule>> = {
   'AdministratorsService.applyConfiguration': exempt(
     'writes one `administrator-granted` entry per designation through grantUser/grantEmail, classified above, or none when the rule names nobody new (tests/integration/auth/administrators.test.ts)',
   ),
-  // Local accounts (ADR local-accounts-sign-in-provider): the service audits what an
+  // Sign-in accounts (ADR local-accounts-sign-in-provider): the service audits what an
   // administrator or a link does; a person's own sign-in (the password, the second
   // factor) writes counters and spends codes but is no administrative act.
-  'LocalAccountsService.linkUrl': READ,
-  'LocalAccountsService.inspectLink': READ,
-  'LocalAccountsService.accountOf': READ,
-  'LocalAccountsService.accountById': READ,
-  'LocalAccountsService.list': READ,
-  'LocalAccountsService.pendingLinks': READ,
+  'SignInAccountsService.linkUrl': READ,
+  'SignInAccountsService.inspectLink': READ,
+  'SignInAccountsService.signInAccountOf': READ,
+  'SignInAccountsService.signInAccountById': READ,
+  'SignInAccountsService.list': READ,
+  'SignInAccountsService.pendingLinks': READ,
   'RecoveryService.banner': READ,
   'RecoveryService.isOpen': READ,
   'RecoveryService.challenge': exempt(
@@ -1359,23 +1358,23 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SecondFactorService.beginEnrolment': READ,
   'SecondFactorService.recoveryCodesLeft': READ,
   'SecondFactorService.adoptLocalFactors': exempt(
-    'run by the boot alone: moves the factors local accounts kept to their people, a change of storage and of nobody’s authority (tests/integration/auth/second-factor.test.ts)',
+    'run by the boot alone: moves the factors sign-in accounts kept to their people, a change of storage and of nobody’s authority (tests/integration/auth/second-factor.test.ts)',
   ),
-  'LocalAccountsService.checkPassword': exempt(
+  'SignInAccountsService.checkPassword': exempt(
     'the person’s own sign-in: counts a wrong password towards the lockout and clears the count on a right one; refusals are logged, not audited (spec §8 names a human actor)',
   ),
   'SecondFactorService.check': exempt(
     'the person’s own sign-in: advances the accepted time step or spends a recovery code; a sign-in by recovery code is logged',
   ),
-  'LocalAccountsService.createLink': {
+  'SignInAccountsService.createLink': {
     kind: 'mutation',
-    target: accounts,
-    prepare: localAccount,
+    target: signInAccounts,
+    prepare: signInAccount,
     drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.createLink({
+      rig.root.auth.signInAccounts.createLink({
         kind: 'reset',
         providerId: 'local',
-        email: (prepared as LocalAccountRecord).email,
+        email: (prepared as SignInAccountRecord).email,
         createdBy: rig.operator.id,
       }),
     writes: {
@@ -1385,30 +1384,30 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
-  'LocalAccountsService.createAccount': {
+  'SignInAccountsService.createSignInAccount': {
     kind: 'mutation',
-    target: accounts,
+    target: signInAccounts,
     prepare: localProvider,
     drive: (rig) =>
-      rig.root.auth.accounts.createAccount({
+      rig.root.auth.signInAccounts.createSignInAccount({
         providerId: 'local',
         email: 'fresh@example.com',
         password: LOCAL_PASSWORD,
         actor: rig.operator.id,
       }),
     writes: {
-      act: 'local-account-created',
+      act: 'sign-in-account-created',
       object: 'instance-config',
       objectId: LOCAL_OBJECT,
       actor: 'operator',
     },
   },
-  'LocalAccountsService.createAccountFromLink': {
+  'SignInAccountsService.createSignInAccountFromLink': {
     kind: 'mutation',
-    target: accounts,
+    target: signInAccounts,
     prepare: async (rig) => {
       await localProvider(rig);
-      return rig.root.auth.accounts.createLink({
+      return rig.root.auth.signInAccounts.createLink({
         kind: 'invite',
         providerId: 'local',
         email: 'invited@example.com',
@@ -1416,20 +1415,23 @@ const RULES: Readonly<Record<string, Rule>> = {
       });
     },
     drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.createAccountFromLink((prepared as IssuedLink).token, LOCAL_PASSWORD),
+      rig.root.auth.signInAccounts.createSignInAccountFromLink(
+        (prepared as IssuedLink).token,
+        LOCAL_PASSWORD,
+      ),
     writes: {
-      act: 'local-account-created',
+      act: 'sign-in-account-created',
       object: 'instance-config',
       objectId: LOCAL_OBJECT,
       actor: 'operator',
     },
   },
-  'LocalAccountsService.resetPasswordFromLink': {
+  'SignInAccountsService.resetPasswordFromLink': {
     kind: 'mutation',
-    target: accounts,
+    target: signInAccounts,
     prepare: async (rig) => {
-      const account = await localAccount(rig);
-      return rig.root.auth.accounts.createLink({
+      const account = await signInAccount(rig);
+      return rig.root.auth.signInAccounts.createLink({
         kind: 'reset',
         providerId: 'local',
         email: account.email,
@@ -1437,7 +1439,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       });
     },
     drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.resetPasswordFromLink(
+      rig.root.auth.signInAccounts.resetPasswordFromLink(
         (prepared as IssuedLink).token,
         'another sentence long enough',
       ),
@@ -1448,13 +1450,13 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
-  'LocalAccountsService.changePassword': {
+  'SignInAccountsService.changePassword': {
     kind: 'mutation',
-    target: accounts,
-    prepare: localAccount,
+    target: signInAccounts,
+    prepare: signInAccount,
     drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.changePassword(
-        (prepared as LocalAccountRecord).id,
+      rig.root.auth.signInAccounts.changePassword(
+        (prepared as SignInAccountRecord).id,
         'another sentence long enough',
         rig.operator.id,
       ),
@@ -1497,14 +1499,14 @@ const RULES: Readonly<Record<string, Rule>> = {
       ),
     writes: { act: 'second-factor-changed', object: 'user', actor: 'operator' },
   },
-  'LocalAccountsService.remove': {
+  'SignInAccountsService.remove': {
     kind: 'mutation',
-    target: accounts,
-    prepare: localAccount,
+    target: signInAccounts,
+    prepare: signInAccount,
     drive: (rig, prepared: never) =>
-      rig.root.auth.accounts.remove((prepared as LocalAccountRecord).id, rig.operator.id),
+      rig.root.auth.signInAccounts.remove((prepared as SignInAccountRecord).id, rig.operator.id),
     writes: {
-      act: 'local-account-removed',
+      act: 'sign-in-account-removed',
       object: 'instance-config',
       objectId: LOCAL_OBJECT,
       actor: 'operator',
@@ -1628,7 +1630,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
   'InstanceProfiler.profile': READ,
   // ── the `vaubaan` plugin: an agent acting for the user, through a mission ──
-  'VaubaanActs.listMyConnections': READ,
+  'VaubaanActs.listMyAccounts': READ,
   'VaubaanActs.getCatalog': READ,
   'VaubaanActs.listMyMissions': READ,
   'VaubaanActs.previewPolicy': READ,
@@ -1636,13 +1638,13 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: vaubaanActs,
     prepare: async (rig) => ({
-      connection: await rig.connectByKey(),
+      account: await rig.connectByKey(),
       caller: await rig.platformCaller(),
     }),
-    drive: (rig, prepared: { connection: ConnectionRecord; caller: VaubaanCaller }) =>
+    drive: (rig, prepared: { account: AccountRecord; caller: VaubaanCaller }) =>
       rig.root.vaubaan.ports.issueMission(prepared.caller, {
         name: 'Read the things',
-        connections: [{ connection_id: prepared.connection.id, trust_levels: { read: 'careful' } }],
+        accounts: [{ account_id: prepared.account.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       }),
@@ -1653,11 +1655,11 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: vaubaanActs,
     // A mission rotates only what it issued itself: the mission comes from the plugin.
     prepare: async (rig) => {
-      const connection = await rig.connectByKey();
+      const account = await rig.connectByKey();
       const caller = await rig.platformCaller();
       const issued = await rig.root.vaubaan.ports.issueMission(caller, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, trust_levels: { read: 'careful' } }],
+        accounts: [{ account_id: account.id, trust_levels: { read: 'careful' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       });
@@ -1707,6 +1709,14 @@ describe('every administrative mutation writes an admin audit entry', () => {
 
   it('covers every mutating act the services can perform', () => {
     expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
+      'account-created',
+      'account-created',
+      'account-created',
+      'account-created',
+      'account-default-env-set',
+      'account-reassigned',
+      'account-revoked',
+      'account-transferred',
       'administrator-granted',
       'administrator-granted',
       'administrator-granted',
@@ -1718,14 +1728,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'config-changed',
       'config-changed',
       'config-changed',
-      'connection-created',
-      'connection-created',
-      'connection-created',
-      'connection-created',
-      'connection-default-env-set',
-      'connection-reassigned',
-      'connection-revoked',
-      'connection-transferred',
       'gate-changed',
       'group-created',
       'group-member-added',
@@ -1733,9 +1735,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'invitation-added',
       'invitation-removed',
       'limits-changed',
-      'local-account-created',
-      'local-account-created',
-      'local-account-removed',
       'local-link-created',
       'local-password-changed',
       'local-password-changed',
@@ -1771,6 +1770,9 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'setup-finished',
       'share-created',
       'share-revoked',
+      'sign-in-account-created',
+      'sign-in-account-created',
+      'sign-in-account-removed',
       'sign-in-provider-disabled',
       'user-deactivated',
       'user-reactivated',
@@ -1854,27 +1856,27 @@ describe('every administrative mutation writes an admin audit entry', () => {
   it('a resource edit records the fields before and after, and a save that changes nothing records none', async () => {
     rig = await openRig();
     const { root, alice } = rig;
-    const connection = await rig.connectByKey();
-    const [resource] = await root.store.connections.listResources(connection.id);
+    const account = await rig.connectByKey();
+    const [resource] = await root.store.accounts.listResources(account.id);
     if (!resource) throw new Error('expected a discovered resource');
     const edits = async () =>
       (await root.store.audit.list({ kind: 'admin' })).filter(
         (e) => e.kind === 'admin' && e.act === 'resource-edited',
       );
 
-    await root.connections.service.updateResource(alice, connection.id, resource.id, {
+    await root.accounts.service.updateResource(alice, account.id, resource.id, {
       env: 'staging',
       hidden: true,
     });
     expect(await edits()).toMatchObject([
       {
-        object: { type: 'connection', id: connection.id },
+        object: { type: 'account', id: account.id },
         before: { resource_id: resource.id, ref: 'acct-a', env: null, hidden: false },
         after: { resource_id: resource.id, ref: 'acct-a', env: 'staging', hidden: true },
       },
     ]);
 
-    await root.connections.service.updateResource(alice, connection.id, resource.id, {
+    await root.accounts.service.updateResource(alice, account.id, resource.id, {
       env: 'staging',
       hidden: true,
     });
@@ -1884,21 +1886,21 @@ describe('every administrative mutation writes an admin audit entry', () => {
   it('a discovery that fails is recorded too, with the reason', async () => {
     rig = await openRig();
     const { root, alice } = rig;
-    const connection = await rig.connectByKey();
-    await root.store.connections.revoke(connection.id);
-    const reconnectable = await root.store.connections.create({
+    const account = await rig.connectByKey();
+    await root.store.accounts.revoke(account.id);
+    const reconnectable = await root.store.accounts.create({
       provider: 'keyco',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'No credential',
       credential: null,
     });
 
-    const outcome = await root.connections.service.discover(alice, reconnectable.id);
+    const outcome = await root.accounts.service.discover(alice, reconnectable.id);
     expect(outcome.ok).toBe(false);
     const entry = (await root.store.audit.list({ kind: 'admin' })).at(-1);
     expect(entry).toMatchObject({
       act: 'resources-discovered',
-      object: { type: 'connection', id: reconnectable.id },
+      object: { type: 'account', id: reconnectable.id },
       after: { ok: false, count: 0, error: outcome.error },
     });
   });

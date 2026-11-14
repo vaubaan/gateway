@@ -2,8 +2,8 @@
  * The built-in "Everything I hold on this account" (ADR
  * preset-everything-i-hold-expands-explicitly; spec §0 "Macro-action", §3.2).
  *
- * It is not a value of any catalog: `everythingIHold(connection, selected)`
- * computes, for one connection and one selection of resources, the explicit
+ * It is not a value of any catalog: `everythingIHold(account, selected)`
+ * computes, for one account and one selection of resources, the explicit
  * lines it stands for — every non-deprecated id of the catalog that the
  * creator's authority covers now and that the selected resources can reach,
  * the fallback included — each with an explicit budget and gate `auto`.
@@ -16,7 +16,7 @@ import type { MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
 import { macroActionOfRisk } from './macro-actions';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource, Row } from './model';
+import type { CatalogRisk, IssuanceAccount, IssuanceResource, Row } from './model';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** Its id where the gateway names it (a notice, the reference). No catalog may declare a macro-action of that id. */
@@ -44,7 +44,7 @@ export const RATE_BY_ROW: Readonly<Record<Row, number>> = {
   4: 5,
 };
 
-/** The lines "Everything I hold" wrote on one connection, with what the picker shows. */
+/** The lines "Everything I hold" wrote on one account, with what the picker shows. */
 export interface EverythingIHold {
   readonly id: typeof EVERYTHING_I_HOLD;
   readonly label: string;
@@ -58,12 +58,10 @@ export interface EverythingIHold {
  * sets one; by row for a risk in no macro-action.
  */
 export function budgetFor(
-  connection: Pick<IssuanceConnection, 'macro_actions'>,
+  account: Pick<IssuanceAccount, 'macro_actions'>,
   risk: Pick<CatalogRisk, 'base_id' | 'rate_ceiling_per_minute' | 'row'>,
 ): { readonly quota: number; readonly rate_limit: RateLimit } {
-  const entry = macroActionOfRisk(connection, risk)?.entries.find(
-    (e) => e.risk_id === risk.base_id,
-  );
+  const entry = macroActionOfRisk(account, risk)?.entries.find((e) => e.risk_id === risk.base_id);
   const ceiling: RateLimit | null =
     risk.rate_ceiling_per_minute === null
       ? null
@@ -79,22 +77,21 @@ export function budgetFor(
 }
 
 /**
- * "Everything I hold" on this connection with these resources: explicit ids
+ * "Everything I hold" on this account with these resources: explicit ids
  * only, catalog order, each with its budget and the gate `auto`.
  */
 export function everythingIHold(
-  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'macro_actions' | 'derives_env'>,
+  account: Pick<IssuanceAccount, 'risks' | 'authority' | 'macro_actions' | 'derives_env'>,
   selected: readonly Pick<IssuanceResource, 'env'>[],
 ): EverythingIHold {
-  const held = new Set(connection.authority);
-  const entries = connection.risks
+  const held = new Set(account.authority);
+  const entries = account.risks
     .filter(
-      (risk) =>
-        held.has(risk.risk_id) && !risk.deprecated && isResolvable(risk, connection, selected),
+      (risk) => held.has(risk.risk_id) && !risk.deprecated && isResolvable(risk, account, selected),
     )
     .map((risk): MissionPolicyEntry => ({
       risk_id: risk.risk_id,
-      ...budgetFor(connection, risk),
+      ...budgetFor(account, risk),
       gate: 'auto',
     }));
   return {
@@ -120,7 +117,7 @@ export interface ExpansionDigest {
   readonly fallback: readonly CatalogRisk[];
 }
 
-/** The digest of explicit lines on a connection's catalog. */
+/** The digest of explicit lines on an account's catalog. */
 export function expansionDigest(
   lines: readonly { readonly risk_id: RiskId; readonly gate: string }[],
   risks: readonly CatalogRisk[],

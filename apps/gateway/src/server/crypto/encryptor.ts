@@ -1,5 +1,5 @@
 /**
- * `Encryptor` — the port the store and the connection flows use to protect
+ * `Encryptor` — the port the store and the connect flows use to protect
  * credentials at rest (spec §6 "encryption at rest"). Built once by the
  * composition root from `InstanceConfig.encryption`.
  *
@@ -11,7 +11,7 @@
  * master-key-rotation-reseals-every-blob).
  */
 import type { EncryptionKeys } from '../config/types';
-import { CryptoError, deriveConnectionKey, open, seal, sodiumReady, wipe } from './aead';
+import { CryptoError, deriveAccountKey, open, seal, sodiumReady, wipe } from './aead';
 
 export interface EncryptedBlob {
   /** Master key version used; persisted by the store next to the blob. */
@@ -22,8 +22,8 @@ export interface EncryptedBlob {
 
 export interface Encryptor {
   readonly currentKeyVersion: number;
-  encrypt(connectionId: string, plaintext: string): Promise<EncryptedBlob>;
-  decrypt(connectionId: string, sealed: EncryptedBlob): Promise<string>;
+  encrypt(accountId: string, plaintext: string): Promise<EncryptedBlob>;
+  decrypt(accountId: string, sealed: EncryptedBlob): Promise<string>;
 }
 
 export async function createEncryptor(config: EncryptionKeys): Promise<Encryptor> {
@@ -44,23 +44,23 @@ export async function createEncryptor(config: EncryptionKeys): Promise<Encryptor
   return {
     currentKeyVersion: config.keyVersion,
 
-    async encrypt(connectionId, plaintext) {
-      const key = deriveConnectionKey(keyFor(config.keyVersion), connectionId);
+    async encrypt(accountId, plaintext) {
+      const key = deriveAccountKey(keyFor(config.keyVersion), accountId);
       try {
         const encoder = new TextEncoder();
         return {
           keyVersion: config.keyVersion,
-          blob: seal(key, encoder.encode(plaintext), encoder.encode(connectionId)),
+          blob: seal(key, encoder.encode(plaintext), encoder.encode(accountId)),
         };
       } finally {
         wipe(key);
       }
     },
 
-    async decrypt(connectionId, sealed) {
-      const key = deriveConnectionKey(keyFor(sealed.keyVersion), connectionId);
+    async decrypt(accountId, sealed) {
+      const key = deriveAccountKey(keyFor(sealed.keyVersion), accountId);
       try {
-        const plain = open(key, sealed.blob, new TextEncoder().encode(connectionId));
+        const plain = open(key, sealed.blob, new TextEncoder().encode(accountId));
         return new TextDecoder().decode(plain);
       } finally {
         wipe(key);

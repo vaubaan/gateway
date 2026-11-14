@@ -57,11 +57,11 @@ export function createSignInFlows(deps: SignInFlowsDeps): SignInFlows {
     for(provider, adminGroups) {
       const redirectUri = callbackUrl(deps.publicUrl, provider.id);
       if (provider.kind === 'local') {
-        // Local accounts sign in on the form of the sign-in page (`local-handlers.ts`),
+        // Sign-in accounts sign in on the form of the sign-in page (`local-handlers.ts`),
         // never through a redirect: nothing to start, nothing to finish.
         throw new LoginError(
           'provider-unknown',
-          `provider '${provider.id}' keeps local accounts: it has no redirect flow`,
+          `provider '${provider.id}' keeps sign-in accounts: it has no redirect flow`,
         );
       }
       if (provider.kind === 'github') {

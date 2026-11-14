@@ -109,7 +109,7 @@ describe('miro createdResources', () => {
     ).toEqual([]);
   });
 
-  test('another tool creates nothing the connection lists', () => {
+  test('another tool creates nothing the account lists', () => {
     expect(createdMiroResources(TOOL.listBoards, {}, LIVE_ANSWER)).toEqual([]);
   });
 });

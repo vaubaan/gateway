@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/shares/<shareId>/revoke` — revokes a share (terminal).
+ * `POST /accounts/<id>/shares/<shareId>/revoke` — revokes a share (terminal).
  * One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';

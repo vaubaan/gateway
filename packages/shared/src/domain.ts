@@ -1,5 +1,5 @@
 /**
- * v5 domain types — the instance, its identities, connections, missions.
+ * v5 domain types — the instance, its identities, accounts, missions.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 (vocabulary), §2 (domain), §3
  *        (authority, budget, session, requests, approvals).
@@ -46,10 +46,10 @@ export type Principal =
   { readonly kind: 'user'; readonly id: string } | { readonly kind: 'group'; readonly id: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connections, resources, shares
+// Accounts, resources, shares
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** How a connection authenticates to its provider. Declared by the plugin.
+/** How an account authenticates to its provider. Declared by the plugin.
  *  The constant is the source ; the type derives from it so a new kind cannot
  *  be added to one without the other. */
 export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'ssh-key', 'host'] as const;
@@ -60,7 +60,7 @@ export function isCredentialKind(raw: string): raw is CredentialKind {
 }
 
 /**
- * A connection's credential as the instance stores it : an opaque payload
+ * An account's credential as the instance stores it : an opaque payload
  * encrypted at rest, plus what the gateway needs without decrypting.
  * The decrypted material only exists in memory, typed by the plugin SDK
  * (`CredentialSecret`).
@@ -76,14 +76,14 @@ export interface Credential {
   readonly metadata: Readonly<Record<string, string>>;
 }
 
-export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'unowned';
+export type AccountStatus = 'active' | 'expired' | 'revoked' | 'unowned';
 
-export interface Connection {
+export interface Account {
   readonly id: string;
   readonly provider: string;
   readonly display_name: string;
   readonly owner: Principal;
-  readonly status: ConnectionStatus;
+  readonly status: AccountStatus;
   readonly credential: Credential;
   readonly created_by: string | null;
   readonly created_at: Iso8601;
@@ -91,8 +91,8 @@ export interface Connection {
 }
 
 /**
- * One thing reachable through a connection : a repository, a database
- * project, a hosting project. Discovered by the plugin at connection time,
+ * One thing reachable through an account : a repository, a database
+ * project, a hosting project. Discovered by the plugin when the account is connected,
  * labelled with an environment by the owner. Replaces the v4
  * `ProviderBinding`.
  */
@@ -108,17 +108,17 @@ export interface Resource {
   /**
    * A discovery's hint: the credential reaches the resource but most likely cannot act on
    * it (a public GitHub repository outside a token's grant), so it is listed hidden from
-   * new missions. Followed only while the connection's owner never showed or hid the
+   * new missions. Followed only while the account's owner never showed or hid the
    * resource themselves (ADR connect-driver-and-resource-curation, amendment 2026-11-14);
    * the owner's choice always wins. Absent or false: listed as usual.
    */
   readonly hiddenByDefault?: boolean;
 }
 
-/** A resource as kept on a connection (discovered, then edited by the owner). */
-export interface ConnectionResource extends Resource {
+/** A resource as kept on an account (discovered, then edited by the owner). */
+export interface AccountResource extends Resource {
   readonly id: string;
-  readonly connection_id: string;
+  readonly account_id: string;
   readonly discovered_at: Iso8601;
 }
 
@@ -129,7 +129,7 @@ export type ShareStatus = 'active' | 'revoked';
 
 export interface Share {
   readonly id: string;
-  readonly connection_id: string;
+  readonly account_id: string;
   readonly target: Principal;
   readonly restriction: Restriction;
   readonly status: ShareStatus;
@@ -168,7 +168,7 @@ export interface MissionPolicyEntry extends Budget {
   readonly risk_id: RiskId;
   readonly gate: Gate;
   /**
-   * The resource set of its connection the line belongs to (risk model §4.7): every
+   * The resource set of its account the line belongs to (risk model §4.7): every
    * line of a stored mission names one. Absent on a draft's line, whose set is the one
    * it is written in.
    */
@@ -214,9 +214,9 @@ export type Period =
 /** `exhausted` is per risk, not a mission state (spec §2.3). */
 export type MissionStatus = 'active' | 'expired' | 'orphaned' | 'revoked';
 
-/** The resources a mission may touch on one connection. */
+/** The resources a mission may touch on one account. */
 export interface MissionResourceSelection {
-  readonly connection_id: string;
+  readonly account_id: string;
   /** Explicit refs ; the UI's "all resources" resolves to the list known at issuance. */
   readonly resource_refs: readonly string[];
 }

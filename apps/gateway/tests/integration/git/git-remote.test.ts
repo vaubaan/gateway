@@ -15,7 +15,7 @@ import { budgetMissionOf } from '../../../src/server/budget';
 import type { AuditCallRecord } from '../../../src/server/store';
 import { line, type IssuedMission } from '../../support/execution/testing';
 import {
-  CONNECTION_TOKEN,
+  ACCOUNT_TOKEN,
   DEVELOPER_TRUST_LEVELS,
   openGitRig,
   OTHER_REPOSITORY,
@@ -73,7 +73,7 @@ async function auditOf(mission: IssuedMission) {
 
 async function counters(mission: IssuedMission) {
   const usage = await rig.root.budget.usageOf(budgetMissionOf(mission.mission), new Date());
-  // One set on the connection: the counters read by risk.
+  // One set on the account: the counters read by risk.
   return Object.fromEntries(
     [...usage.consumed].map(([line, n]) => [line.slice(line.indexOf('::') + 2), n]),
   );
@@ -89,8 +89,8 @@ describe('clone and fetch', () => {
     expect(upstream.some((r) => r.host === 'git' && r.gitProtocol === 'version=2')).toBe(true);
     // The mission key never reaches GitHub.
     expect(upstream.every((r) => !(r.authorization ?? '').includes(developer.token))).toBe(true);
-    // The connection's token is what GitHub sees, as the Basic password git expects.
-    const basic = `Basic ${Buffer.from(`x-access-token:${CONNECTION_TOKEN}`).toString('base64')}`;
+    // The account's token is what GitHub sees, as the Basic password git expects.
+    const basic = `Basic ${Buffer.from(`x-access-token:${ACCOUNT_TOKEN}`).toString('base64')}`;
     expect(upstream.filter((r) => r.host === 'git').every((r) => r.authorization === basic)).toBe(
       true,
     );
@@ -378,10 +378,10 @@ describe('keys', () => {
     const account = await rig.tokenHolding(token, { metadata: 'read', contents: 'write' });
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'Two accounts',
-      connections: [
-        { connection_id: account.id, trust_levels: DEVELOPER_TRUST_LEVELS },
+      accounts: [
+        { account_id: account.id, trust_levels: DEVELOPER_TRUST_LEVELS },
         {
-          connection_id: rig.connection.id,
+          account_id: rig.account.id,
           resources: { scope: 'all' },
           policy: [line('depot.read')],
         },
@@ -390,7 +390,7 @@ describe('keys', () => {
       expires_at: null,
     });
     if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
-    await rig.root.store.connections.revoke(account.id);
+    await rig.root.store.accounts.revoke(account.id);
 
     const result = await rig.git(
       rig.workdir(),
@@ -427,12 +427,12 @@ describe('the provider segment', () => {
     expect(bare.status).toBe(404);
   });
 
-  it('refuses, and audits, a mission that holds no connection on the provider the path names', async () => {
+  it('refuses, and audits, a mission that holds no account on the provider the path names', async () => {
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'No GitHub',
-      connections: [
+      accounts: [
         {
-          connection_id: rig.connection.id,
+          account_id: rig.account.id,
           resources: { scope: 'all' },
           policy: [line('depot.read')],
         },
@@ -447,7 +447,7 @@ describe('the provider segment', () => {
       issued.token.secret,
     );
     expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain('this mission holds no GitHub connection');
+    expect(result.stderr).toContain('this mission holds no GitHub account');
     const audit = await auditOf({
       mission: issued.mission,
       token: issued.token.secret,

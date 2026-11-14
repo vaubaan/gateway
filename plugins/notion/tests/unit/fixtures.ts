@@ -101,7 +101,7 @@ export const hidden = (endpoint: Endpoint, objectId: string): MockRoute => ({
 /**
  * The standard world : the root page at the top of the workspace, a page
  * under it, a paragraph in that page ; the root database with its data
- * source and one entry ; another root of the connection with a page.
+ * source and one entry ; another root of the account with a page.
  */
 export function world(): MockRoute[] {
   return [

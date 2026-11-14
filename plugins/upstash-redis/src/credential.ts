@@ -1,7 +1,7 @@
 /**
  * Credential of the `upstash-redis` provider : the Upstash Developer API key.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2.
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2.
  * ADR  : one-place-to-authorize-services-token-first (amended 2026-10-31 :
  *        grant wide at the service, the mission narrows).
  *
@@ -20,7 +20,7 @@
  *
  * The per-database REST tokens (Data API, Bearer) are **not** part of the
  * credential : `execute` reads them from the Management API at call time
- * (`GET /v2/redis/database/{id}`). A connection made of
+ * (`GET /v2/redis/database/{id}`). An account made of
  * per-database REST tokens would not be able to discover its databases,
  * nor to reach the Management API tools, so it was not retained.
  */
@@ -30,7 +30,7 @@ import {
   UpstreamHttpError,
   expectCredentialKind,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
@@ -132,7 +132,7 @@ export function basicAuthHeader(auth: UpstashAuth): string {
  * read and which carries no database secret) ; the account is the email the
  * key belongs to. A 401 or 403 is a rejected key.
  */
-export async function verifyUpstashKey(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyUpstashKey(ctx: AccountContext): Promise<CredentialCheck> {
   const auth = upstashAuth(ctx.credential);
   const res = await ctx.fetch(`${UPSTASH_MANAGEMENT_API}/teams`, {
     method: 'GET',

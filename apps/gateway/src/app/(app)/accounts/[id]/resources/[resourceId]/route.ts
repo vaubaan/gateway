@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/resources/<resourceId>` — the owner's edits on one
+ * `POST /accounts/<id>/resources/<resourceId>` — the owner's edits on one
  * resource (display name, environment label, hidden flag, list settings).
  * One-line adapter over the host-agnostic handler.
  */
@@ -13,5 +13,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string; resourceId: string }> },
 ): Promise<Response> {
   const { id, resourceId } = await params;
-  return (await getRoot()).connections.handlers.updateResource(request, id, resourceId);
+  return (await getRoot()).accounts.handlers.updateResource(request, id, resourceId);
 }

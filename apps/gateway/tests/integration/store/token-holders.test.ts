@@ -156,7 +156,7 @@ describe('token holders (migration 0010)', () => {
         email: 'ada@example.com',
       })
     ).id;
-    const connection = await t.store.connections.create({
+    const account = await t.store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: ada },
       displayName: 'gh',
@@ -167,7 +167,7 @@ describe('token holders (migration 0010)', () => {
       creatorUserId: ada,
       periodAnchor: AT,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceIds: [] }],
+      accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [{ riskId: READ, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     const session = await t.store.sessions.getOrCreate(mission.id);
@@ -219,7 +219,7 @@ describe('token holders (migration 0010)', () => {
       token_kind: kind,
       token_holder: holder,
       session_id: sessionId,
-      connection_id: null,
+      account_id: null,
       resource_ref: null,
       tool: 'github__get_file',
       arguments_hash: 'abc',
@@ -305,7 +305,7 @@ describe('token holders (migration 0010)', () => {
         token_kind: kind,
         token_holder: holder,
         session_id: null,
-        connection_id: null,
+        account_id: null,
         resource_ref: null,
         tool,
         arguments_hash: 'abc',
@@ -332,7 +332,7 @@ describe('token holders (migration 0010)', () => {
     const scope = {
       missionCreatorUserId: ada,
       missionMemberUserId: null,
-      connectionOwners: [],
+      accountOwners: [],
       allAdmin: false,
       allCalls: false,
     };

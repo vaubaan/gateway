@@ -16,7 +16,7 @@ import {
   parseSlice,
   refusalResult,
   serializeSlice,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -123,7 +123,7 @@ const execCtx = (
   resources,
   ...(signal ? { signal } : {}),
 });
-const connCtx = (): ConnectionContext => ({
+const connCtx = (): AccountContext => ({
   credential,
   fetch: () => Promise.reject(new Error('ssh plugin must not use fetch')),
 });
@@ -1224,7 +1224,7 @@ describe('execute over an injected transport', () => {
     expect(result.structuredContent).toMatchObject({ exit_code: 2 });
   });
 
-  test('refuses before any connection : bad arguments, a host that is not this connection, an unknown tool', async () => {
+  test('refuses before any connection : bad arguments, a host that is not this account, an unknown tool', async () => {
     const transport = fakeTransport();
     const plugin = createSshPlugin({ transport });
     const missing = await plugin.execute(execCtx(), 'ssh__exec', {});
@@ -1234,9 +1234,7 @@ describe('execute over an injected transport', () => {
       cmd: 'ls',
     });
     expect(foreign.isError).toBe(true);
-    expect((foreign.content[0] as { text: string }).text).toMatch(
-      /not the host of this connection/,
-    );
+    expect((foreign.content[0] as { text: string }).text).toMatch(/not the host of this account/);
     const unknown = await plugin.execute(execCtx(), 'ssh__nope', { cmd: 'ls' });
     expect(unknown.isError).toBe(true);
     expect(transport.calls).toHaveLength(0);
@@ -1254,7 +1252,7 @@ describe('execute over an injected transport', () => {
     await expect(
       plugin.execute(execCtx([staging, prod]), 'ssh__exec', { host: OTHER, cmd: 'ls' }),
     ).resolves.toEqual(
-      refusalResult(`host '${OTHER}' is not the host of this connection ('${HOST}')`),
+      refusalResult(`host '${OTHER}' is not the host of this account ('${HOST}')`),
     );
     expect(transport.calls).toHaveLength(0);
   });

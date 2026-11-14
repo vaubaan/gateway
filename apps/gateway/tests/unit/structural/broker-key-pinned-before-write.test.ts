@@ -25,7 +25,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
-const CHANNEL = join(SERVER, 'connections/broker-channel.ts');
+const CHANNEL = join(SERVER, 'accounts/broker-channel.ts');
 
 function sourcesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -105,7 +105,7 @@ describe('the broker key is written only on a socket whose key is the pinned one
     const offenders = sourcesUnder(SERVER)
       .filter((path) => /rejectUnauthorized:\s*false/.test(readFileSync(path, 'utf8')))
       .map((path) => relative(SERVER, path));
-    expect(offenders).toEqual(['connections/broker-channel.ts']);
+    expect(offenders).toEqual(['accounts/broker-channel.ts']);
     expect(text.match(/rejectUnauthorized:\s*false/g)).toHaveLength(1);
     const open = methods.get('open');
     expect(open?.getText(source)).toMatch(/rejectUnauthorized:\s*false/);

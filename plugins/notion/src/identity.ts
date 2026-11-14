@@ -13,7 +13,7 @@ import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 /** The provider id. */
 export const PROVIDER_ID = 'notion';
 
-/** Name of the secret field of the `api-key` credential : the internal connection token. */
+/** Name of the secret field of the `api-key` credential : the internal account token. */
 export const API_TOKEN_FIELD = 'api_token';
 
 const prefix = toolPrefixFor(PROVIDER_ID);

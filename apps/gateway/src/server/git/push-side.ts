@@ -99,7 +99,7 @@ export class PushSide {
       if (!answer.ok) {
         await answer.body?.cancel();
         if (answer.status === HTTP_UNAUTHORIZED) {
-          await this.deps.credentialCache.drop(target.connection.id);
+          await this.deps.credentialCache.drop(target.account.id);
         }
         // A 403 here is the provider's own permission check on the account's token.
         if (answer.status === HTTP_FORBIDDEN) {

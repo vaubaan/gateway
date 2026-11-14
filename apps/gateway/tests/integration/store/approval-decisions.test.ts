@@ -45,7 +45,7 @@ describe('store: the approval gate', () => {
         email: 'c@x',
       })
     ).id;
-    const connection = await store.connections.create({
+    const account = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
@@ -57,7 +57,7 @@ describe('store: the approval gate', () => {
         creatorUserId: creator,
         periodAnchor: PERIOD,
         periodSeconds: 86_400,
-        connections: [{ connectionId: connection.id, resourceIds: [] }],
+        accounts: [{ accountId: account.id, resourceIds: [] }],
         policy: [
           { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
           { riskId: MERGE, quota: 5, rateLimit: 5, rateWindowSeconds: 60, gate: 'approval' },
@@ -505,7 +505,7 @@ describe('store: the approval gate', () => {
       token_kind: null,
       token_holder: null,
       session_id: null,
-      connection_id: null,
+      account_id: null,
       resource_ref: 'acme/app',
       tool: TOOL,
       arguments_hash: 'fp-1',

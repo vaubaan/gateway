@@ -22,11 +22,7 @@ import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
-import {
-  createConnectionsModule,
-  type ConnectionsModule,
-  type DiscoveryTimers,
-} from '../connections';
+import { createAccountsModule, type AccountsModule, type DiscoveryTimers } from '../accounts';
 import {
   buildInfoFromEnv,
   ConfigError,
@@ -121,10 +117,10 @@ export interface GatewayRoot {
   /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule. */
   readonly auth: AuthModule;
   /** Connect flows, resources, credential broker with the generic OAuth refresh. */
-  readonly connections: ConnectionsModule;
+  readonly accounts: AccountsModule;
   /** Authority: owner or union of shares, mission grounds (`orphaned`, derived), membership settlement. */
   readonly authority: AuthorityModule;
-  /** Shares of a connection to a user or a group, and the shares a user received. */
+  /** Shares of an account to a user or a group, and the shares a user received. */
   readonly shares: SharesModule;
   /** Local groups kept by the operator. */
   readonly groups: GroupsModule;
@@ -175,7 +171,7 @@ export interface RootDeps {
   readonly openStore?: (ctx: StoreContext) => Promise<Store>;
   /** Tests: the clock of the authentication module (link expiry, lockouts); the system clock otherwise. */
   readonly clock?: Clock;
-  /** Sends the mails of the local accounts' links; built from `mail.*` by the boot (wave C). */
+  /** Sends the mails of the sign-in accounts' links; built from `mail.*` by the boot (wave C). */
   readonly mailer?: LinkMailer;
   /**
    * Replaces the plugin loading (tests: a fixture registry). The inventory then lists the
@@ -210,7 +206,7 @@ export interface RootDeps {
   readonly notificationResolve?: Resolver;
   /**
    * The mail transport of mail notifications only (the e2e instance: a recording fake, while
-   * the local accounts keep handing their links to the administrator). Default: `mailer`.
+   * the sign-in accounts keep handing their links to the administrator). Default: `mailer`.
    */
   readonly notificationMailer?: LinkMailer;
   readonly logWrite?: LoggerOptions['write'];
@@ -266,7 +262,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or dropped by an image.
     checkAccountsServed(
       unservedProviders(
-        await store.connections.countByProvider(),
+        await store.accounts.countByProvider(),
         new Set(registry.ids),
         inventory.entries,
       ),
@@ -407,7 +403,7 @@ function logConfigurationSummary(
     client_ip_header: config.clientIpHeader ?? 'not set',
     limits: {
       users: config.limits.users ?? 'unlimited',
-      connections: config.limits.connections ?? 'unlimited',
+      accounts: config.limits.accounts ?? 'unlimited',
       active_missions: config.limits.activeMissions ?? 'unlimited',
     },
     ops_stats: opsStats,
@@ -502,7 +498,7 @@ type RootModules = Pick<
   | 'cache'
   | 'sessions'
   | 'auth'
-  | 'connections'
+  | 'accounts'
   | 'authority'
   | 'shares'
   | 'groups'
@@ -554,7 +550,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     store,
     lookups: {
       missions: store.missions,
-      connections: store.connections,
+      accounts: store.accounts,
       users: store.users,
       groups: store.groups,
       administrators: async () =>
@@ -627,7 +623,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
 
   const cache = deps.cache ?? new MemoryCacheClient();
-  const connections = createConnectionsModule({
+  const accounts = createAccountsModule({
     config,
     store,
     registry,
@@ -642,15 +638,15 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     notifications: notifications.events,
     discoveryTimers: deps.discoveryTimers,
   });
-  // The hourly discovery of the connections future resources depend on; stopped before
+  // The hourly discovery of the accounts future resources depend on; stopped before
   // the store closes (a run in progress finishes).
-  opened.push(() => connections.hourlyDiscovery.stop());
-  connections.hourlyDiscovery.start();
+  opened.push(() => accounts.hourlyDiscovery.stop());
+  accounts.hourlyDiscovery.start();
   const shares = createSharesModule({
     config,
     store,
     registry,
-    connections,
+    accounts,
     authority: authority.service,
     grounds: authority.grounds,
     authenticator: auth.authenticator,
@@ -661,7 +657,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     config,
     store,
     membership: authority.membership,
-    connections,
+    accounts,
     authenticator: auth.authenticator,
     logger,
   });
@@ -708,7 +704,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     profileSource: {
       users: () => limits.counts.users(),
       activeMissions: (now) => limits.counts.activeMissions(now),
-      accountsByProvider: async () => ({ ...(await limits.counts.connections()).byProvider }),
+      accountsByProvider: async () => ({ ...(await limits.counts.accounts()).byProvider }),
     },
   });
   opened.push(() => telemetry.stop());
@@ -749,10 +745,10 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     store,
     membership: authority.membership,
     memberTokens: missions.team,
-    connections,
+    accounts,
     authenticator: auth.authenticator,
     sessions: auth.sessions,
-    accounts: auth.accounts,
+    signInAccounts: auth.signInAccounts,
     providers: auth.providers,
     mailer,
     logger,
@@ -767,7 +763,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     registry,
     auth,
     missions,
-    connections,
+    accounts,
     grounds: authority.grounds,
     budget,
     cache,
@@ -779,14 +775,14 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     notifications: notifications.events,
   });
   // A discovery the door scheduled after a creating call finishes before the store closes.
-  opened.push(() => connections.discoveryAfterCall.stop());
+  opened.push(() => accounts.discoveryAfterCall.stop());
   // The git remote shares the execution door's admission, stages and audit.
   const git = createGitModule({
     config,
     store,
     registry,
     execution,
-    connections,
+    accounts,
     logger,
   });
   opened.push(() => git.sweeper.stop());
@@ -795,7 +791,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     cache,
     sessions,
     auth,
-    connections,
+    accounts,
     authority,
     shares,
     groups,
@@ -842,7 +838,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
  * token, has no way to a first administrator: the boot stops and says so.
  */
 async function settleAdministrators(auth: AuthModule, config: InstanceConfig): Promise<void> {
-  // The factors local accounts kept per account move to their people, once (§7).
+  // The factors sign-in accounts kept per account move to their people, once (§7).
   const providers = await auth.providers.views();
   await auth.secondFactors.adoptLocalFactors(
     providers.filter((p) => p.kind === 'local').map((p) => p.id),
@@ -940,9 +936,12 @@ export async function resetRoot(): Promise<void> {
  * starts; the value is never logged.
  */
 export function logRetiredKeys(
-  config: Pick<InstanceConfig, 'retiredKeys' | 'retiredManagementKeys'>,
+  config: Pick<InstanceConfig, 'retiredKeys' | 'retiredManagementKeys' | 'deprecatedKeys'>,
   logger: Logger,
 ): void {
+  for (const { old, current } of config.deprecatedKeys) {
+    logger.warn(DEPRECATED_KEY_WARNING, { key: old, write_instead: current });
+  }
   for (const key of config.retiredKeys) {
     logger.warn(
       'configuration key no longer read: the gateway takes no OAuth client declared by an administrator (Gmail connects with an app password); remove it',
@@ -954,6 +953,10 @@ export function logRetiredKeys(
     logger.warn(RETIRED_MANAGEMENT_KEYS_WARNING, { keys: [...config.retiredManagementKeys] });
   }
 }
+
+/** Said once per renamed key or variable the configuration still uses under its old name. */
+export const DEPRECATED_KEY_WARNING =
+  'configuration key renamed: it is still read under its old name, for now; write the new one';
 
 /** Said once at boot when the configuration still sets keys of the retired authorization server. */
 export const RETIRED_MANAGEMENT_KEYS_WARNING =

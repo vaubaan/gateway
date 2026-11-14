@@ -13,7 +13,7 @@
  *   - `list_boards` is answered from the mission's boards, without a request ;
  *   - every other tool is one `tools/call` to Miro's MCP server through the
  *     SDK's client (`callUpstreamTool`), with the OAuth access token of the
- *     connection ; Miro's tool result is passed through (its `isError`
+ *     account ; Miro's tool result is passed through (its `isError`
  *     included) — the agent reads Miro's words ; a failure is thrown typed
  *     (401 / 403 `UpstreamAuthError`, another status `UpstreamHttpError`, a
  *     JSON-RPC error frame `UpstreamProtocolError`) ;
@@ -29,7 +29,7 @@ import {
   expectCredentialKind,
   mcpRequest,
   refusalResult,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
@@ -58,8 +58,8 @@ export const MAX_DISCOVERED_BOARDS = 500;
 export const MCP_SERVER_REFUSED =
   "Miro refused its MCP server to this account. On a Miro Enterprise plan, an administrator first enables Miro's MCP server for the organisation (Miro admin guide, 'Miro MCP Server'); then reconnect the account.";
 
-/** The OAuth access token of the connection. */
-function tokenOf(ctx: ConnectionContext): string {
+/** The OAuth access token of the account. */
+function tokenOf(ctx: AccountContext): string {
   return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
 }
 
@@ -108,7 +108,7 @@ export const DISCOVERY_PAGE_SIZE = 50;
  * Also compares Miro's live `tools/list` with the plugin's model and logs
  * the differences (names only) : the signal to capture the tool list again.
  */
-export async function discoverMiroResources(ctx: ConnectionContext): Promise<readonly Resource[]> {
+export async function discoverMiroResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const token = tokenOf(ctx);
   const found = new Map<string, Resource>();
   for (let offset = 0; found.size <= MAX_DISCOVERED_BOARDS; offset += DISCOVERY_PAGE_SIZE) {
@@ -134,7 +134,7 @@ export async function discoverMiroResources(ctx: ConnectionContext): Promise<rea
 
 /** One page of `board_search_boards`. */
 async function searchBoards(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   token: string,
   offset: number,
 ): Promise<McpToolResult> {
@@ -317,7 +317,7 @@ export function toolDrift(
 }
 
 /** Logs the drift of the live tool list ; never fails a discovery. */
-async function reportDrift(ctx: ConnectionContext, token: string): Promise<void> {
+async function reportDrift(ctx: AccountContext, token: string): Promise<void> {
   try {
     const drift = toolDrift(await mcpRequest(ctx, MIRO_MCP_SERVER, token, 'tools/list', {}));
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {

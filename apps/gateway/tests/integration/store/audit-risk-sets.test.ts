@@ -26,7 +26,7 @@ function call(ts: string, over: Partial<CallAuditEntry> = {}): CallAuditEntry {
     token_kind: null,
     token_holder: null,
     session_id: 's1',
-    connection_id: 'c1',
+    account_id: 'c1',
     resource_ref: 'acme/repo',
     tool: 'github__create_branch',
     arguments_hash: 'abc123def4567890',
@@ -195,7 +195,7 @@ describe('audit: accepted-risk sets', () => {
     row.run('old', READ, 1, 0, 9);
     row.run('old', WRITE, 1, 1, 4);
     row.run('old', MERGE, 0, 1, null);
-    // Migration 0029 attributed the entry to the one set of its mission's connection.
+    // Migration 0029 attributed the entry to the one set of its mission's account.
     store.db
       .prepare("INSERT INTO audit_resource_sets (audit_id, resource_set_id) VALUES ('old', 's1')")
       .run();

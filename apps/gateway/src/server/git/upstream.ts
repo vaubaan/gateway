@@ -1,6 +1,6 @@
 /**
  * The provider side of the git remote, as the host drives it (spec §4.1 ter,
- * §2.4): the connection's credential decrypted in memory, handed to the
+ * §2.4): the account's credential decrypted in memory, handed to the
  * plugin's `gitRemote.upstream`, presented to the provider, released. The
  * agent's key never goes upstream; the provider's credential never goes back.
  *
@@ -13,7 +13,7 @@
 import {
   UpstreamFailureError,
   type CallRequest,
-  type MissionConnection,
+  type MissionAccount,
   type MissionContext,
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
@@ -21,23 +21,23 @@ import { isExecutorRefusal, refusalResult } from '@vaubaan/plugin-sdk';
 import type { ExecuteContext, PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
 import type { GitAccess, GitRemoteCapability, GitUpstream } from '@vaubaan/plugin-sdk/git';
 
-import type { CredentialBroker } from '../connections';
-import type { ConnectionCredentialCache } from '../execution';
+import type { CredentialBroker } from '../accounts';
+import type { AccountCredentialCache } from '../execution';
 import type { Logger } from '../logging';
 
 /** The repository a git request is about, and who serves it. */
 export interface GitTarget {
   readonly plugin: ProviderPlugin;
   readonly remote: GitRemoteCapability;
-  /** The mission's connection to the plugin's provider. */
-  readonly connection: MissionConnection;
+  /** The mission's account to the plugin's provider. */
+  readonly account: MissionAccount;
   /** The resource ref (`owner/repo`). */
   readonly repository: string;
 }
 
 export interface UpstreamDeps {
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'contextOf'>;
-  readonly credentialCache: ConnectionCredentialCache;
+  readonly credentialCache: AccountCredentialCache;
 }
 
 /** The context the plugin receives for one git request (memory only). */
@@ -48,11 +48,11 @@ export async function executeContextFor(
   /** The git request's: aborted at `git.request_timeout` or when git hangs up. */
   signal: AbortSignal,
 ): Promise<ExecuteContext> {
-  const resolved = await deps.credentials.resolve(target.connection.id);
+  const resolved = await deps.credentials.resolve(target.account.id);
   return {
     ...deps.credentials.contextOf(resolved, signal),
-    resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
-    credentialCache: deps.credentialCache.scopeFor(resolved.connection),
+    resources: ctx.resources.filter((r) => r.account_id === target.account.id),
+    credentialCache: deps.credentialCache.scopeFor(resolved.account),
   };
 }
 
@@ -211,14 +211,14 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
     async execute(ctx, call, target) {
       const job = deps.jobs.of(call);
       if (!job) return deps.plugins.execute(ctx, call, target);
-      const provider = target.connection.provider;
+      const provider = target.account.provider;
       const plugin = deps.registry.get(provider)?.plugin;
       const remote = plugin?.gitRemote;
       if (!plugin || !remote) throw new Error(`git relay: '${provider}' declares no git remote`);
       const gitTarget: GitTarget = {
         plugin,
         remote,
-        connection: target.connection,
+        account: target.account,
         repository: job.repository,
       };
       const execCtx = await executeContextFor(deps, ctx, gitTarget, job.signal);
@@ -235,7 +235,7 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
         await answer.body?.cancel();
         if (answer.status === HTTP_UNAUTHORIZED) {
           // A cached token the provider no longer takes: the next request mints anew.
-          await deps.credentialCache.drop(target.connection.id);
+          await deps.credentialCache.drop(target.account.id);
         }
         throw new UpstreamFailureError({
           summary: `${provider} git answered HTTP ${answer.status}`,

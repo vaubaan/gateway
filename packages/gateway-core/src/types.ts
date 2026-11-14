@@ -6,7 +6,7 @@
  *
  * The domain types themselves live in `@vaubaan/shared` (ADR
  * plugin-contract-and-credential-spec D8): one source of truth for the
- * refusal codes, the connection and mission states, the policy entries, the
+ * refusal codes, the account and mission states, the policy entries, the
  * budget shape, the period, the resources. This module re-exports what the
  * pipeline consumes, so `@vaubaan/gateway-core` stays a one-stop import for
  * the door, and adds only what is specific to the core: the two doors, the
@@ -15,8 +15,8 @@
  */
 
 import type {
-  Connection,
-  ConnectionResource,
+  Account,
+  AccountResource,
   Mission,
   MissionPolicy,
   Principal,
@@ -38,8 +38,8 @@ export {
 } from '@vaubaan/shared';
 export type {
   Budget,
-  ConnectionResource,
-  ConnectionStatus,
+  AccountResource,
+  AccountStatus,
   Gate,
   MissionPolicy,
   MissionPolicyEntry,
@@ -68,7 +68,7 @@ export type Door = 'execution';
  * door is the `wrong-credential-kind` refusal.
  *
  * Not to be confused with `CredentialKind` in `@vaubaan/shared`, which is
- * how a *connection* authenticates to its provider (`api-key`, `oauth2`,
+ * how a *account* authenticates to its provider (`api-key`, `oauth2`,
  * `ssh-key`) and belongs to the plugin contract.
  */
 export type BearerKind = 'mission-token' | 'human-session';
@@ -79,34 +79,34 @@ export type BearerKind = 'mission-token' | 'human-session';
 
 /** A principal with what a refusal shows an agent so a human can be
  *  contacted: the user's email or the group's name. */
-export type ConnectionOwner = Principal & { readonly display: string };
+export type AccountOwner = Principal & { readonly display: string };
 
-/** The slice of a connection a mission context carries. Credentials are
+/** The slice of an account a mission context carries. Credentials are
  *  never part of the context: the upstream stage decrypts them in memory
  *  for the duration of one call (spec §2.4). */
-/** Why a connection no longer serves a mission that keeps serving through its others
+/** Why an account no longer serves a mission that keeps serving through its others
  *  (ADR orphaned-missions-and-ownerless-connections, amendment 2026-10-21):
- *  `connection-revoked` — revoked by an owner, for good; `access-withdrawn` — the
+ *  `account-revoked` — revoked by an owner, for good; `access-withdrawn` — the
  *  creator holds nothing on it any more, and it serves again if the access returns. */
-export const CONNECTION_LOSSES = ['connection-revoked', 'access-withdrawn'] as const;
-export type ConnectionLoss = (typeof CONNECTION_LOSSES)[number];
+export const ACCOUNT_LOSSES = ['account-revoked', 'access-withdrawn'] as const;
+export type AccountLoss = (typeof ACCOUNT_LOSSES)[number];
 
-export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_name' | 'status'> & {
-  readonly owner: ConnectionOwner;
-  /** Set when this connection's part of the mission is lost: every call through it is
-   *  refused `connection-revoked`, and its tools leave `tools/list`. Absent: it serves. */
-  readonly lost?: ConnectionLoss;
-  /** How the connection was made, when its plugin connects in more than one
+export type MissionAccount = Pick<Account, 'id' | 'provider' | 'display_name' | 'status'> & {
+  readonly owner: AccountOwner;
+  /** Set when this account's part of the mission is lost: every call through it is
+   *  refused `account-revoked`, and its tools leave `tools/list`. Absent: it serves. */
+  readonly lost?: AccountLoss;
+  /** How the account was made, when its plugin connects in more than one
    *  way: a tool its way cannot run is refused before the budget and left out
    *  of `tools/list`. Absent or `null`: the plugin's primary way. */
-  /** As stored by the connection: a kind of the contract, or a word it no longer knows (refused by the host). */
+  /** As stored by the account: a kind of the contract, or a word it no longer knows (refused by the host). */
   readonly credential_kind?: string | null;
-  /** The connection can reach a resource that hosts this gateway (`self_resources`):
+  /** The account can reach a resource that hosts this gateway (`self_resources`):
    *  the plugin's `unboundTools` are unavailable on it. Absent: false. */
   readonly hosts_instance?: boolean;
-  /** The non-secret fields of the connection's form (a Fly organization
+  /** The non-secret fields of the account's form (a Fly organization
    *  slug), handed to the plugin's classifier so a slice can name what the
-   *  connection is bound to. Absent: none. */
+   *  account is bound to. Absent: none. */
   readonly public_fields?: Readonly<Record<string, string>>;
   /** A set of the mission takes the resources that later appear in its
    *  environment (ADR resource-set-is-one-environment-with-optional-future-resources).
@@ -115,20 +115,20 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
 };
 
 /** One resource a mission may touch, hydrated from its selection (spec §0
- *  "Resource", §3.1 "Resource selection"). The shared `ConnectionResource`
+ *  "Resource", §3.1 "Resource selection"). The shared `AccountResource`
  *  as-is, so `ctx.resources` feeds `resourceEnvResolver` and the plugin's
  *  `classify` without an adapter. */
-export type MissionResource = ConnectionResource;
+export type MissionResource = AccountResource;
 
 /**
- * One resource set of a connection of the mission (risk model §4.7): the resources it
+ * One resource set of an account of the mission (risk model §4.7): the resources it
  * holds now and, through the lines of `MissionContext.policy` that name it, its policy.
- * A connection has one set or more; a resource is in exactly one.
+ * An account has one set or more; a resource is in exactly one.
  */
 export interface MissionResourceSet {
   readonly id: string;
-  readonly connection_id: string;
-  /** Its place among the sets of its connection, from 1 ("Resource set 2"). */
+  readonly account_id: string;
+  /** Its place among the sets of its account, from 1 ("Resource set 2"). */
   readonly position: number;
   /** The ids of the mission resources (`MissionContext.resources`) it holds now. */
   readonly resource_ids: readonly string[];
@@ -186,11 +186,11 @@ export interface MissionContext {
   /** The token that authenticated the call, and its holder. Only the prefix
    *  is ever logged. */
   readonly token: AuthenticatedToken;
-  readonly connections: readonly MissionConnection[];
-  /** Resource selection, all connections together. Empty for a connection
+  readonly accounts: readonly MissionAccount[];
+  /** Resource selection, all accounts together. Empty for an account
    *  means the mission may touch nothing on it. */
   readonly resources: readonly MissionResource[];
-  /** The resource sets of every connection, by connection then position. */
+  /** The resource sets of every account, by account then position. */
   readonly resource_sets: readonly MissionResourceSet[];
   /** The explicit policy, every line naming its resource set (`resource_set_id`); the
    *  accepted risks of a set are the `risk_id`s of its lines. Nothing stores

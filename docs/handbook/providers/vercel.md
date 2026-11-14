@@ -38,7 +38,7 @@ Resource: the project; the environment is a slice segment, not a resource label.
   matches those slices, so their `NO_SINGLE_ENV` changes no decision: keep it so (a test checks every
   sample); the catalog's `project[**]` patterns match with or without the `env` segment.
 - **Two modes, read from the field the host kept** (`vercelAuth`; the form's choice is not stored):
-  `team_id` → team mode, every connection made before 2026-11-11 included, no migration;
+  `team_id` → team mode, every account made before 2026-11-11 included, no migration;
   `project_id` → project mode. Both or neither is a host bug (plain `Error`).
 - **The team is pinned to the credential**: a `teamId` argument other than the credential's is
   refused on every tool; the sent value always comes from the credential.
@@ -106,9 +106,9 @@ Resource: the project; the environment is a slice segment, not a resource label.
 - `deployment '…' does not belong to vercel project '…'` → pass the right `projectId`;
   `could not be verified` → another team, deleted, or a custom domain: use the deployment id or its
   `*.vercel.app` URL.
-- `teamId is fixed by the connection` / `scoped to the vercel project … infers its team` → omit
+- `teamId is fixed by the account` / `scoped to the vercel project … infers its team` → omit
   `teamId`.
-- `not the project this connection is scoped to` → a project-mode account reaches its one project;
+- `not the project this account is scoped to` → a project-mode account reaches its one project;
   use a team account for the other.
 - `the team of vercel project … is not known` → a project-mode resource discovered without
   `accountId`: refresh the account's resources.

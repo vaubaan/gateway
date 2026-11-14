@@ -286,7 +286,7 @@ function ModelSection({ plugin, n }: { plugin: PluginInfo; n: number }) {
       <div className="pp-defs">
         <div className="pp-def">
           <h3>Account</h3>
-          <p>{model.account ?? `One account is one connection to ${plugin.name}.`}</p>
+          <p>{model.account ?? `One account is one account to ${plugin.name}.`}</p>
         </div>
         <div className="pp-def">
           <h3>Resource</h3>

@@ -33,13 +33,13 @@ import {
   type SessionService,
 } from '../auth';
 import { notAFormResponse, readForm } from '../http/form';
-import { createNoticeRedirect, type Notice, type NoticeStore } from '../connections';
+import { createNoticeRedirect, type Notice, type NoticeStore } from '../accounts';
 import type { Logger } from '../logging';
 import { UserAdminError } from './errors';
-import type { LocalAccountsService } from '../auth/local-accounts';
+import type { SignInAccountsService } from '../auth/sign-in-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
-import { LocalAccountError } from '../auth/errors';
+import { SignInAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { BootstrapService } from '../auth/bootstrap';
@@ -51,7 +51,7 @@ import type { UserAdminActor, UserAdminService } from './service';
 export const USERS_PAGE = '/admin/users';
 /** The setup checklist, where the first administrator's creation lands. */
 export const ADMIN_SETUP_PAGE = '/admin';
-/** The page that creates the first administrator's local account. */
+/** The page that creates the first administrator's sign-in account. */
 export const FIRST_ADMINISTRATOR_PAGE = '/admin/first-administrator';
 /** "Finish setup": the form action that ends the setup. */
 export const FINISH_SETUP_ACTION = '/api/admin/setup/finish';
@@ -63,7 +63,7 @@ export interface UserAdminHandlerDeps {
   readonly sessions: Pick<SessionService, 'destroy'>;
   readonly users: UserAdminService;
   readonly invitations: InvitationService;
-  readonly accounts: LocalAccountsService;
+  readonly signInAccounts: SignInAccountsService;
   readonly providers: Pick<SignInProvidersService, 'views'>;
   /** The designations of the administrators (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
@@ -86,15 +86,15 @@ export interface UserAdminHandlers {
   invite(request: Request): Promise<Response>;
   removeInvitation(request: Request): Promise<Response>;
   /**
-   * A single-use link for a local account (field `kind`: `invite` to create it, `reset`
+   * A single-use link for a sign-in account (field `kind`: `invite` to create it, `reset`
    * for its password; field `email`): mailed when the instance sends mail, shown to the
    * administrator to hand over otherwise.
    */
-  accountLink(request: Request): Promise<Response>;
+  signInAccountLink(request: Request): Promise<Response>;
   /** An administrator resets a person's second factor: their next sign-in takes the password alone (or enrols one, for an administrator). */
   resetSecondFactor(request: Request, userId: string): Promise<Response>;
   /**
-   * The setup creates the first administrator's local account (fields `email`, any
+   * The setup creates the first administrator's sign-in account (fields `email`, any
    * address; `password`, `password_again`) and names them administrator; their first
    * sign-in enrols the second factor (ADR administrators-live-in-the-instance, §4).
    */
@@ -120,7 +120,7 @@ export async function setupCannotFinish(deps: {
     return 'Download the encryption key and confirm you kept it first.';
   }
   if ((await deps.administrators.withAWayIn()).length === 0) {
-    return 'Name an administrator who can sign in first: create their local account, or make the identity of a passed provider test an administrator.';
+    return 'Name an administrator who can sign in first: create their sign-in account, or make the identity of a passed provider test an administrator.';
   }
   return null;
 }
@@ -145,7 +145,12 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     email: string,
     actor: string,
   ): Promise<string[]> {
-    const issued = await deps.accounts.createLink({ kind, providerId, email, createdBy: actor });
+    const issued = await deps.signInAccounts.createLink({
+      kind,
+      providerId,
+      email,
+      createdBy: actor,
+    });
     const what = kind === 'invite' ? 'create their account' : 'choose a new password';
     if (deps.mailer) {
       await deps.mailer.sendLink({
@@ -168,7 +173,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
     if (err instanceof UserAdminError) {
       return { tone: 'danger', title, lines: [err.sentence] };
     }
-    if (err instanceof LocalAccountError) {
+    if (err instanceof SignInAccountError) {
       return { tone: 'danger', title, lines: [err.sentence] };
     }
     if (err instanceof AdministratorsError) {
@@ -271,9 +276,9 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       let notice: Notice;
       try {
         const local = await localProvider();
-        if (!local) throw new LocalAccountError('no-local-provider');
+        if (!local) throw new SignInAccountError('no-local-provider');
         if (field('password') !== field('password_again')) {
-          throw new LocalAccountError(
+          throw new SignInAccountError(
             'password-weak',
             'The two passwords differ. Type the same one twice.',
           );
@@ -281,7 +286,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         const actor = auditActorId(principal);
         // A new person: refused at the ceiling before the account exists (spec §4.3 bis).
         await deps.users.refuseNewUser();
-        const account = await deps.accounts.createAccount({
+        const signInAccount = await deps.signInAccounts.createSignInAccount({
           providerId: local.id,
           email,
           password: field('password'),
@@ -291,13 +296,13 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         // setup link, inside the instance (ADR administrators-live-in-the-instance, §4).
         const user = await deps.users.ensureIdentity({
           issuer: local.issuer.href,
-          subject: account.id,
-          email: account.email,
+          subject: signInAccount.id,
+          email: signInAccount.email,
         });
         await deps.administrators.grantUser(user.id, actor, 'setup');
         notice = {
           tone: 'success',
-          title: `Account of ${account.email} created`,
+          title: `Account of ${signInAccount.email} created`,
           lines: [
             'It administers this gateway. Sign in with it now: the first sign-in sets the second factor up and shows the recovery codes.',
           ],
@@ -308,7 +313,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       return redirectWithNotice(principal.sessionId, ADMIN_SETUP_PAGE, notice);
     },
 
-    async accountLink(request) {
+    async signInAccountLink(request) {
       const principal = await operatorOf(request);
       if (principal instanceof Response) return principal;
       const form = await readForm(request);
@@ -320,10 +325,10 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       let notice: Notice;
       try {
         const local = await localProvider();
-        if (!local) throw new LocalAccountError('no-local-provider');
+        if (!local) throw new SignInAccountError('no-local-provider');
         if (kind === 'invite' && !(await deps.invitations.isInvited(email.trim().toLowerCase()))) {
           // The link admits nobody by itself: the address must be invited first.
-          throw new LocalAccountError('not-admitted');
+          throw new SignInAccountError('not-admitted');
         }
         notice = {
           tone: 'success',

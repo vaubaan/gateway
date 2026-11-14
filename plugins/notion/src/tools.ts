@@ -5,7 +5,7 @@
  *
  * Every tool that acts on content takes `root`, the id of one of the
  * mission's Notion resources (a top-level page or database shared with the
- * connection) ; it may be omitted when the mission selects exactly one. The
+ * account) ; it may be omitted when the mission selects exactly one. The
  * `properties` of each schema are the whole argument surface of the tool :
  * any other argument is refused (`undeclaredArgument` in `classify.ts`).
  */
@@ -92,7 +92,7 @@ export const notionTools: readonly McpToolDeclaration[] = [
   {
     name: TOOL.getPage,
     description:
-      "Read a page's properties (title, icon, cover, database values). Its content is read with notion__list_block_children. A relation or a rollup may look empty when the related pages are not shared with the connection.",
+      "Read a page's properties (title, icon, cover, database values). Its content is read with notion__list_block_children. A relation or a rollup may look empty when the related pages are not shared with the account.",
     inputSchema: {
       type: 'object',
       properties: { ...root, page_id: id('The page.') },
@@ -308,7 +308,7 @@ export const notionTools: readonly McpToolDeclaration[] = [
   {
     name: TOOL.createComment,
     description:
-      'Open a discussion on a page or a block, or reply to an open discussion of that page or block. Signed by the connection; notifies the people it mentions.',
+      'Open a discussion on a page or a block, or reply to an open discussion of that page or block. Signed by the account; notifies the people it mentions.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -4,20 +4,20 @@
  * `ACME_CATALOG` is a small catalog with every shape issuance must handle
  * (account-scoped and env-scoped risks, a rate ceiling, a deprecated entry,
  * the fallback, three macro-actions, one of which holds env-scoped risks by
- * their base id); `acmeConnection()` is the issuance context of
- * one connection on it, for the pure tests. `seedConnection()` writes a
- * connection and its resources straight through the store repositories, the
- * way the Connections feature will, for the integration and browser tests.
+ * their base id); `acmeAccount()` is the issuance context of
+ * one account on it, for the pure tests. `seedAccount()` writes an
+ * account and its resources straight through the store repositories, the
+ * way the Accounts feature will, for the integration and browser tests.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { Principal, RiskCatalog } from '@vaubaan/shared';
 
 import { fullCatalogRiskIds } from '../../../src/server/authority';
 import type { Store } from '../../../src/server/store';
-import type { ConnectionRecord, ConnectionResourceRecord } from '../../../src/server/store/types';
+import type { AccountRecord, AccountResourceRecord } from '../../../src/server/store/types';
 import { enumerateCatalog } from '../../../src/lib/missions/catalog-view';
 import { macroActionsOf } from '../../../src/lib/missions/macro-actions';
-import type { IssuanceConnection, IssuanceResource } from '../../../src/lib/missions/model';
+import type { IssuanceAccount, IssuanceResource } from '../../../src/lib/missions/model';
 
 const READ_VECTOR = {
   reversibility: 'reversible',
@@ -151,8 +151,8 @@ export const ACME_STALE: IssuanceResource = {
   self: false,
 };
 
-/** The issuance context of an owner on one Acme connection. */
-export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): IssuanceConnection {
+/** The issuance context of an owner on one Acme account. */
+export function acmeAccount(overrides: Partial<IssuanceAccount> = {}): IssuanceAccount {
   return {
     id: 'conn-acme',
     provider: 'acme',
@@ -177,36 +177,36 @@ export interface SeedResource {
   readonly env?: string | null;
 }
 
-export interface SeededConnection {
-  readonly connection: ConnectionRecord;
-  readonly resources: readonly ConnectionResourceRecord[];
+export interface SeededAccount {
+  readonly account: AccountRecord;
+  readonly resources: readonly AccountResourceRecord[];
 }
 
-/** A connection with its resources, written through the repositories only. */
-export async function seedConnection(
-  store: Pick<Store, 'connections'>,
+/** An account with its resources, written through the repositories only. */
+export async function seedAccount(
+  store: Pick<Store, 'accounts'>,
   input: {
     readonly provider: string;
     readonly owner: Principal;
     readonly displayName: string;
     readonly resources: readonly SeedResource[];
   },
-): Promise<SeededConnection> {
-  const connection = await store.connections.create({
+): Promise<SeededAccount> {
+  const account = await store.accounts.create({
     provider: input.provider,
     owner: input.owner,
     displayName: input.displayName,
     credential: JSON.stringify({ kind: 'test', note: 'never sent upstream' }),
   });
-  const resources = await store.connections.syncDiscoveredResources(
-    connection.id,
+  const resources = await store.accounts.syncDiscoveredResources(
+    account.id,
     input.resources.map((r) => ({
       ref: r.ref,
       displayName: r.displayName ?? r.ref,
       env: r.env ?? null,
     })),
   );
-  return { connection, resources };
+  return { account, resources };
 }
 
 /** Every environment label a provider's catalog names, in first-seen order. */

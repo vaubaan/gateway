@@ -137,6 +137,15 @@ export const LEGACY_REDIRECTS: readonly {
   // The accounts without owner are the last region of Accounts (see
   // docs/handbook/web-app.md); the reassign action stays under /admin.
   { source: '/admin/connections', destination: '/accounts#without-owner' },
+  // The reassign action of an account without owner (a form post: 308 keeps it).
+  { source: '/admin/connections/:id/reassign', destination: '/admin/accounts/:id/reassign' },
+  // The pages of a sign-in account moved when "account" came to mean an account at a
+  // service (ADR one-word-per-thing-account-service-plugin): a link mailed before the
+  // upgrade still opens its page.
+  {
+    source: '/account/:page(create|reset|forgot)',
+    destination: '/sign-in-account/:page',
+  },
 ];
 
 const nextConfig: NextConfig = {

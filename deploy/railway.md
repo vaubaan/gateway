@@ -195,7 +195,7 @@ would still leave your machine; the clean archive above is the procedure.
 
 - **The master key**, separately and outside Railway: a copy of the volume
   without it opens no stored credential, and the key without the volume is
-  nothing. Losing the key loses every connection's credential. **A copy opens
+  nothing. Losing the key loses every account's credential. **A copy opens
   only with the keys of the versions it names** (the third line above), as
   they were when it was made: keep those keys with it. After a rotation
   (§8) the copies taken before need the old key.

@@ -12,7 +12,7 @@ last_reviewed: 2026-10-31
 
 # Authentication — handbook
 
-Sign-in providers (OIDC, GitHub, local accounts), admission, administrators,
+Sign-in providers (OIDC, GitHub, sign-in accounts), admission, administrators,
 web sessions, the bootstrap token and recovery. Spec:
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §4.2, §4.3, §6; ADRs
 [oidc-relying-party-and-web-session](../decisions/oidc-relying-party-and-web-session.md),
@@ -68,7 +68,7 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 - `groups` is requested only when `scopes_supported` lists it (Google refuses
   unknown scopes). Unreadable groups (userinfo failed, claim absent from the
   ID token) refuse the sign-in: syncing "no group" would strip groups, the
-  connections they own and administrator groups. An Entra overage pointer is
+  accounts they own and administrator groups. An Entra overage pointer is
   refused, never followed; Entra sends group object ids.
 - `readCookie` matches the name exactly (no `trim()`: ` __Host-…` is another
   cookie a sibling may plant); a name present twice reads as none.

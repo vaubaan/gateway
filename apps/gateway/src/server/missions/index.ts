@@ -11,11 +11,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
-import {
-  ConnectionAuthorityService,
-  type AuthorityService,
-  type MissionGrounds,
-} from '../authority';
+import { AccountAuthorityService, type AuthorityService, type MissionGrounds } from '../authority';
 import type { SessionService } from '../budget';
 import type { InstanceConfig } from '../config';
 import type { CeilingCheck } from '../limits';
@@ -45,7 +41,7 @@ export interface MissionsModuleDeps {
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
-  /** Defaults to a `ConnectionAuthorityService` over the store; the root injects its own. */
+  /** Defaults to a `AccountAuthorityService` over the store; the root injects its own. */
   readonly authority?: AuthorityService;
   /** Derives `orphaned` on every mission read (handbook authority). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
@@ -62,11 +58,11 @@ export interface MissionsModuleDeps {
 export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
   const authority =
     deps.authority ??
-    new ConnectionAuthorityService({
+    new AccountAuthorityService({
       registry: deps.registry,
       users: deps.store.users,
       groups: deps.store.groups,
-      connections: deps.store.connections,
+      accounts: deps.store.accounts,
       shares: deps.store.shares,
     });
   const service = new MissionService({
@@ -156,7 +152,7 @@ export {
   type LimitEdit,
   type MissionAccess,
   type MissionDetail,
-  type MissionDetailConnection,
+  type MissionDetailAccount,
   type MissionDetailRisk,
   type MissionIssuedAudit,
   type MissionOrphanReason,
@@ -202,7 +198,7 @@ export { reachedResources, takesFutureResources } from '../store/mission-reach';
 export {
   budgetProblem,
   defaultResources,
-  previewConnection,
+  previewAccount,
   previewDraft,
   uncoveredOf,
 } from '../../lib/missions/preview';

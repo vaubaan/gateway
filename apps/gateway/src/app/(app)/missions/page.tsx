@@ -99,7 +99,7 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
       header: 'Allows',
       nowrap: true,
       cell: ({ mission }) =>
-        `${count(mission.policy.length, TERMS.risk)} · ${count(mission.connections.length, TERMS.connection)}`,
+        `${count(mission.policy.length, TERMS.risk)} · ${count(mission.accounts.length, TERMS.account)}`,
     },
     {
       id: 'expires',

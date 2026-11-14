@@ -5,11 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import {
-  UpstreamAuthError,
-  type ConnectionContext,
-  type ExecuteContext,
-} from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, type AccountContext, type ExecuteContext } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import supabasePlugin, {
@@ -21,7 +17,7 @@ import supabasePlugin, {
 const PAT = 'sbp_fc0123456789abcdef0123456789abcdef0123';
 const REF = 'tlqgxnezmthbpzhdwxgi';
 
-function ctx(fetch: MockFetch): ConnectionContext {
+function ctx(fetch: MockFetch): AccountContext {
   return {
     credential: { kind: 'api-key', fields: { access_token: PAT }, metadata: {} },
     fetch,

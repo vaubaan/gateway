@@ -13,7 +13,7 @@
  *                 `wrong-credential-kind`
  *   grounds       the creator's authority, re-read on every request; a mission
  *                 whose grounds are gone reads `orphaned` for this request, and
- *                 a connection whose part is lost is marked `lost` in it
+ *                 an account whose part is lost is marked `lost` in it
  *   surface rate  requests per minute per mission, one window for both doors
  *
  * Each door renders a denial in its own protocol: JSON-RPC for MCP, HTTP and
@@ -61,7 +61,7 @@ export interface MissionAdmissionDeps {
     InstanceConfig,
     'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
   >;
-  readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
+  readonly store: Pick<Store, 'accounts' | 'users' | 'groups' | 'sessions'>;
   readonly tokens: TokenVerifier;
   readonly tokenUse: TokenUseRecorder;
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
@@ -228,13 +228,13 @@ export class MissionAdmission {
             this.deps.logger.info('mission orphaned at the execution surface', {
               mission_id: mission.id,
               cause: orphan.cause,
-              connection_id: orphan.connectionId,
+              account_id: orphan.accountId,
               uncovered: orphan.uncovered,
             });
           }
-          // A lost connection (revoked, or the creator's access withdrawn) is marked in
-          // the context: its calls are refused `connection-revoked`, its tools unlisted,
-          // and the mission serves through its other connections.
+          // A lost account (revoked, or the creator's access withdrawn) is marked in
+          // the context: its calls are refused `account-revoked`, its tools unlisted,
+          // and the mission serves through its other accounts.
           const context = await loadMissionContext(
             this.deps.store,
             mission,

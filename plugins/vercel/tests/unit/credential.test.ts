@@ -8,7 +8,7 @@ import {
   CredentialRefusal,
   UpstreamAuthError,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
 } from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
@@ -27,12 +27,12 @@ const PROJECT = `${VERCEL_API_BASE}/v9/projects/prj_app`;
 const ctx = (
   fetch: typeof globalThis.fetch,
   fields: Record<string, string> = { token: 'vcp_secret', team_id: 'team_abc' },
-): ConnectionContext => ({
+): AccountContext => ({
   credential: { kind: 'api-key', fields, metadata: {} },
   fetch,
 });
 
-const projectCtx = (fetch: typeof globalThis.fetch): ConnectionContext =>
+const projectCtx = (fetch: typeof globalThis.fetch): AccountContext =>
   ctx(fetch, { token: 'vcp_secret', project_id: 'prj_app' });
 
 const current = (token: Record<string, unknown>): MockRoute => ({

@@ -21,7 +21,7 @@
  * section says so and offers to apply it: the configuration grants nothing by itself.
  */
 import styles from '@/components/settings/settings.module.css';
-import { NoticeBanner } from '@/components/connections/parts';
+import { NoticeBanner } from '@/components/accounts/parts';
 import {
   Avatar,
   Button,
@@ -38,7 +38,7 @@ import {
   type Column,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { takeNotice, type PageSearchParams } from '@/lib/accounts/session';
 import {
   DOC_PAGES,
   ago,
@@ -429,8 +429,8 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         note={
           local
             ? sendsMail
-              ? 'Addresses allowed to sign in. With local accounts, inviting sends the person a link to create theirs.'
-              : 'Addresses allowed to sign in. With local accounts, inviting gives you a link to hand to the person; this gateway sends no mail.'
+              ? 'Addresses allowed to sign in. With sign-in accounts, inviting sends the person a link to create theirs.'
+              : 'Addresses allowed to sign in. With sign-in accounts, inviting gives you a link to hand to the person; this gateway sends no mail.'
             : 'Addresses allowed to sign in through any provider that verified them. Nothing is sent.'
         }
         testId="invitations"

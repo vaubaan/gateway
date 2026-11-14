@@ -2,7 +2,7 @@
  * Credential of the `gmail` provider — the mailbox's address and a Google
  * **app password**, with which the plugin signs in over IMAP.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §5, §7.2.
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §5, §7.2.
  * ADR  : docs/decisions/gmail-over-imap-with-an-app-password.md (D1).
  *
  * An app password is 16 letters Google prints in four groups of four ; it

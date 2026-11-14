@@ -79,7 +79,7 @@ export interface AuditFilter {
 
 /**
  * Whose audit a search may return (spec §4.2 "Audit", §6): the entries about the
- * missions one user created and about the connections some principals own, plus —
+ * missions one user created and about the accounts some principals own, plus —
  * for an operator — every administrative entry. A search always carries a scope;
  * an empty one (no creator, no member, no owner, `allAdmin` and `allCalls` false)
  * matches nothing.
@@ -92,11 +92,11 @@ export interface AuditScope {
    * them, their requests): a removed member reads none of them, past ones included.
    */
   readonly missionMemberUserId: string | null;
-  /** Entries about the connections these principals own (calls through them, acts on them). */
-  readonly connectionOwners: readonly Principal[];
+  /** Entries about the accounts these principals own (calls through them, acts on them). */
+  readonly accountOwners: readonly Principal[];
   /** Every administrative entry, whatever its object. */
   readonly allAdmin: boolean;
-  /** Every call entry, whatever its mission and its connection (an operator). */
+  /** Every call entry, whatever its mission and its account (an operator). */
   readonly allCalls: boolean;
 }
 
@@ -124,8 +124,8 @@ export interface AuditSearch {
   /** Acts performed by these users and calls of the missions they created. An empty
    *  list matches nothing. */
   readonly userIds?: readonly string[];
-  /** Calls through the connection and administrative acts on it. */
-  readonly connectionId?: string;
+  /** Calls through the account and administrative acts on it. */
+  readonly accountId?: string;
   /** Exact tool name (call entries only). */
   readonly tool?: string;
   /** Call entries only. */
@@ -286,7 +286,7 @@ interface AuditRow {
   token_kind: string | null;
   token_holder: string | null;
   session_id: string | null;
-  connection_id: string | null;
+  account_id: string | null;
   resource_ref: string | null;
   tool: string | null;
   arguments_hash: string | null;
@@ -327,7 +327,7 @@ const AUDIT_COLUMNS = [
   'token_kind',
   'token_holder',
   'session_id',
-  'connection_id',
+  'account_id',
   'resource_ref',
   'tool',
   'arguments_hash',
@@ -370,7 +370,7 @@ function callParams(id: string, e: CallAuditEntry, acceptedSetId: string): SqlPa
     token_kind: e.token_kind,
     token_holder: e.token_holder,
     session_id: e.session_id,
-    connection_id: e.connection_id,
+    account_id: e.account_id,
     resource_ref: e.resource_ref,
     tool: e.tool,
     arguments_hash: e.arguments_hash,
@@ -466,7 +466,7 @@ export function acceptedSetOf(snapshot: readonly RiskId[]): AcceptedSet {
 }
 
 const REQUESTS_OF_MISSION = 'SELECT id FROM requests WHERE mission_id';
-const SHARES_OF_CONNECTION = 'SELECT id FROM shares WHERE connection_id';
+const SHARES_OF_ACCOUNT = 'SELECT id FROM shares WHERE account_id';
 
 /**
  * The WHERE clause of `search`: the scope first (what the viewer may see at all), then
@@ -500,17 +500,17 @@ const EVERYTHING: SqlPiece = { sql: '1 = 1', params: [] };
  * docs/spec/vaubaan-gateway.md). An entry is in the scope when:
  *
  *   call   — the scope holds every call, or its mission is one the viewer created
- *            or is a current member of, or its connection is one they own;
+ *            or is a current member of, or its account is one they own;
  *   admin  — the scope holds every administrative entry, or its object is such a
- *            mission, a request of such a mission, a connection they own, a share
- *            of such a connection.
+ *            mission, a request of such a mission, an account they own, a share
+ *            of such an account.
  *
  * A dimension the scope does not hold is an always-false piece, never a placeholder
  * value that happens to match nothing. Each piece carries its own values, so adding
  * a dimension cannot shift the placeholders of another.
  */
 function scopePredicate(scope: AuditScope): SqlPiece {
-  const owners = principalPredicate(scope.connectionOwners, 'owner_user_id', 'owner_group_id');
+  const owners = principalPredicate(scope.accountOwners, 'owner_user_id', 'owner_group_id');
   const created: SqlPiece =
     scope.missionCreatorUserId === null
       ? { sql: 'SELECT id FROM missions WHERE 1 = 0', params: [] }
@@ -526,17 +526,17 @@ function scopePredicate(scope: AuditScope): SqlPiece {
           sql: 'SELECT mission_id FROM mission_members WHERE user_id = ? AND removed_at IS NULL',
           params: [scope.missionMemberUserId],
         };
-  const ownConnections: SqlPiece = {
-    sql: `SELECT id FROM connections WHERE ${owners.sql}`,
+  const ownAccounts: SqlPiece = {
+    sql: `SELECT id FROM accounts WHERE ${owners.sql}`,
     params: owners.params,
   };
   const requestsOf = (missions: SqlPiece): SqlPiece => ({
     sql: `${REQUESTS_OF_MISSION} IN (${missions.sql})`,
     params: missions.params,
   });
-  const sharesOf = (connections: SqlPiece): SqlPiece => ({
-    sql: `${SHARES_OF_CONNECTION} IN (${connections.sql})`,
-    params: connections.params,
+  const sharesOf = (accounts: SqlPiece): SqlPiece => ({
+    sql: `${SHARES_OF_ACCOUNT} IN (${accounts.sql})`,
+    params: accounts.params,
   });
   const about = (type: string, ids: SqlPiece): SqlPiece => {
     const inIds = inSet('object_id', ids);
@@ -547,7 +547,7 @@ function scopePredicate(scope: AuditScope): SqlPiece {
     scope.allCalls ? EVERYTHING : NOTHING,
     inSet('mission_id', created),
     inSet('mission_id', memberOf),
-    inSet('connection_id', ownConnections),
+    inSet('account_id', ownAccounts),
   ]);
   const admin = anyOf([
     scope.allAdmin ? EVERYTHING : NOTHING,
@@ -555,8 +555,8 @@ function scopePredicate(scope: AuditScope): SqlPiece {
     about('mission', memberOf),
     about('request', requestsOf(created)),
     about('request', requestsOf(memberOf)),
-    about('connection', ownConnections),
-    about('share', sharesOf(ownConnections)),
+    about('account', ownAccounts),
+    about('share', sharesOf(ownAccounts)),
   ]);
   return {
     sql: `((kind = 'call' AND ${calls.sql}) OR (kind = 'admin' AND ${admin.sql}))`,
@@ -598,11 +598,11 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
       );
     }
   }
-  if (query.connectionId) {
+  if (query.accountId) {
     add(
-      "(connection_id = ? OR (object_type = 'connection' AND object_id = ?))",
-      query.connectionId,
-      query.connectionId,
+      "(account_id = ? OR (object_type = 'account' AND object_id = ?))",
+      query.accountId,
+      query.accountId,
     );
   }
   if (query.tool) add('tool = ?', query.tool);
@@ -840,7 +840,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       token_kind: tokenKind,
       token_holder: tokenKind === null ? null : row.token_holder,
       session_id: row.session_id,
-      connection_id: row.connection_id,
+      account_id: row.account_id,
       resource_ref: row.resource_ref,
       tool: requireColumn(row.tool, 'audit.tool'),
       arguments_hash: requireColumn(row.arguments_hash, 'audit.arguments_hash'),

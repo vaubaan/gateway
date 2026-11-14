@@ -3,13 +3,13 @@
  * (`@vaubaan/gateway-core` `MissionContext`), loaded from the store on every
  * request.
  *
- * Spec §3.1 "Resource selection": a mission names, per connection, the
+ * Spec §3.1 "Resource selection": a mission names, per account, the
  * resources it may touch. What it reaches is `reachedResources`
  * (`store/mission-reach.ts`), the rule the mission page and the bootstrap kit
  * read too:
  *
  * - a mission reaches exactly the rows whose id its resource sets store, never the
- *   connection's live list: a resource found later is reached once a set with
+ *   account's live list: a resource found later is reached once a set with
  *   future on took it into its list (ADR
  *   resource-set-is-one-environment-with-optional-future-resources; handbook
  *   missions);
@@ -30,18 +30,18 @@
  * "list" tool that filters its answer to the mission (`fly__list_apps`,
  * `cloudflare_dns__list_zones`) sees the same lists.
  *
- * A connection whose part of the mission is lost (revoked, or the creator's
- * access to it withdrawn: `MissionGrounds`) stays in `connections`, marked
- * `lost`: the pipeline refuses its calls `connection-revoked` and `tools/list`
+ * An account whose part of the mission is lost (revoked, or the creator's
+ * access to it withdrawn: `MissionGrounds`) stays in `accounts`, marked
+ * `lost`: the pipeline refuses its calls `account-revoked` and `tools/list`
  * leaves its tools out, while the mission serves through the others.
  *
  * Nothing here is cached: the reads are local (SQLite) and a revocation, an
- * expired connection or a stale resource must be seen by the next call.
+ * expired account or a stale resource must be seen by the next call.
  */
 import type {
   AuthenticatedToken,
-  ConnectionOwner,
-  MissionConnection,
+  AccountOwner,
+  MissionAccount,
   MissionContext,
   MissionResource,
   MissionResourceSet,
@@ -50,27 +50,27 @@ import type {
 import { periodOf, policyEntryOf } from '../budget';
 import { isSelfResource, type SelfResource } from '../config';
 import {
-  connectionCredentialKind,
-  connectionOwnerOf,
-  connectionPublicFields,
-  connectionSummaryOf,
-} from '../connections/mapping';
+  accountCredentialKind,
+  accountOwnerOf,
+  accountPublicFields,
+  accountSummaryOf,
+} from '../accounts/mapping';
 import type { LostPart } from '../authority';
 import type { Store } from '../store';
 import { reachedResourcesBySet, takesFutureResources } from '../store/mission-reach';
-import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
+import type { AccountRecord, AccountResourceRecord, MissionRecord } from '../store/types';
 
-export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
+export type MissionContextStore = Pick<Store, 'accounts' | 'users' | 'groups' | 'sessions'>;
 
-/** The shared `ConnectionResource` of a stored row — what `classify` and `execute` receive. */
+/** The shared `AccountResource` of a stored row — what `classify` and `execute` receive. */
 export function missionResourceOf(
-  connection: Pick<ConnectionRecord, 'id' | 'provider'>,
-  record: ConnectionResourceRecord,
+  account: Pick<AccountRecord, 'id' | 'provider'>,
+  record: AccountResourceRecord,
 ): MissionResource {
   return {
     id: record.id,
-    connection_id: connection.id,
-    provider: connection.provider,
+    account_id: account.id,
+    provider: account.provider,
     ref: record.ref,
     env: record.env,
     displayName: record.displayName,
@@ -82,9 +82,9 @@ export function missionResourceOf(
 /** What a refusal shows so a human can be contacted: the user's email or the group's name. */
 async function ownerOf(
   store: Pick<Store, 'users' | 'groups'>,
-  connection: ConnectionRecord,
-): Promise<ConnectionOwner> {
-  const { kind, id, name } = await connectionOwnerOf(store, connection);
+  account: AccountRecord,
+): Promise<AccountOwner> {
+  const { kind, id, name } = await accountOwnerOf(store, account);
   return { kind, id, display: name ?? `a ${kind} that no longer exists` };
 }
 
@@ -98,54 +98,54 @@ export async function loadMissionContext(
   token: AuthenticatedToken,
   /** The instance's own resources: never part of a mission's context. */
   selfResources: readonly SelfResource[],
-  /** The connections whose part of the mission is lost (`MissionGrounds.inspect`). */
+  /** The accounts whose part of the mission is lost (`MissionGrounds.inspect`). */
   lost: readonly LostPart[] = [],
 ): Promise<MissionContext> {
-  const connections: MissionConnection[] = [];
+  const accounts: MissionAccount[] = [];
   const resources: MissionResource[] = [];
   const resourceSets: MissionResourceSet[] = [];
-  const lostOn = new Map(lost.map((part) => [part.connectionId, part.cause] as const));
+  const lostOn = new Map(lost.map((part) => [part.accountId, part.cause] as const));
 
-  for (const selection of mission.connections) {
-    const connection = await store.connections.getById(selection.connectionId);
-    // Connections are never deleted (revocation keeps the row); a missing one
+  for (const selection of mission.accounts) {
+    const account = await store.accounts.getById(selection.accountId);
+    // Accounts are never deleted (revocation keeps the row); a missing one
     // simply gives the mission nothing to call.
-    if (!connection) continue;
-    const discovered = await store.connections.listResources(connection.id);
-    const loss = lostOn.get(connection.id);
-    connections.push({
-      ...connectionSummaryOf(connection),
-      owner: await ownerOf(store, connection),
-      credential_kind: connectionCredentialKind(connection, null),
-      // What the classifier may cite of the connection (a Fly organization): never a secret.
-      public_fields: connectionPublicFields(connection),
+    if (!account) continue;
+    const discovered = await store.accounts.listResources(account.id);
+    const loss = lostOn.get(account.id);
+    accounts.push({
+      ...accountSummaryOf(account),
+      owner: await ownerOf(store, account),
+      credential_kind: accountCredentialKind(account, null),
+      // What the classifier may cite of the account (a Fly organization): never a secret.
+      public_fields: accountPublicFields(account),
       // Any resource it reaches, selected or not, stale or not: the credential still reaches it.
       hosts_instance: discovered.some((r) =>
-        isSelfResource(selfResources, connection.provider, r.ref),
+        isSelfResource(selfResources, account.provider, r.ref),
       ),
       ...(takesFutureResources(selection) ? { takes_future_resources: true } : {}),
-      // A revoked connection is lost whatever the grounds said: its status is final.
+      // A revoked account is lost whatever the grounds said: its status is final.
       ...(loss === 'access-withdrawn'
         ? { lost: 'access-withdrawn' as const }
-        : loss || connection.status === 'revoked'
-          ? { lost: 'connection-revoked' as const }
+        : loss || account.status === 'revoked'
+          ? { lost: 'account-revoked' as const }
           : {}),
     });
     const bySet = reachedResourcesBySet(selection, discovered, (r) =>
-      isSelfResource(selfResources, connection.provider, r.ref),
+      isSelfResource(selfResources, account.provider, r.ref),
     );
     for (const set of selection.resourceSets) {
       const reached = bySet.get(set.id) ?? [];
       resourceSets.push({
         id: set.id,
-        connection_id: connection.id,
+        account_id: account.id,
         position: set.position,
         resource_ids: reached.map((r) => r.id),
       });
     }
     const reachedIds = new Set([...bySet.values()].flat().map((r) => r.id));
     for (const record of discovered) {
-      if (reachedIds.has(record.id)) resources.push(missionResourceOf(connection, record));
+      if (reachedIds.has(record.id)) resources.push(missionResourceOf(account, record));
     }
   }
 
@@ -160,7 +160,7 @@ export async function loadMissionContext(
       period: periodOf(mission),
     },
     token: { id: token.id, prefix: token.prefix, holder: token.holder },
-    connections,
+    accounts,
     resources,
     resource_sets: resourceSets,
     policy: mission.policy.map(policyEntryOf),

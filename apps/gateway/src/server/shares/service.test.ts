@@ -9,7 +9,7 @@ import {
   WRITE_STAGING,
   type AuthorityRig,
 } from '../../../tests/integration/authority/support';
-import type { Actor } from '../connections';
+import type { Actor } from '../accounts';
 import type { ShareInput } from './service';
 import { labellingOf } from './service';
 
@@ -30,8 +30,8 @@ describe('ShareService', () => {
     await rig.close();
   });
 
-  const share = (input: ShareInput) => rig.root.shares.service.share(ada, rig.connection.id, input);
-  const stored = () => rig.root.store.shares.listForConnection(rig.connection.id);
+  const share = (input: ShareInput) => rig.root.shares.service.share(ada, rig.account.id, input);
+  const stored = () => rig.root.store.shares.listForAccount(rig.account.id);
   const restrictionRows = () =>
     rig.root.store.db
       .prepare<[], { risk_id: string }>('SELECT risk_id FROM share_restrictions ORDER BY risk_id')
@@ -42,7 +42,7 @@ describe('ShareService', () => {
     it('stores the restriction as one row per risk, in catalog order, and audits it', async () => {
       const outcome = await share(toBob([WRITE_STAGING, READ, READ]));
       expect(outcome.share).toMatchObject({
-        connectionId: rig.connection.id,
+        accountId: rig.account.id,
         target: { kind: 'user', id: rig.bob.id },
         restriction: [READ, WRITE_STAGING],
         status: 'active',
@@ -60,7 +60,7 @@ describe('ShareService', () => {
           object: { type: 'share', id: outcome.share.id },
           before: null,
           after: {
-            connection_id: rig.connection.id,
+            account_id: rig.account.id,
             target: { kind: 'user', id: rig.bob.id },
             restriction: [READ, WRITE_STAGING],
           },
@@ -161,32 +161,28 @@ describe('ShareService', () => {
       expect(context?.authority).toEqual([READ, PROFILE]);
     });
 
-    it('refuses to share a revoked connection', async () => {
-      await rig.root.connections.service.revoke(ada, rig.connection.id);
-      await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'connection-revoked' });
+    it('refuses to share a revoked account', async () => {
+      await rig.root.accounts.service.revoke(ada, rig.account.id);
+      await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'account-revoked' });
     });
 
-    it('refuses to share an unowned connection, even for a member who joined the emptied owner group again', async () => {
+    it('refuses to share an unowned account, even for a member who joined the emptied owner group again', async () => {
       const admins = await rig.root.groups.service.create(rig.operator.id, 'depot-admins');
       await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
-      await rig.root.connections.service.transfer(
-        await rig.actor(rig.ada),
-        rig.connection.id,
-        admins.id,
-      );
+      await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, admins.id);
       await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
       await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
-      // Ada is a member of the owner group again; the connection stays `unowned`
+      // Ada is a member of the owner group again; the account stays `unowned`
       // until the operator reassigns it (spec §2.3).
-      expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+      expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('unowned');
       await expect(
-        rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, toBob([READ])),
-      ).rejects.toMatchObject({ code: 'connection-unowned', status: 409 });
+        rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, toBob([READ])),
+      ).rejects.toMatchObject({ code: 'account-unowned', status: 409 });
       expect(await stored()).toEqual([]);
     });
 
-    it('refuses a connection whose provider has no registered plugin', async () => {
-      // A plugin removed from the build after the connection was made: simulated in the registry.
+    it('refuses an account whose provider has no registered plugin', async () => {
+      // A plugin removed from the build after the account was made: simulated in the registry.
       const get = vi.spyOn(rig.root.registry, 'get').mockImplementation(() => undefined);
       try {
         await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'provider-unknown' });
@@ -199,7 +195,7 @@ describe('ShareService', () => {
     it('settles a share even when its own entry cannot be written', async () => {
       const { share: granted } = await share(toBob([READ]));
       const mission = await rig.issueFor(rig.bob, [READ]);
-      await rig.root.shares.service.revoke(ada, granted.id, granted.connectionId);
+      await rig.root.shares.service.revoke(ada, granted.id, granted.accountId);
       expect(await rig.statusOf(mission)).toBe('orphaned');
 
       vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
@@ -216,32 +212,32 @@ describe('ShareService', () => {
   describe('revoke', () => {
     it('is terminal, audited, and idempotent', async () => {
       const { share: granted } = await share(toBob([READ]));
-      const first = await rig.root.shares.service.revoke(ada, granted.id, granted.connectionId);
+      const first = await rig.root.shares.service.revoke(ada, granted.id, granted.accountId);
       expect(first).toMatchObject({
         share: { status: 'revoked' },
         targetLabel: 'bob@example.com',
         orphaned: 0,
       });
       expect(first.share.revokedAt).not.toBeNull();
-      const again = await rig.root.shares.service.revoke(ada, granted.id, granted.connectionId);
+      const again = await rig.root.shares.service.revoke(ada, granted.id, granted.accountId);
       expect(again).toMatchObject({ share: { status: 'revoked' }, orphaned: 0 });
       expect(await rig.adminEntries('share-revoked')).toHaveLength(1);
       await expect(
-        rig.root.shares.service.revoke(ada, 'nope', granted.connectionId),
+        rig.root.shares.service.revoke(ada, 'nope', granted.accountId),
       ).rejects.toMatchObject({ code: 'not-found' });
-      // Named with another connection, a share is not there either.
+      // Named with another account, a share is not there either.
       await expect(
-        rig.root.shares.service.revoke(ada, granted.id, 'another-connection'),
+        rig.root.shares.service.revoke(ada, granted.id, 'another-account'),
       ).rejects.toMatchObject({ code: 'not-found' });
     });
 
-    it('answers not-found for a share that is not of the connection the route names', async () => {
+    it('answers not-found for a share that is not of the account the route names', async () => {
       const { share: granted } = await share(toBob([READ]));
       await expect(
-        rig.root.shares.service.revoke(ada, granted.id, 'another-connection'),
+        rig.root.shares.service.revoke(ada, granted.id, 'another-account'),
       ).rejects.toMatchObject({ code: 'not-found' });
       expect((await stored())[0]?.status).toBe('active');
-      const revoked = await rig.root.shares.service.revoke(ada, granted.id, rig.connection.id);
+      const revoked = await rig.root.shares.service.revoke(ada, granted.id, rig.account.id);
       expect(revoked.share.status).toBe('revoked');
     });
 
@@ -256,7 +252,7 @@ describe('ShareService', () => {
         await shares.revoke(key);
         return seen;
       });
-      const outcome = await rig.root.shares.service.revoke(ada, granted.id, granted.connectionId);
+      const outcome = await rig.root.shares.service.revoke(ada, granted.id, granted.accountId);
       expect(outcome).toMatchObject({ share: { status: 'revoked' }, orphaned: 0 });
       // The entry belongs to the act that revoked; this one wrote none.
       expect(await rig.adminEntries('share-revoked')).toEqual([]);
@@ -267,7 +263,7 @@ describe('ShareService', () => {
       const mission = await rig.issueFor(rig.bob, [READ]);
       vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
       await expect(
-        rig.root.shares.service.revoke(ada, granted.id, granted.connectionId),
+        rig.root.shares.service.revoke(ada, granted.id, granted.accountId),
       ).rejects.toThrow('audit down');
       expect((await stored())[0]?.status).toBe('revoked');
       expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
@@ -284,9 +280,9 @@ describe('ShareService', () => {
         target: { kind: 'group', groupId: team.id },
         riskIds: [PURGE],
       });
-      await rig.root.shares.service.revoke(ada, revoked.share.id, revoked.share.connectionId);
+      await rig.root.shares.service.revoke(ada, revoked.share.id, revoked.share.accountId);
 
-      const context = await rig.root.shares.service.contextFor(ada, rig.connection.id);
+      const context = await rig.root.shares.service.contextFor(ada, rig.account.id);
       expect(context.providerLabel).toBe('Depot');
       expect(context.risks.map((r) => r.risk_id)).toEqual([
         READ,
@@ -339,7 +335,7 @@ describe('ShareService', () => {
       const [context] = await rig.root.missions.service.issuanceContext(rig.bob);
       expect(context?.authority).toEqual([READ]);
 
-      await rig.root.shares.service.revoke(ada, granted.id, granted.connectionId);
+      await rig.root.shares.service.revoke(ada, granted.id, granted.accountId);
       expect(await rig.root.shares.service.received(await rig.actor(rig.bob))).toEqual([]);
     });
   });

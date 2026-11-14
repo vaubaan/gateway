@@ -5,7 +5,7 @@ tracks:
   - scripts/export-v4-lib.mjs
   - scripts/build-commands.mjs
   - apps/gateway/src/server/import-v4/
-  - apps/gateway/src/server/connections/service.ts
+  - apps/gateway/src/server/accounts/service.ts
 last_reviewed: 2026-11-04
 ---
 
@@ -20,7 +20,7 @@ The rest of the cut-over: [first-install](first-install.md).
 
 - [`scripts/export-v4.mjs`](../../scripts/export-v4.mjs) — the exporter, run on the operator's machine.
 - [`import-v4/cli.ts`](../../apps/gateway/src/server/import-v4/cli.ts) — the importer command, in the container.
-- [`import-v4/importer.ts`](../../apps/gateway/src/server/import-v4/importer.ts) — connections, resources, missions.
+- [`import-v4/importer.ts`](../../apps/gateway/src/server/import-v4/importer.ts) — accounts, resources, missions.
 - [`import-v4/risk-translation.ts`](../../apps/gateway/src/server/import-v4/risk-translation.ts) — v4 risk ids to v5.
 
 ## Invariants

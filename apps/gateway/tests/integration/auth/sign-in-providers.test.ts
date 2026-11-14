@@ -15,7 +15,7 @@ import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
-import { seedConnection } from '../../support/missions/testing';
+import { seedAccount } from '../../support/missions/testing';
 import { FakeGithub, routeFetch, type FakeGithubUser } from './fake-github';
 import { answerAnyDiscovery, FakeIdp } from './fake-idp';
 
@@ -394,7 +394,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     await signIn(b, 'github');
     const ada = await root.store.users.getByIdentity(github.issuer, '1001');
     if (!ada) throw new Error('Ada was not created');
-    const seeded = await seedConnection(root.store, {
+    const seeded = await seedAccount(root.store, {
       provider: 'github',
       owner: { kind: 'user', id: ada.id },
       displayName: 'ada-org',
@@ -402,9 +402,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     });
     const issued = await root.missions.service.issue(ada, {
       name: 'ada-app',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.connection.id,
+          account_id: seeded.account.id,
           trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],

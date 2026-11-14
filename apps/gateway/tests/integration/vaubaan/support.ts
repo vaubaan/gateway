@@ -3,7 +3,7 @@
  * mission by an agent within the user's authority and refusal beyond it"; ADR
  * platform-management-is-a-plugin-on-the-execution-door): the real composition
  * root on the `:memory:` store, a simulated IdP, the instance's HTTP surface as
- * one `fetch`, Ada's seeded connections on the shipped plugins, and an
+ * one `fetch`, Ada's seeded accounts on the shipped plugins, and an
  * **agent** — the official MCP client on the execution door, holding the key of
  * a platform management mission on its user's Vaubaan account.
  *
@@ -17,7 +17,7 @@ import { TOOL_PREFIX } from '@vaubaan/plugin-vaubaan';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import type { Actor } from '../../../src/server/connections';
+import type { Actor } from '../../../src/server/accounts';
 import { retiredManagementDoorResponse } from '../../../src/server/execution/retired-door';
 import { executionResourceMetadataResponse } from '../../../src/server/execution/resource-metadata';
 import type { UserRecord } from '../../../src/server/store/types';
@@ -331,11 +331,11 @@ export async function openVaubaanRig(options: InstanceOptions = {}): Promise<Vau
     },
     async agentOf(claims = ADA, trustLevels = PLATFORM_AUTONOMOUS) {
       const user = claims.email === BOB.email ? seeded.bob : seeded.ada;
-      const started = await root.connections.service.start(await rig.actor(user), 'vaubaan');
+      const started = await root.accounts.service.start(await rig.actor(user), 'vaubaan');
       if (started.kind !== 'connected') throw new Error('a Vaubaan account connects at once');
       const issued = await root.missions.service.issue(user, {
         name: 'Platform management',
-        connections: [{ connection_id: started.connection.id, trust_levels: trustLevels }],
+        accounts: [{ account_id: started.account.id, trust_levels: trustLevels }],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });
@@ -346,7 +346,7 @@ export async function openVaubaanRig(options: InstanceOptions = {}): Promise<Vau
         missionId: issued.mission.id,
         token,
         user,
-        accountId: started.connection.id,
+        accountId: started.account.id,
         client,
         async toolNames() {
           return (await client.listTools()).tools.map((tool) => tool.name);
@@ -390,17 +390,17 @@ export async function openVaubaanRig(options: InstanceOptions = {}): Promise<Vau
   return rig;
 }
 
-/** A draft on one connection with explicit risks, each with its budget. */
+/** A draft on one account with explicit risks, each with its budget. */
 export function draftOn(
-  connectionId: string,
+  accountId: string,
   riskIds: readonly string[],
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
     name: 'Fix the flaky test',
-    connections: [
+    accounts: [
       {
-        connection_id: connectionId,
+        account_id: accountId,
         resources: { scope: 'all' },
         policy: riskIds.map((risk_id) => ({
           risk_id,

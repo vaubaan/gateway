@@ -221,7 +221,7 @@ describe('execution door: one mission, several token holders', () => {
     const NONE = {
       missionId: null,
       user: null,
-      connectionId: null,
+      accountId: null,
       tool: null,
       decision: null,
       agentLabel: null,

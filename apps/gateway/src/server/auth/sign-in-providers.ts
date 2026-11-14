@@ -53,7 +53,7 @@ export type SignInProviderView = SignInProviderWithoutSecret & {
   /**
    * Whether people may sign in through it (ADR administrators-live-in-the-instance,
    * §5): a provider of the configuration always; one saved in Settings once an
-   * administrator enabled it after a passed test (local accounts: when added).
+   * administrator enabled it after a passed test (sign-in accounts: when added).
    */
   readonly enabled: boolean;
   /** The public address the provider was set up for; `ProviderState.registeredFor`. */
@@ -464,7 +464,7 @@ export class SignInProvidersService {
 
   /**
    * Waives the second factor for this provider's people, or asks it again (`null`).
-   * Local accounts never; GitHub `always` only (it sends no `amr`). Works for a
+   * Sign-in accounts never; GitHub `always` only (it sends no `amr`). Works for a
    * provider of the file too: the waiver lives in the store, never in the
    * configuration. Returns the waiver it replaced.
    */
@@ -476,7 +476,7 @@ export class SignInProvidersService {
     if (!provider) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
     if (waiver !== null && provider.kind === 'local') {
       throw new IdpSettingsError([
-        'the second factor of local accounts is the instance’s own: it cannot be waived',
+        'the second factor of sign-in accounts is the instance’s own: it cannot be waived',
       ]);
     }
     if (waiver === 'amr' && provider.kind !== 'oidc') {
@@ -499,7 +499,7 @@ export class SignInProvidersService {
 
   /**
    * Switches a provider saved in Settings on or off. On: only after a test that passed
-   * since its last save (local accounts need none). A file provider cannot be switched.
+   * since its last save (sign-in accounts need none). A file provider cannot be switched.
    */
   async setEnabled(id: string, enabled: boolean): Promise<SignInProvider> {
     if (this.isReadOnly(id)) {
@@ -552,7 +552,7 @@ export class SignInProvidersService {
   ): Promise<{ saved: SignInProvider; before: SignInProvider | null }> {
     const result = await this.saveSettings(input, mode);
     // A new provider that redirects is saved off, and switched on after a passed
-    // test; local accounts have nothing to test. An edit keeps the switch, and makes
+    // test; sign-in accounts have nothing to test. An edit keeps the switch, and makes
     // the last test stale (ADR administrators-live-in-the-instance, §5).
     const current = parseState(await this.store.get(stateKey(result.saved.id)));
     await this.store.set(
@@ -608,7 +608,7 @@ export class SignInProvidersService {
       const twin = others.find((p) => p.kind === 'local');
       if (twin) {
         problems.push(
-          `provider '${twin.id}' already keeps this gateway's local accounts: one local provider per instance`,
+          `provider '${twin.id}' already keeps this gateway's sign-in accounts: one local provider per instance`,
         );
       }
       problems.push(

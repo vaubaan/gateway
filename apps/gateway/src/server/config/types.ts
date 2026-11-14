@@ -102,7 +102,7 @@ export function isMailTlsMode(raw: string): raw is MailTlsMode {
 
 /**
  * Mail delivery (`mail.*`; ADR local-accounts-sign-in-provider, D6): the relay the
- * instance sends its own mail through — the links of the local accounts. `null` when
+ * instance sends its own mail through — the links of the sign-in accounts. `null` when
  * the configuration sets no relay: the links are then handed over by an administrator.
  */
 export interface MailConfig {
@@ -234,7 +234,7 @@ export interface LimitsConfig {
   /** People not removed (`users.status = 'active'`). */
   readonly users: number | null;
   /** Connected accounts not revoked, every owner together. */
-  readonly connections: number | null;
+  readonly accounts: number | null;
   /** Missions neither revoked nor past their end, orphaned ones included. */
   readonly activeMissions: number | null;
 }
@@ -317,6 +317,13 @@ export interface InstanceConfig {
    * says once that they are ignored, and the instance starts.
    */
   readonly retiredManagementKeys: readonly string[];
+  /**
+   * Old names of renamed keys and variables the configuration still uses
+   * (`limits.connections`, `VAUBAAN_LIMITS_CONNECTIONS`; ADR
+   * one-word-per-thing-account-service-plugin): read under their new name, the
+   * root warns once for each.
+   */
+  readonly deprecatedKeys: readonly { readonly old: string; readonly current: string }[];
   readonly bootstrapToken: string | null;
   readonly telemetry: TelemetryConfig;
   /** Mail delivery, or `null` when no relay is configured. */
@@ -344,7 +351,7 @@ export interface InstanceConfig {
    * how long one git request may last, in seconds. Both fail closed.
    */
   readonly git: { readonly maxPackBytes: number; readonly requestTimeoutSeconds: number };
-  /** Ceilings on users, connections and active missions; each `null` when unlimited. */
+  /** Ceilings on users, accounts and active missions; each `null` when unlimited. */
   readonly limits: LimitsConfig;
   /** The counters endpoint for the operator's monitoring. */
   readonly ops: OpsConfig;

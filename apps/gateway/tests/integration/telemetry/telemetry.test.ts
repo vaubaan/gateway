@@ -475,8 +475,8 @@ describe('community telemetry', () => {
       });
 
       const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
-      expect(body.error?.data?.code).toBe('connection-unavailable');
-      // The connection is now expired: the next call never reaches the plugin.
+      expect(body.error?.data?.code).toBe('account-unavailable');
+      // The account is now expired: the next call never reaches the plugin.
       await instance.call(mission, 'depot__read_item', { space: 'scratch' });
       await r.drain();
 
@@ -615,7 +615,7 @@ describe('community telemetry', () => {
     });
   });
 
-  describe('validation status of a connection', () => {
+  describe('validation status of an account', () => {
     it('reads plugin_stats once, caches it, and names the status of the running version', async () => {
       const r = await open(
         { VAUBAAN_TELEMETRY_ENABLED: 'true', VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL },
@@ -634,14 +634,14 @@ describe('community telemetry', () => {
       );
       const { stats } = r.instance.root.telemetry;
 
-      expect(await stats.statusFor(r.instance.connection.provider)).toBeNull();
+      expect(await stats.statusFor(r.instance.account.provider)).toBeNull();
       await stats.refresh();
-      expect(await stats.statusFor(r.instance.connection.provider)).toEqual({
+      expect(await stats.statusFor(r.instance.account.provider)).toEqual({
         validated: true,
         reports: 640,
         successRate: 0.962,
       });
-      await stats.statusFor(r.instance.connection.provider);
+      await stats.statusFor(r.instance.account.provider);
       expect(r.collector).toHaveBeenCalledTimes(1);
     });
 

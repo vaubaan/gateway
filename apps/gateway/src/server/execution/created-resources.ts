@@ -9,22 +9,22 @@
  *   read      the plugin reads the resource(s) the call created from its answer
  *             (`createdResources`, pure); a resource of another provider, without
  *             a ref, or one of the instance's own (`isSelfResource`) is left out
- *   record    `ConnectionsRepo.upsertDiscoveredResources`: the row is inserted (it
- *             reads the connection's default environment) or its stale flag cleared,
+ *   record    `AccountsRepo.upsertDiscoveredResources`: the row is inserted (it
+ *             reads the account's default environment) or its stale flag cleared,
  *             owner edits kept, no other row touched
  *   join      `MissionsRepo.addResources(…, 'created')`: added to the list of the
  *             resource set the call was judged against (judged against several: the
  *             candidate with future on in its environment, else one in its
  *             environment, else the first of them, risk model §4.7)
  *   audit     one `mission-resources-added` entry, cause `created-by-the-mission`,
- *             with the mission, the connection, the tool and the refs; the actor is
+ *             with the mission, the account, the tool and the refs; the actor is
  *             the human behind the call's key
  *   future    the other running missions' sets with future on in the new resource's
  *             environment take it (`FutureResources.settle`, ADR
  *             resource-set-is-one-environment-with-optional-future-resources)
  *
  * It returns the refs it recorded, for the discovery after the call (which looks
- * again while the provider does not list them). A failure is logged — connection,
+ * again while the provider does not list them). A failure is logged — account,
  * tool, mission, never the arguments — and never changes the call's outcome: the
  * step returns `[]` and the discovery after the call runs as before.
  */
@@ -32,9 +32,9 @@ import type { AuditWriter, MissionContext } from '@vaubaan/gateway-core';
 import type { McpToolResult, PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { isSelfResource, type SelfResource } from '../config';
-import { callerUserId, type AnsweredCall } from '../connections/discovery-after-call';
-import type { FutureResources } from '../connections/future-resources';
-import { usableResourcesOf } from '../connections/input';
+import { callerUserId, type AnsweredCall } from '../accounts/discovery-after-call';
+import type { FutureResources } from '../accounts/future-resources';
+import { usableResourcesOf } from '../accounts/input';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
@@ -44,7 +44,7 @@ export const CREATED_BY_THE_MISSION = 'created-by-the-mission';
 
 export interface CreatedResourcesDeps {
   readonly registry: Pick<PluginRegistry, 'providerForTool'>;
-  readonly store: Pick<Store, 'connections' | 'missions'>;
+  readonly store: Pick<Store, 'accounts' | 'missions'>;
   readonly audit: AuditWriter;
   readonly selfResources: readonly Pick<SelfResource, 'provider' | 'ref'>[];
   readonly logger: Logger;
@@ -58,20 +58,20 @@ export class CreatedResources {
 
   /**
    * Records what an answered call created and adds it to the mission. Returns the
-   * refs recorded on the connection (`[]` when the call created nothing the plugin
+   * refs recorded on the account (`[]` when the call created nothing the plugin
    * could read, or on a failure). Never throws.
    */
   async record(ctx: MissionContext, call: AnsweredCall): Promise<readonly string[]> {
-    const { connectionId } = call;
-    if (connectionId === null || !isToolResult(call.result) || call.result.isError === true) {
+    const { accountId } = call;
+    if (accountId === null || !isToolResult(call.result) || call.result.isError === true) {
       return [];
     }
     const registered = this.deps.registry.providerForTool(call.tool);
     const plugin = registered?.plugin;
     if (!plugin?.resourceCreatingTools?.includes(call.tool) || !plugin.createdResources) return [];
-    const connection = ctx.connections.find((c) => c.id === connectionId);
-    if (!connection || connection.provider !== plugin.id) return [];
-    const context = { connection_id: connectionId, tool: call.tool, mission_id: ctx.mission.id };
+    const account = ctx.accounts.find((c) => c.id === accountId);
+    if (!account || account.provider !== plugin.id) return [];
+    const context = { account_id: accountId, tool: call.tool, mission_id: ctx.mission.id };
     try {
       const { usable, unusable } = usableResourcesOf(
         plugin.id,
@@ -88,17 +88,14 @@ export class CreatedResources {
         });
       }
       if (created.length === 0) return [];
-      const before = await this.deps.futureResources?.snapshot(connectionId);
-      const rows = await this.deps.store.connections.upsertDiscoveredResources(
-        connectionId,
-        created,
-      );
+      const before = await this.deps.futureResources?.snapshot(accountId);
+      const rows = await this.deps.store.accounts.upsertDiscoveredResources(accountId, created);
       // The sets the creating call was judged against: the store places the resource in
       // the one set, else the candidate in its environment (future first), else the
       // first candidate (risk model §4.7).
       const joined = await this.deps.store.missions.addResources(
         ctx.mission.id,
-        connectionId,
+        accountId,
         rows.map((r) => r.id),
         'created',
         { tool: call.tool, actorUserId: callerUserId(ctx) },
@@ -114,7 +111,7 @@ export class CreatedResources {
         before: null,
         after: {
           cause: CREATED_BY_THE_MISSION,
-          connection_id: connectionId,
+          account_id: accountId,
           tool: call.tool,
           refs,
           resource_set_ids: [...new Set(joined.placed.map((p) => p.resourceSetId))],
@@ -122,7 +119,7 @@ export class CreatedResources {
         },
       });
       if (before) {
-        await this.deps.futureResources?.settle(connectionId, before, callerUserId(ctx));
+        await this.deps.futureResources?.settle(accountId, before, callerUserId(ctx));
       }
       this.deps.logger.info('created resources reached by the mission', {
         ...context,

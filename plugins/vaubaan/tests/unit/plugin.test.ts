@@ -143,7 +143,7 @@ describe('vaubaan catalog — the macro-actions at each trust level', () => {
 
 describe('classifyVaubaan', () => {
   test('each tool lands on its plane', () => {
-    expect(slices(TOOL.listMyConnections, {})).toEqual([`${PROVIDER_ID}.account[*].R`]);
+    expect(slices(TOOL.listMyAccounts, {})).toEqual([`${PROVIDER_ID}.account[*].R`]);
     expect(slices(TOOL.previewPolicy, { name: 'x' })).toEqual([`${PROVIDER_ID}.account[*].R`]);
     expect(slices(TOOL.getCatalog, { provider: 'github' })).toEqual([
       `${PROVIDER_ID}.catalog[github].R`,

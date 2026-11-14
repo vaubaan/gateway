@@ -17,9 +17,11 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 6 (2026-11-14) : wording only, one word per thing (ADR
+#   one-word-per-thing-account-service-plugin).
 provider: notion
-catalog_version: 5
-catalog_date: 2026-11-13
+catalog_version: 6
+catalog_date: 2026-11-14
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────────
@@ -179,7 +181,7 @@ risks:
   - id: notion.root-trash
     label: 'Move a whole shared root page to the trash'
     reason: >-
-      Trashing the page that was shared with the connection takes the whole
+      Trashing the page that was shared with the account takes the whole
       resource away: every page under it, for every person and every
       mission. A mission that needs it holds it explicitly, beside the permission to trash a page.
     matches: 'notion.root[*].root-trash.W'
@@ -226,7 +228,7 @@ risks:
     label: 'Add a comment'
     reason: >-
       Opens a discussion on a page or a block, or replies to an open one,
-      signed by the connection. Notifies the people it mentions: Notion offers
+      signed by the account. Notifies the people it mentions: Notion offers
       no silent comment.
     matches: 'notion.root[**].block[*].comment[**].W'
     infra_limits: { calls_per_minute_max: 20 }
@@ -261,7 +263,7 @@ macro_actions:
     description: 'Pages, databases and comments.'
     narrative: >-
       Reading the pages, page content, databases and comments under the roots shared with the
-      connection. Nothing changes in Notion, but everything read was written by people and can
+      account. Nothing changes in Notion, but everything read was written by people and can
       carry instructions aimed at the agent. Querying a database is a permission of its own
       because one call exports a whole table, and comments are apart because they are often more
       candid than the page.
@@ -279,7 +281,7 @@ macro_actions:
     label: 'Comment'
     description: 'Leave comments.'
     narrative: >-
-      Opening a discussion on a page or a block, or replying to one, signed by the connection.
+      Opening a discussion on a page or a block, or replying to one, signed by the account.
       It is the one write Notion cannot keep silent: the people a comment mentions are notified.
     entries:
       - risk_id: notion.comment-create

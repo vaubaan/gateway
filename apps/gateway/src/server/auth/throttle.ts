@@ -2,7 +2,7 @@
  * The windows of the anonymous sign-in endpoints (see
  * docs/handbook/authentication.md): one per client address when it is
  * known, and one for the whole instance. Shared by the redirect sign-ins
- * (`handlers.ts`) and the forms of the local accounts (`local-handlers.ts`).
+ * (`handlers.ts`) and the forms of the sign-in accounts (`local-handlers.ts`).
  */
 import type { RateLimiter } from '../compose/ports';
 import { UNKNOWN_CLIENT } from '../http/client-ip';

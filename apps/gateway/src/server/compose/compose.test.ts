@@ -12,6 +12,7 @@ import {
   getRoot,
   NO_TRUSTED_PROXY_WARNING,
   resetRoot,
+  DEPRECATED_KEY_WARNING,
   RETIRED_MANAGEMENT_KEYS_WARNING,
   type RootDeps,
 } from './root';
@@ -35,13 +36,11 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(35);
+    expect(root.store.schemaVersion).toBe(36);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
-    expect((await root.connections.service.providers()).map((p) => p.id)).toEqual(
-      root.registry.ids,
-    );
+    expect((await root.accounts.service.providers()).map((p) => p.id)).toEqual(root.registry.ids);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
     const sealed = await root.encryptor.encrypt('conn-1', 'hello');
     await expect(root.encryptor.decrypt('conn-1', sealed)).resolves.toBe('hello');
@@ -125,6 +124,22 @@ describe('buildRoot', () => {
     expect(retired).toHaveLength(1);
     expect(retired[0]).toContain('VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY');
     expect(retired[0]).not.toContain('"open"');
+    await root.close();
+  });
+
+  it('starts with a renamed key under its old name, reads it, and warns once naming the new one', async () => {
+    // ADR one-word-per-thing-account-service-plugin: `limits.connections` is `limits.accounts`.
+    const lines: string[] = [];
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '12' }) }),
+      logWrite: (_lvl, line) => lines.push(line),
+    });
+    expect(root.config.limits.accounts).toBe(12);
+    const renamed = lines.filter((l) => l.includes(DEPRECATED_KEY_WARNING));
+    expect(renamed).toHaveLength(1);
+    expect(renamed[0]).toContain('VAUBAAN_LIMITS_CONNECTIONS');
+    expect(renamed[0]).toContain('VAUBAAN_LIMITS_ACCOUNTS');
     await root.close();
   });
 
@@ -269,7 +284,7 @@ describe('buildRoot and the plugins', () => {
         const store = openMemoryStore({ encryptor, catalog });
         return {
           ...store,
-          connections: { ...store.connections, countByProvider: async () => ({ notion: 2 }) },
+          accounts: { ...store.accounts, countByProvider: async () => ({ notion: 2 }) },
           close: async () => {
             closed = true;
             await store.close();

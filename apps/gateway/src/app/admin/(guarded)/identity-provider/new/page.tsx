@@ -71,7 +71,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
           definition
             ? definition.title
             : local
-              ? 'Add local accounts'
+              ? 'Add sign-in accounts'
               : github
                 ? 'Add GitHub sign-in'
                 : 'Add a sign-in provider'
@@ -103,7 +103,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
             },
             {
               value: 'local',
-              label: 'Local accounts',
+              label: 'Sign-in accounts',
               href: `${NEW_SIGN_IN_PROVIDER_PAGE}?kind=local`,
             },
           ]}

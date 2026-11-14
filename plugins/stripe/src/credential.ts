@@ -15,7 +15,7 @@
  * Stripe keys carry no expiry in what the API answers.
  */
 
-import type { ApiKeyCredentialSpec, ConnectionContext, CredentialCheck } from '@vaubaan/plugin-sdk';
+import type { ApiKeyCredentialSpec, AccountContext, CredentialCheck } from '@vaubaan/plugin-sdk';
 
 import { stripeAccounts, type StripeAccount } from './execute.ts';
 
@@ -78,7 +78,7 @@ export const stripeCredential: ApiKeyCredentialSpec = {
 };
 
 /** The account each key opens, named once with its modes: `Acme Inc (test, live)`. */
-export async function verifyStripeKeys(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyStripeKeys(ctx: AccountContext): Promise<CredentialCheck> {
   return { account: accountWords(await stripeAccounts(ctx)), expiresAt: null };
 }
 

@@ -1,5 +1,5 @@
 /**
- * `POST /connections/<id>/transfer` — transfers ownership to a group the owner belongs to.
+ * `POST /accounts/<id>/transfer` — transfers ownership to a group the owner belongs to.
  * One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';
@@ -11,5 +11,5 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return (await getRoot()).connections.handlers.transfer(request, (await params).id);
+  return (await getRoot()).accounts.handlers.transfer(request, (await params).id);
 }

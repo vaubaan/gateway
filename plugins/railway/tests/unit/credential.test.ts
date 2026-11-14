@@ -5,11 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import {
-  UpstreamAuthError,
-  type ConnectionContext,
-  type CredentialSecret,
-} from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, type AccountContext, type CredentialSecret } from '@vaubaan/plugin-sdk';
 import {
   guideText,
   type MockFetch,
@@ -33,7 +29,7 @@ const ENV = '00000000-0000-4000-8000-0000000000e1';
 
 const PASTED: CredentialSecret = { kind: 'api-key', fields: { api_token: TOKEN }, metadata: {} };
 
-function ctx(fetch: MockFetch, credential: CredentialSecret = PASTED): ConnectionContext {
+function ctx(fetch: MockFetch, credential: CredentialSecret = PASTED): AccountContext {
   return { credential, fetch };
 }
 

@@ -96,7 +96,7 @@ describe('execution door: the call pipeline', () => {
         token_kind: 'member',
         token_holder: mission.mission.creatorUserId,
         session_id: session?.id,
-        connection_id: instance.connection.id,
+        account_id: instance.account.id,
         resource_ref: 'scratch',
         tool: 'depot__read_item',
         arguments_hash: fingerprintArguments(args),
@@ -122,7 +122,7 @@ describe('execution door: the call pipeline', () => {
       expect(status).toBe(200);
       const ctx = instance.depot.calls[0]?.ctx;
       expect(ctx?.credential).toEqual(depotSecret());
-      // The plugin sees the mission's resources on the connection, nothing else of the mission.
+      // The plugin sees the mission's resources on the account, nothing else of the mission.
       expect(ctx?.resources.map((r) => r.ref).sort()).toEqual([
         'app-prod',
         'app-staging',
@@ -143,7 +143,7 @@ describe('execution door: the call pipeline', () => {
       expect(refusalOf(prod, 'risk-not-accepted').missing_risks).toEqual(['depot[prod].write']);
     });
 
-    it("reads an unlabelled resource under the connection's default environment, and only while it is set", async () => {
+    it("reads an unlabelled resource under the account's default environment, and only while it is set", async () => {
       // `scratch` carries no label of its own: it enters the mission through the default.
       const labelled = await executionInstance({
         spaces: [
@@ -153,8 +153,8 @@ describe('execution door: the call pipeline', () => {
         ],
       });
       try {
-        const { connections } = labelled.root.store;
-        await connections.setDefaultEnv(labelled.connection.id, 'staging');
+        const { accounts } = labelled.root.store;
+        await accounts.setDefaultEnv(labelled.account.id, 'staging');
         const mission = await labelled.issue({ policy: [line(READ), line(WRITE_STAGING, 3)] });
 
         // The same call matches `depot[staging].write` under the default.
@@ -166,7 +166,7 @@ describe('execution door: the call pipeline', () => {
 
         // Cleared in the store (no owner act, so nothing leaves the mission): the door
         // reads the label at the call, and an env-qualified risk is refused on it.
-        await connections.setDefaultEnv(labelled.connection.id, null);
+        await accounts.setDefaultEnv(labelled.account.id, null);
         const cleared = await labelled.call(mission, 'depot__write_item', { space: 'scratch' });
         refusalOf(cleared, 'risk-not-accepted');
       } finally {
@@ -211,8 +211,8 @@ describe('execution door: the call pipeline', () => {
         [
           'approval-required',
           'budget-exhausted',
-          'connection-revoked',
-          'connection-unavailable',
+          'account-revoked',
+          'account-unavailable',
           'mission-inactive',
           'rate-limited',
           'resource-not-in-mission',
@@ -278,14 +278,14 @@ describe('execution door: the call pipeline', () => {
       expect((await callEntries(mission))[0]?.arguments_hash).toBe(refusal.fingerprint);
     });
 
-    it('resource-not-in-mission: the cited ref, the connection, the allowed resources — before any risk', async () => {
+    it('resource-not-in-mission: the cited ref, the account, the allowed resources — before any risk', async () => {
       const mission = await instance.issue({ policy: [line(READ)], spaces: ['scratch'] });
 
       const body = await instance.call(mission, 'depot__read_item', { space: 'app-prod' });
 
       const refusal = refusalOf(body, 'resource-not-in-mission');
       expect(refusal.cited_ref).toBe('app-prod');
-      expect(refusal.connection).toEqual({ id: instance.connection.id, name: 'Depot main' });
+      expect(refusal.account).toEqual({ id: instance.account.id, name: 'Depot main' });
       expect(refusal.allowed_resources).toEqual([
         { ref: 'scratch', env: 'staging', display_name: 'scratch' },
       ]);
@@ -301,12 +301,12 @@ describe('execution door: the call pipeline', () => {
 
     it('resource-not-in-mission also for a selected resource that went stale; a hidden one still works', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
-      const { connections } = instance.root.store;
+      const { accounts } = instance.root.store;
       const scratch = instance.resources.find((r) => r.ref === 'scratch');
-      await connections.setResourceHidden(scratch?.id ?? '', true);
+      await accounts.setResourceHidden(scratch?.id ?? '', true);
       // The next discovery no longer returns app-prod (seen long ago: past the grace).
-      agePastStaleGrace(instance.root.store, instance.connection.id);
-      await connections.syncDiscoveredResources(instance.connection.id, [
+      agePastStaleGrace(instance.root.store, instance.account.id);
+      await accounts.syncDiscoveredResources(instance.account.id, [
         { ref: 'app-staging', displayName: 'app-staging' },
         { ref: 'scratch', displayName: 'scratch' },
       ]);
@@ -327,10 +327,10 @@ describe('execution door: the call pipeline', () => {
       const empty = await executionInstance({ spaces: [] });
       try {
         const mission = await empty.issue({ policy: [line(READ), line('depot.profile')] });
-        expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
+        expect(mission.mission.accounts[0]?.resourceSets[0]).toMatchObject({
           resourceIds: [],
         });
-        await empty.root.store.connections.syncDiscoveredResources(empty.connection.id, [
+        await empty.root.store.accounts.syncDiscoveredResources(empty.account.id, [
           { ref: 'late', displayName: 'late' },
         ]);
 
@@ -350,27 +350,27 @@ describe('execution door: the call pipeline', () => {
     it('future resources: one discovered after issuance is written in and reached, a hidden or vanished one is not', async () => {
       const empty = await executionInstance({ spaces: [] });
       try {
-        const { connections } = empty.root.store;
+        const { accounts } = empty.root.store;
         // A set of future resources only takes the environment later ones inherit.
-        await connections.setDefaultEnv(empty.connection.id, 'staging');
-        const mission = await empty.issue({ policy: [line(READ)], wholeConnection: true });
-        expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
+        await accounts.setDefaultEnv(empty.account.id, 'staging');
+        const mission = await empty.issue({ policy: [line(READ)], wholeAccount: true });
+        expect(mission.mission.accounts[0]?.resourceSets[0]).toMatchObject({
           future: true,
           env: 'staging',
           resourceIds: [],
         });
-        const { futureResources } = empty.root.connections;
-        const before = await futureResources.snapshot(empty.connection.id);
-        await connections.syncDiscoveredResources(empty.connection.id, [
+        const { futureResources } = empty.root.accounts;
+        const before = await futureResources.snapshot(empty.account.id);
+        await accounts.syncDiscoveredResources(empty.account.id, [
           { ref: 'late', displayName: 'late' },
           { ref: 'kept-out', displayName: 'kept-out' },
         ]);
         // Hidden by the owner before anything joined (the ordinary discovery settles at once).
-        const keptOut = (await connections.listResources(empty.connection.id)).find(
+        const keptOut = (await accounts.listResources(empty.account.id)).find(
           (r) => r.ref === 'kept-out',
         );
-        await connections.setResourceHidden(keptOut?.id ?? '', true);
-        await futureResources.settle(empty.connection.id, before, empty.ada.id);
+        await accounts.setResourceHidden(keptOut?.id ?? '', true);
+        await futureResources.settle(empty.account.id, before, empty.ada.id);
 
         const late = await empty.call(mission, 'depot__read_item', { space: 'late' });
         expect(late.error).toBeUndefined();
@@ -385,8 +385,8 @@ describe('execution door: the call pipeline', () => {
 
         // The next discovery no longer returns `late`: the mission no longer reaches it
         // (once `late` is past the grace of a fresh row).
-        agePastStaleGrace(empty.root.store, empty.connection.id);
-        await connections.syncDiscoveredResources(empty.connection.id, [
+        agePastStaleGrace(empty.root.store, empty.account.id);
+        await accounts.syncDiscoveredResources(empty.account.id, [
           { ref: 'kept-out', displayName: 'kept-out' },
         ]);
         const gone = await empty.call(mission, 'depot__read_item', { space: 'late' });
@@ -417,14 +417,14 @@ describe('execution door: the call pipeline', () => {
       expect(instance.depot.calls).toHaveLength(1);
     });
 
-    it('connection-unavailable: an expired connection, its name and the owner to contact', async () => {
+    it('account-unavailable: an expired account, its name and the owner to contact', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
-      await instance.root.store.connections.markExpired(instance.connection.id);
+      await instance.root.store.accounts.markExpired(instance.account.id);
 
       const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
 
-      const refusal = refusalOf(body, 'connection-unavailable');
-      expect(refusal.connection).toEqual({ id: instance.connection.id, name: 'Depot main' });
+      const refusal = refusalOf(body, 'account-unavailable');
+      expect(refusal.account).toEqual({ id: instance.account.id, name: 'Depot main' });
       expect(refusal.status).toBe('expired');
       expect(refusal.owner).toEqual({ kind: 'user', display: 'ada@example.com' });
       expect(refusal.hint).toContain('ada@example.com');
@@ -432,10 +432,10 @@ describe('execution door: the call pipeline', () => {
       expect(await consumed(mission, READ)).toBe(0);
     });
 
-    it('mission-inactive: a revoked connection orphans a mission it was the only connection of, as a derived state (spec §7.8)', async () => {
+    it('mission-inactive: a revoked account orphans a mission it was the only account of, as a derived state (spec §7.8)', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       // Revoked behind the services' back: the door's own re-check must see it.
-      await instance.root.store.connections.revoke(instance.connection.id);
+      await instance.root.store.accounts.revoke(instance.account.id);
 
       const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
 
@@ -481,7 +481,7 @@ describe('execution door: the call pipeline', () => {
   });
 
   describe('structural rejections (no refusal code)', () => {
-    it('rejects an unknown tool, a provider the mission has no connection for, and unplaceable arguments', async () => {
+    it('rejects an unknown tool, a provider the mission has no account for, and unplaceable arguments', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
 
       const unknown = await instance.call(mission, 'nope__anything');
@@ -534,7 +534,7 @@ describe('execution door: the call pipeline', () => {
           tool: 'depot__read_item',
           arguments_hash: fingerprintArguments(args),
           token_holder: mission.mission.creatorUserId,
-          connection_id: logged.connection.id,
+          account_id: logged.account.id,
           risks_touched: [],
           remaining_budget: null,
         });
@@ -638,7 +638,7 @@ describe('execution door: the call pipeline', () => {
       );
     });
 
-    it('401 → refresh → retry with the new credential; the connection stays active', async () => {
+    it('401 → refresh → retry with the new credential; the account stays active', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       instance.depot.scriptRefresh(async () => depotSecret('sk-rotated'));
       instance.depot.script(async (ctx) => {
@@ -651,15 +651,15 @@ describe('execution door: the call pipeline', () => {
 
       expect(body.result?.content).toEqual([{ type: 'text', text: 'ok' }]);
       expect(instance.depot.calls).toHaveLength(2);
-      const connection = await instance.root.store.connections.getById(instance.connection.id);
-      expect(connection?.status).toBe('active');
+      const account = await instance.root.store.accounts.getById(instance.account.id);
+      expect(account?.status).toBe('active');
       expect((await callEntries(mission))[0]).toMatchObject({
         decision: 'allowed',
         upstream_error: null,
       });
     });
 
-    it('401 and a rejected refresh → the connection is expired and the agent reads connection-unavailable', async () => {
+    it('401 and a rejected refresh → the account is expired and the agent reads account-unavailable', async () => {
       const mission = await instance.issue({ policy: [line(READ, 5)] });
       instance.depot.script(async () => {
         throw new UpstreamAuthError('bad key', 401);
@@ -667,21 +667,21 @@ describe('execution door: the call pipeline', () => {
 
       const first = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
 
-      const refusal = refusalOf(first, 'connection-unavailable');
+      const refusal = refusalOf(first, 'account-unavailable');
       expect(refusal.status).toBe('expired');
       expect(refusal.owner).toEqual({ kind: 'user', display: 'ada@example.com' });
-      const connection = await instance.root.store.connections.getById(instance.connection.id);
-      expect(connection?.status).toBe('expired');
+      const account = await instance.root.store.accounts.getById(instance.account.id);
+      expect(account?.status).toBe('expired');
       // The decision stood: allowed and counted, with the failure on the entry.
       const [entry] = await callEntries(mission);
       expect(entry).toMatchObject({ decision: 'allowed', refusal_code: null });
-      expect(entry?.upstream_error).toMatch(/^connection-unavailable: /);
+      expect(entry?.upstream_error).toMatch(/^account-unavailable: /);
       expect(await consumed(mission, READ)).toBe(1);
 
       // From now on the call is refused before the budget.
       instance.depot.script(null);
       const second = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
-      expect(refusalOf(second, 'connection-unavailable').status).toBe('expired');
+      expect(refusalOf(second, 'account-unavailable').status).toBe('expired');
       expect(await consumed(mission, READ)).toBe(1);
       expect((await callEntries(mission))[1]?.decision).toBe('refused');
     });
@@ -702,11 +702,11 @@ describe('execution door: the call pipeline', () => {
       expect(body.result).toMatchObject({ isError: true });
       expect(refreshes).toBe(0);
       expect(instance.depot.calls).toHaveLength(1);
-      const connection = await instance.root.store.connections.getById(instance.connection.id);
-      expect(connection?.status).toBe('active');
+      const account = await instance.root.store.accounts.getById(instance.account.id);
+      expect(account?.status).toBe('active');
     });
 
-    it('serves a derived upstream credential from the connection-scoped cache, and drops it on 401', async () => {
+    it('serves a derived upstream credential from the account-scoped cache, and drops it on 401', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       let minted = 0;
       let rejectCached = false;
@@ -743,12 +743,12 @@ describe('execution door: the call pipeline', () => {
         'minted',
       );
       expect(minted).toBe(2);
-      const connection = await instance.root.store.connections.getById(instance.connection.id);
-      expect(connection?.status).toBe('active');
+      const account = await instance.root.store.accounts.getById(instance.account.id);
+      expect(account?.status).toBe('active');
 
-      // A revoked connection leaves nothing behind.
-      await instance.root.store.connections.revoke(instance.connection.id);
-      expect(await instance.root.execution.credentialCache.drop(instance.connection.id)).toBe(1);
+      // A revoked account leaves nothing behind.
+      await instance.root.store.accounts.revoke(instance.account.id);
+      expect(await instance.root.execution.credentialCache.drop(instance.account.id)).toBe(1);
     });
   });
 });

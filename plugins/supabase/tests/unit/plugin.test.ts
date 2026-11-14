@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type ApiKeySecret,
   type Resource,
@@ -55,8 +55,8 @@ const tokenSecret = (overrides: Partial<ApiKeySecret> = {}): ApiKeySecret => ({
 
 const connCtx = (
   fetch: typeof globalThis.fetch,
-  overrides: Partial<ConnectionContext> = {},
-): ConnectionContext => ({
+  overrides: Partial<AccountContext> = {},
+): AccountContext => ({
   credential: tokenSecret(),
   fetch,
   ...overrides,

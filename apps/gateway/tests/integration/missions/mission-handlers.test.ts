@@ -36,9 +36,9 @@ describe('missions: HTTP handlers', () => {
   function draft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [
+      accounts: [
         {
-          connection_id: seeded.github.connection.id,
+          account_id: seeded.github.account.id,
           trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],
@@ -132,7 +132,7 @@ describe('missions: HTTP handlers', () => {
     const body = (await res.json()) as { error: string; preview: MissionPreview };
     expect(body.error).toBe('refused');
     expect(body.preview.ok).toBe(false);
-    expect(body.preview.issues[0]?.code).toBe('connection-unknown');
+    expect(body.preview.issues[0]?.code).toBe('account-unknown');
   });
 
   it('previews without writing: what passes, the summary, the resolved draft', async () => {
@@ -142,7 +142,7 @@ describe('missions: HTTP handlers', () => {
         await sessionHeaders(root, seeded.ada),
         // An agent's proposal names the provider and the refs, not the ids.
         draft({
-          connections: [
+          accounts: [
             {
               provider: 'github',
               // Trust levels beside a policy decide nothing: they only redraw the form.
@@ -169,7 +169,7 @@ describe('missions: HTTP handlers', () => {
     expect(res.status).toBe(200);
     const { preview } = (await res.json()) as { preview: MissionPreview };
     expect(preview.ok).toBe(true);
-    expect(preview.resolved[0]?.connection_id).toBe(seeded.github.connection.id);
+    expect(preview.resolved[0]?.account_id).toBe(seeded.github.account.id);
     expect(preview.resolved[0]?.resource_sets[0]?.resources).toMatchObject({ scope: 'selected' });
     expect(preview.resolved[0]?.resource_sets[0]?.resources).toHaveProperty('resource_ids', [
       expect.any(String),

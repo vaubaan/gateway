@@ -28,7 +28,7 @@ import {
   refusalResult,
   textResult,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type ExecuteContext,
   type McpToolResult,
@@ -239,7 +239,7 @@ async function folder(session: GmailImapSession, specialUse: '\\All' | '\\Drafts
 // Each tool checks every argument first and returns either the refusal or the
 // work to do : a call refused here opens no IMAP and no SMTP connection.
 
-/** Relays one message over SMTP, signed in as the connection's mailbox. */
+/** Relays one message over SMTP, signed in as the account's mailbox. */
 type SendMail = (mail: SmtpMail) => Promise<SmtpReceipt>;
 /** Work in one IMAP session ; `send` opens an SMTP connection only when called. */
 type Work = (session: GmailImapSession, send: SendMail) => Promise<McpToolResult>;
@@ -760,13 +760,13 @@ export interface GmailRuntime {
     tool: string,
     args: Readonly<Record<string, unknown>>,
   ): Promise<McpToolResult>;
-  discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
-  verify(ctx: ConnectionContext): Promise<CredentialCheck>;
+  discoverResources(ctx: AccountContext): Promise<readonly Resource[]>;
+  verify(ctx: AccountContext): Promise<CredentialCheck>;
   /** The credential spec, its `verify` bound to this transport. */
   readonly credential: ApiKeyCredentialSpec;
 }
 
-/** The mailbox as the connection's single resource. */
+/** The mailbox as the account's single resource. */
 export function mailboxResource(email: string): Resource {
   return {
     provider: PROVIDER_ID,
@@ -781,7 +781,7 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
   const smtp = options.smtp ?? nodemailerSmtpTransport;
   const now = options.now ?? (() => new Date());
 
-  const sessionOptions = (ctx: ConnectionContext) => ({
+  const sessionOptions = (ctx: AccountContext) => ({
     timeoutMs: SESSION_TIMEOUT_MS,
     ...(ctx.signal ? { signal: ctx.signal } : {}),
     ...(ctx.logger ? { logger: ctx.logger } : {}),
@@ -789,12 +789,12 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
 
   const inSession = <T>(
     account: GmailAccount,
-    ctx: ConnectionContext,
+    ctx: AccountContext,
     work: (s: GmailImapSession) => Promise<T>,
   ): Promise<T> => transport.session(account, sessionOptions(ctx), work);
 
   /** Signs in and checks the two folders every tool needs. */
-  const signIn = async (ctx: ConnectionContext): Promise<GmailAccount> => {
+  const signIn = async (ctx: AccountContext): Promise<GmailAccount> => {
     const account = gmailAccount(ctx.credential);
     await inSession(account, ctx, async (s) => {
       await folder(s, '\\All');
@@ -803,7 +803,7 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
     return account;
   };
 
-  const verify = async (ctx: ConnectionContext): Promise<CredentialCheck> => {
+  const verify = async (ctx: AccountContext): Promise<CredentialCheck> => {
     const account = await signIn(ctx);
     return { account: account.email, expiresAt: null };
   };
@@ -830,7 +830,7 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
       if (mailbox.ref.toLowerCase() !== account.email) {
         return refused(
           'invalid_resource',
-          `mailbox '${mailbox.ref}' is not the mailbox of this connection.`,
+          `mailbox '${mailbox.ref}' is not the mailbox of this account.`,
         );
       }
       const send: SendMail = (mail) => smtp.send(account, sessionOptions(ctx), mail);

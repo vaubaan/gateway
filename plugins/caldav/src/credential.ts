@@ -2,7 +2,7 @@
  * Credential of the `caldav` provider — a server URL, a username and an
  * **app password**, sent with HTTP Basic authentication on every request.
  *
- * Spec     : docs/spec/vaubaan-gateway.md §0 "Connection", §5, §7.2.
+ * Spec     : docs/spec/vaubaan-gateway.md §0 "Account", §5, §7.2.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5).
  * Handbook : docs/handbook/providers/caldav.md.
  *

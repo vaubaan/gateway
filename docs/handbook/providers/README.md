@@ -3,7 +3,7 @@ title: Provider plugin handbooks — index
 tracks:
   - plugins/*/src/risk-catalog.yaml
   - plugins/*/src/index.ts
-  - apps/gateway/src/server/connections/shipped-providers.test.ts
+  - apps/gateway/src/server/accounts/shipped-providers.test.ts
 last_reviewed: 2026-10-31
 ---
 
@@ -66,10 +66,10 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 | Vaubaan         | [`vaubaan.md`](./vaubaan.md)                 | `host`     | The gateway's own management tools; one click, bound by the host.      |
 | Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                         |
 
-## Revoking a connection: what happens at the provider
+## Revoking an account: what happens at the provider
 
 Revoking erases the credential and, where the provider documents an endpoint, withdraws the grant
-there too ([connections](../connections.md),
+there too ([accounts](../accounts.md),
 [ADR](../../decisions/provider-side-revocation-on-connection-revoke.md)). An endpoint enters this table only once read in the
 provider's documentation through Context7, never from memory.
 
@@ -80,7 +80,7 @@ provider's documentation through Context7, never from memory.
 | Miro            | no                                                                                                                                  | Miro profile settings, apps allowed: remove "Vaubaan Gateway"                                                |
 | Outlook         | no — Microsoft offers no endpoint to revoke one refresh token; the broker's `/revoke` calls nothing and the gateway erases its copy | Microsoft account: Privacy → App access (personal) or My Apps → manage apps (work): remove the gateway's app |
 | Axonaut         | no                                                                                                                                  | regenerate the API key in Axonaut, Settings (Paramètres), API                                                |
-| SSH             | no                                                                                                                                  | remove the connection's public key from `authorized_keys` on the host                                        |
+| SSH             | no                                                                                                                                  | remove the account's public key from `authorized_keys` on the host                                           |
 | every other     | no, on purpose: a pasted key or app password                                                                                        | delete it at the provider; the gateway erases its copy and deletes nothing there                             |
 
 - Keys are not withdrawn on purpose: a person created them and may use them elsewhere. GitHub's

@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf } from '../../../src/server/budget';
-import { seedConnection } from '../../support/missions/testing';
+import { seedAccount } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   issueMission,
@@ -100,7 +100,7 @@ describe('changing the limits of a mission after issuance', () => {
             : entry,
       ),
     );
-    expect(after.connections).toEqual(before.connections);
+    expect(after.accounts).toEqual(before.accounts);
     expect(after.periodSeconds).toBe(before.periodSeconds);
     expect(after.expiresAt).toBe(before.expiresAt);
   });
@@ -307,7 +307,7 @@ describe('changing the limits of a mission after issuance', () => {
   });
 
   it('a raise is capped as at creation: the catalog ceiling refuses the change with issuance’s own words', async () => {
-    const stripe = await seedConnection(rig.root.store, {
+    const stripe = await seedAccount(rig.root.store, {
       provider: 'stripe',
       owner: { kind: 'user', id: rig.seeded.ada.id },
       displayName: 'Acme Stripe',
@@ -315,9 +315,9 @@ describe('changing the limits of a mission after issuance', () => {
     });
     const draft = (max: number) => ({
       name: 'Refund the duplicates',
-      connections: [
+      accounts: [
         {
-          connection_id: stripe.connection.id,
+          account_id: stripe.account.id,
           policy: [{ risk_id: REFUND, quota: 2, rate_limit: { max, window_seconds: 60 } }],
         },
       ],
@@ -378,7 +378,7 @@ describe('changing the limits of a mission after issuance', () => {
     ).toMatchObject({ ok: true });
     await rig.root.store.missions.setExpiresAt(mission.id, null);
 
-    await rig.root.store.connections.revoke(rig.seeded.github.connection.id);
+    await rig.root.store.accounts.revoke(rig.seeded.github.account.id);
     expect(
       await service().setLimits(rig.seeded.ada, mission.id, [
         { risk_id: READ, quota: 50, rate_limit_max: 50 },

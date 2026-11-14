@@ -15,7 +15,7 @@
  *
  *   - which URL path names a repository, and its resource ref ;
  *   - the upstream endpoint and the credential to present there, minted or
- *     decrypted in memory from the connection (`upstream`) — the key of the
+ *     decrypted in memory from the account (`upstream`) — the key of the
  *     agent never reaches the provider, the provider's credential never
  *     reaches the agent ;
  *   - the inspection of a push's own objects before anything is sent
@@ -164,7 +164,7 @@ export interface GitRemoteCapability {
     objects: GitPackObjects,
   ): Promise<readonly GitInspectedUpdate[]>;
   /**
-   * Whether the provider credential of this connection can carry the push,
+   * Whether the provider credential of this account can carry the push,
    * asked once the mission has decided on what the inspection found and
    * BEFORE the pack is stored at the provider: the sentence that refuses it
    * (a permission the account lacks, by name), or `null`. The mission's

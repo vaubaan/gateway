@@ -57,7 +57,7 @@ describe('definePlugin', () => {
   });
 
   test('summary is optional, and a paragraph when present', () => {
-    expect(pluginIssues({ ...acmePlugin, summary: 'One connection is one Acme account.' })).toEqual(
+    expect(pluginIssues({ ...acmePlugin, summary: 'One account is one Acme account.' })).toEqual(
       [],
     );
     expect(pluginIssues({ ...acmePlugin, summary: '   ' })).toEqual([

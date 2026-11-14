@@ -11,7 +11,7 @@
  * The classifier itself checks that a named workspace is one of the
  * mission's resources (`resolveWorkspace`) and refuses the call otherwise.
  * The gateway's resource stage runs on the slices this function returns and
- * only recognises refs the connection has discovered, so a ref it has never
+ * only recognises refs the account has discovered, so a ref it has never
  * seen would not be caught there : the plugin is the place that knows which
  * argument names the resource. `execute` resolves the workspace with the
  * same function, so the slice always names the workspace the call runs on.

@@ -62,7 +62,7 @@ export { isWorkflowPath } from './call.ts';
 // Public entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Entry point : `resources` are the mission's resources on this connection. */
+/** Entry point : `resources` are the mission's resources on this account. */
 export function classifyGithub(
   tool: string,
   args: Readonly<Record<string, unknown>>,

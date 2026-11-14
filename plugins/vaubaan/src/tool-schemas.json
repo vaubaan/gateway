@@ -1,9 +1,9 @@
 {
-  "list_my_connections": {
+  "list_my_accounts": {
     "type": "object",
     "properties": {
       "include_experimental": {
-        "description": "Deprecated and ignored: every connection is listed.",
+        "description": "Deprecated and ignored: every account is listed.",
         "type": "boolean"
       }
     },
@@ -16,10 +16,10 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 100,
-        "description": "Provider id, as `list_my_connections` shows it, e.g. `github`."
+        "description": "Provider id, as `list_my_accounts` shows it, e.g. `github`."
       },
-      "connection_id": {
-        "description": "One of the user’s connections of that provider.",
+      "account_id": {
+        "description": "One of the user’s accounts of that provider.",
         "type": "string",
         "minLength": 1,
         "maxLength": 300
@@ -52,20 +52,20 @@
         "maxLength": 1000,
         "description": "What the mission is for, as the user will read it."
       },
-      "connections": {
+      "accounts": {
         "maxItems": 32,
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "connection_id": {
-              "description": "Id of one of the user’s connections (`list_my_connections`).",
+            "account_id": {
+              "description": "Id of one of the user’s accounts (`list_my_accounts`).",
               "type": "string",
               "minLength": 1,
               "maxLength": 300
             },
             "provider": {
-              "description": "Instead of `connection_id`, when the user holds exactly one usable connection of that provider.",
+              "description": "Instead of `account_id`, when the user holds exactly one usable account of that provider.",
               "type": "string",
               "minLength": 1,
               "maxLength": 300
@@ -78,11 +78,11 @@
                   "properties": { "scope": { "type": "string", "const": "all" } },
                   "required": ["scope"],
                   "additionalProperties": false,
-                  "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                  "description": "Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
                 },
                 {
                   "type": "object",
-                  "properties": { "scope": { "type": "string", "const": "connection" } },
+                  "properties": { "scope": { "type": "string", "const": "account" } },
                   "required": ["scope"],
                   "additionalProperties": false,
                   "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
@@ -97,7 +97,7 @@
                       "items": { "type": "string", "minLength": 1, "maxLength": 300 }
                     },
                     "resource_refs": {
-                      "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                      "description": "Resource refs as `list_my_accounts` shows them, e.g. `acme/app`.",
                       "maxItems": 5000,
                       "type": "array",
                       "items": { "type": "string", "minLength": 1, "maxLength": 300 }
@@ -105,12 +105,12 @@
                   },
                   "required": ["scope"],
                   "additionalProperties": false,
-                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the account they are split into one set per environment."
                 }
               ]
             },
             "future": {
-              "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+              "description": "`true`: a resource that later appears on the account with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
               "type": "boolean"
             },
             "env": {
@@ -118,11 +118,11 @@
               "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
             },
             "everything_i_hold": {
-              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the account that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the account (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
               "type": "boolean"
             },
             "policy": {
-              "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+              "description": "Exactly the risks the mission accepts on this account, each with its budget.",
               "maxItems": 2000,
               "type": "array",
               "items": {
@@ -132,10 +132,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300,
-                    "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                    "description": "One explicit RiskId of the account’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
                   },
                   "quota": {
-                    "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                    "description": "Actions allowed per period on this risk. Mandatory unless the account gives `everything_i_hold: true`, which then supplies it.",
                     "type": "number"
                   },
                   "rate_limit": {
@@ -171,7 +171,7 @@
               }
             },
             "resource_sets": {
-              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.",
+              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this account, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `account` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the account is split into one set per environment of its resources, each with the policy lines that apply there.",
               "minItems": 1,
               "maxItems": 32,
               "type": "array",
@@ -192,11 +192,11 @@
                         "properties": { "scope": { "type": "string", "const": "all" } },
                         "required": ["scope"],
                         "additionalProperties": false,
-                        "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                        "description": "Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
                       },
                       {
                         "type": "object",
-                        "properties": { "scope": { "type": "string", "const": "connection" } },
+                        "properties": { "scope": { "type": "string", "const": "account" } },
                         "required": ["scope"],
                         "additionalProperties": false,
                         "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
@@ -211,7 +211,7 @@
                             "items": { "type": "string", "minLength": 1, "maxLength": 300 }
                           },
                           "resource_refs": {
-                            "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                            "description": "Resource refs as `list_my_accounts` shows them, e.g. `acme/app`.",
                             "maxItems": 5000,
                             "type": "array",
                             "items": { "type": "string", "minLength": 1, "maxLength": 300 }
@@ -219,12 +219,12 @@
                         },
                         "required": ["scope"],
                         "additionalProperties": false,
-                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the account they are split into one set per environment."
                       }
                     ]
                   },
                   "future": {
-                    "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+                    "description": "`true`: a resource that later appears on the account with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
                     "type": "boolean"
                   },
                   "env": {
@@ -235,11 +235,11 @@
                     ]
                   },
                   "everything_i_hold": {
-                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the account that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the account (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
                     "type": "boolean"
                   },
                   "policy": {
-                    "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+                    "description": "Exactly the risks the mission accepts on this account, each with its budget.",
                     "maxItems": 2000,
                     "type": "array",
                     "items": {
@@ -249,10 +249,10 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 300,
-                          "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                          "description": "One explicit RiskId of the account’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
                         },
                         "quota": {
-                          "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                          "description": "Actions allowed per period on this risk. Mandatory unless the account gives `everything_i_hold: true`, which then supplies it.",
                           "type": "number"
                         },
                         "rate_limit": {
@@ -292,13 +292,13 @@
                   }
                 },
                 "additionalProperties": false,
-                "description": "One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget."
+                "description": "One resource set: resources of one environment of the account, optionally those that appear there later, with their own policy and budget."
               }
             }
           },
           "additionalProperties": false
         },
-        "description": "At least one connection; at most one connection per provider."
+        "description": "At least one account; at most one account per provider."
       },
       "period": {
         "oneOf": [
@@ -329,7 +329,7 @@
         "description": "ISO-8601 instant in the future, or null for a mission that does not expire."
       }
     },
-    "required": ["name", "connections", "period", "expires_at"],
+    "required": ["name", "accounts", "period", "expires_at"],
     "additionalProperties": false
   },
   "issue_mission": {
@@ -340,20 +340,20 @@
         "maxLength": 1000,
         "description": "What the mission is for, as the user will read it."
       },
-      "connections": {
+      "accounts": {
         "maxItems": 32,
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "connection_id": {
-              "description": "Id of one of the user’s connections (`list_my_connections`).",
+            "account_id": {
+              "description": "Id of one of the user’s accounts (`list_my_accounts`).",
               "type": "string",
               "minLength": 1,
               "maxLength": 300
             },
             "provider": {
-              "description": "Instead of `connection_id`, when the user holds exactly one usable connection of that provider.",
+              "description": "Instead of `account_id`, when the user holds exactly one usable account of that provider.",
               "type": "string",
               "minLength": 1,
               "maxLength": 300
@@ -366,11 +366,11 @@
                   "properties": { "scope": { "type": "string", "const": "all" } },
                   "required": ["scope"],
                   "additionalProperties": false,
-                  "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                  "description": "Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
                 },
                 {
                   "type": "object",
-                  "properties": { "scope": { "type": "string", "const": "connection" } },
+                  "properties": { "scope": { "type": "string", "const": "account" } },
                   "required": ["scope"],
                   "additionalProperties": false,
                   "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
@@ -385,7 +385,7 @@
                       "items": { "type": "string", "minLength": 1, "maxLength": 300 }
                     },
                     "resource_refs": {
-                      "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                      "description": "Resource refs as `list_my_accounts` shows them, e.g. `acme/app`.",
                       "maxItems": 5000,
                       "type": "array",
                       "items": { "type": "string", "minLength": 1, "maxLength": 300 }
@@ -393,12 +393,12 @@
                   },
                   "required": ["scope"],
                   "additionalProperties": false,
-                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                  "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the account they are split into one set per environment."
                 }
               ]
             },
             "future": {
-              "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+              "description": "`true`: a resource that later appears on the account with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
               "type": "boolean"
             },
             "env": {
@@ -406,11 +406,11 @@
               "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 64 }, { "type": "null" }]
             },
             "everything_i_hold": {
-              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+              "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the account that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the account (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
               "type": "boolean"
             },
             "policy": {
-              "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+              "description": "Exactly the risks the mission accepts on this account, each with its budget.",
               "maxItems": 2000,
               "type": "array",
               "items": {
@@ -420,10 +420,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300,
-                    "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                    "description": "One explicit RiskId of the account’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
                   },
                   "quota": {
-                    "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                    "description": "Actions allowed per period on this risk. Mandatory unless the account gives `everything_i_hold: true`, which then supplies it.",
                     "type": "number"
                   },
                   "rate_limit": {
@@ -459,7 +459,7 @@
               }
             },
             "resource_sets": {
-              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.",
+              "description": "Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this account, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `account` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the account is split into one set per environment of its resources, each with the policy lines that apply there.",
               "minItems": 1,
               "maxItems": 32,
               "type": "array",
@@ -480,11 +480,11 @@
                         "properties": { "scope": { "type": "string", "const": "all" } },
                         "required": ["scope"],
                         "additionalProperties": false,
-                        "description": "Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
+                        "description": "Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions."
                       },
                       {
                         "type": "object",
-                        "properties": { "scope": { "type": "string", "const": "connection" } },
+                        "properties": { "scope": { "type": "string", "const": "account" } },
                         "required": ["scope"],
                         "additionalProperties": false,
                         "description": "Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so."
@@ -499,7 +499,7 @@
                             "items": { "type": "string", "minLength": 1, "maxLength": 300 }
                           },
                           "resource_refs": {
-                            "description": "Resource refs as `list_my_connections` shows them, e.g. `acme/app`.",
+                            "description": "Resource refs as `list_my_accounts` shows them, e.g. `acme/app`.",
                             "maxItems": 5000,
                             "type": "array",
                             "items": { "type": "string", "minLength": 1, "maxLength": 300 }
@@ -507,12 +507,12 @@
                         },
                         "required": ["scope"],
                         "additionalProperties": false,
-                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment."
+                        "description": "Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the account they are split into one set per environment."
                       }
                     ]
                   },
                   "future": {
-                    "description": "`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
+                    "description": "`true`: a resource that later appears on the account with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.",
                     "type": "boolean"
                   },
                   "env": {
@@ -523,11 +523,11 @@
                     ]
                   },
                   "everything_i_hold": {
-                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
+                    "description": "`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the account that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the account (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.",
                     "type": "boolean"
                   },
                   "policy": {
-                    "description": "Exactly the risks the mission accepts on this connection, each with its budget.",
+                    "description": "Exactly the risks the mission accepts on this account, each with its budget.",
                     "maxItems": 2000,
                     "type": "array",
                     "items": {
@@ -537,10 +537,10 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 300,
-                          "description": "One explicit RiskId of the connection’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
+                          "description": "One explicit RiskId of the account’s catalog, exactly as `get_catalog` lists it, e.g. `github.pr-write` or `supabase[staging].bulk-row-write`. Never a wildcard, never a pattern."
                         },
                         "quota": {
-                          "description": "Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.",
+                          "description": "Actions allowed per period on this risk. Mandatory unless the account gives `everything_i_hold: true`, which then supplies it.",
                           "type": "number"
                         },
                         "rate_limit": {
@@ -580,13 +580,13 @@
                   }
                 },
                 "additionalProperties": false,
-                "description": "One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget."
+                "description": "One resource set: resources of one environment of the account, optionally those that appear there later, with their own policy and budget."
               }
             }
           },
           "additionalProperties": false
         },
-        "description": "At least one connection; at most one connection per provider."
+        "description": "At least one account; at most one account per provider."
       },
       "period": {
         "oneOf": [
@@ -617,7 +617,7 @@
         "description": "ISO-8601 instant in the future, or null for a mission that does not expire."
       }
     },
-    "required": ["name", "connections", "period", "expires_at"],
+    "required": ["name", "accounts", "period", "expires_at"],
     "additionalProperties": false
   },
   "rotate_mission_token": {

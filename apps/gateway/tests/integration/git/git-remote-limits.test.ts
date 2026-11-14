@@ -1,7 +1,7 @@
 /**
  * The git remote's limits and edges (spec §4.1 ter; ADR gateway-as-git-remote
  * D1, D5, D6, D10): the pack cap, the budget, keys that stopped working, an
- * expired mission, a token connection, the sweeper of temporary refs, the
+ * expired mission, a token account, the sweeper of temporary refs, the
  * catalog's remote URL, and the one admission both doors share.
  */
 import { randomBytes } from 'node:crypto';
@@ -10,7 +10,7 @@ import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import type { AuditCallRecord } from '../../../src/server/store';
 import { line, TEST_PUBLIC_URL, type IssuedMission } from '../../support/execution/testing';
 import {
@@ -115,24 +115,24 @@ describe('keys and missions that stopped', () => {
   });
 });
 
-describe('a token connection (fine-grained personal access token)', () => {
-  it('clones and pushes with the connection token, never the mission key, upstream', async () => {
+describe('a token account (fine-grained personal access token)', () => {
+  it('clones and pushes with the account token, never the mission key, upstream', async () => {
     const pat = `github_pat_${randomBytes(12).toString('hex')}`;
     rig.host.acceptToken(pat, { contents: 'write' });
     const { store } = rig.root;
     // Another GitHub account of Ada: the same repository, a token instead of the App.
-    const tokenConnection = await store.connections.create({
+    const tokenAccount = await store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: rig.ada.id },
       displayName: 'acme-token',
       credential: serializeSecret({ kind: 'api-key', fields: { token: pat }, metadata: {} }),
     });
-    await store.connections.syncDiscoveredResources(tokenConnection.id, [
+    await store.accounts.syncDiscoveredResources(tokenAccount.id, [
       { ref: REPOSITORY, displayName: REPOSITORY, env: null },
     ]);
     const issued = await rig.root.missions.service.issue(rig.ada, {
-      name: 'Token connection',
-      connections: [{ connection_id: tokenConnection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
+      name: 'Token account',
+      accounts: [{ account_id: tokenAccount.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     });
@@ -248,9 +248,9 @@ describe('one execution surface', () => {
       }),
     );
     const catalog = (await response.json()) as {
-      connections: { provider: string; resources: { ref: string; git_remote?: string }[] }[];
+      accounts: { provider: string; resources: { ref: string; git_remote?: string }[] }[];
     };
-    const github = catalog.connections.find((c) => c.provider === 'github');
+    const github = catalog.accounts.find((c) => c.provider === 'github');
     expect(github?.resources).toEqual([
       expect.objectContaining({
         ref: REPOSITORY,

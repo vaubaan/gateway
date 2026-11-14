@@ -12,10 +12,10 @@ import { randomBytes } from 'node:crypto';
 import type { SessionStore } from '../compose/ports';
 import type { Logger } from '../logging';
 import { AdministratorsError, ADMINISTRATORS_ERROR_MESSAGES } from './administrators';
-import { LocalAccountError } from './errors';
+import { SignInAccountError } from './errors';
 import { readForm } from '../http/form';
 import { AUTH_LIMITS } from './handlers';
-import type { LocalAccountsService } from './local-accounts';
+import type { SignInAccountsService } from './sign-in-accounts';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import { CHALLENGE_COOKIE, type NameRequest, type RecoveryService } from './recovery';
 import type { SignInProvidersService } from './sign-in-providers';
@@ -30,8 +30,8 @@ const DONE_TTL_MS = 5 * 60_000;
 /** What the page shows once after a naming: never stored past five minutes. */
 export interface RecoveryOutcome {
   readonly named: Record<string, unknown>;
-  /** For an address of local accounts: the link that creates its account, shown once. */
-  readonly accountLink?: string;
+  /** For an address of sign-in accounts: the link that creates its account, shown once. */
+  readonly signInAccountLink?: string;
   readonly problem?: string;
 }
 
@@ -45,7 +45,7 @@ export interface RecoveryHandlerDeps extends ThrottleDeps {
   readonly publicUrl: URL;
   readonly recovery: RecoveryService;
   readonly providers: Pick<SignInProvidersService, 'view'>;
-  readonly accounts: Pick<LocalAccountsService, 'createLink'>;
+  readonly signInAccounts: Pick<SignInAccountsService, 'createLink'>;
   readonly sessions: SessionStore;
   readonly logger: Logger;
 }
@@ -131,23 +131,23 @@ export function createRecoveryHandlers(deps: RecoveryHandlerDeps): RecoveryHandl
       else target = { kind: 'email', provider, email: field('email').toLowerCase() };
       try {
         const { named, clearCookie: clear } = await deps.recovery.name(request.headers, target);
-        let accountLink: string | undefined;
+        let signInAccountLink: string | undefined;
         if (target.kind === 'email' && (await deps.providers.view(provider))?.kind === 'local') {
           // No mail may be set: the link that creates the account is shown once.
-          const issued = await deps.accounts.createLink({
+          const issued = await deps.signInAccounts.createLink({
             kind: 'invite',
             providerId: provider,
             email: target.email,
             createdBy: 'recovery',
           });
-          accountLink = issued.url.href;
+          signInAccountLink = issued.url.href;
         }
-        return done({ named, ...(accountLink ? { accountLink } : {}) }, [clear]);
+        return done({ named, ...(signInAccountLink ? { signInAccountLink } : {}) }, [clear]);
       } catch (err) {
         const problem =
           err instanceof AdministratorsError
             ? ADMINISTRATORS_ERROR_MESSAGES[err.code]
-            : err instanceof LocalAccountError
+            : err instanceof SignInAccountError
               ? err.sentence
               : 'Nobody was named. Open the recovery page again.';
         deps.logger.warn('recovery naming refused', {

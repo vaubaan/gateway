@@ -163,7 +163,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await signIn(b2, { sub: 'idp|bob', email: 'bob@example.com', groups: 'ops security' });
     const names = (await root.store.groups.groupsOf(bob.id)).map((g) => g.name).sort();
     expect(names).toEqual(['local-reviewers', 'ops', 'security']);
-    // the emptied idp group survives as a row (it may own connections); membership is what moves
+    // the emptied idp group survives as a row (it may own accounts); membership is what moves
     expect(await root.store.groups.getByName('dev')).not.toBeNull();
     expect(
       await root.store.groups.memberCount((await root.store.groups.getByName('dev'))!.id),

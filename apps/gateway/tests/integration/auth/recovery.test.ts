@@ -192,7 +192,7 @@ describe('recovery by the master key', () => {
     expect(await root.auth.recovery.banner()).not.toBeNull();
   });
 
-  it('naming an address of local accounts hands its account link over, once', async () => {
+  it('naming an address of sign-in accounts hands its account link over, once', async () => {
     await root.auth.providers.save(
       {
         id: 'local',
@@ -219,7 +219,7 @@ describe('recovery by the master key', () => {
     const id = new URL(named.headers.get('location') ?? '', PUBLIC_URL).searchParams.get('done');
     const { takeRecoveryOutcome } = await import('../../../src/server/auth');
     const outcome = await takeRecoveryOutcome(root.sessions, id);
-    expect(outcome?.accountLink).toMatch(/\/account\/create\?token=/);
+    expect(outcome?.signInAccountLink).toMatch(/\/sign-in-account\/create\?token=/);
     expect(await takeRecoveryOutcome(root.sessions, id)).toBeNull();
     expect(
       await root.auth.administrators.admits(

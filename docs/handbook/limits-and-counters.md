@@ -11,7 +11,7 @@ last_reviewed: 2026-10-31
 
 # Ceilings and counters — handbook
 
-The `limits.*` ceilings on users, connections and active missions, and `GET /ops/stats`.
+The `limits.*` ceilings on users, accounts and active missions, and `GET /ops/stats`.
 Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
 
 ## Start here
@@ -33,9 +33,9 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
     the local invitation link before `createAccountFromLink`, an invitation for an address no
     active person holds, a reactivation, the setup's first administrator (`UserAdminError`
     `limit-reached`), naming an administrator from a sign-in test (`LimitReachedError`);
-  - connections — `ConnectionService.start` before any provider is reached, and `persist`
-    before `connections.create`; never with a `reconnectId` (`ConnectError`
-    `connection-limit-reached`);
+  - accounts — `AccountService.start` before any provider is reached, and `persist`
+    before `accounts.create`; never with a `reconnectId` (`ConnectError`
+    `account-limit-reached`);
   - active missions — `MissionService.issue` (so the duplicate, the `vaubaan` plugin and the v4
     import too: `IssueResult` `limit-reached`; door code `instance-limit-reached`), an edit and
     a granted `extend-expiry` that give an ended mission a new end (`revivesEndedMission`).
@@ -50,7 +50,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
 - The sign-in page and the claim form show a static sentence (`?error=` / `?problem=` carry a
   code only): the count reaches the log, never an anonymous visitor. JSON answers and
   administrators' notices carry the count.
-- The import of a v4 connection (`importPastedKey`, `importSshKey`) skips `start`: only the
+- The import of a v4 account (`importPastedKey`, `importSshKey`) skips `start`: only the
   `persist` check refuses it.
 - `/ops/stats` checks the token before the setup state: an outsider cannot tell setup from
   ready. It is in `SETUP_PATHS` (`setup/state.ts`) so the proxy does not redirect it.
@@ -66,4 +66,4 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
 - 404 on `/ops/stats` with the right token → `ops.token` is not set (the boot log says
   `ops_stats: off`).
 - Additions refused although the settings show room → the ceiling counts expired-but-unrevoked
-  connections and orphaned missions: revoke them.
+  accounts and orphaned missions: revoke them.

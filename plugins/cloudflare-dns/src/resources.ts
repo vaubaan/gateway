@@ -2,10 +2,10 @@
  * Cloudflare DNS resources — one `Resource` per zone.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Resource", §3.1 (resources per
- *        connection) ; docs/spec/gateway-risk-model.md §2.
+ *        account) ; docs/spec/gateway-risk-model.md §2.
  *
  * A Cloudflare API token reaches N zones, possibly across accounts. The
- * connection exposes **one resource per zone** : `ref` is the zone id (what
+ * account exposes **one resource per zone** : `ref` is the zone id (what
  * every tool takes as `zone_id`), `displayName` the zone name, and
  * `metadata` carries the non-secret facts the classifier needs :
  *   - `account_id`  → the `account[…]` segment of every slice ;

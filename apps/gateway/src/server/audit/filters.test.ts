@@ -19,7 +19,7 @@ import {
 const EMPTY = {
   missionId: null,
   user: null,
-  connectionId: null,
+  accountId: null,
   tool: null,
   decision: null,
   agentLabel: null,
@@ -40,7 +40,7 @@ describe('parseAuditQuery', () => {
       new URLSearchParams({
         mission: ' m-1 ',
         user: 'ada@example.com',
-        connection: 'c-1',
+        account: 'c-1',
         tool: 'github__get_file',
         decision: 'refused',
         agent: ' planner ',
@@ -54,7 +54,7 @@ describe('parseAuditQuery', () => {
     expect(parsed.filters).toEqual({
       missionId: 'm-1',
       user: 'ada@example.com',
-      connectionId: 'c-1',
+      accountId: 'c-1',
       tool: 'github__get_file',
       decision: 'refused',
       agentLabel: 'planner',
@@ -207,13 +207,13 @@ describe('auditQueryString', () => {
 describe('scopeOf — the visibility rule', () => {
   const user = { id: 'u-1' };
 
-  it('a user: the missions they created or are a member of, the connections they and their groups own', () => {
+  it('a user: the missions they created or are a member of, the accounts they and their groups own', () => {
     expect(
       scopeOf({ kind: 'user', user, groups: [{ id: 'g-1' }, { id: 'g-2' }], isOperator: false }),
     ).toEqual({
       missionCreatorUserId: 'u-1',
       missionMemberUserId: 'u-1',
-      connectionOwners: [
+      accountOwners: [
         { kind: 'user', id: 'u-1' },
         { kind: 'group', id: 'g-1' },
         { kind: 'group', id: 'g-2' },
@@ -227,7 +227,7 @@ describe('scopeOf — the visibility rule', () => {
     expect(scopeOf({ kind: 'user', user, groups: [], isOperator: true })).toEqual({
       missionCreatorUserId: 'u-1',
       missionMemberUserId: 'u-1',
-      connectionOwners: [{ kind: 'user', id: 'u-1' }],
+      accountOwners: [{ kind: 'user', id: 'u-1' }],
       allAdmin: true,
       allCalls: true,
     });
@@ -237,7 +237,7 @@ describe('scopeOf — the visibility rule', () => {
     expect(scopeOf({ kind: 'bootstrap' })).toEqual({
       missionCreatorUserId: null,
       missionMemberUserId: null,
-      connectionOwners: [],
+      accountOwners: [],
       allAdmin: true,
       allCalls: false,
     });
@@ -251,7 +251,7 @@ describe('standingOn — who is shown the argument fingerprint', () => {
   const owned = { owner: { kind: 'user', id: 'ada' } } as const;
   const groupOwned = { owner: { kind: 'group', id: 'g-1' } } as const;
 
-  it('the creator of the mission and an owner of the connection answer for the call', () => {
+  it('the creator of the mission and an owner of the account answer for the call', () => {
     expect(standingOn(ada, mission, null)).toBe('responsible');
     expect(standingOn(ada, theirs, owned)).toBe('responsible');
     expect(standingOn({ ...ada, groups: [{ id: 'g-1' }] }, theirs, groupOwned)).toBe('responsible');

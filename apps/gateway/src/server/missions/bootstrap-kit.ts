@@ -8,7 +8,7 @@
  *   2. the client's MCP configuration: the instance URL and the Authorization
  *      header by reference to the variable, never the secret itself;
  *   3. the instruction block for the agent: whose token it holds (every token
- *      of a mission has one holder), connections, resource refs, accepted
+ *      of a mission has one holder), accounts, resource refs, accepted
  *      risks, budget, what to do on each structured refusal and when the
  *      token itself stops working, and a short "missions prepared by an agent" section — what the
  *      `vaubaan__*` tools do, and that they never lift a refusal;
@@ -53,7 +53,7 @@ export interface KitResource {
   readonly env: string | null;
 }
 
-export interface KitConnection {
+export interface KitAccount {
   readonly provider_label: string;
   readonly display_name: string;
   /** What the mission reaches now. */
@@ -61,7 +61,7 @@ export interface KitConnection {
   /** A set takes the resources that later appear in its environment. */
   readonly future?: boolean;
   /**
-   * The connection's resource sets (risk model §4.7), only when it has several: each
+   * The account's resource sets (risk model §4.7), only when it has several: each
    * with its label ("Resource set 1") and what it reaches. Absent with one set.
    */
   readonly resource_sets?: readonly KitResourceSet[];
@@ -88,7 +88,7 @@ export interface BootstrapKitInput {
     readonly period: DraftPeriod;
     readonly expires_at: string | null;
   };
-  readonly connections: readonly KitConnection[];
+  readonly accounts: readonly KitAccount[];
   readonly policy: readonly KitPolicyLine[];
   /** The secret right after issuance or rotation; the prefix on a revisited page. */
   readonly token: { readonly secret: string } | { readonly prefix: string };
@@ -140,9 +140,9 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
     'the arguments cite a resource outside the mission. Use one of the refs listed above (`allowed_resources`), or ask the human to have the resource added.',
   'rate-limited':
     'too many actions on that permission in a short window. Wait `retry_after_seconds`, then retry once; nothing was counted against the limit.',
-  'connection-unavailable':
+  'account-unavailable':
     'the account behind this call needs reconnecting (its credential expired). Nothing you can do fixes it: tell the human who owns the account (`owner`).',
-  'connection-revoked':
+  'account-revoked':
     'the account behind this call no longer serves this mission: it was removed (`final: true`, it never comes back), or the mission creator lost access to it (`final: false`, it serves again if the access is given back). The mission still works on its other accounts: keep using them. Do not retry through that account; tell the human, so the mission creator can issue a mission for the account that replaces it.',
   'mission-inactive':
     'the mission is expired, without an owner (`orphaned`: none of its accounts serves it any more) or stopped (`revoked`). Stop calling with this key and report to the human: a stopped mission needs a new one, an expired one more time, and one without an owner works again with this same key once its creator may allow its permissions again. A request opened before the mission lost its owner can be answered only until it expires; after that, your next refused call opens a new one.',
@@ -181,7 +181,7 @@ function resourceLine(resource: KitResource): string {
   return resource.env ? `\`${resource.ref}\` (${resource.env})` : `\`${resource.ref}\``;
 }
 
-/** A connection issued whole: what it reaches now, and that later resources join. */
+/** An account issued whole: what it reaches now, and that later resources join. */
 /** A list that takes future resources (ADR resource-set-is-one-environment-with-optional-future-resources). */
 function withFuture(resources: readonly KitResource[]): string {
   const known = resources.length === 0 ? 'none known yet' : resources.map(resourceLine).join(', ');
@@ -297,7 +297,7 @@ function gitSection(remotes: readonly KitGitRemote[]): string[] {
 function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
   const { mission } = input;
   const gitRemotes = servedRemotes(input.git);
-  const connections = input.connections.flatMap((c) => {
+  const accounts = input.accounts.flatMap((c) => {
     if (c.resource_sets && c.resource_sets.length > 1) {
       return [
         `- ${c.provider_label} "${c.display_name}" — in resource sets:`,
@@ -328,11 +328,9 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
     ...agentLabelGuidance(),
     '',
     '### Accounts and resources you may touch',
-    ...connections,
+    ...accounts,
     CREATED_RESOURCES_LINE,
-    ...(input.connections.some((c) => (c.resource_sets?.length ?? 0) > 1)
-      ? [RESOURCE_SETS_LINE]
-      : []),
+    ...(input.accounts.some((c) => (c.resource_sets?.length ?? 0) > 1) ? [RESOURCE_SETS_LINE] : []),
     '',
     `### Permissions and limits (${resetPhrase(mission.period)}; the mission ${expiryPhrase(mission.expires_at)})`,
     ...input.policy.map((entry) => policyLine(entry, mission.period)),

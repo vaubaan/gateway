@@ -3,7 +3,7 @@
  *
  * Visibility (docs/spec/vaubaan-gateway.md): a user sees the
  * entries about the missions they created, about the missions they are a
- * member of, and about the connections they or their groups own; an operator
+ * member of, and about the accounts they or their groups own; an operator
  * sees every entry, calls included. The scope is applied in the store's
  * query, before filters and paging, so a filter can only narrow it.
  *
@@ -12,7 +12,7 @@
  * nothing else of a record reaches the page. The fingerprint itself is the
  * one trace of the arguments, and it can be guessed for low-entropy ones: it
  * is shown to whoever answers for the call — the creator of its mission, an
- * owner of its connection — and to nobody who reads the entry only as a
+ * owner of its account — and to nobody who reads the entry only as a
  * member or as an operator (`standingOn`).
  */
 import {
@@ -33,7 +33,7 @@ import {
 import type { MissionTokenKind, Principal, RefusalCode, RiskId } from '@vaubaan/shared';
 
 import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, ShareKey, Store } from '../store';
-import type { ConnectionRecord, MissionRecord } from '../store/types';
+import type { AccountRecord, MissionRecord } from '../store/types';
 import type { AuditFilters } from './filters';
 import { keysetOf, pageOf, type PagePosition } from './paging';
 import { parseHolderParam } from './session-view';
@@ -59,7 +59,7 @@ export interface AuditMissionRef {
   readonly creator_email: string | null;
 }
 
-export interface AuditConnectionRef {
+export interface AuditAccountRef {
   readonly id: string;
   readonly display_name: string | null;
   readonly provider: string | null;
@@ -81,7 +81,7 @@ export interface AuditCallView {
   readonly mission: AuditMissionRef;
   /** `null` on an entry written before tokens had a holder. */
   readonly token: AuditTokenRef | null;
-  readonly connection: AuditConnectionRef | null;
+  readonly account: AuditAccountRef | null;
   readonly resource_ref: string | null;
   readonly tool: string;
   /**
@@ -115,8 +115,8 @@ export interface AuditAdminView {
     readonly id: string;
     /**
      * The name of the object when it still exists (`objectLabel`): a mission or
-     * group name, a connection's display name, a client's declared name, "the
-     * connection → who it is shared with" for a share, "the limit of <mission>"
+     * group name, an account's display name, a client's declared name, "the
+     * account → who it is shared with" for a share, "the limit of <mission>"
      * or "a call of <mission>" for a request. `null` for an object that is gone, and for `instance-config`,
      * whose id is its name.
      */
@@ -145,13 +145,13 @@ export interface AuditPage {
 
 export interface AuditFilterOptions {
   readonly missions: readonly { readonly id: string; readonly name: string }[];
-  readonly connections: readonly { readonly id: string; readonly label: string }[];
+  readonly accounts: readonly { readonly id: string; readonly label: string }[];
 }
 
 export interface AuditQueryDeps {
   readonly store: Pick<
     Store,
-    'audit' | 'missions' | 'connections' | 'users' | 'shares' | 'groups' | 'requests'
+    'audit' | 'missions' | 'accounts' | 'users' | 'shares' | 'groups' | 'requests'
   >;
 }
 
@@ -164,7 +164,7 @@ export function scopeOf(viewer: AuditViewer): AuditScope {
     return {
       missionCreatorUserId: null,
       missionMemberUserId: null,
-      connectionOwners: [],
+      accountOwners: [],
       allAdmin: true,
       allCalls: false,
     };
@@ -172,15 +172,15 @@ export function scopeOf(viewer: AuditViewer): AuditScope {
   return {
     missionCreatorUserId: viewer.user.id,
     missionMemberUserId: viewer.user.id,
-    connectionOwners: ownersOf(viewer),
+    accountOwners: ownersOf(viewer),
     allAdmin: viewer.isOperator,
     allCalls: viewer.isOperator,
   };
 }
 
 /**
- * What a viewer is to the mission and the connection of an entry they were
- * given: `responsible` when they created the mission or own the connection —
+ * What a viewer is to the mission and the account of an entry they were
+ * given: `responsible` when they created the mission or own the account —
  * they answer for the call —, `reader` otherwise (a member of the mission, an
  * operator). A reader is shown everything but the argument fingerprint.
  */
@@ -189,12 +189,12 @@ export type AuditStanding = 'responsible' | 'reader';
 export function standingOn(
   viewer: AuditViewer,
   mission: { readonly creatorUserId: string } | null,
-  connection: { readonly owner: Principal } | null,
+  account: { readonly owner: Principal } | null,
 ): AuditStanding {
   if (viewer.kind !== 'user') return 'reader';
   if (mission !== null && mission.creatorUserId === viewer.user.id) return 'responsible';
-  if (connection !== null) {
-    const { owner } = connection;
+  if (account !== null) {
+    const { owner } = account;
     const owns = ownersOf(viewer).some((p) => p.kind === owner.kind && p.id === owner.id);
     if (owns) return 'responsible';
   }
@@ -255,7 +255,7 @@ export class AuditQueryService {
       limit: pageSize + 1,
       ...(filters.missionId ? { missionId: filters.missionId } : {}),
       ...(userIds ? { userIds } : {}),
-      ...(filters.connectionId ? { connectionId: filters.connectionId } : {}),
+      ...(filters.accountId ? { accountId: filters.accountId } : {}),
       ...(filters.tool ? { tool: filters.tool } : {}),
       ...(filters.decision ? { decision: filters.decision } : {}),
       ...(filters.agentLabel ? { agentLabel: filters.agentLabel } : {}),
@@ -273,20 +273,20 @@ export class AuditQueryService {
   }
 
   /**
-   * The missions and connections the viewer can filter on: the missions they
-   * created or are a member of, the connections they own. An operator reads
+   * The missions and accounts the viewer can filter on: the missions they
+   * created or are a member of, the accounts they own. An operator reads
    * every entry but is offered their own here: the list is a convenience, and
    * any mission id can be typed in the address.
    */
   async filterOptions(viewer: AuditViewer): Promise<AuditFilterOptions> {
-    if (viewer.kind === 'bootstrap') return { missions: [], connections: [] };
+    if (viewer.kind === 'bootstrap') return { missions: [], accounts: [] };
     const created = await this.deps.store.missions.listForCreator(viewer.user.id);
     const shared = await this.deps.store.missions.listForMember(viewer.user.id);
     const missions = [...created, ...shared];
-    const connections = await this.deps.store.connections.listOwnedBy(ownersOf(viewer));
+    const accounts = await this.deps.store.accounts.listOwnedBy(ownersOf(viewer));
     return {
       missions: missions.map((m) => ({ id: m.id, name: m.name })).reverse(),
-      connections: connections.map((c) => ({
+      accounts: accounts.map((c) => ({
         id: c.id,
         label: `${c.provider} — ${c.displayName}`,
       })),
@@ -324,8 +324,8 @@ export class AuditQueryService {
         );
       }
       for (const [key, inner] of Object.entries(record)) {
-        if (key === 'connection_id' && typeof inner === 'string') {
-          put(inner, (await names.connection(inner)).display_name);
+        if (key === 'account_id' && typeof inner === 'string') {
+          put(inner, (await names.account(inner)).display_name);
         } else if (key === 'resource_id' && typeof inner === 'string') {
           put(inner, await names.resource(inner));
         } else if (key === 'resource_ids' && Array.isArray(inner)) {
@@ -385,9 +385,9 @@ export async function holdersOf(
 /** Names behind the ids of one page, looked up once each. */
 class NameCache {
   private readonly missions = new Map<string, Promise<AuditMissionRef>>();
-  private readonly connections = new Map<string, Promise<AuditConnectionRef>>();
+  private readonly accounts = new Map<string, Promise<AuditAccountRef>>();
   private readonly missionRecords = new Map<string, Promise<MissionRecord | null>>();
-  private readonly connectionRecords = new Map<string, Promise<ConnectionRecord | null>>();
+  private readonly accountRecords = new Map<string, Promise<AccountRecord | null>>();
   private readonly emails = new Map<string, Promise<string | null>>();
   private readonly labels = new Map<string, Promise<string | null>>();
 
@@ -398,9 +398,9 @@ class NameCache {
     return memo(this.missionRecords, id, () => this.store.missions.getById(id));
   }
 
-  /** The connection row, or `null` when it no longer exists. */
-  connectionRecord(id: string): Promise<ConnectionRecord | null> {
-    return memo(this.connectionRecords, id, () => this.store.connections.getById(id));
+  /** The account row, or `null` when it no longer exists. */
+  accountRecord(id: string): Promise<AccountRecord | null> {
+    return memo(this.accountRecords, id, () => this.store.accounts.getById(id));
   }
 
   mission(id: string): Promise<AuditMissionRef> {
@@ -411,13 +411,13 @@ class NameCache {
     });
   }
 
-  connection(id: string): Promise<AuditConnectionRef> {
-    return memo(this.connections, id, async () => {
-      const connection = await this.connectionRecord(id);
+  account(id: string): Promise<AuditAccountRef> {
+    return memo(this.accounts, id, async () => {
+      const account = await this.accountRecord(id);
       return {
         id,
-        display_name: connection?.displayName ?? null,
-        provider: connection?.provider ?? null,
+        display_name: account?.displayName ?? null,
+        provider: account?.provider ?? null,
       };
     });
   }
@@ -450,22 +450,22 @@ class NameCache {
   /** A resource of an account, as its owner named it; else its ref. */
   resource(id: string): Promise<string | null> {
     return memo(this.labels, `resource:${id}`, async () => {
-      const resource = await this.store.connections.getResource(id);
+      const resource = await this.store.accounts.getResource(id);
       return resource ? resource.displayName || resource.ref : null;
     });
   }
 
-  /** "<connection> → <the user's email or the group's name>". */
+  /** "<account> → <the user's email or the group's name>". */
   share(key: ShareKey): Promise<string | null> {
-    return memo(this.labels, `share:${key.connectionId}:${key.shareId}`, async () => {
+    return memo(this.labels, `share:${key.accountId}:${key.shareId}`, async () => {
       const share = await this.store.shares.get(key);
       if (!share) return null;
-      const connection = (await this.connection(share.connectionId)).display_name;
+      const account = (await this.account(share.accountId)).display_name;
       const target =
         share.target.kind === 'user'
           ? await this.email(share.target.id)
           : await this.group(share.target.id);
-      return `${connection ?? share.connectionId} → ${target ?? share.target.id}`;
+      return `${account ?? share.accountId} → ${target ?? share.target.id}`;
     });
   }
 
@@ -501,7 +501,7 @@ function memo<V>(cache: Map<string, Promise<V>>, key: string, load: () => Promis
 }
 
 /**
- * What the viewer is to an entry: decided from the mission and the connection
+ * What the viewer is to an entry: decided from the mission and the account
  * as they are now, like the scope that gave them the entry.
  */
 async function standingOf(
@@ -513,7 +513,7 @@ async function standingOf(
     return standingOn(
       viewer,
       await names.missionRecord(record.mission_id),
-      record.connection_id ? await names.connectionRecord(record.connection_id) : null,
+      record.account_id ? await names.accountRecord(record.account_id) : null,
     );
   }
   const { type, id } = record.object;
@@ -522,7 +522,7 @@ async function standingOf(
   return standingOn(
     viewer,
     missionId === null ? null : await names.missionRecord(missionId),
-    type === 'connection' ? await names.connectionRecord(id) : null,
+    type === 'account' ? await names.accountRecord(id) : null,
   );
 }
 
@@ -539,7 +539,7 @@ async function toView(
       ts: record.ts,
       mission: await names.mission(record.mission_id),
       token: await tokenRef(record, names),
-      connection: record.connection_id ? await names.connection(record.connection_id) : null,
+      account: record.account_id ? await names.account(record.account_id) : null,
       resource_ref: record.resource_ref,
       tool: record.tool,
       arguments_hash: standing === 'responsible' ? record.arguments_hash : null,
@@ -586,16 +586,16 @@ async function tokenRef(
 }
 
 /**
- * The connection a share entry names in its `before` or `after` (every share entry
- * carries it): a share is read with its connection, never by its id alone.
+ * The account a share entry names in its `before` or `after` (every share entry
+ * carries it): a share is read with its account, never by its id alone.
  */
-function shareConnectionOf(record: {
+function shareAccountOf(record: {
   readonly before: unknown;
   readonly after: unknown;
 }): string | null {
   for (const side of [record.after, record.before]) {
-    if (typeof side !== 'object' || side === null || !('connection_id' in side)) continue;
-    if (typeof side.connection_id === 'string') return side.connection_id;
+    if (typeof side !== 'object' || side === null || !('account_id' in side)) continue;
+    if (typeof side.account_id === 'string') return side.account_id;
   }
   return null;
 }
@@ -615,11 +615,11 @@ async function objectLabel(
   switch (object.type) {
     case 'mission':
       return (await names.mission(object.id)).name;
-    case 'connection':
-      return (await names.connection(object.id)).display_name;
+    case 'account':
+      return (await names.account(object.id)).display_name;
     case 'share': {
-      const connectionId = shareConnectionOf(record);
-      return connectionId === null ? null : names.share({ connectionId, shareId: object.id });
+      const accountId = shareAccountOf(record);
+      return accountId === null ? null : names.share({ accountId, shareId: object.id });
     }
     case 'group':
       return names.group(object.id);

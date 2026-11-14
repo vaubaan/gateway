@@ -54,13 +54,13 @@ export interface UserSession {
 }
 
 /**
- * The guard of a page that needs an identified user (missions, connections,
+ * The guard of a page that needs an identified user (missions, accounts,
  * requests), with one answer per case:
  *
  * - no session: redirect to the sign-in;
  * - the bootstrap operator: `null` — the page renders `<NeedsUser />` and
  *   nothing else (the bootstrap token configures the instance; it owns no
- *   mission, no connection and no request);
+ *   mission, no account and no request);
  * - a signed-in user: the root, the principal and its user record.
  */
 export async function currentUser(): Promise<UserSession | null> {

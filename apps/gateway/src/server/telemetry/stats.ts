@@ -1,6 +1,6 @@
 /**
  * Community validation status of the plugins (spec §9 "the instance's
- * interface shows this status on each connection").
+ * interface shows this status on each account").
  *
  * The collector publishes `plugin_stats` beside the endpoint that receives
  * reports (`deploy/collector/schema.sql`): one row per `(plugin,

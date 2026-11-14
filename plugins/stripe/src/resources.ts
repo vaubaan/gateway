@@ -2,10 +2,10 @@
  * Stripe resources — one `Resource` per (account, mode).
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Resource", §3.1 (resources per
- *        connection) ; docs/spec/gateway-risk-model.md §4.4 (env qualification).
+ *        account) ; docs/spec/gateway-risk-model.md §4.4 (env qualification).
  *
  * A Stripe API key is pinned to one mode (`sk_test_*` / `sk_live_*`) and the
- * test and live namespaces are disjoint upstream. The connection holds up to
+ * test and live namespaces are disjoint upstream. The account holds up to
  * two keys (one per mode) and exposes **one resource per mode the keys
  * allow** : `acct_123/test` and `acct_123/live`. The mode is therefore :
  *   - the resource's `env` label (so `stripe[live].refund-create` resolves

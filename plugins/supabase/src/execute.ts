@@ -11,7 +11,7 @@
  *     caller's `signal` from the context : `httpJson` for an API that answers
  *     JSON, `upstreamFailure` + `readBoundedText` for a data-plane answer that
  *     may be text. A failure is thrown typed — 401 / 403 `UpstreamAuthError`
- *     (the host tries `refresh`, otherwise marks the connection `expired`),
+ *     (the host tries `refresh`, otherwise marks the account `expired`),
  *     another failed status `UpstreamHttpError`, an answer that is not what
  *     the plugin reads `UpstreamProtocolError` ;
  *   - what this executor declines itself (an unknown tool, a call the
@@ -59,7 +59,7 @@ import {
   readShape,
   refusalResult,
   upstreamFailure,
-  type ConnectionContext,
+  type AccountContext,
   type ExecuteContext,
   type Guard,
   type McpToolResult,
@@ -79,7 +79,7 @@ import { projectRefIdent, tableSchemas } from './identifiers.ts';
 import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
 import { SUPABASE_DATA_PLANE_TOOLS, SUPABASE_TOOL_NAMES } from './tools.ts';
 
-/** Upper bound on the projects one connection may expose ; the owner labels them one by one. */
+/** Upper bound on the projects one account may expose ; the owner labels them one by one. */
 export const MAX_DISCOVERED_PROJECTS = 200;
 
 /** What a call without an answer body returns to the agent (a `204`, a `DELETE`). */
@@ -121,7 +121,7 @@ export async function executeSupabase(
 /** One call, resolved : where it goes and the identifiers it carries. */
 interface SupabaseCall {
   readonly io: UpstreamIo;
-  /** The connection's personal access token : the Management API's bearer. */
+  /** The account's personal access token : the Management API's bearer. */
   readonly token: string;
   /** The project `resolveProjectRef` answered. */
   readonly projectRef: string;
@@ -134,11 +134,9 @@ interface SupabaseCall {
  * of the connected account. The Management API returns the whole list in one
  * answer (no paging) ; the plugin caps it at `MAX_DISCOVERED_PROJECTS` and
  * warns through the logger when the cap truncates. The owner labels `env`
- * on the connection page.
+ * on the account page.
  */
-export async function discoverSupabaseResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function discoverSupabaseResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const token = supabaseBearerOf(PROVIDER_ID, ctx.credential);
   const [organizations, projects] = await Promise.all([
     managementJson(ctx, token, '/organizations', isRecordList),
@@ -158,7 +156,7 @@ export async function discoverSupabaseResources(
     return ref === null ? [] : [{ ref, project }];
   });
   // A ref the classifier would refuse is of no use to a mission : say so at
-  // connection time instead of listing a resource no call can name.
+  // account time instead of listing a resource no call can name.
   const unusable = all.find(({ ref }) => projectRefIdent(ref) === null);
   if (unusable) {
     throw new UpstreamProtocolError(

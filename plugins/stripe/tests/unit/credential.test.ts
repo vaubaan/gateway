@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import { CredentialRefusal, UpstreamAuthError, type AccountContext } from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -17,10 +17,7 @@ import {
 
 const ACCOUNT = `${STRIPE_API_BASE}/account`;
 
-const ctx = (
-  fetch: typeof globalThis.fetch,
-  fields: Record<string, string>,
-): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch, fields: Record<string, string>): AccountContext => ({
   credential: { kind: 'api-key', fields, metadata: {} },
   fetch,
 });

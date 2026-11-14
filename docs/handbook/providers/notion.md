@@ -9,7 +9,7 @@ last_reviewed: 2026-10-27
 # Notion provider plugin — handbook
 
 `@vaubaan/plugin-notion`: pages, blocks, databases and comments under the top-level pages and
-databases shared with one internal connection. No administration, no file upload.
+databases shared with one internal account. No administration, no file upload.
 
 ## Start here
 
@@ -58,21 +58,21 @@ databases shared with one internal connection. No administration, no file upload
 - Accepted: a page moved between walk and write is written in its new place.
 - Synced originals: rewriting or deleting one changes copies possibly under another root; the API
   cannot list copies, so it is not refused (the `block-delete` reason warns).
-- Notion's rate limit (180 req/min per connection, 600 on Business) counts requests; one tool call
+- Notion's rate limit (180 req/min per account, 600 on Business) counts requests; one tool call
   fans out to 1-~100. No retry: a `503` may follow a saved write.
 - Unverified (check before 1.0): internal token expiry; trashing takes the subtree; `GET` answers on
   trashed pages; two-way relation writes.
 
 ## Outside the repo
 
-- Only an **internal connection** token fits (one workspace, reaches what is shared with it).
+- Only an **internal account** token fits (one workspace, reaches what is shared with it).
   `verify` refuses OAuth and personal access tokens (they act as a person, across everything they
   can open).
-- Created as Workspace Owner at `app.notion.com/developers/connections`, "No user information";
+- Created as Workspace Owner at `app.notion.com/developers/accounts`, "No user information";
   capabilities Read / Insert / Update content, Read / Insert comments; share only the top-level
   pages the agents need.
 
 ## Debug
 
 - A page just shared is missing → search indexing lags; it appears at the next discovery refresh.
-- `403 restricted_resource` → a capability is not ticked on the connection.
+- `403 restricted_resource` → a capability is not ticked on the account.

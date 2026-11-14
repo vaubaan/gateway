@@ -1,9 +1,9 @@
 /**
- * `/accounts` — the accounts a person can use (spec §4.2 "Connections",
+ * `/accounts` — the accounts a person can use (spec §4.2 "Accounts",
  * "Shares received"): the ones they own, alone or through a team, the ones a
  * colleague gave them access to, and the services they can connect.
  *
- * An account is a connection; an access is a share. What was a page of its own
+ * An account is an account; an access is a share. What was a page of its own
  * ("Shares received") is the second region here: one place answers "which
  * accounts can my missions use, and how far". For an administrator, the
  * accounts whose owners all left are the last region, when there are any
@@ -16,11 +16,11 @@
 import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import styles from '@/components/connections/account.module.css';
-import { OwnerlessAccounts } from '@/components/connections/OwnerlessAccounts';
-import { AccountState, NoticeBanner } from '@/components/connections/parts';
-import { PermissionList } from '@/components/connections/PermissionList';
-import { ServicePicker } from '@/components/connections/ServicePicker';
+import styles from '@/components/accounts/account.module.css';
+import { OwnerlessAccounts } from '@/components/accounts/OwnerlessAccounts';
+import { AccountState, NoticeBanner } from '@/components/accounts/parts';
+import { PermissionList } from '@/components/accounts/PermissionList';
+import { ServicePicker } from '@/components/accounts/ServicePicker';
 import {
   ButtonLink,
   DataTable,
@@ -38,7 +38,7 @@ import {
   firstParam,
   takeNotice,
   type PageSearchParams,
-} from '@/lib/connections/session';
+} from '@/lib/accounts/session';
 import {
   DOC_PAGES,
   ACCOUNT_PAGES,
@@ -59,8 +59,8 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import type { GatewayRoot } from '@/server/compose';
-import { connectionPath, type Actor, type ConnectionView } from '@/server/connections';
-import type { MissionOnConnection } from '@/server/missions/mission-service';
+import { accountPath, type Actor, type AccountView } from '@/server/accounts';
+import type { MissionOnAccount } from '@/server/missions/mission-service';
 import { PROVIDERS_PATH } from '@/lib/providers/links';
 import { providerCards } from '@/lib/providers/reference';
 import type { ReceivedRisk, ReceivedShare } from '@/server/shares';
@@ -74,7 +74,7 @@ const SHARED_ANCHOR = 'shared-with-you';
 
 /** One account the person owns, with what the list says about it. */
 interface OwnedRow {
-  readonly view: ConnectionView;
+  readonly view: AccountView;
   readonly ownership: string;
   /** Resources discovery still returns. */
   readonly resources: number;
@@ -82,7 +82,7 @@ interface OwnedRow {
   readonly unlabelled: number;
   readonly holders: number;
   readonly teamOwned: boolean;
-  readonly missions: readonly MissionOnConnection[];
+  readonly missions: readonly MissionOnAccount[];
 }
 
 export default async function AccountsPage({ searchParams }: { searchParams: PageSearchParams }) {
@@ -94,33 +94,33 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   const now = new Date();
 
   const [owned, received, providers, mine, ownerless, ownerTeams] = await Promise.all([
-    root.connections.service.listFor(actor),
+    root.accounts.service.listFor(actor),
     root.shares.service.received(actor),
-    root.connections.service.providers(),
+    root.accounts.service.providers(),
     root.missions.service.list(actor.user),
     // The administrator's only act on an account: name an owner where none is left.
-    principal.isOperator ? root.connections.service.listOwnerless() : [],
-    principal.isOperator ? root.connections.service.reassignTargets() : [],
+    principal.isOperator ? root.accounts.service.listOwnerless() : [],
+    principal.isOperator ? root.accounts.service.reassignTargets() : [],
   ]);
   const rows = await Promise.all(owned.map((view) => ownedRow(root, actor, view)));
-  const yours = rows.filter((row) => row.view.connection.status !== 'revoked');
-  const disconnected = rows.filter((row) => row.view.connection.status === 'revoked');
+  const yours = rows.filter((row) => row.view.account.status !== 'revoked');
+  const disconnected = rows.filter((row) => row.view.account.status === 'revoked');
   const totals = new Map(
     providerCards(root.registry).map((card) => [card.id, card.counts.risk_ids] as const),
   );
   const shared = sharedRows(
     received,
     totals,
-    (connectionId) =>
+    (accountId) =>
       mine.filter(
         (overview) =>
           overview.role === 'creator' &&
           overview.state.kind === 'active' &&
-          overview.mission.connections.some((c) => c.connectionId === connectionId),
+          overview.mission.accounts.some((c) => c.accountId === accountId),
       ).length,
   );
   const unfolded = firstParam(params[ACCESS_PARAM]);
-  const stopped = shared.filter((row) => row.connection.status !== 'active');
+  const stopped = shared.filter((row) => row.account.status !== 'active');
 
   const yourColumns: readonly Column<OwnedRow>[] = [
     {
@@ -130,8 +130,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         <span className={styles.named}>
           <ServiceMark name={view.provider_label} icon={view.provider_icon} />
           <span className={styles.namedText}>
-            <Link href={connectionPath(view.connection.id)} className={styles.name}>
-              {view.connection.displayName}
+            <Link href={accountPath(view.account.id)} className={styles.name}>
+              {view.account.displayName}
             </Link>
             <span className={styles.sub}>
               {view.provider_label} · {owns}
@@ -192,7 +192,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.status,
       align: 'right',
       nowrap: true,
-      cell: (row) => <AccountState status={row.view.connection.status} />,
+      cell: (row) => <AccountState status={row.view.account.status} />,
     },
   ];
 
@@ -204,7 +204,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         <span className={styles.named}>
           <ServiceMark name={row.providerLabel} icon={row.providerIcon} />
           <span className={styles.namedText}>
-            <span className={styles.name}>{row.connection.displayName}</span>
+            <span className={styles.name}>{row.account.displayName}</span>
             <span className={styles.sub}>{row.providerLabel}</span>
           </span>
         </span>
@@ -215,15 +215,15 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.youMayAllow,
       nowrap: true,
       cell: (row) => {
-        const open = unfolded === row.connection.id;
-        const query = open ? '' : `?${ACCESS_PARAM}=${encodeURIComponent(row.connection.id)}`;
+        const open = unfolded === row.account.id;
+        const query = open ? '' : `?${ACCESS_PARAM}=${encodeURIComponent(row.account.id)}`;
         return (
           <Link
             href={`${ROUTES.accounts}${query}#${SHARED_ANCHOR}`}
             scroll={false}
             aria-expanded={open}
             className={styles.reveal}
-            data-testid={`allowed-${row.connection.id}`}
+            data-testid={`allowed-${row.account.id}`}
           >
             {mayAllow(row.permissions.length, row.total)}
           </Link>
@@ -252,7 +252,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.status,
       align: 'right',
       nowrap: true,
-      cell: (row) => <AccountState status={row.connection.status} />,
+      cell: (row) => <AccountState status={row.account.status} />,
     },
   ];
 
@@ -284,7 +284,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
             caption="The accounts you own"
             columns={yourColumns}
             rows={yours}
-            rowKey={(row) => row.view.connection.id}
+            rowKey={(row) => row.view.account.id}
             empty={
               <Hint>
                 {disconnected.length === 0
@@ -305,7 +305,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
                 caption="Your disconnected accounts"
                 columns={disconnectedColumns}
                 rows={disconnected}
-                rowKey={(row) => row.view.connection.id}
+                rowKey={(row) => row.view.account.id}
                 rowTone={() => 'quiet'}
               />
             </Disclosure>
@@ -325,12 +325,12 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
             caption="The accounts a colleague gave you access to"
             columns={sharedColumns}
             rows={shared}
-            rowKey={(row) => row.connection.id}
+            rowKey={(row) => row.account.id}
             rowDetail={(row) =>
-              unfolded === row.connection.id ? (
+              unfolded === row.account.id ? (
                 <PermissionList
                   testId="allowed-permissions"
-                  head={`What you may allow in your missions on ${row.connection.displayName}, and nothing beyond.`}
+                  head={`What you may allow in your missions on ${row.account.displayName}, and nothing beyond.`}
                   permissions={row.permissions.map((risk) => ({
                     id: risk.risk_id,
                     label: risk.label,
@@ -343,7 +343,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
           />
           {stopped.length > 0 && (
             <Hint>
-              {stopped.map((row) => row.connection.displayName).join(', ')}{' '}
+              {stopped.map((row) => row.account.displayName).join(', ')}{' '}
               {stopped.length === 1 ? 'does' : 'do'} not answer any more; only an owner can
               reconnect {stopped.length === 1 ? 'it' : 'them'}. Your missions on{' '}
               {stopped.length === 1 ? 'it' : 'them'} are refused meanwhile.
@@ -369,16 +369,16 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   );
 }
 
-async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): Promise<OwnedRow> {
-  const { connection } = view;
+async function ownedRow(root: GatewayRoot, actor: Actor, view: AccountView): Promise<OwnedRow> {
+  const { account } = view;
   const [detail, context, missions] = await Promise.all([
-    root.connections.service.get(actor, connection.id),
-    root.shares.service.contextFor(actor, connection.id),
-    root.missions.service.onConnection(actor.user, connection.id),
+    root.accounts.service.get(actor, account.id),
+    root.shares.service.contextFor(actor, account.id),
+    root.missions.service.onAccount(actor.user, account.id),
   ]);
   const team =
-    connection.owner.kind === 'group'
-      ? actor.groups.find((group) => group.id === connection.owner.id)?.name
+    account.owner.kind === 'group'
+      ? actor.groups.find((group) => group.id === account.owner.id)?.name
       : undefined;
   // A label matters only where a permission depends on one and the plugin does not read it from the call.
   const needsLabels =
@@ -389,14 +389,14 @@ async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): 
     resources: detail.resources.filter((resource) => resource.staleSince === null).length,
     unlabelled: needsLabels ? context.labelling.unlabelledResources : 0,
     holders: context.shares.length,
-    teamOwned: connection.owner.kind === 'group',
+    teamOwned: account.owner.kind === 'group',
     missions,
   };
 }
 
 /** One account shared with the person: every access to it added up. */
 interface SharedRow {
-  readonly connection: ReceivedShare['connection'];
+  readonly account: ReceivedShare['account'];
   readonly providerLabel: string;
   readonly providerIcon: ReceivedShare['providerIcon'];
   readonly givenBy: string;
@@ -414,28 +414,28 @@ interface SharedRow {
 function sharedRows(
   received: readonly ReceivedShare[],
   totals: ReadonlyMap<string, number>,
-  missionsOn: (connectionId: string) => number,
+  missionsOn: (accountId: string) => number,
 ): SharedRow[] {
   const rows = new Map<string, SharedRow>();
   for (const item of received) {
-    const known = rows.get(item.connection.id);
+    const known = rows.get(item.account.id);
     const through = item.via === 'you' ? [] : [holderWords(item.via)];
     if (!known) {
-      rows.set(item.connection.id, {
-        connection: item.connection,
+      rows.set(item.account.id, {
+        account: item.account,
         providerLabel: item.providerLabel,
         providerIcon: item.providerIcon,
         givenBy: holderWords(item.ownerLabel),
         through,
         since: item.share.createdAt,
         permissions: item.risks,
-        total: totals.get(item.connection.provider) ?? item.risks.length,
-        missions: missionsOn(item.connection.id),
+        total: totals.get(item.account.provider) ?? item.risks.length,
+        missions: missionsOn(item.account.id),
       });
       continue;
     }
     const held = new Set(known.permissions.map((risk) => risk.risk_id));
-    rows.set(item.connection.id, {
+    rows.set(item.account.id, {
       ...known,
       through: [...new Set([...known.through, ...through])],
       since: item.share.createdAt < known.since ? item.share.createdAt : known.since,
@@ -454,7 +454,7 @@ function Fact({ value, note }: { value: React.ReactNode; note?: React.ReactNode 
   );
 }
 
-function missionsFact(missions: readonly MissionOnConnection[]): React.ReactNode {
+function missionsFact(missions: readonly MissionOnAccount[]): React.ReactNode {
   const running = missions.filter((mission) => mission.state === 'active');
   const atLimit = running.filter((mission) => mission.exhausted > 0).length;
   const orphaned = missions.filter((mission) => mission.state === 'orphaned').length;
@@ -465,9 +465,9 @@ function missionsFact(missions: readonly MissionOnConnection[]): React.ReactNode
   return <Fact value={formatNumber(running.length)} note={notes.join(' · ') || undefined} />;
 }
 
-function lastChecked({ connection, discovery }: ConnectionView, now: Date): React.ReactNode {
-  if (ACCOUNT_STATES[connection.status].tone !== null || connection.status === 'revoked') {
-    return <AccountState status={connection.status} />;
+function lastChecked({ account, discovery }: AccountView, now: Date): React.ReactNode {
+  if (ACCOUNT_STATES[account.status].tone !== null || account.status === 'revoked') {
+    return <AccountState status={account.status} />;
   }
   if (!discovery) return <span className={styles.quiet}>{ACCOUNT_WORDS.neverChecked}</span>;
   if (!discovery.ok) return <StatusMark tone="warn">{ACCOUNT_WORDS.checkFailed}</StatusMark>;

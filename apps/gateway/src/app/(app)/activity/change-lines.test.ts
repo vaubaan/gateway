@@ -28,7 +28,7 @@ describe('a change in words', () => {
       null,
       {
         name: 'Review the docs',
-        connections: [{ connection_id: 'conn-1', resource_ids: ['res-1', 'res-2'] }],
+        accounts: [{ account_id: 'conn-1', resource_ids: ['res-1', 'res-2'] }],
         policy: [
           {
             risk_id: 'github.read-code',
@@ -65,16 +65,16 @@ describe('a change in words', () => {
       'github.merge-protected',
     ]);
     // No raw id of an account or a resource is left in the lines.
-    expect(JSON.stringify(lines)).not.toMatch(/conn-1|res-1|connection_id|resource_ids|risk_id"/);
+    expect(JSON.stringify(lines)).not.toMatch(/conn-1|res-1|account_id|resource_ids|risk_id"/);
   });
 
   it('says when a mission was given a whole account, and when it reached no resource', () => {
     const lines = changeLines(
       null,
       {
-        connections: [
-          { connection_id: 'conn-1', resource_scope: 'connection', resource_ids: [] },
-          { connection_id: 'conn-1', resource_scope: 'all', resource_ids: [] },
+        accounts: [
+          { account_id: 'conn-1', resource_scope: 'account', resource_ids: [] },
+          { account_id: 'conn-1', resource_scope: 'all', resource_ids: [] },
         ],
       },
       NAMES,
@@ -111,7 +111,7 @@ describe('a change in words', () => {
     expect(
       words(changeLines({ status: 'active' }, { status: 'revoked' }, NAMES, 'instance-config')),
     ).toEqual(['State: revoked (was active)']);
-    expect(words(changeLines(null, { status: 'active' }, NAMES, 'connection'))).toEqual([
+    expect(words(changeLines(null, { status: 'active' }, NAMES, 'account'))).toEqual([
       'State: connected',
     ]);
   });
@@ -122,7 +122,7 @@ describe('a change in words', () => {
         changeLines(
           null,
           {
-            connection_id: 'conn-1',
+            account_id: 'conn-1',
             target: { kind: 'user', id: 'user-bob' },
             restriction: ['github.read-code', 'github.merge-protected'],
           },
@@ -141,7 +141,7 @@ describe('a change in words', () => {
           { owner: { kind: 'user', id: 'user-gone' } },
           { owner: { kind: 'group', id: 'group-admins' } },
           NAMES,
-          'connection',
+          'account',
         ),
       ),
     ).toEqual(['Owner: GitHub admins (was user-gone)']);

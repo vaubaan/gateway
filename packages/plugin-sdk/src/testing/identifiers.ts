@@ -23,7 +23,7 @@
  *      satisfy 2 and 4 together : it has to be refused.
  *
  * What it does not see : an identifier that is not a top-level string
- * argument (a resource ref, connection metadata, a nested field), a request
+ * argument (a resource ref, account metadata, a nested field), a request
  * an executor only reaches after a provider answer the catch-all `{}` does not
  * give (pass `routes`), and an upstream that is not HTTP. Each plugin keeps
  * its own identifier tests for those ; this one makes sure none is without a

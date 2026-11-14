@@ -16,7 +16,7 @@ import {
   anyJson,
   expectCredentialKind,
   httpJson,
-  type ConnectionContext,
+  type AccountContext,
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
@@ -35,7 +35,7 @@ export interface GraphRequest<T> {
   readonly maxBytes?: number;
 }
 
-function tokenOf(ctx: ConnectionContext): string {
+function tokenOf(ctx: AccountContext): string {
   return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
 }
 
@@ -50,7 +50,7 @@ function queryString(query: Query): string {
 
 /** One Graph request; an answer without content (202, 204) is `null`. */
 export async function graph<T = unknown>(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: Method,
   path: string,
   options: GraphRequest<T> = {},

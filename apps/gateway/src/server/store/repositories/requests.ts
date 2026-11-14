@@ -236,7 +236,7 @@ const COLUMNS = `r.id, r.mission_id, r.session_id, r.kind, r.state, r.risk_id, r
 /**
  * The (set, risk) lines of a request, from its `request_lines` rows (migration 0029). A
  * request written before 0029 has one row, for its first risk: the other risks it lists
- * are read in the same set, which was its connection's only one. Rows in several sets
+ * are read in the same set, which was its account's only one. Rows in several sets
  * are read as they are.
  */
 export function requestLinesOf(
@@ -331,7 +331,7 @@ function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
  */
 export type OpenRequestLookup =
   | { readonly kind: 'claim'; readonly line: RequestLine }
-  /** A claim on a risk alone, whatever its set: a caller of one set per connection. */
+  /** A claim on a risk alone, whatever its set: a caller of one set per account. */
   | { readonly kind: 'claim'; readonly riskId: RiskId }
   | ({
       readonly kind: 'approval';
@@ -423,7 +423,7 @@ export function insertRequestSync(
         .prepare<[string, string], { resource_set_id: string }>(
           `SELECT p.resource_set_id FROM mission_policy p
              JOIN mission_resource_sets s ON s.id = p.resource_set_id
-           WHERE p.mission_id = ? AND p.risk_id = ? ORDER BY s.connection_id, s.position`,
+           WHERE p.mission_id = ? AND p.risk_id = ? ORDER BY s.account_id, s.position`,
         )
         .all(input.missionId, riskId)
         .map((row) => ({ resourceSetId: row.resource_set_id, riskId })),

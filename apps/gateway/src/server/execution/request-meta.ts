@@ -7,7 +7,7 @@
  * caller declares it; nothing proves it. Two carriers, because MCP clients
  * differ in what they let a user set:
  *   - `params._meta.agent` of a `tools/call`, set per call by an orchestrator
- *     that multiplexes several agents over one connection;
+ *     that multiplexes several agents over one account;
  *   - the HTTP header `X-Vaubaan-Agent`, fixed for a whole client
  *     configuration (one `.mcp.json` per sub-agent).
  * Precedence: the per-call value wins, it is the more specific. A carrier

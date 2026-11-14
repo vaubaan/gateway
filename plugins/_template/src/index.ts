@@ -39,7 +39,7 @@ export const templatePlugin = definePlugin({
   version: '0.2.0',
   description: 'Scaffold plugin. Copy it to start a real one.',
   // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
-  // connection is, what one resource is, where the environment of a call comes from.
+  // account is, what one resource is, where the environment of a call comes from.
   summary:
     'One account is one API key of the template service; one resource is one workspace. The owner of the account labels each workspace with an environment (staging, prod), and writes are held per label.',
   manualRevocation: "Delete the API key in the service's dashboard.",
@@ -57,7 +57,7 @@ export const templatePlugin = definePlugin({
   examples: templateExamples,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
-  // How a connection of this provider is obtained : the one way, the
+  // How an account of this provider is obtained : the one way, the
   // simplest the provider offers — a key a person makes by hand whenever the
   // provider has one. The host runs the flow from this declaration (here : a
   // form with one secret field) ; the plugin writes no route and never reads

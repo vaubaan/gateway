@@ -10,8 +10,8 @@ import {
   USER_STATUSES,
   type Gate,
   type Iso,
-  type MissionConnectionInput,
-  type MissionConnectionRecord,
+  type MissionAccountInput,
+  type MissionAccountRecord,
   type MissionIssuerRecord,
   type MissionMemberRecord,
   type MissionPolicyEntry,
@@ -45,15 +45,15 @@ export interface CreateMissionInput {
   /** The mission whose agent issued this one through its `vaubaan` account. */
   readonly issuedByMissionId?: string | null;
   /**
-   * Every connection with its sets and their lines (`resourceSets`), or with its
+   * Every account with its sets and their lines (`resourceSets`), or with its
    * selection directly: it then has one set, whose lines are the `policy` lines of its
    * provider.
    */
-  readonly connections: readonly MissionConnectionInput[];
+  readonly accounts: readonly MissionAccountInput[];
   /**
-   * The lines of the connections given without sets, placed in the set of the
-   * connection of their provider (the first segment of the risk id). Every id must be in
-   * the catalog; a line no connection is for is refused.
+   * The lines of the accounts given without sets, placed in the set of the
+   * account of their provider (the first segment of the risk id). Every id must be in
+   * the catalog; a line no account is for is refused.
    */
   readonly policy?: readonly MissionPolicyLineInput[];
 }
@@ -107,7 +107,7 @@ export interface CreatedBy {
   readonly actorUserId: string | null;
 }
 
-/** What `addResources` did on one connection of a mission. */
+/** What `addResources` did on one account of a mission. */
 export interface AddedMissionResources {
   /** The set each given resource is in after the write, in the given order. */
   readonly placed: readonly { readonly resourceId: string; readonly resourceSetId: string }[];
@@ -118,7 +118,7 @@ export interface AddedMissionResources {
 /** Why a resource joined or left a set of a running mission after issuance. */
 export type ResourceMoveReason = 'discovered' | 'relabelled';
 
-/** A resource of a connection that appeared, or whose effective environment changed. */
+/** A resource of an account that appeared, or whose effective environment changed. */
 export interface ResourceChange {
   readonly resourceId: string;
   readonly reason: ResourceMoveReason;
@@ -127,7 +127,7 @@ export interface ResourceChange {
 /** One join or leave `applyResourceChanges` wrote. */
 export interface ResourceMove {
   readonly missionId: string;
-  readonly connectionId: string;
+  readonly accountId: string;
   readonly resourceSetId: string;
   readonly resourceId: string;
   readonly ref: string;
@@ -152,12 +152,12 @@ export interface MissionTokenKey {
 export interface MissionsRepo {
   /**
    * The creator's edit of the whole mission after issuance (ADR
-   * mission-editable-after-issuance): the mission becomes `connections` and `policy`,
+   * mission-editable-after-issuance): the mission becomes `accounts` and `policy`,
    * named `name`, expiring at `expiresAt`. In one `BEGIN IMMEDIATE` transaction: the
    * mission is read again, and nothing is written (`null`) unless `actorUserId` is its
    * creator, its stored status is not `revoked` and `unchanged(mission)` holds — the
    * edit was judged against that very state. Only the rows that move are written: a
-   * kept connection or resource row is not rewritten (it keeps its `source`), and a
+   * kept account or resource row is not rewritten (it keeps its `source`), and a
    * resource row the edit adds carries `source = 'edit'`. An expiry moved into the future
    * (or removed) brings a mission stored `expired` back to `active`. Open claims and
    * approval requests about a removed risk are closed (`refused`, `mission-changed`),
@@ -181,7 +181,7 @@ export interface MissionsRepo {
   ): Promise<MissionRecord | null>;
   create(input: CreateMissionInput): Promise<MissionRecord>;
   /**
-   * Adds resources of one of the mission's connections to the list of one of its sets,
+   * Adds resources of one of the mission's accounts to the list of one of its sets,
    * each row marked with `source` (ADR created-resources-join-the-mission: `created` for
    * a resource the mission created). The set of each resource follows `judgedSetIds`,
    * the sets the creating call was judged against (risk model §4.7): exactly one, that
@@ -190,16 +190,16 @@ export interface MissionsRepo {
    * call was not judged against, so a resource made under a strict judgement never gets
    * a looser set's rights (it may then sit in a set of another environment: the next
    * edit refuses the set as mixed until it is relabelled or moved). Absent (or none of
-   * them a set of that connection any more): the same order over every set of the
-   * connection. An id already selected, in any set, keeps its row, its set and its
+   * them a set of that account any more): the same order over every set of the
+   * account. An id already selected, in any set, keeps its row, its set and its
    * source. One transaction. `NotFoundError` when the mission does not carry the
-   * connection; `InvariantError` when a resource is not one of that connection's. With
+   * account; `InvariantError` when a resource is not one of that account's. With
    * `created`, the mission's session (when it has one) records a `resources-created`
    * event in the same transaction.
    */
   addResources(
     missionId: string,
-    connectionId: string,
+    accountId: string,
     resourceIds: readonly string[],
     source: MissionResourceSource,
     created?: CreatedBy,
@@ -208,7 +208,7 @@ export interface MissionsRepo {
   /**
    * Future resources (ADR resource-set-is-one-environment-with-optional-future-resources):
    * for every running mission (stored `active`, not past its expiry at `now`) with a set
-   * on the connection, in one transaction, each changed resource
+   * on the account, in one transaction, each changed resource
    *
    *   leaves  the set holding it when it was relabelled and its effective environment is
    *           no longer the set's (a legacy `mixedEnv` set keeps it; a resource that
@@ -218,18 +218,18 @@ export interface MissionsRepo {
    *           id is in `neverJoin` (the instance's own) — row source `future`.
    *
    * Returns every move written, for the caller's audit. A resource of another
-   * connection, or unknown, is ignored.
+   * account, or unknown, is ignored.
    */
   applyResourceChanges(
-    connectionId: string,
+    accountId: string,
     changes: readonly ResourceChange[],
     neverJoin: readonly string[],
   ): Promise<ResourceMove[]>;
   /**
-   * The connections a running mission's set with future on depends on (hourly
+   * The accounts a running mission's set with future on depends on (hourly
    * discovery), in id order.
    */
-  connectionsWithFutureSets(now: Iso): Promise<string[]>;
+  accountsWithFutureSets(now: Iso): Promise<string[]>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
   /**
@@ -240,7 +240,7 @@ export interface MissionsRepo {
   countActive(now: Iso): Promise<number>;
   /** The missions this user is a current member of (never the ones they created). */
   listForMember(userId: string): Promise<MissionRecord[]>;
-  listForConnection(connectionId: string): Promise<MissionRecord[]>;
+  listForAccount(accountId: string): Promise<MissionRecord[]>;
   /**
    * The client behind each of these missions that was issued through the
    * management door, keyed by mission id. A mission issued in the interface
@@ -376,14 +376,14 @@ export interface MissionEditInput {
   readonly name: string;
   readonly expiresAt: Iso | null;
   /**
-   * Every connection of the mission after the edit, with its sets in order and their
-   * lines: a set with the `id` of a stored set of that connection is that set (its
-   * counters and requests follow it); any other is a new set. A connection given with
-   * its selection directly (one set, lines in `policy`) keeps the connection's one
+   * Every account of the mission after the edit, with its sets in order and their
+   * lines: a set with the `id` of a stored set of that account is that set (its
+   * counters and requests follow it); any other is a new set. An account given with
+   * its selection directly (one set, lines in `policy`) keeps the account's one
    * stored set, when it has one.
    */
-  readonly connections: readonly MissionConnectionInput[];
-  /** The lines of the connections given without sets, as `CreateMissionInput.policy`. */
+  readonly accounts: readonly MissionAccountInput[];
+  /** The lines of the accounts given without sets, as `CreateMissionInput.policy`. */
   readonly policy?: readonly MissionPolicyLineInput[];
   /** The session's summary event of the edit, given how many requests it closed. */
   readonly summary: (requestsClosed: number) => NewEvent;
@@ -459,13 +459,13 @@ interface PolicyRow {
   gate: string;
 }
 
-interface ConnectionRow {
-  connection_id: string;
+interface AccountRow {
+  account_id: string;
 }
 
 interface SetRow {
   id: string;
-  connection_id: string;
+  account_id: string;
   position: number;
   future: number;
   env: string | null;
@@ -473,7 +473,7 @@ interface SetRow {
   trust_levels_json: string | null;
 }
 
-const SET_COLUMNS = 'id, connection_id, position, future, env, mixed_env, trust_levels_json';
+const SET_COLUMNS = 'id, account_id, position, future, env, mixed_env, trust_levels_json';
 
 interface SelectedRow {
   resource_id: string;
@@ -617,46 +617,46 @@ export function isRiskOfProvider(riskId: RiskId, provider: string): boolean {
   return riskId.startsWith(`${provider}.`) || riskId.startsWith(`${provider}[`);
 }
 
-/** A connection of a write, with its sets and their lines. */
-interface ResolvedConnectionInput {
-  readonly connectionId: string;
+/** An account of a write, with its sets and their lines. */
+interface ResolvedAccountInput {
+  readonly accountId: string;
   readonly resourceSets: readonly MissionResourceSetInput[];
 }
 
-/** A set of a write with its environment read from its resources (`assertConnectionSelections`). */
+/** A set of a write with its environment read from its resources (`assertAccountSelections`). */
 interface CheckedSetInput extends MissionResourceSetInput {
   readonly future: boolean;
   readonly env: string | null;
 }
 
-/** A connection of a write whose sets were checked. */
-interface CheckedConnectionInput {
-  readonly connectionId: string;
+/** An account of a write whose sets were checked. */
+interface CheckedAccountInput {
+  readonly accountId: string;
   readonly resourceSets: readonly CheckedSetInput[];
 }
 
 /**
- * The connections of a write with their sets: a connection given with its selection
+ * The accounts of a write with their sets: an account given with its selection
  * directly becomes one set holding the `policy` lines of its provider. A line no
- * connection of that shape is for is refused.
+ * account of that shape is for is refused.
  */
-function resolveConnectionInputs(
+function resolveAccountInputs(
   ctx: RepoContext,
-  connections: readonly MissionConnectionInput[],
+  accounts: readonly MissionAccountInput[],
   policy: readonly MissionPolicyLineInput[] = [],
-): ResolvedConnectionInput[] {
+): ResolvedAccountInput[] {
   const providerOf = ctx.db.prepare<[string], { provider: string }>(
-    'SELECT provider FROM connections WHERE id = ?',
+    'SELECT provider FROM accounts WHERE id = ?',
   );
   const placed = new Set<MissionPolicyLineInput>();
-  const resolved = connections.map((c): ResolvedConnectionInput => {
-    if ('resourceSets' in c) return { connectionId: c.connectionId, resourceSets: c.resourceSets };
-    const provider = providerOf.get(c.connectionId)?.provider;
-    if (provider === undefined) throw new NotFoundError('connection', c.connectionId);
+  const resolved = accounts.map((c): ResolvedAccountInput => {
+    if ('resourceSets' in c) return { accountId: c.accountId, resourceSets: c.resourceSets };
+    const provider = providerOf.get(c.accountId)?.provider;
+    if (provider === undefined) throw new NotFoundError('account', c.accountId);
     const lines = policy.filter((line) => isRiskOfProvider(line.riskId, provider));
     for (const line of lines) placed.add(line);
     return {
-      connectionId: c.connectionId,
+      accountId: c.accountId,
       resourceSets: [
         {
           resourceIds: c.resourceIds,
@@ -671,39 +671,39 @@ function resolveConnectionInputs(
   const unplaced = policy.filter((line) => !placed.has(line));
   if (unplaced.length > 0) {
     throw new InvariantError(
-      `policy line(s) ${unplaced.map((l) => l.riskId).join(', ')} name no connection of the mission`,
+      `policy line(s) ${unplaced.map((l) => l.riskId).join(', ')} name no account of the mission`,
     );
   }
   return resolved;
 }
 
 /**
- * Every connection carries at least one set; each set an explicit list of resources of
- * that connection, all of one effective environment (own label, else the connection's
+ * Every account carries at least one set; each set an explicit list of resources of
+ * that account, all of one effective environment (own label, else the account's
  * default), which is the set's `env` — or the `env` given, which every resource must
  * carry (ADR resource-set-is-one-environment-with-optional-future-resources). The sets of
- * a connection partition its selection: a resource in one set only, and one set at most
+ * an account partition its selection: a resource in one set only, and one set at most
  * with future on per environment. Returns the sets with their environment.
  */
-function assertConnectionSelections(
+function assertAccountSelections(
   ctx: RepoContext,
-  connections: readonly ResolvedConnectionInput[],
-): CheckedConnectionInput[] {
-  if (connections.length === 0) {
-    throw new InvariantError('a mission carries at least one connection');
+  accounts: readonly ResolvedAccountInput[],
+): CheckedAccountInput[] {
+  if (accounts.length === 0) {
+    throw new InvariantError('a mission carries at least one account');
   }
-  const resourceOf = ctx.db.prepare<[string], { connection_id: string; env: string | null }>(
-    `SELECT r.connection_id, COALESCE(r.env, c.default_env) AS env
-     FROM connection_resources r JOIN connections c ON c.id = r.connection_id WHERE r.id = ?`,
+  const resourceOf = ctx.db.prepare<[string], { account_id: string; env: string | null }>(
+    `SELECT r.account_id, COALESCE(r.env, c.default_env) AS env
+     FROM account_resources r JOIN accounts c ON c.id = r.account_id WHERE r.id = ?`,
   );
-  const seenConnections = new Set<string>();
-  return connections.map((c): CheckedConnectionInput => {
-    if (seenConnections.has(c.connectionId)) {
-      throw new InvariantError(`connection ${c.connectionId} is listed twice`);
+  const seenAccounts = new Set<string>();
+  return accounts.map((c): CheckedAccountInput => {
+    if (seenAccounts.has(c.accountId)) {
+      throw new InvariantError(`account ${c.accountId} is listed twice`);
     }
-    seenConnections.add(c.connectionId);
+    seenAccounts.add(c.accountId);
     if (c.resourceSets.length === 0) {
-      throw new InvariantError(`connection ${c.connectionId}: no resource set`);
+      throw new InvariantError(`account ${c.accountId}: no resource set`);
     }
     const seenResources = new Set<string>();
     const seenSets = new Set<string>();
@@ -719,15 +719,15 @@ function assertConnectionSelections(
       for (const resourceId of set.resourceIds) {
         if (seenResources.has(resourceId)) {
           throw new InvariantError(
-            `resource ${resourceId} is in two resource sets of connection ${c.connectionId}`,
+            `resource ${resourceId} is in two resource sets of account ${c.accountId}`,
           );
         }
         seenResources.add(resourceId);
         const owner = resourceOf.get(resourceId);
-        if (!owner) throw new NotFoundError('connection_resource', resourceId);
-        if (owner.connection_id !== c.connectionId) {
+        if (!owner) throw new NotFoundError('account_resource', resourceId);
+        if (owner.account_id !== c.accountId) {
           throw new InvariantError(
-            `resource ${resourceId} does not belong to connection ${c.connectionId}`,
+            `resource ${resourceId} does not belong to account ${c.accountId}`,
           );
         }
         envs.add(owner.env);
@@ -735,7 +735,7 @@ function assertConnectionSelections(
       if (set.env !== undefined) envs.add(set.env);
       if (envs.size > 1) {
         throw new InvariantError(
-          `connection ${c.connectionId}: a resource set holds several environments`,
+          `account ${c.accountId}: a resource set holds several environments`,
         );
       }
       const [env = null] = envs;
@@ -743,14 +743,14 @@ function assertConnectionSelections(
       if (future) {
         if (futureEnvs.has(env)) {
           throw new InvariantError(
-            `connection ${c.connectionId}: two resource sets take the future resources of one environment`,
+            `account ${c.accountId}: two resource sets take the future resources of one environment`,
           );
         }
         futureEnvs.add(env);
       }
       return { ...set, future, env };
     });
-    return { connectionId: c.connectionId, resourceSets };
+    return { accountId: c.accountId, resourceSets };
   });
 }
 
@@ -778,10 +778,10 @@ function validateLines(
 }
 
 /** Every line of every set, checked; a line of one set appears once in it. */
-function validateSets(ctx: RepoContext, connections: readonly ResolvedConnectionInput[]): void {
-  for (const c of connections) {
+function validateSets(ctx: RepoContext, accounts: readonly ResolvedAccountInput[]): void {
+  for (const c of accounts) {
     for (const [index, set] of c.resourceSets.entries()) {
-      validateLines(ctx, set.policy, `resource set ${index + 1} of connection ${c.connectionId}`);
+      validateLines(ctx, set.policy, `resource set ${index + 1} of account ${c.accountId}`);
     }
   }
 }
@@ -810,7 +810,7 @@ function validateFlatPolicy(
 
 /** The ids of every set of a mission. */
 function setIdsOf(mission: MissionRecord): Set<string> {
-  return new Set(mission.connections.flatMap((c) => c.resourceSets.map((set) => set.id)));
+  return new Set(mission.accounts.flatMap((c) => c.resourceSets.map((set) => set.id)));
 }
 
 /** The one key of a line, for maps: its set and its risk. */
@@ -827,7 +827,7 @@ function placementOf(candidates: readonly SetRow[], env: string | null): SetRow 
   const sameEnv = candidates.filter((set) => set.mixed_env === 0 && set.env === env);
   const [first] = candidates;
   const chosen = sameEnv.find((set) => set.future === 1) ?? sameEnv[0] ?? first;
-  if (!chosen) throw new InvariantError('a mission connection carries at least one resource set');
+  if (!chosen) throw new InvariantError('a mission account carries at least one resource set');
   return chosen;
 }
 
@@ -848,12 +848,12 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      FROM missions m JOIN mission_members mm ON mm.mission_id = m.id
      WHERE mm.user_id = ? AND mm.removed_at IS NULL ORDER BY m.created_at`,
   );
-  const byConnection = db.prepare<[string], MissionRow>(
+  const byAccount = db.prepare<[string], MissionRow>(
     `SELECT m.id, m.name, m.creator_user_id, m.status, m.period_anchor, m.period_seconds,
        m.expires_at, m.issued_by_mission_id, m.issued_via_client_name, m.created_at,
        m.updated_at, m.closed_at
-     FROM missions m JOIN mission_connections mc ON mc.mission_id = m.id
-     WHERE mc.connection_id = ? ORDER BY m.created_at`,
+     FROM missions m JOIN mission_accounts mc ON mc.mission_id = m.id
+     WHERE mc.account_id = ? ORDER BY m.created_at`,
   );
   const insert = db.prepare<
     [string, string, string, string, number | null, string | null, string | null, string, string]
@@ -862,18 +862,18 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
        expires_at, issued_by_mission_id, created_at, updated_at)
      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
   );
-  const insertConnection = db.prepare<[string, string]>(
-    'INSERT INTO mission_connections (mission_id, connection_id) VALUES (?, ?)',
+  const insertAccount = db.prepare<[string, string]>(
+    'INSERT INTO mission_accounts (mission_id, account_id) VALUES (?, ?)',
   );
   const insertSet = db.prepare<
     [string, string, string, number, number, string | null, string | null]
   >(
     `INSERT INTO mission_resource_sets
-       (id, mission_id, connection_id, position, future, env, trust_levels_json)
+       (id, mission_id, account_id, position, future, env, trust_levels_json)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertResource = db.prepare<[string, string, string, string, string]>(
-    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
+    `INSERT INTO mission_resources (mission_id, account_id, resource_id, resource_set_id, source)
      VALUES (?, ?, ?, ?, ?)`,
   );
   const insertPolicy = db.prepare<[string, string, string, number, number, number, string]>(
@@ -886,49 +886,49 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const policyOf = db.prepare<[string], PolicyRow>(
     `SELECT p.resource_set_id, p.risk_id, p.quota, p.rate_limit, p.rate_window_seconds, p.gate
      FROM mission_policy p JOIN mission_resource_sets s ON s.id = p.resource_set_id
-     WHERE p.mission_id = ? ORDER BY p.risk_id, s.connection_id, s.position`,
+     WHERE p.mission_id = ? ORDER BY p.risk_id, s.account_id, s.position`,
   );
-  const connectionsOf = db.prepare<[string], ConnectionRow>(
-    'SELECT connection_id FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
+  const accountsOf = db.prepare<[string], AccountRow>(
+    'SELECT account_id FROM mission_accounts WHERE mission_id = ? ORDER BY account_id',
   );
   const setsOf = db.prepare<[string], SetRow>(
     `SELECT ${SET_COLUMNS}
-     FROM mission_resource_sets WHERE mission_id = ? ORDER BY connection_id, position, id`,
+     FROM mission_resource_sets WHERE mission_id = ? ORDER BY account_id, position, id`,
   );
-  const setsOfConnection = db.prepare<[string, string], SetRow>(
+  const setsOfAccount = db.prepare<[string, string], SetRow>(
     `SELECT ${SET_COLUMNS}
-     FROM mission_resource_sets WHERE mission_id = ? AND connection_id = ? ORDER BY position, id`,
+     FROM mission_resource_sets WHERE mission_id = ? AND account_id = ? ORDER BY position, id`,
   );
   const resourcesOf = db.prepare<[string], SelectedRow>(
     'SELECT resource_id, resource_set_id, source FROM mission_resources WHERE mission_id = ? ORDER BY resource_id',
   );
   const insertResourceFrom = db.prepare<[string, string, string, string, string]>(
-    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
+    `INSERT INTO mission_resources (mission_id, account_id, resource_id, resource_set_id, source)
      VALUES (?, ?, ?, ?, ?) ON CONFLICT (mission_id, resource_id) DO NOTHING`,
   );
-  const resourceConnectionOf = db.prepare<
+  const resourceAccountOf = db.prepare<
     [string],
-    { connection_id: string; ref: string; env: string | null; hidden: number }
+    { account_id: string; ref: string; env: string | null; hidden: number }
   >(
-    `SELECT r.connection_id, r.ref, COALESCE(r.env, c.default_env) AS env, r.hidden
-     FROM connection_resources r JOIN connections c ON c.id = r.connection_id WHERE r.id = ?`,
+    `SELECT r.account_id, r.ref, COALESCE(r.env, c.default_env) AS env, r.hidden
+     FROM account_resources r JOIN accounts c ON c.id = r.account_id WHERE r.id = ?`,
   );
   // Running: stored `active` and not past its expiry (an `orphaned` one is derived, still stored active).
-  const runningOnConnection = db.prepare<[string, string], { id: string }>(
-    `SELECT DISTINCT m.id FROM missions m JOIN mission_connections mc ON mc.mission_id = m.id
-     WHERE mc.connection_id = ? AND m.status = 'active' AND (m.expires_at IS NULL OR m.expires_at > ?)
+  const runningOnAccount = db.prepare<[string, string], { id: string }>(
+    `SELECT DISTINCT m.id FROM missions m JOIN mission_accounts mc ON mc.mission_id = m.id
+     WHERE mc.account_id = ? AND m.status = 'active' AND (m.expires_at IS NULL OR m.expires_at > ?)
      ORDER BY m.id`,
   );
-  const heldOnConnection = db.prepare<
+  const heldOnAccount = db.prepare<
     [string, string],
     { resource_id: string; resource_set_id: string }
   >(
-    'SELECT resource_id, resource_set_id FROM mission_resources WHERE mission_id = ? AND connection_id = ?',
+    'SELECT resource_id, resource_set_id FROM mission_resources WHERE mission_id = ? AND account_id = ?',
   );
-  const futureConnections = db.prepare<[string], { connection_id: string }>(
-    `SELECT DISTINCT s.connection_id FROM mission_resource_sets s JOIN missions m ON m.id = s.mission_id
+  const futureAccounts = db.prepare<[string], { account_id: string }>(
+    `SELECT DISTINCT s.account_id FROM mission_resource_sets s JOIN missions m ON m.id = s.mission_id
      WHERE s.future = 1 AND m.status = 'active' AND (m.expires_at IS NULL OR m.expires_at > ?)
-     ORDER BY s.connection_id`,
+     ORDER BY s.account_id`,
   );
   const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
@@ -1062,10 +1062,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       closedAt: row.closed_at,
-      connections: connectionsOf.all(row.id).map((c): MissionConnectionRecord => ({
-        connectionId: c.connection_id,
+      accounts: accountsOf.all(row.id).map((c): MissionAccountRecord => ({
+        accountId: c.account_id,
         resourceSets: sets
-          .filter((set) => set.connection_id === c.connection_id)
+          .filter((set) => set.account_id === c.account_id)
           .map((set) => setToRecord(set, selected.get(set.id) ?? [])),
       })),
       policy: policyOf.all(row.id).map(policyToRecord),
@@ -1137,8 +1137,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     `SELECT resource_set_id, macro_action_id, level_changed_at, snoozed_at
      FROM mission_trust_marks WHERE mission_id = ? ORDER BY resource_set_id, macro_action_id`,
   );
-  const deleteConnectionStmt = db.prepare<[string, string]>(
-    'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
+  const deleteAccountStmt = db.prepare<[string, string]>(
+    'DELETE FROM mission_accounts WHERE mission_id = ? AND account_id = ?',
   );
   const deleteResourceStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_resources WHERE mission_id = ? AND resource_id = ?',
@@ -1233,26 +1233,26 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     readonly id: string;
     readonly kept: boolean;
     readonly position: number;
-    readonly connectionId: string;
+    readonly accountId: string;
     readonly input: CheckedSetInput;
   }
 
-  /** Inserts one connection with its sets, resources and lines. In-transaction. */
-  function insertConnectionWithSets(missionId: string, c: CheckedConnectionInput): void {
-    insertConnection.run(missionId, c.connectionId);
+  /** Inserts one account with its sets, resources and lines. In-transaction. */
+  function insertAccountWithSets(missionId: string, c: CheckedAccountInput): void {
+    insertAccount.run(missionId, c.accountId);
     c.resourceSets.forEach((set, index) => {
       const setId = ctx.newId();
       insertSet.run(
         setId,
         missionId,
-        c.connectionId,
+        c.accountId,
         index + 1,
         set.future ? 1 : 0,
         set.env,
         trustLevelsJsonOf(set),
       );
       for (const resourceId of set.resourceIds) {
-        insertResource.run(missionId, c.connectionId, resourceId, setId, 'issuance');
+        insertResource.run(missionId, c.accountId, resourceId, setId, 'issuance');
       }
       for (const line of set.policy) writeLine(missionId, setId, line);
     });
@@ -1260,19 +1260,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
 
   return {
     async edit(id, raw) {
-      const unchecked = resolveConnectionInputs(ctx, raw.connections, raw.policy);
+      const unchecked = resolveAccountInputs(ctx, raw.accounts, raw.policy);
       validateSets(ctx, unchecked);
-      const resolved = assertConnectionSelections(ctx, unchecked);
+      const resolved = assertAccountSelections(ctx, unchecked);
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const before = requireMission(id);
-        // A connection given flat keeps its one stored set.
+        // An account given flat keeps its one stored set.
         const input = {
           ...raw,
-          connections: resolved.map((c, i): CheckedConnectionInput => {
-            const given = raw.connections[i];
+          accounts: resolved.map((c, i): CheckedAccountInput => {
+            const given = raw.accounts[i];
             const flat = given !== undefined && !('resourceSets' in given);
-            const stored = before.connections.find((b) => b.connectionId === c.connectionId);
+            const stored = before.accounts.find((b) => b.accountId === c.accountId);
             const [only] = stored?.resourceSets ?? [];
             const [set] = c.resourceSets;
             return flat && only && set && stored?.resourceSets.length === 1
@@ -1295,27 +1295,25 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           else setExpiry.run(input.expiresAt, now, id);
         }
 
-        // ── Which set is which: a stored id on the same connection keeps its set. ──
-        const stored = new Map<string, { connectionId: string; set: MissionResourceSetRecord }>();
-        for (const c of before.connections) {
-          for (const set of c.resourceSets)
-            stored.set(set.id, { connectionId: c.connectionId, set });
+        // ── Which set is which: a stored id on the same account keeps its set. ──
+        const stored = new Map<string, { accountId: string; set: MissionResourceSetRecord }>();
+        for (const c of before.accounts) {
+          for (const set of c.resourceSets) stored.set(set.id, { accountId: c.accountId, set });
         }
-        const planned: PlannedSet[] = input.connections.flatMap((c) =>
+        const planned: PlannedSet[] = input.accounts.flatMap((c) =>
           c.resourceSets.map((set, index): PlannedSet => {
-            const kept =
-              set.id !== undefined && stored.get(set.id)?.connectionId === c.connectionId;
+            const kept = set.id !== undefined && stored.get(set.id)?.accountId === c.accountId;
             return {
               id: kept && set.id !== undefined ? set.id : ctx.newId(),
               kept,
               position: index + 1,
-              connectionId: c.connectionId,
+              accountId: c.accountId,
               input: set,
             };
           }),
         );
         const keptIds = new Set(planned.filter((p) => p.kept).map((p) => p.id));
-        const nextConnections = new Set(input.connections.map((c) => c.connectionId));
+        const nextAccounts = new Set(input.accounts.map((c) => c.accountId));
 
         const session = sessions.sessionOfMission(id);
         const record = (event: NewEvent): void => {
@@ -1349,9 +1347,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         // ── The sets and their resources. Order matters: a resource row always names a
         // set that exists.
         const removedSets = [...stored.entries()].filter(([setId]) => !keptIds.has(setId));
-        for (const c of input.connections) {
-          if (!before.connections.some((b) => b.connectionId === c.connectionId)) {
-            insertConnection.run(id, c.connectionId);
+        for (const c of input.accounts) {
+          if (!before.accounts.some((b) => b.accountId === c.accountId)) {
+            insertAccount.run(id, c.accountId);
           }
         }
         for (const set of planned) {
@@ -1359,21 +1357,21 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           insertSet.run(
             set.id,
             id,
-            set.connectionId,
+            set.accountId,
             set.position,
             set.input.future ? 1 : 0,
             set.input.env,
             trustLevelsJsonOf(set.input),
           );
         }
-        for (const c of before.connections) {
-          if (nextConnections.has(c.connectionId)) continue;
+        for (const c of before.accounts) {
+          if (nextAccounts.has(c.accountId)) continue;
           // Its sets, resources and lines go with it (foreign keys, ON DELETE CASCADE).
-          deleteConnectionStmt.run(id, c.connectionId);
+          deleteAccountStmt.run(id, c.accountId);
         }
         const placedBefore = new Map<string, string>();
-        for (const c of before.connections) {
-          if (!nextConnections.has(c.connectionId)) continue;
+        for (const c of before.accounts) {
+          if (!nextAccounts.has(c.accountId)) continue;
           for (const set of c.resourceSets) {
             for (const resourceId of set.resourceIds) placedBefore.set(resourceId, set.id);
           }
@@ -1387,12 +1385,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         }
         for (const [resourceId, set] of placedAfter) {
           const was = placedBefore.get(resourceId);
-          if (was === undefined)
-            insertResource.run(id, set.connectionId, resourceId, set.id, 'edit');
+          if (was === undefined) insertResource.run(id, set.accountId, resourceId, set.id, 'edit');
           else if (was !== set.id) moveResourceStmt.run(set.id, id, resourceId);
         }
-        for (const [setId, { connectionId }] of removedSets) {
-          if (nextConnections.has(connectionId)) deleteSetStmt.run(setId);
+        for (const [setId, { accountId }] of removedSets) {
+          if (nextAccounts.has(accountId)) deleteSetStmt.run(setId);
         }
         for (const set of planned) {
           if (!set.kept) continue;
@@ -1511,9 +1508,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return issuers;
     },
     async create(input) {
-      const unchecked = resolveConnectionInputs(ctx, input.connections, input.policy);
+      const unchecked = resolveAccountInputs(ctx, input.accounts, input.policy);
       validateSets(ctx, unchecked);
-      const connections = assertConnectionSelections(ctx, unchecked);
+      const accounts = assertAccountSelections(ctx, unchecked);
       const id = ctx.newId();
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
@@ -1528,36 +1525,34 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
           now,
         );
-        for (const c of connections) insertConnectionWithSets(id, c);
+        for (const c of accounts) insertAccountWithSets(id, c);
       });
       return requireMission(id);
     },
-    async addResources(missionId, connectionId, resourceIds, source, created, judgedSetIds) {
+    async addResources(missionId, accountId, resourceIds, source, created, judgedSetIds) {
       if (!MISSION_RESOURCE_SOURCES.includes(source)) {
         throw new InvariantError(`unknown mission resource source '${String(source)}'`);
       }
       const now = nowIso(ctx);
       return withImmediateTransaction(db, (): AddedMissionResources => {
-        const sets = setsOfConnection.all(missionId, connectionId);
+        const sets = setsOfAccount.all(missionId, accountId);
         if (sets.length === 0) {
-          throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
+          throw new NotFoundError('mission_account', `${missionId}/${accountId}`);
         }
         const judged = sets.filter((set) => judgedSetIds?.includes(set.id) ?? false);
         const candidates = judged.length > 0 ? judged : sets;
         const held = new Map(
-          heldOnConnection
-            .all(missionId, connectionId)
-            .map((r) => [r.resource_id, r.resource_set_id]),
+          heldOnAccount.all(missionId, accountId).map((r) => [r.resource_id, r.resource_set_id]),
         );
         const refs: string[] = [];
         const placed: { resourceId: string; resourceSetId: string }[] = [];
         const added: string[] = [];
         for (const resourceId of resourceIds) {
-          const owner = resourceConnectionOf.get(resourceId);
-          if (!owner) throw new NotFoundError('connection_resource', resourceId);
-          if (owner.connection_id !== connectionId) {
+          const owner = resourceAccountOf.get(resourceId);
+          if (!owner) throw new NotFoundError('account_resource', resourceId);
+          if (owner.account_id !== accountId) {
             throw new InvariantError(
-              `resource ${resourceId} does not belong to connection ${connectionId}`,
+              `resource ${resourceId} does not belong to account ${accountId}`,
             );
           }
           if (!refs.includes(owner.ref)) refs.push(owner.ref);
@@ -1567,7 +1562,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             continue;
           }
           const target = placementOf(candidates, owner.env);
-          insertResourceFrom.run(missionId, connectionId, resourceId, target.id, source);
+          insertResourceFrom.run(missionId, accountId, resourceId, target.id, source);
           held.set(resourceId, target.id);
           placed.push({ resourceId, resourceSetId: target.id });
           added.push(resourceId);
@@ -1584,7 +1579,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             {
               kind: 'resources-created',
               actorUserId: created.actorUserId,
-              details: { tool: created.tool, connection_id: connectionId, refs },
+              details: { tool: created.tool, account_id: accountId, refs },
             },
             now,
           );
@@ -1592,14 +1587,14 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         return { placed, added };
       });
     },
-    async applyResourceChanges(connectionId, changes, neverJoin) {
+    async applyResourceChanges(accountId, changes, neverJoin) {
       const now = nowIso(ctx);
       const excluded = new Set(neverJoin);
       return withImmediateTransaction(db, (): ResourceMove[] => {
         const resources = new Map<string, { ref: string; env: string | null; hidden: boolean }>();
         for (const change of changes) {
-          const row = resourceConnectionOf.get(change.resourceId);
-          if (row?.connection_id !== connectionId) continue;
+          const row = resourceAccountOf.get(change.resourceId);
+          if (row?.account_id !== accountId) continue;
           resources.set(change.resourceId, {
             ref: row.ref,
             env: row.env,
@@ -1607,12 +1602,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           });
         }
         const moves: ResourceMove[] = [];
-        for (const { id: missionId } of runningOnConnection.all(connectionId, now)) {
-          const sets = setsOfConnection.all(missionId, connectionId);
+        for (const { id: missionId } of runningOnAccount.all(accountId, now)) {
+          const sets = setsOfAccount.all(missionId, accountId);
           const held = new Map(
-            heldOnConnection
-              .all(missionId, connectionId)
-              .map((r) => [r.resource_id, r.resource_set_id]),
+            heldOnAccount.all(missionId, accountId).map((r) => [r.resource_id, r.resource_set_id]),
           );
           const before = moves.length;
           for (const change of changes) {
@@ -1621,7 +1614,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             const move = (resourceSetId: string, kind: ResourceMove['change']): void => {
               moves.push({
                 missionId,
-                connectionId,
+                accountId,
                 resourceSetId,
                 resourceId: change.resourceId,
                 ref: resource.ref,
@@ -1645,7 +1638,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
                 (set) => set.future === 1 && set.mixed_env === 0 && set.env === resource.env,
               ) ?? sets.find((set) => set.future === 1 && set.mixed_env === 1);
             if (!target) continue;
-            insertResource.run(missionId, connectionId, change.resourceId, target.id, 'future');
+            insertResource.run(missionId, accountId, change.resourceId, target.id, 'future');
             held.set(change.resourceId, target.id);
             move(target.id, 'joined');
           }
@@ -1654,8 +1647,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         return moves;
       });
     },
-    async connectionsWithFutureSets(now) {
-      return futureConnections.all(now).map((r) => r.connection_id);
+    async accountsWithFutureSets(now) {
+      return futureAccounts.all(now).map((r) => r.account_id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -1670,8 +1663,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async listForMember(userId) {
       return byMember.all(userId).map(toRecord);
     },
-    async listForConnection(connectionId) {
-      return byConnection.all(connectionId).map(toRecord);
+    async listForAccount(accountId) {
+      return byAccount.all(accountId).map(toRecord);
     },
     async setStatus(id, status) {
       const now = nowIso(ctx);

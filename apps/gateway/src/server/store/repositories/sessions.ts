@@ -79,7 +79,7 @@ export type DecideInput = {
   | {
       /**
        * Risks alone: each in every set of the mission that accepts it (`linesOfRisks`),
-       * exact for a mission with one set per connection.
+       * exact for a mission with one set per account.
        */
       readonly riskIds: readonly RiskId[];
     }
@@ -599,10 +599,10 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const setsOfRisk = db.prepare<[string, string], { resource_set_id: string }>(
     `SELECT p.resource_set_id FROM mission_policy p
        JOIN mission_resource_sets s ON s.id = p.resource_set_id
-     WHERE p.mission_id = ? AND p.risk_id = ? ORDER BY s.connection_id, s.position`,
+     WHERE p.mission_id = ? AND p.risk_id = ? ORDER BY s.account_id, s.position`,
   );
   const firstSetOf = db.prepare<[string], { id: string }>(
-    'SELECT id FROM mission_resource_sets WHERE mission_id = ? ORDER BY connection_id, position LIMIT 1',
+    'SELECT id FROM mission_resource_sets WHERE mission_id = ? ORDER BY account_id, position LIMIT 1',
   );
 
   /** The lines of a decision: given, or each risk in every set that accepts it. */

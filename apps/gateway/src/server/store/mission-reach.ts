@@ -1,10 +1,10 @@
 /**
- * What a mission reaches on one of its connections — the one statement of the rule
+ * What a mission reaches on one of its accounts — the one statement of the rule
  * (spec §3.1 "Resource selection"; ADR
  * resource-set-is-one-environment-with-optional-future-resources).
  *
  * A set reaches the ids stored in its list, nothing else: no resource is resolved from
- * the connection at call time. A resource that appears later joins a list only by a
+ * the account at call time. A resource that appears later joins a list only by a
  * write (`MissionsRepo.applyResourceChanges`, `addResources`), audited on the mission.
  * Whatever the list says, a *stale* resource (the last discovery no longer returned it)
  * is not reached, and neither is one of the instance's own (`isSelf`, SEC 2026-10-15 H1).
@@ -16,26 +16,26 @@
  * and a change of the rule cannot be made in one of them and forgotten in another.
  */
 import type {
-  ConnectionResourceRecord,
-  MissionConnectionRecord,
+  AccountResourceRecord,
+  MissionAccountRecord,
   MissionResourceSetRecord,
 } from './types.ts';
 
-type Reachable = Pick<ConnectionResourceRecord, 'id' | 'staleSince'>;
+type Reachable = Pick<AccountResourceRecord, 'id' | 'staleSince'>;
 
 /** True when one set of the selection takes the resources that later appear in its environment. */
 export function takesFutureResources(
-  selection: Pick<MissionConnectionRecord, 'resourceSets'>,
+  selection: Pick<MissionAccountRecord, 'resourceSets'>,
 ): boolean {
   return selection.resourceSets.some((set) => set.future);
 }
 
 /**
- * The resources of `discovered` (the connection's rows, as `listResources` returns
- * them) that each set of the selection reaches now, in the connection's own order.
+ * The resources of `discovered` (the account's rows, as `listResources` returns
+ * them) that each set of the selection reaches now, in the account's own order.
  */
 export function reachedResourcesBySet<R extends Reachable>(
-  selection: Pick<MissionConnectionRecord, 'resourceSets'>,
+  selection: Pick<MissionAccountRecord, 'resourceSets'>,
   discovered: readonly R[],
   isSelf: (resource: R) => boolean,
 ): Map<string, R[]> {
@@ -57,10 +57,10 @@ function reachedBySet<R extends Reachable>(
 
 /**
  * The resources of `discovered` that the selection reaches now, every set together, in
- * the connection's own order.
+ * the account's own order.
  */
 export function reachedResources<R extends Reachable>(
-  selection: Pick<MissionConnectionRecord, 'resourceSets'>,
+  selection: Pick<MissionAccountRecord, 'resourceSets'>,
   discovered: readonly R[],
   isSelf: (resource: R) => boolean,
 ): R[] {

@@ -31,7 +31,7 @@ row keeps the resource's own label.
 - Setting or clearing a default changes what running missions reach, like relabelling; an
   unlabelled resource of a connection without default is still never a safe default.
 - An owner-editable scalar in metadata needs a plugin contract change (only lists of strings are
-  editable today). Connect-flow rules: handbook [connections](../handbook/connections.md).
+  editable today). Connect-flow rules: handbook [accounts](../handbook/accounts.md).
 
 ## Rejected alternatives
 

@@ -110,7 +110,7 @@ percent-escape or any other character is refused by `classify` and by
 reaches the request.
 
 What `execute` declines itself — an account outside the mission, a malformed
-identifier, an undeclared argument, a mode the connection holds no key for,
+identifier, an undeclared argument, a mode the account holds no key for,
 an unknown tool — is an `isError` result carrying the reason
 (`ExecutorRefusal` under the SDK's `declining`), returned before any request:
 nothing failed at Stripe and the audit records no upstream failure. What Stripe fails is thrown

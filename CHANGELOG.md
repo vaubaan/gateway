@@ -9,6 +9,45 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Breaking
+
+- **Connection is account, in the code, the store and the protocol** (ADR
+  one-word-per-thing-account-service-plugin). The interface already said account; the tool
+  names, refusal codes, API fields and audit acts an agent or an integration reads now say it
+  too. Old → new:
+  - tool `vaubaan__list_my_connections` → `vaubaan__list_my_accounts` (plugin `vaubaan` 0.2.0); its answer’s
+    `lost_connections` → `lost_accounts`;
+  - refusal codes `connection-unavailable` → `account-unavailable`, `connection-revoked` →
+    `account-revoked`;
+  - fields `connection_id` → `account_id`, `connections` → `accounts` (an issuance, a preview,
+    `vaubaan__issue_mission`, the audit, the session events),
+    `connection_ids` → `account_ids`, `connection_index` → `account_index`,
+    `connections_added` / `connections_removed` → `accounts_added` / `accounts_removed`,
+    `connections_unowned` → `accounts_unowned`; the resource scope `{ scope: 'connection' }`
+    → `{ scope: 'account' }`;
+  - preview and issuance issue codes `connection-unknown`, `connection-ambiguous`,
+    `connection-unavailable`, `connection-personal`, `duplicate-connection`, `no-connection`,
+    `unknown-connection`, `resource-not-in-connection` → the same with `account`; connect
+    errors `connection-limit-reached`, `connection-unowned`, `connection-name` → `account-…`;
+  - audit acts `connection-created`, `-reconnected`, `-refused`, `-transferred`,
+    `-reassigned`, `-revoked`, `-default-env-set` → `account-…`; `mission-connection-lost` /
+    `-restored` → `mission-account-lost` / `-restored`; object type `connection` → `account`;
+  - sign-in: `local-account-created` / `-removed` → `sign-in-account-created` / `-removed`,
+    their object `local-account:<provider>` → `sign-in-account:<provider>`; the pages
+    `/account/create|reset|forgot` → `/sign-in-account/…` (the old paths redirect, so a link
+    mailed before the upgrade still opens) and their forms post to `/api/sign-in-account/…`.
+
+  Store migration 0036 renames the tables (`connections` → `accounts`, `connection_resources`
+  → `account_resources`, `mission_connections` → `mission_accounts`, `local_accounts` →
+  `sign_in_accounts`) and every `connection_id` column in place, and rewrites the stored acts,
+  refusal codes and JSON snapshots to the new names: history reads with them. No id and no
+  sealed byte changes: every credential still opens. A backup written before the upgrade
+  restores. Kept on purpose: the callback `/connections/callback/<plugin>` registered at
+  the services and the brokers, and the telemetry payload (`connection-revoked` and
+  `connection-unavailable` still travel under those names). `limits.connections` and
+  `VAUBAAN_LIMITS_CONNECTIONS` are read as `limits.accounts` / `VAUBAAN_LIMITS_ACCOUNTS`,
+  with one warning at start. The sign-in provider kind stays `local`.
+
 ### Changed
 
 - **No confirmation except before an irreversible act** (spec §4.2, owner decision
@@ -42,6 +81,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `oauth.*` keys are ignored with one warning at start.
 
 ### Plugin SDK
+
+- **0.9.3 — `AccountContext` and `ClassifyAccount`** (ADR
+  one-word-per-thing-account-service-plugin): the context of `verify`, `discoverResources`,
+  `refresh` and `revoke`, and the public fields `classify` receives, named after the account.
+  `ConnectionContext` and `ClassifyConnection` stay as `@deprecated` aliases until 0.10, and
+  the kit's `decide` still reads `connection` beside `account`: a pin built against 0.9
+  loads and compiles as before.
 
 - **0.9.2 — the credential kind `host`**: no field, nothing to paste or verify; only the
   gateway creates such an account, and a plugin declaring it is loaded bundled only (a

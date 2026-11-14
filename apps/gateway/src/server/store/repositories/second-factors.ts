@@ -9,7 +9,7 @@ import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
 import type { Iso } from '../types.ts';
 import { nowIso, type RepoContext } from './context.ts';
-import { nextLockout, type LockoutRule } from './local-accounts.ts';
+import { nextLockout, type LockoutRule } from './sign-in-accounts.ts';
 
 export const SECOND_FACTOR_SECRET_KINDS = ['totp', 'recovery'] as const;
 export type SecondFactorSecretKind = (typeof SECOND_FACTOR_SECRET_KINDS)[number];

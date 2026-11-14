@@ -74,22 +74,21 @@ The interface speaks to people; the protocol — MCP tool names, refusal codes,
 ids, the API, the database, the configuration, and the specification of the
 domain — keeps the names it had. The same things, under both:
 
-| In the interface                   | In the protocol, the code and the spec                |
-| ---------------------------------- | ----------------------------------------------------- |
-| account                            | connection                                            |
-| access (Give access)               | share                                                 |
-| permission                         | risk, by its `RiskId` (`github.merge-protected`)      |
-| limits (per day, per minute)       | budget: quota and rate limit                          |
-| runs freely / ask me first         | gate: `auto` / `approval`                             |
-| key, machine key                   | mission token: member token, named token              |
-| Replace key                        | rotate                                                |
-| Waiting for you                    | request: a claim (limit reached), an approval request |
-| Vaubaan account                    | the connection of the `vaubaan` plugin (host account) |
-| Activity                           | audit, session                                        |
-| teammate, team                     | mission member, group                                 |
-| administrator                      | operator                                              |
-| service, OAuth client, Reference   | provider, provider app, the provider pages            |
-| mission, macro-action, trust level | mission, macro-action, trust level                    |
+| In the interface                            | In the protocol, the code and the spec                |
+| ------------------------------------------- | ----------------------------------------------------- |
+| access (Give access)                        | share                                                 |
+| permission                                  | risk, by its `RiskId` (`github.merge-protected`)      |
+| limits (per day, per minute)                | budget: quota and rate limit                          |
+| runs freely / ask me first                  | gate: `auto` / `approval`                             |
+| key, machine key                            | mission token: member token, named token              |
+| Replace key                                 | rotate                                                |
+| Waiting for you                             | request: a claim (limit reached), an approval request |
+| Vaubaan account                             | the account of the `vaubaan` plugin (host account)    |
+| Activity                                    | audit, session                                        |
+| teammate, team                              | mission member, group                                 |
+| administrator                               | operator                                              |
+| service, OAuth client, Reference            | provider, provider app, the provider pages            |
+| account, mission, macro-action, trust level | the same                                              |
 
 ## Status
 

@@ -1,5 +1,5 @@
 /**
- * Password hashing of the local accounts (spec §6; ADR
+ * Password hashing of the sign-in accounts (spec §6; ADR
  * local-accounts-sign-in-provider): argon2id in the PHC string format
  * (`$argon2id$v=19$m=…,t=…,p=…$salt$hash`), which names its algorithm, salt and
  * limits, so that the limits can be raised later without a migration — a hash
@@ -14,7 +14,7 @@
  * sign-in being hashed no longer stalls every other request (the MCP calls of
  * running agents included). The sign-in form stays rate-limited
  * (`AUTH_LIMITS.password*`) and locks an account after repeated failures
- * (`local-accounts.ts`), which bounds how much of the pool anonymous posts take.
+ * (`sign-in-accounts.ts`), which bounds how much of the pool anonymous posts take.
  *
  * The policy is a length, not a composition: at least `PASSWORD_MIN_LENGTH`
  * characters, at most `PASSWORD_MAX_BYTES` bytes (argon2's input limit is far

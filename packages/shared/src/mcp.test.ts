@@ -40,8 +40,8 @@ describe('refusal codes', () => {
       [
         'approval-required',
         'budget-exhausted',
-        'connection-revoked',
-        'connection-unavailable',
+        'account-revoked',
+        'account-unavailable',
         'mission-inactive',
         'rate-limited',
         'resource-not-in-mission',

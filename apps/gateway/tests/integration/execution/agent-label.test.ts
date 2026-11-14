@@ -154,7 +154,7 @@ describe('agent label: attribution only', () => {
     // Apart from the label (and the time), every allowed entry is the same decision.
     const decisions = new Set(
       all.map((e) =>
-        JSON.stringify([e.tool, e.decision, e.refusal_code, e.risks_touched, e.connection_id]),
+        JSON.stringify([e.tool, e.decision, e.refusal_code, e.risks_touched, e.account_id]),
       ),
     );
     expect(decisions.size).toBe(2);

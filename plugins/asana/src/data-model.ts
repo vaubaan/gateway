@@ -27,8 +27,7 @@ export const asanaDataModel: DataModel = {
           parent: null,
           // `bounded` : `list_projects` names every project of the mission at once.
           cardinalities: ['one', 'bounded'],
-          description:
-            'An Asana project : the resource a connection exposes and a mission selects.',
+          description: 'An Asana project : the resource an account exposes and a mission selects.',
         },
         {
           name: 'section',

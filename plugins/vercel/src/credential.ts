@@ -22,8 +22,8 @@
  * Two alternatives on the connect form (`CredentialAlternative`), the
  * narrowest first : `project` asks the Project ID, `team` the Team ID. The host keeps only the chosen
  * one's field, so the mode is read from which field is there
- * (`vercelAuth`) : a connection made before the alternatives holds
- * `team_id` and stays a team connection, without migration.
+ * (`vercelAuth`) : an account made before the alternatives holds
+ * `team_id` and stays a team account, without migration.
  */
 
 import {
@@ -34,7 +34,7 @@ import {
   httpJson,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
@@ -145,7 +145,7 @@ export type VercelAuth =
 
 /**
  * Narrow the secret the host hands the plugin. The mode is the field that is
- * there : `team_id` (every connection made before 2026-11-11 too) or
+ * there : `team_id` (every account made before 2026-11-11 too) or
  * `project_id`. Throws `CredentialKindMismatch` on the wrong kind and a plain
  * `Error` when the token is missing, when neither or both ids are there, or
  * when one is malformed — all host bugs, not provider errors, so none is an
@@ -182,7 +182,7 @@ export function vercelAuth(secret: CredentialSecret): VercelAuth {
  * the project (`GET /v9/projects/{projectId}`, without `teamId` : Vercel
  * infers it from the token). A refusal says what to change.
  */
-export async function verifyVercelToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyVercelToken(ctx: AccountContext): Promise<CredentialCheck> {
   const auth = vercelAuth(ctx.credential);
   const current = await vercelGet(ctx, auth.token, '/v5/user/tokens/current');
   const account =
@@ -195,7 +195,7 @@ export async function verifyVercelToken(ctx: ConnectionContext): Promise<Credent
 }
 
 async function teamAccount(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   auth: Extract<VercelAuth, { mode: 'team' }>,
 ): Promise<string> {
   let team: Readonly<Record<string, unknown>>;
@@ -218,7 +218,7 @@ async function teamAccount(
 }
 
 async function projectAccount(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   auth: Extract<VercelAuth, { mode: 'project' }>,
 ): Promise<string> {
   let project: Readonly<Record<string, unknown>>;
@@ -256,7 +256,7 @@ function isNotFound(err: unknown): boolean {
 
 /** One GET of the REST API ; every answer it reads is an object, its fields read one by one. */
 async function vercelGet(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   token: string,
   path: string,
 ): Promise<Readonly<Record<string, unknown>>> {

@@ -1,6 +1,6 @@
 /**
  * The screenshots of a plugin's connect guide (ADR plugin-contract-and-credential-spec,
- * amendment 2026-11-13; handbook connections "Screenshots of the connect guide"):
+ * amendment 2026-11-13; handbook accounts "Screenshots of the connect guide"):
  * files of `GUIDE_SCREENSHOT_DIR` in the plugin's folder, served to signed-in users by
  * `GET /reference/<id>/connect/<file>`.
  *

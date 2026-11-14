@@ -36,15 +36,15 @@ import type { ToolResultPartSink } from './streaming.ts';
 export type ClassifyOutcome = { readonly slices: readonly Slice[] } | { readonly denied: string };
 
 /**
- * What `classify` may know of the connection a call goes through : the
- * non-secret fields of the form the connection was made with (a Fly
- * organization slug, a team id), as the connection recorded them. Never a
+ * What `classify` may know of the account a call goes through : the
+ * non-secret fields of the form the account was made with (a Fly
+ * organization slug, a team id), as the account recorded them. Never a
  * secret, never the credential. Absent when the host has none to give
  * (catalog tooling, tests) : a classifier then cites what the resources say,
  * or a wildcard, and never anything narrower than it knows.
  * docs/handbook/plugin-sdk.md.
  */
-export interface ClassifyConnection {
+export interface ClassifyAccount {
   readonly fields: Readonly<Record<string, string>>;
 }
 
@@ -57,13 +57,13 @@ export interface PluginLogger {
 }
 
 /**
- * What a plugin receives whenever it talks to its provider on behalf of a
- * connection : the decrypted credential (in memory only) and the IO
+ * What a plugin receives whenever it talks to its provider on behalf of an
+ * account : the decrypted credential (in memory only) and the IO
  * primitives. The plugin never
  * reads `process.env`, never opens its own `fetch` : both are injected so
  * tests run with `mockFetch` and never reach a real provider.
  */
-export interface ConnectionContext {
+export interface AccountContext {
   readonly credential: CredentialSecret;
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;
@@ -71,12 +71,24 @@ export interface ConnectionContext {
 }
 
 /**
- * A small key/value cache the host scopes to ONE connection and hands to
+ * @deprecated Renamed `AccountContext` (ADR one-word-per-thing-account-service-plugin);
+ * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
+ */
+export type ConnectionContext = AccountContext;
+
+/**
+ * @deprecated Renamed `ClassifyAccount` (ADR one-word-per-thing-account-service-plugin);
+ * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
+ */
+export type ClassifyConnection = ClassifyAccount;
+
+/**
+ * A small key/value cache the host scopes to ONE account and hands to
  * `execute`, for the short-lived upstream credential a plugin derives on
  * every call (a GitHub installation token minted from the App key). The
- * plugin chooses the key inside its connection (`installation-token:<repo>`)
- * and the lifetime ; the host namespaces the entries per connection, drops
- * them as soon as the provider rejects a call or the connection stops being
+ * plugin chooses the key inside its account (`installation-token:<repo>`)
+ * and the lifetime ; the host namespaces the entries per account, drops
+ * them as soon as the provider rejects a call or the account stops being
  * `active`, and never persists them. Absent : derive on every call.
  *
  * Only what `execute` itself needs goes in : a credential that is the
@@ -89,12 +101,12 @@ export interface UpstreamCredentialCache {
 }
 
 /** The context of one allowed `tools/call`. */
-export interface ExecuteContext extends ConnectionContext {
-  /** The resources of this connection the mission may touch. */
+export interface ExecuteContext extends AccountContext {
+  /** The resources of this account the mission may touch. */
   readonly resources: readonly Resource[];
   /** Free-form agent label carried by the call ; attribution only. */
   readonly agentLabel?: string | null;
-  /** Connection-scoped cache for derived upstream credentials ; see `UpstreamCredentialCache`. */
+  /** Account-scoped cache for derived upstream credentials ; see `UpstreamCredentialCache`. */
   readonly credentialCache?: UpstreamCredentialCache;
   /**
    * Hands the caller one part of the result as soon as the provider
@@ -144,7 +156,7 @@ export interface ProviderPlugin {
   readonly description?: string;
   /**
    * A short paragraph in plain words for the provider reference of the web
-   * interface (`/providers/<id>`) : what one connection is, what one
+   * interface (`/providers/<id>`) : what one account is, what one
    * resource is, and where the environment of a call comes from. Two to
    * four sentences, no markup. Optional in the contract ; every plugin
    * shipped with the gateway fills it (structural test).
@@ -187,7 +199,7 @@ export interface ProviderPlugin {
   /**
    * Tools whose effect cannot be bound to one resource (a free-text request to
    * the provider's own agent, say), each with one sentence saying why. The host
-   * makes them unavailable on a connection that can reach a resource hosting
+   * makes them unavailable on an account that can reach a resource hosting
    * the gateway itself (`self_resources`): no mission resource check could keep
    * such a tool away from it (SEC 2026-10-15 re-check M-1). Keys are tool names
    * of the plugin.
@@ -217,12 +229,12 @@ export interface ProviderPlugin {
   readonly examples?: ToolSamples;
 
   /**
-   * The tools whose success creates a resource of the connection : something
+   * The tools whose success creates a resource of the account : something
    * `discoverResources` returns as a new ref afterwards (`fly__create_app`
-   * creates an app, and an app is what a Fly connection lists). After such a
-   * call succeeds through the execution door, the host runs the connection's
+   * creates an app, and an app is what a Fly account lists). After such a
+   * call succeeds through the execution door, the host runs the account's
    * discovery again, off the request path, so the new resource is known — and
-   * reached by a mission issued on the whole connection — at once (ADR
+   * reached by a mission issued on the whole account — at once (ADR
    * created-resources-join-the-mission). Each name is an MCP tool of the
    * plugin (`definePlugin`). A tool that creates something inside a resource
    * (a DNS record in a zone, a machine in an app) is not one. Absent : no call
@@ -249,7 +261,7 @@ export interface ProviderPlugin {
   /** The risk catalog, loaded from `risk-catalog.yaml` at boot, macro-actions included. */
   readonly catalog: RiskCatalog;
   /**
-   * How a connection to this provider is obtained, stored and refreshed :
+   * How an account to this provider is obtained, stored and refreshed :
    * the one way of connecting, the simplest the provider offers — a token a
    * person makes by hand whenever the provider has one, OAuth only where it
    * has none (ADR one-place-to-authorize-services-token-first).
@@ -258,24 +270,24 @@ export interface ProviderPlugin {
 
   /**
    * Classify a concrete call into the slices it touches. Pure : no IO, no
-   * credential. `resources` are the mission's resources on this connection,
+   * credential. `resources` are the mission's resources on this account,
    * so the classifier can derive the environment and refuse refs the
    * arguments do not identify. A call touching several entities returns
-   * several slices. `connection` carries the connection's public form
-   * fields (`ClassifyConnection`), so a slice can name what the connection
+   * several slices. `account` carries the account's public form
+   * fields (`ClassifyAccount`), so a slice can name what the account
    * is bound to (an organization) when no resource of the mission says it.
    */
   classify(
     tool: string,
     args: Readonly<Record<string, unknown>>,
     resources: readonly Resource[],
-    connection?: ClassifyConnection,
+    account?: ClassifyAccount,
   ): ClassifyOutcome;
 
   /**
    * Execute an allowed call against the provider. Throws
    * `UpstreamAuthError` when the provider rejects the credential (the host
-   * then tries `refresh`, and marks the connection `expired` if that fails).
+   * then tries `refresh`, and marks the account `expired` if that fails).
    */
   execute(
     ctx: ExecuteContext,
@@ -285,12 +297,12 @@ export interface ProviderPlugin {
 
   /**
    * List the resources reachable through a freshly connected credential
-   * (repositories, projects, zones…). Called at connection time, on the
+   * (repositories, projects, zones…). Called when the account is connected, on the
    * owner's "refresh resources", and after a call of one of
    * `resourceCreatingTools` succeeded. Returned refs are the ones `classify`
    * will see in `resources`.
    */
-  discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
+  discoverResources(ctx: AccountContext): Promise<readonly Resource[]>;
 
   /**
    * The resource(s) a successful call of one of `resourceCreatingTools`
@@ -298,7 +310,7 @@ export interface ProviderPlugin {
    * `discoverResources` would describe them (same ref, display name and
    * metadata shape). Pure : no IO, no credential. The host calls it on the
    * request path, after an allowed call whose result is not `isError`, upserts
-   * what it returns into the connection's resources and adds it to the
+   * what it returns into the account's resources and adds it to the
    * mission that made the call, so the mission reaches what it created at once
    * (ADR created-resources-join-the-mission). The answer is untrusted : read
    * every ref through the grammar discovery uses, and return `[]` when the
@@ -340,20 +352,20 @@ export interface ProviderPlugin {
    * calls it instead of the generic refresh ; it returns a new
    * `CredentialSecret` and must not mutate its input.
    */
-  refresh?(ctx: ConnectionContext): Promise<CredentialSecret>;
+  refresh?(ctx: AccountContext): Promise<CredentialSecret>;
 
   /**
-   * Withdraw at the provider the grant this connection holds, when the owner
-   * revokes the connection (spec vaubaan-gateway §2.3). For a provider whose
+   * Withdraw at the provider the grant this account holds, when the owner
+   * revokes the account (spec vaubaan-gateway §2.3). For a provider whose
    * revocation is not one of the declarative `OAuth2CredentialSpec.revocation`
    * shapes. The host calls it once, with the credential it is about to erase,
-   * after the connection is revoked locally : the local revocation never
+   * after the account is revoked locally : the local revocation never
    * depends on it. Resolve when the provider confirmed ; throw otherwise
    * (the host then tells the person to remove the grant by hand). When
    * present it takes precedence over `credential.revocation`. No agent
    * argument ever reaches it.
    */
-  revoke?(ctx: ConnectionContext): Promise<void>;
+  revoke?(ctx: AccountContext): Promise<void>;
 
   /**
    * One or two plain sentences telling a person where, at the provider, they

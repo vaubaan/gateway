@@ -12,12 +12,7 @@ import type { AddressInfo } from 'node:net';
 
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
-import type {
-  ConnectionContext,
-  ExecuteContext,
-  McpToolResult,
-  Resource,
-} from '@vaubaan/plugin-sdk';
+import type { AccountContext, ExecuteContext, McpToolResult, Resource } from '@vaubaan/plugin-sdk';
 
 import { createCaldavPlugin } from '../../src/index.ts';
 import { TOOL } from '../../src/identity.ts';
@@ -55,7 +50,7 @@ afterAll(async () => {
 
 const plugin = createCaldavPlugin({ uuid: () => 'aaaaaaaa-1111-4222-8333-444444444444' });
 
-const ctx = (): ConnectionContext => ({
+const ctx = (): AccountContext => ({
   credential: {
     kind: 'api-key',
     fields: { server_url: origin, username: USER, app_password: PASSWORD },

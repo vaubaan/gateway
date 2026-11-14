@@ -299,7 +299,7 @@ function riskIdsOf(value) {
  * One entry per Stripe account, with the mode each project used in v4. The
  * v4 gateway gave a project ONE key: its row's live key, else its test key
  * (`live ?? test`, packages/web/src/lib/gateway/build.ts at v4-final). A
- * project keeps exactly that mode, never the other; the connection carries
+ * project keeps exactly that mode, never the other; the account carries
  * the account's keys. Rows of one account holding two different keys of the
  * same mode stop the export: which one is right is the operator's call.
  * @param {RawStripe[]} rows

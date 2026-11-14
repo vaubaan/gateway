@@ -8,8 +8,8 @@ host…). It is one folder, `plugins/<provider>`, named
 2. ships a **risk catalog** (`risk-catalog.yaml`): the named risks an agent's
    call can carry, grouped into **macro-actions**;
 3. **classifies** each tool call into the part of the data model it touches;
-4. declares the **credential**: how a connection to the provider is obtained;
-5. **discovers the resources** a connection can reach;
+4. declares the **credential**: how an account at the provider is plugged in;
+5. **discovers the resources** an account can reach;
 6. **executes** the call with the credential the gateway hands it.
 
 This page is the step-by-step guide to write one, test it and submit it. It
@@ -43,14 +43,14 @@ Five words used on every line below:
 
 | Word             | Meaning                                                                                                                                                                                                                                            |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                  |
+| **Resource**     | One thing an account reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                    |
 | **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                        |
 | **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.                 |
 | **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Careful, Trusting, Autonomous), which writes the explicit lines; the mission stores those lines. |
 | **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                   |
 
 The interface shows these to people under other words: a provider is a
-**service**, a connection an **account**, a risk a **permission**, a gate
+**service**, an account an **account**, a risk a **permission**, a gate
 **runs freely** (`auto`) or **ask me first** (`approval`), a quota and a rate
 limit **limits**. The contract — this guide, the YAML, the SDK — keeps the
 names above.
@@ -158,7 +158,7 @@ export const acmeDataModel: DataModel = {
           name: 'workspace',
           parent: null, // a root entity of the plane
           cardinalities: ['one'],
-          description: 'The resource a connection exposes.',
+          description: 'The resource an account exposes.',
           envScopable: true, // the entity the owner labels staging / prod
         },
         {
@@ -360,7 +360,7 @@ a description and a JSON input schema. Every tool that acts on a resource
 takes the resource's `ref` (the identifier `discoverResources` returns,
 step 6) as an explicit argument. The one exception is a rewrapped upstream
 tool whose frozen schema has no resource argument: it is acceptable only
-when a connection has exactly one resource, so the classifier resolves the
+when an account has exactly one resource, so the classifier resolves the
 mission's single resource and refuses none or several, and the plugin's
 handbook argues why (`context7`). The `properties` of the schema are the
 whole argument surface of the tool: an argument is declared there before
@@ -381,7 +381,7 @@ has one.
 
 **Classifier.** `classify(tool, args, resources)` returns
 `{ slices: Slice[] }` or `{ denied: string }`. `resources` are the mission's
-resources on this connection. This is the security-critical file: the gateway
+resources on this account. This is the security-critical file: the gateway
 decides from the slices alone, so a slice that understates a call lets the
 call through.
 
@@ -407,7 +407,7 @@ The rules the template already applies and a plugin must keep:
 - **Identifiers: one grammar function per kind, shared by `classify` and
   `execute`; refuse, never repair**
   ([ADR](../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
-  Every identifier a call carries — an argument, a resource ref, connection
+  Every identifier a call carries — an argument, a resource ref, account
   metadata, a value the provider answered — is read by the grammar function
   of its kind, which returns the value or `null` (`pathIdent` in the
   template). A value outside its grammar is `denied` here and refused in
@@ -475,7 +475,7 @@ The rules the template already applies and a plugin must keep:
 
 ## Step 5 — Credential (`src/credential.ts`)
 
-You declare **how** a connection is obtained; the gateway runs the flow,
+You declare **how** an account is obtained; the gateway runs the flow,
 stores the result encrypted and hands the decrypted secret to `execute` for
 the duration of one call. A plugin writes no route, never reads the
 environment and never sees an OAuth client secret. One `CredentialSpec` per
@@ -548,7 +548,7 @@ standard one.
 
 ## Step 6 — Resources (`discoverResources` in `src/execute.ts`)
 
-`discoverResources(ctx)` runs when the connection is created and when its
+`discoverResources(ctx)` runs when the account is created and when its
 owner refreshes it. It returns what the credential reaches:
 
 ```ts
@@ -606,7 +606,7 @@ It runs only after the gateway allowed the call and counted it.
   that is not JSON, a shape your guard refuses. A network error is left to
   propagate. The gateway records it and still tells the agent. A 401 means
   the credential itself is invalid: the gateway then tries a refresh and
-  otherwise marks the connection expired.
+  otherwise marks the account expired.
 - **`isError: true` is for what your executor declines itself**, before any
   request: an unknown tool, an argument it cannot read, an undeclared
   argument, a target outside the mission, a guard that does not hold. Never

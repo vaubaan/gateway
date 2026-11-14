@@ -8,7 +8,7 @@ import {
   CredentialRefusal,
   UpstreamAuthError,
   UpstreamProtocolError,
-  type ConnectionContext,
+  type AccountContext,
 } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
@@ -23,7 +23,7 @@ const TOKEN = 'cfut_0123456789abcdefghij';
 const VERIFY = `${CLOUDFLARE_API_BASE}/user/tokens/verify`;
 const ZONES = `${CLOUDFLARE_API_BASE}/zones?page=1&per_page=50`;
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
+const ctx = (fetch: typeof globalThis.fetch): AccountContext => ({
   credential: { kind: 'api-key', fields: { api_token: TOKEN }, metadata: {} },
   fetch,
 });

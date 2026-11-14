@@ -14,7 +14,7 @@
  *   account → agent-session (opaque meta-tool — no containment)
  *
  * Notes :
- *  - The *resource* a connection exposes is the Railway **project** (UUID).
+ *  - The *resource* an account exposes is the Railway **project** (UUID).
  *    The owner labels it with a Vaubaan environment (`prod`, `staging`…) ;
  *    the classifier stamps that label into the `environment[...]` segment of
  *    every project-scoped slice. Railway's own environment names
@@ -64,7 +64,7 @@ export const railwayDataModel: DataModel = {
           parent: 'account',
           cardinalities: ['one', 'bounded'],
           description:
-            'A Railway project (UUID). The resource a connection exposes and a mission selects.',
+            'A Railway project (UUID). The resource an account exposes and a mission selects.',
         },
         {
           name: 'environment',

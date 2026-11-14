@@ -21,7 +21,7 @@ import {
   isList,
   isRecord,
   type ApiKeyCredentialSpec,
-  type ConnectionContext,
+  type AccountContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
@@ -85,7 +85,7 @@ export const resendCredential: ApiKeyCredentialSpec = {
  * access key is refused with the permission to choose ; any other 401 or
  * 403 is a rejected key.
  */
-export async function verifyResendKey(ctx: ConnectionContext): Promise<CredentialCheck> {
+export async function verifyResendKey(ctx: AccountContext): Promise<CredentialCheck> {
   let body: unknown;
   try {
     body = await httpJson(

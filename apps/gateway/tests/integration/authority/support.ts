@@ -1,13 +1,13 @@
 /**
  * The rig of the authority integration tests: the execution instance (real
  * composition root on the `:memory:` store, the Depot fixture plugin, Ada
- * owning the Depot connection) plus what sharing needs — a second user, an
+ * owning the Depot account) plus what sharing needs — a second user, an
  * operator, missions issued by anyone, and the admin entries written.
  */
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
-import type { Actor } from '../../../src/server/connections';
+import type { Actor } from '../../../src/server/accounts';
 import {
   DEPOT,
   executionInstance,
@@ -31,7 +31,7 @@ export interface AuthorityRig extends ExecutionInstance {
   readonly operator: UserRecord;
   /** The user with their *current* groups, as a page or a handler builds it. */
   actor(user: UserRecord): Promise<Actor>;
-  /** The raw outcome of an issuance on the Depot connection, refused or not. */
+  /** The raw outcome of an issuance on the Depot account, refused or not. */
   tryIssue(
     user: UserRecord,
     riskIds: readonly string[],
@@ -87,10 +87,10 @@ export async function authorityRig(options: ExecutionInstanceOptions = {}): Prom
       const policy: MissionPolicyEntry[] = riskIds.map(entryOf);
       return root.missions.service.issue(user, {
         name,
-        connections: [
+        accounts: [
           // The staging spaces: one environment, so one resource set.
           {
-            connection_id: instance.connection.id,
+            account_id: instance.account.id,
             resources: { scope: 'selected', resource_refs: ['app-staging', 'scratch'] },
             policy,
           },

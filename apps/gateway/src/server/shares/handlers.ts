@@ -1,10 +1,10 @@
 /**
  * Host-agnostic HTTP handlers of the share acts (`Request → Response`, never
- * `next`). The Next route handlers under `src/app/(app)/connections/[id]/shares/**`
+ * `next`). The Next route handlers under `src/app/(app)/accounts/[id]/shares/**`
  * are one-line adapters over these.
  *
- *   POST /connections/<id>/shares                    share, or replace the target's restriction
- *   POST /connections/<id>/shares/<shareId>/revoke   revoke (terminal)
+ *   POST /accounts/<id>/shares                    share, or replace the target's restriction
+ *   POST /accounts/<id>/shares/<shareId>/revoke   revoke (terminal)
  *
  * Every one requires a user session and passes the origin check (spec §6).
  * The form carries the restriction as one `risk` value per ticked risk: the
@@ -21,12 +21,12 @@ import { guardMutation, refusalResponse, type Authenticator, type RefusalWording
 import { notAFormResponse, readForm } from '../http/form';
 import {
   actorOf,
-  connectionPath,
-  CONNECTIONS_PATH,
+  accountPath,
+  ACCOUNTS_PATH,
   createNoticeRedirect,
   type Notice,
   type NoticeStore,
-} from '../connections';
+} from '../accounts';
 import type { Logger } from '../logging';
 import { SHARE_ERROR_MESSAGES, ShareError } from './errors';
 import { SHARE_CONFIRM_PARAM, type PendingShareStore } from './pending';
@@ -47,7 +47,7 @@ const SEE_OTHER = 303;
 const USER_REFUSALS: RefusalWording = {
   field: 'reason',
   noSession: 'no session',
-  forbidden: 'connections are shared by users; sign in through the IdP',
+  forbidden: 'accounts are shared by users; sign in through the IdP',
 };
 
 export interface ShareHandlerDeps {
@@ -60,17 +60,17 @@ export interface ShareHandlerDeps {
 }
 
 export interface ShareHandlers {
-  share(request: Request, connectionId: string): Promise<Response>;
-  revoke(request: Request, connectionId: string, shareId: string): Promise<Response>;
+  share(request: Request, accountId: string): Promise<Response>;
+  revoke(request: Request, accountId: string, shareId: string): Promise<Response>;
 }
 
-/** The Share dialog of a connection. */
-export function sharePath(connectionId: string): string {
-  return `${connectionPath(connectionId)}/share`;
+/** The Share dialog of an account. */
+export function sharePath(accountId: string): string {
+  return `${accountPath(accountId)}/share`;
 }
 
 export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
-  const redirectWithNotice = createNoticeRedirect(deps, CONNECTIONS_PATH);
+  const redirectWithNotice = createNoticeRedirect(deps, ACCOUNTS_PATH);
 
   function failure(err: unknown, title: string): Notice {
     if (err instanceof ShareError) {
@@ -89,7 +89,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
   }
 
   return {
-    async share(request, connectionId) {
+    async share(request, accountId) {
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
       const { principal } = guard;
@@ -102,13 +102,13 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
       try {
         const actor = actorOf(principal);
         // The same refusals as the share itself, then what it would bring back.
-        const forecast = await deps.shares.forecast(actor, connectionId, input);
+        const forecast = await deps.shares.forecast(actor, accountId, input);
         const read = new Set(values(form, SHARE_FIELDS.restore));
         if (forecast.restores.some((mission) => !read.has(mission.id))) {
-          const id = await deps.pending.put(principal.sessionId, { connectionId, input });
-          return confirmationRedirect(connectionId, id);
+          const id = await deps.pending.put(principal.sessionId, { accountId, input });
+          return confirmationRedirect(accountId, id);
         }
-        const outcome = await deps.shares.share(actor, connectionId, input);
+        const outcome = await deps.shares.share(actor, accountId, input);
         const count = outcome.share.restriction.length;
         const lines = [
           `${holderOf(outcome.targetLabel)} may now allow ${count} ${count === 1 ? 'permission' : 'permissions'} of this account in their missions, and nothing else.`,
@@ -116,7 +116,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         if (outcome.replaced) lines.push('This replaces what they held before.');
         if (outcome.orphaned > 0) lines.push(orphanedLine(outcome.orphaned));
         if (outcome.restored > 0) lines.push(restoredLine(outcome.restored));
-        return await redirectWithNotice(principal.sessionId, connectionPath(connectionId), {
+        return await redirectWithNotice(principal.sessionId, accountPath(accountId), {
           tone: 'success',
           title: outcome.replaced ? 'Access updated' : 'Access given',
           lines,
@@ -125,18 +125,18 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         const missing = err instanceof ShareError && err.code === 'not-found';
         return redirectWithNotice(
           principal.sessionId,
-          missing ? CONNECTIONS_PATH : sharePath(connectionId),
+          missing ? ACCOUNTS_PATH : sharePath(accountId),
           failure(err, 'Access not given'),
         );
       }
     },
 
-    async revoke(request, connectionId, shareId) {
+    async revoke(request, accountId, shareId) {
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
       const { principal } = guard;
       try {
-        const outcome = await deps.shares.revoke(actorOf(principal), shareId, connectionId);
+        const outcome = await deps.shares.revoke(actorOf(principal), shareId, accountId);
         const lines = [
           `${holderOf(outcome.targetLabel)} can no longer write missions on this account.`,
         ];
@@ -145,16 +145,16 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         if (outcome.orphaned === 0 && outcome.partsLost === 0) {
           lines.push('No running mission depended on it.');
         }
-        return await redirectWithNotice(
-          principal.sessionId,
-          connectionPath(outcome.share.connectionId),
-          { tone: 'success', title: 'Access removed', lines },
-        );
+        return await redirectWithNotice(principal.sessionId, accountPath(outcome.share.accountId), {
+          tone: 'success',
+          title: 'Access removed',
+          lines,
+        });
       } catch (err) {
         const missing = err instanceof ShareError && err.code === 'not-found';
         return redirectWithNotice(
           principal.sessionId,
-          missing ? CONNECTIONS_PATH : connectionPath(connectionId),
+          missing ? ACCOUNTS_PATH : accountPath(accountId),
           failure(err, 'Access not removed'),
         );
       }
@@ -163,12 +163,12 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
 }
 
 /** Back to the dialog, which lists what the share would bring back. Nothing was stored. */
-function confirmationRedirect(connectionId: string, pendingId: string): Response {
+function confirmationRedirect(accountId: string, pendingId: string): Response {
   const query = new URLSearchParams({ [SHARE_CONFIRM_PARAM]: pendingId });
   return new Response(null, {
     status: SEE_OTHER,
     headers: {
-      Location: `${sharePath(connectionId)}?${query.toString()}`,
+      Location: `${sharePath(accountId)}?${query.toString()}`,
       'Cache-Control': 'no-store',
     },
   });

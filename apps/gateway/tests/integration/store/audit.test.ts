@@ -20,7 +20,7 @@ function callEntry(ts: string, decision: 'allowed' | 'refused' = 'allowed'): Cal
     token_kind: null,
     token_holder: null,
     session_id: 's1',
-    connection_id: 'c1',
+    account_id: 'c1',
     resource_ref: 'acme/repo',
     tool: 'github__create_branch',
     arguments_hash: 'abc123def4567890',
@@ -265,7 +265,7 @@ describe('audit repository', () => {
     const scope = {
       missionCreatorUserId: null,
       missionMemberUserId: null,
-      connectionOwners: [],
+      accountOwners: [],
       allAdmin: true,
       allCalls: false,
     };

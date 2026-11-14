@@ -84,7 +84,7 @@ export interface PendingLogin {
 /**
  * A sign-in between its provider and its session (ADR
  * administrators-live-in-the-instance, §7): the person's second factor is asked, or
- * enrolled when they have none. Any provider: the password of a local account, the
+ * enrolled when they have none. Any provider: the password of a sign-in account, the
  * callback of an OpenID Connect or GitHub provider. Bound to the browser by the same
  * cookie as a pending sign-in, for the same ten minutes, counted from the step's
  * creation: a step re-issued after a wrong code keeps its `createdAt` (security audit
@@ -251,7 +251,7 @@ export class SessionService {
     return clearCookie(LOGIN_COOKIE);
   }
 
-  /** The step between a local account's password and its session; same cookie, same lifetime. */
+  /** The step between a sign-in account's password and its session; same cookie, same lifetime. */
   async createLocalStep(step: Omit<PendingLocalStep, 'kind' | 'createdAt'>): Promise<IssuedCookie> {
     const id = newSessionId();
     const full: PendingLocalStep = {

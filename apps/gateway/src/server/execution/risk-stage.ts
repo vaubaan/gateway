@@ -5,8 +5,8 @@
  * judged against (risk model §4.7).
  *
  * The classifier, the catalog and the environment derivation all come from
- * the registered plugin of the target connection's provider; the resources
- * are the mission's on that connection, every set together, so an
+ * the registered plugin of the target account's provider; the resources
+ * are the mission's on that account, every set together, so an
  * env-qualified risk the mission accepted (`supabase[staging].bulk-row-write`)
  * matches through the label of the resource the call touches (`envResolverFor`,
  * gateway-core's default). The sets choose only the policy: the call goes to
@@ -23,16 +23,16 @@ import {
 } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
-import { classifyConnectionOf } from './resource-stage';
+import { classifyAccountOf } from './resource-stage';
 
-/** The sets of one connection of the mission, each with its refs and its accepted risks. */
+/** The sets of one account of the mission, each with its refs and its accepted risks. */
 export function resourceSetsToJudge(
   ctx: Pick<MissionContext, 'resource_sets' | 'resources' | 'policy'>,
-  connectionId: string,
+  accountId: string,
 ): ResourceSetToJudge[] {
   const refOf = new Map(ctx.resources.map((r) => [r.id, r.ref]));
   return ctx.resource_sets
-    .filter((set) => set.connection_id === connectionId)
+    .filter((set) => set.account_id === accountId)
     .sort((a, b) => a.position - b.position)
     .map((set) => ({
       id: set.id,
@@ -50,15 +50,15 @@ export function resourceSetsToJudge(
 export function createRiskStage(deps: { readonly registry: PluginRegistry }): RiskStage {
   return {
     async evaluate(ctx, call, target): Promise<CallVerdict> {
-      const registered = deps.registry.get(target.connection.provider);
-      if (!registered) return { kind: 'no-catalog', provider: target.connection.provider };
+      const registered = deps.registry.get(target.account.provider);
+      if (!registered) return { kind: 'no-catalog', provider: target.account.provider };
       return evaluateCallForResourceSets({
         tool: call.tool,
         args: call.args,
-        resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
-        connection: classifyConnectionOf(target.connection),
+        resources: ctx.resources.filter((r) => r.account_id === target.account.id),
+        account: classifyAccountOf(target.account),
         // v5 missions carry no explicit denies: each set's policy is the enumeration.
-        sets: resourceSetsToJudge(ctx, target.connection.id),
+        sets: resourceSetsToJudge(ctx, target.account.id),
         adapter: registered.plugin,
         catalog: registered.catalog,
       });

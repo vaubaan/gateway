@@ -95,7 +95,7 @@ describe('GroupService — local groups kept by the operator', () => {
       await groups().addMember(op(), group.id, 'ada@example.com');
       const [view] = await groups().list();
       expect(view?.members.map((m) => m.email)).toEqual(['ada@example.com', 'bob@example.com']);
-      expect(view?.ownedConnections).toBe(0);
+      expect(view?.ownedAccounts).toBe(0);
       // One entry per change: the repeated addition of Bob wrote nothing.
       const added = await rig.adminEntries('group-member-added');
       expect(added).toHaveLength(2);
@@ -107,14 +107,10 @@ describe('GroupService — local groups kept by the operator', () => {
       expect(added[1]).toMatchObject({ after: { user_id: rig.ada.id } });
     });
 
-    it('settles a removal even when its own entry cannot be written: the emptied owner group leaves the connection unowned', async () => {
+    it('settles a removal even when its own entry cannot be written: the emptied owner group leaves the account unowned', async () => {
       const group = await groups().create(op(), 'depot-admins');
       await groups().addMember(op(), group.id, 'ada@example.com');
-      await rig.root.connections.service.transfer(
-        await rig.actor(rig.ada),
-        rig.connection.id,
-        group.id,
-      );
+      await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, group.id);
       const mission = await rig.issueFor(rig.ada, [READ]);
 
       vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
@@ -122,7 +118,7 @@ describe('GroupService — local groups kept by the operator', () => {
 
       // The membership is gone; what it held was settled all the same.
       expect(await rig.root.store.groups.listMembers(group.id)).toEqual([]);
-      expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+      expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('unowned');
       expect(await rig.adminEntries('group-member-removed')).toEqual([]);
       expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
         { user_id: op(), object: { id: mission.mission.id } },
@@ -131,7 +127,7 @@ describe('GroupService — local groups kept by the operator', () => {
 
     it('settles an addition even when its own entry cannot be written', async () => {
       const group = await groups().create(op(), 'platform');
-      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
         target: { kind: 'group', groupId: group.id },
         riskIds: [READ],
       });
@@ -180,7 +176,7 @@ describe('GroupService — local groups kept by the operator', () => {
     it('removes a member, audits it, and reports what the membership held', async () => {
       const group = await groups().create(op(), 'platform');
       await groups().addMember(op(), group.id, 'bob@example.com');
-      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.account.id, {
         target: { kind: 'group', groupId: group.id },
         riskIds: [READ],
       });
@@ -200,15 +196,11 @@ describe('GroupService — local groups kept by the operator', () => {
       ]);
     });
 
-    it('counts the connections a group owns', async () => {
+    it('counts the accounts a group owns', async () => {
       const group = await groups().create(op(), 'depot-admins');
       await groups().addMember(op(), group.id, 'ada@example.com');
-      await rig.root.connections.service.transfer(
-        await rig.actor(rig.ada),
-        rig.connection.id,
-        group.id,
-      );
-      expect((await groups().list())[0]?.ownedConnections).toBe(1);
+      await rig.root.accounts.service.transfer(await rig.actor(rig.ada), rig.account.id, group.id);
+      expect((await groups().list())[0]?.ownedAccounts).toBe(1);
     });
   });
 });

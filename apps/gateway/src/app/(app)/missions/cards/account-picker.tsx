@@ -25,7 +25,7 @@ import {
 } from '@/components/ui';
 import type { ServiceMarkIcon } from '@/components/ui';
 import { ACTIONS, CARD_WORDS, DOC_PAGES, ROUTES } from '@/lib/vocabulary';
-import type { IssuanceConnection } from '@/lib/missions/model';
+import type { IssuanceAccount } from '@/lib/missions/model';
 
 import { cardsOf, type CardResources, type CardState, type FormState } from '../new/form-state';
 import {
@@ -47,27 +47,25 @@ export type Picking =
 
 /** The account cannot be added: another account of its service is in the mission. */
 function blockedBy(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: Pick<FormState, 'cards'>,
-  connection: IssuanceConnection,
+  account: IssuanceAccount,
 ): string | null {
   const taken = state.cards.some((card) => {
-    const other = context.find((c) => c.id === card.connectionId);
-    return (
-      other !== undefined && other.provider === connection.provider && other.id !== connection.id
-    );
+    const other = context.find((c) => c.id === card.accountId);
+    return other !== undefined && other.provider === account.provider && other.id !== account.id;
   });
   return taken ? CARD_WORDS.oneAccountPerService : null;
 }
 
 /** The accounts "+ Add an account" offers, in context order, with why one cannot be taken. */
 export function offeredAccounts(
-  context: readonly IssuanceConnection[],
+  context: readonly IssuanceAccount[],
   state: Pick<FormState, 'cards'>,
-): { readonly connection: IssuanceConnection; readonly blocked: string | null }[] {
-  return context.map((connection) => ({
-    connection,
-    blocked: blockedBy(context, state, connection),
+): { readonly account: IssuanceAccount; readonly blocked: string | null }[] {
+  return context.map((account) => ({
+    account,
+    blocked: blockedBy(context, state, account),
   }));
 }
 
@@ -79,21 +77,21 @@ export function AccountPicker({
   onCancel,
   onDone,
 }: {
-  context: readonly IssuanceConnection[];
+  context: readonly IssuanceAccount[];
   state: FormState;
   icons: Readonly<Record<string, ServiceMarkIcon | null>>;
   picking: Picking;
   onCancel: () => void;
-  onDone: (connectionId: string, resources: CardResources) => void;
+  onDone: (accountId: string, resources: CardResources) => void;
 }) {
   const editing = picking.kind === 'change' ? picking.card : null;
-  const [connectionId, setConnectionId] = useState<string | null>(editing?.connectionId ?? null);
+  const [accountId, setAccountId] = useState<string | null>(editing?.accountId ?? null);
   const [query, setQuery] = useState('');
-  const connection = context.find((c) => c.id === connectionId) ?? null;
+  const account = context.find((c) => c.id === accountId) ?? null;
 
-  if (!connection) {
+  if (!account) {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const offered = offeredAccounts(context, state).filter(({ connection: c }) => {
+    const offered = offeredAccounts(context, state).filter(({ account: c }) => {
       const text = `${c.provider_label} ${c.display_name}`.toLowerCase();
       return terms.every((term) => text.includes(term));
     });
@@ -116,7 +114,7 @@ export function AccountPicker({
           onChange={(event) => setQuery(event.target.value)}
         />
         <ul className={styles.accountList}>
-          {offered.map(({ connection: c, blocked }) => {
+          {offered.map(({ account: c, blocked }) => {
             const has = cardsOf(state, c.id).length > 0;
             const free = has ? freeResources(c, state) : null;
             return (
@@ -126,7 +124,7 @@ export function AccountPicker({
                   className={styles.accountItem}
                   disabled={blocked !== null}
                   title={blocked ?? undefined}
-                  onClick={() => setConnectionId(c.id)}
+                  onClick={() => setAccountId(c.id)}
                 >
                   <ServiceMark name={c.provider_label} icon={icons[c.provider] ?? null} />
                   {accountLabel(c)}
@@ -145,13 +143,13 @@ export function AccountPicker({
 
   return (
     <ResourceStep
-      key={connection.id}
-      connection={connection}
+      key={account.id}
+      account={account}
       state={state}
       editing={editing}
-      onBack={editing ? null : () => setConnectionId(null)}
+      onBack={editing ? null : () => setAccountId(null)}
       onCancel={onCancel}
-      onDone={(resources) => onDone(connection.id, resources)}
+      onDone={(resources) => onDone(account.id, resources)}
     />
   );
 }
@@ -167,21 +165,21 @@ function startGroup(
 }
 
 function ResourceStep({
-  connection,
+  account,
   state,
   editing,
   onBack,
   onCancel,
   onDone,
 }: {
-  connection: IssuanceConnection;
+  account: IssuanceAccount;
   state: FormState;
   editing: CardState | null;
   onBack: (() => void) | null;
   onCancel: () => void;
   onDone: (resources: CardResources) => void;
 }) {
-  const groups = resourceGroups(connection, state, editing?.key ?? null);
+  const groups = resourceGroups(account, state, editing?.key ?? null);
   const initial = startGroup(groups, editing);
   // `undefined`: no group chosen yet.
   const [env, setEnv] = useState<string | null | undefined>(initial);
@@ -203,8 +201,8 @@ function ResourceStep({
           .map((g) => g.env ?? 'no label'),
       ),
   );
-  const noun = connection.resource_noun;
-  const labelled = showsEnv(connection);
+  const noun = account.resource_noun;
+  const labelled = showsEnv(account);
   const several = groups.filter((g) => g.selectable).length > 1;
   const nothingListed = groups.every((g) => g.resources.length + g.hidden.length === 0);
 
@@ -239,7 +237,7 @@ function ResourceStep({
       open
       onClose={onCancel}
       width="lg"
-      title={`${accountLabel(connection)} · ${CARD_WORDS.whichResources(noun.other)}`}
+      title={`${accountLabel(account)} · ${CARD_WORDS.whichResources(noun.other)}`}
       testId="resource-picker"
       footer={
         <>
@@ -274,7 +272,7 @@ function ResourceStep({
             <div className={styles.groupHead}>
               {several && group.selectable && (
                 <Radio
-                  name={`group-${connection.id}`}
+                  name={`group-${account.id}`}
                   checked={on}
                   aria-label={`Environment ${label}`}
                   onChange={() => choose(group)}
@@ -320,7 +318,7 @@ function ResourceStep({
                   <span key={resource.id}>
                     {resourceName(resource)}{' '}
                     <Link
-                      href={`${ROUTES.accounts}/${connection.id}`}
+                      href={`${ROUTES.accounts}/${account.id}`}
                       className={styles.groupNote}
                       target="_blank"
                     >

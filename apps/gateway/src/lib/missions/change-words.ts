@@ -24,11 +24,11 @@ export function missionChangeClauses(summary: MissionChangedEventDetails): strin
         : 'end date removed',
     );
   }
-  if (summary.connections_added > 0) {
-    clauses.push(`${counted(summary.connections_added, 'account', 'accounts')} added`);
+  if (summary.accounts_added > 0) {
+    clauses.push(`${counted(summary.accounts_added, 'account', 'accounts')} added`);
   }
-  if (summary.connections_removed > 0) {
-    clauses.push(`${counted(summary.connections_removed, 'account', 'accounts')} removed`);
+  if (summary.accounts_removed > 0) {
+    clauses.push(`${counted(summary.accounts_removed, 'account', 'accounts')} removed`);
   }
   const setsAdded = summary.resource_sets_added ?? 0;
   if (setsAdded > 0) {

@@ -1,7 +1,7 @@
 /**
  * An ephemeral instance for the mission tests: the real composition root on
  * the `:memory:` store, with the plugins the image ships (their catalogs and
- * macro-actions are what issuance is about) and connections seeded straight through
+ * macro-actions are what issuance is about) and accounts seeded straight through
  * the repositories. Shared by the vitest integration suite and the Playwright
  * launcher.
  */
@@ -10,7 +10,7 @@ import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/
 import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
-import { seedConnection, type SeededConnection } from '../../support/missions/testing';
+import { seedAccount, type SeededAccount } from '../../support/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 
 export const PUBLIC_URL = 'https://gateway.example.com';
@@ -41,10 +41,10 @@ export async function buildTestRoot(options: TestInstanceOptions = {}): Promise<
 export interface SeededInstance {
   readonly ada: UserRecord;
   readonly bob: UserRecord;
-  readonly github: SeededConnection;
-  readonly supabase: SeededConnection;
-  readonly vercel: SeededConnection;
-  readonly gmail: SeededConnection;
+  readonly github: SeededAccount;
+  readonly supabase: SeededAccount;
+  readonly vercel: SeededAccount;
+  readonly gmail: SeededAccount;
 }
 
 export const ADA = {
@@ -61,7 +61,7 @@ export const BOB = {
 } as const;
 
 /**
- * Ada owns four connections: GitHub (three repositories), Supabase (a
+ * Ada owns four accounts: GitHub (three repositories), Supabase (a
  * staging and a prod project), Vercel (two projects, no label: the plugin
  * derives the env from the call) and Gmail (no resource). Bob owns nothing.
  *
@@ -77,7 +77,7 @@ export async function seedInstance(
   const ada = await store.users.upsertFromIdp({ ...ADA, issuer });
   const bob = await store.users.upsertFromIdp({ ...BOB, issuer });
   const owner = { kind: 'user', id: ada.id } as const;
-  const github = await seedConnection(store, {
+  const github = await seedAccount(store, {
     provider: 'github',
     owner,
     displayName: 'acme-org',
@@ -87,7 +87,7 @@ export async function seedInstance(
       { ref: 'acme/infra', displayName: 'acme/infra' },
     ],
   });
-  const supabase = await seedConnection(store, {
+  const supabase = await seedAccount(store, {
     provider: 'supabase',
     owner,
     displayName: 'Acme Supabase',
@@ -96,7 +96,7 @@ export async function seedInstance(
       { ref: 'prdprojectref', displayName: 'app-prod', env: 'prod' },
     ],
   });
-  const vercel = await seedConnection(store, {
+  const vercel = await seedAccount(store, {
     provider: 'vercel',
     owner,
     displayName: 'Acme Vercel',
@@ -105,7 +105,7 @@ export async function seedInstance(
       { ref: 'prj_web', displayName: 'web' },
     ],
   });
-  const gmail = await seedConnection(store, {
+  const gmail = await seedAccount(store, {
     provider: 'gmail',
     owner,
     displayName: 'ops mailbox',

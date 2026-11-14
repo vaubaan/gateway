@@ -9,10 +9,10 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
-import { API_KEY_SPEC, fixturePlugin } from '../../../tests/support/connections/testing';
+import { API_KEY_SPEC, fixturePlugin } from '../../../tests/support/accounts/testing';
 import type { MissionService, TokenVerification, VerifiedToken } from '../missions';
 import type { MissionRecord } from '../store/types';
-import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
+import { AccountCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
 import {
   AGENT_LABEL_MAX_LENGTH,
   agentLabelOf,
@@ -180,12 +180,12 @@ describe('tool discovery', () => {
   const context = (providers: readonly string[], risks: readonly string[]): MissionContext =>
     ({
       mission: { id: 'm' },
-      connections: providers.map((provider) => ({ id: `c-${provider}`, provider })),
+      accounts: providers.map((provider) => ({ id: `c-${provider}`, provider })),
       resources: [],
       policy: risks.map((risk_id) => ({ risk_id })),
     }) as unknown as MissionContext;
 
-  it('needs both a connection and an accepted risk of the provider', () => {
+  it('needs both an account and an accepted risk of the provider', () => {
     expect(callableTools(context(['depot'], ['depot.read']), registry)).toHaveLength(5);
     expect(callableTools(context(['depot'], ['other.read-things']), registry)).toEqual([]);
     expect(callableTools(context([], ['depot.read']), registry)).toEqual([]);
@@ -207,14 +207,14 @@ describe('tool discovery', () => {
 
 describe('an account connected a way the plugin no longer offers', () => {
   // The GitHub App of catalog v8, the OAuth apps of Supabase and Railway : a stored
-  // connection may carry a credential kind the plugin no longer declares (ADR
+  // account may carry a credential kind the plugin no longer declares (ADR
   // one-place-to-authorize-services-token-first). It runs nothing until reconnected.
   const dual = fixturePlugin({ id: 'dual', displayName: 'Dual', credential: API_KEY_SPEC });
   const registry = createRegistry([dual]);
   const context = (credential_kind?: 'oauth2' | 'api-key' | 'app-install'): MissionContext =>
     ({
       mission: { id: 'm' },
-      connections: [
+      accounts: [
         {
           id: 'c-dual',
           provider: 'dual',
@@ -233,14 +233,14 @@ describe('an account connected a way the plugin no longer offers', () => {
     expect(callableTools(context('api-key'), registry).map((t) => t.name)).toEqual([
       'dual__list_things',
     ]);
-    // A connection of a build that did not record the way is read as the plugin's way.
+    // An account of a build that did not record the way is read as the plugin's way.
     expect(callableTools(context(), registry)).toHaveLength(1);
   });
 
   it('is refused by the resource stage, before any budget, naming the account and why', async () => {
     const stage = createResourceStage({
       registry,
-      connections: { listResources: async () => [] },
+      accounts: { listResources: async () => [] },
     });
     const call = { tool: 'dual__list_things', args: { space: 's' } } as unknown as CallRequest;
     const refused = await stage.resolve(context('oauth2'), call);
@@ -318,12 +318,12 @@ describe('token verifier', () => {
 });
 
 describe('upstream credential cache', () => {
-  const connection = { id: 'conn-1', updatedAt: '2026-10-13T09:00:00.000Z' };
+  const account = { id: 'conn-1', updatedAt: '2026-10-13T09:00:00.000Z' };
 
-  it('scopes entries to the connection and drops them on demand', async () => {
-    const store = new ConnectionCredentialCache(new MemoryCacheClient());
-    const mine = store.scopeFor(connection);
-    const theirs = store.scopeFor({ id: 'conn-2', updatedAt: connection.updatedAt });
+  it('scopes entries to the account and drops them on demand', async () => {
+    const store = new AccountCredentialCache(new MemoryCacheClient());
+    const mine = store.scopeFor(account);
+    const theirs = store.scopeFor({ id: 'conn-2', updatedAt: account.updatedAt });
     await mine.set('installation-token:app', { token: 'a' }, 600);
     await mine.set('installation-token:*', { token: 'b' }, 600);
 
@@ -335,17 +335,17 @@ describe('upstream credential cache', () => {
     expect(await store.drop('conn-1')).toBe(0);
   });
 
-  it('makes earlier entries unreachable once the connection row changed', async () => {
-    const store = new ConnectionCredentialCache(new MemoryCacheClient());
-    await store.scopeFor(connection).set('k', 'before', 600);
-    const reconnected = store.scopeFor({ ...connection, updatedAt: '2026-10-13T10:00:00.000Z' });
+  it('makes earlier entries unreachable once the account row changed', async () => {
+    const store = new AccountCredentialCache(new MemoryCacheClient());
+    await store.scopeFor(account).set('k', 'before', 600);
+    const reconnected = store.scopeFor({ ...account, updatedAt: '2026-10-13T10:00:00.000Z' });
     expect(await reconnected.get('k')).toBeNull();
   });
 
   it('bounds the lifetime, and stores nothing for a non-positive one', async () => {
     let now = 0;
     const cache = new MemoryCacheClient({ now: () => now });
-    const scope = new ConnectionCredentialCache(cache).scopeFor(connection);
+    const scope = new AccountCredentialCache(cache).scopeFor(account);
     await scope.set('k', 'v', 24 * 3600);
     now = (MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS + 1) * 1000;
     expect(await scope.get('k')).toBeNull();

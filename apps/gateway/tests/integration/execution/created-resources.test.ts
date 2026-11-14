@@ -41,7 +41,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     await instance.close();
   });
 
-  const idle = (): Promise<void> => instance.root.connections.discoveryAfterCall.idle();
+  const idle = (): Promise<void> => instance.root.accounts.discoveryAfterCall.idle();
 
   /** The provider answers the creation with the new space, as Miro answers a board. */
   function createsSpace(ref: string, name = `Space ${ref}`): void {
@@ -58,14 +58,14 @@ describe('execution door: a resource the mission creates joins the mission', () 
   }
 
   async function rowOf(ref: string) {
-    const rows = await instance.root.store.connections.listResources(instance.connection.id);
+    const rows = await instance.root.store.accounts.listResources(instance.account.id);
     return rows.find((r) => r.ref === ref);
   }
 
   async function selectionOf(mission: IssuedMission) {
     const stored = await instance.root.store.missions.getById(mission.mission.id);
-    // One set on the connection: its selection.
-    return stored?.connections[0]?.resourceSets[0];
+    // One set on the account: its selection.
+    return stored?.accounts[0]?.resourceSets[0];
   }
 
   it('an explicit selection reaches the space it created on its very next call', async () => {
@@ -109,7 +109,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
       before: null,
       after: {
         cause: 'created-by-the-mission',
-        connection_id: instance.connection.id,
+        account_id: instance.account.id,
         tool: 'depot__create_space',
         refs: ['fresh'],
         resource_set_ids: [selection?.id],
@@ -131,7 +131,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     // The first attempt ran and missed the space; the retry waits (2 s): stop it there.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(instance.depot.discoveries()).toBe(1);
-    await instance.root.connections.discoveryAfterCall.stop();
+    await instance.root.accounts.discoveryAfterCall.stop();
 
     expect((await rowOf('fresh'))?.staleSince).toBeNull();
     const read = await instance.call(mission, 'depot__read_item', { space: 'fresh' });
@@ -167,7 +167,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     const empty = await executionInstance({ spaces: [] });
     try {
       const mission = await empty.issue({ policy: [line(CREATE), line(READ)] });
-      expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
+      expect(mission.mission.accounts[0]?.resourceSets[0]).toMatchObject({
         resourceIds: [],
       });
       empty.depot.script(async () => ({
@@ -176,7 +176,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
       await empty.call(mission, 'depot__create_space', { space: 'first' });
       const stored = await empty.root.store.missions.getById(mission.mission.id);
-      expect(stored?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
+      expect(stored?.accounts[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
 
       empty.depot.script(async () => ({ content: [{ type: 'text', text: 'ok' }] }));
       const read = await empty.call(mission, 'depot__read_item', { space: 'first' });
@@ -189,13 +189,13 @@ describe('execution door: a resource the mission creates joins the mission', () 
   it('a mission with future resources gets it in its list like any other, and the other missions’ future sets too', async () => {
     const other = await instance.issue({
       policy: [line(READ)],
-      wholeConnection: true,
+      wholeAccount: true,
       name: 'Another mission, future resources',
     });
-    await instance.root.store.connections.setDefaultEnv(instance.connection.id, 'staging');
+    await instance.root.store.accounts.setDefaultEnv(instance.account.id, 'staging');
     const mission = await instance.issue({
       policy: [line(CREATE), line(READ)],
-      wholeConnection: true,
+      wholeAccount: true,
     });
     instance.depot.scriptDiscovery(async () => [...SEEDED]);
     createsSpace('fresh');
@@ -203,7 +203,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     await instance.call(mission, 'depot__create_space', { space: 'fresh' });
     const fresh = await rowOf('fresh');
     // The creating mission: in the set the call was judged against (staging, future on).
-    const sets = (await instance.root.store.missions.getById(mission.mission.id))!.connections[0]!
+    const sets = (await instance.root.store.missions.getById(mission.mission.id))!.accounts[0]!
       .resourceSets;
     const holding = sets.find((set) => set.resourceIds.includes(fresh!.id));
     expect(holding).toMatchObject({ future: true, env: 'staging' });
@@ -213,8 +213,8 @@ describe('execution door: a resource the mission creates joins the mission', () 
       refs: ['fresh'],
     });
     // The other mission's staging set with future on takes it, audited on that mission.
-    const otherSets = (await instance.root.store.missions.getById(other.mission.id))!
-      .connections[0]!.resourceSets;
+    const otherSets = (await instance.root.store.missions.getById(other.mission.id))!.accounts[0]!
+      .resourceSets;
     const joinedOther = otherSets.find((set) => set.resourceIds.includes(fresh!.id));
     expect(joinedOther).toMatchObject({ future: true, env: 'staging' });
     expect(joinedOther?.resourceSources).toEqual({ [fresh!.id]: 'future' });
@@ -225,7 +225,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
       [
         other.mission.id,
         {
-          connection_id: instance.connection.id,
+          account_id: instance.account.id,
           resource_set_id: joinedOther?.id,
           refs: ['fresh'],
           reason: 'discovered',
@@ -237,11 +237,11 @@ describe('execution door: a resource the mission creates joins the mission', () 
   });
 
   it('a new row inherits the default environment; a known one keeps its owner edits', async () => {
-    const { connections } = instance.root.store;
-    await connections.setDefaultEnv(instance.connection.id, 'staging');
+    const { accounts } = instance.root.store;
+    await accounts.setDefaultEnv(instance.account.id, 'staging');
     const scratch = instance.resources.find((r) => r.ref === 'scratch')!;
-    await connections.setResourceDisplayName(scratch.id, 'My scratch');
-    await connections.setResourceEnv(scratch.id, 'prod');
+    await accounts.setResourceDisplayName(scratch.id, 'My scratch');
+    await accounts.setResourceEnv(scratch.id, 'prod');
     const mission = await instance.issue({
       policy: [line(CREATE)],
       spaces: ['app-staging'],
@@ -250,7 +250,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
     createsSpace('fresh');
     await instance.call(mission, 'depot__create_space', { space: 'fresh' });
-    expect(await rowOf('fresh')).toMatchObject({ env: 'staging', envSource: 'connection-default' });
+    expect(await rowOf('fresh')).toMatchObject({ env: 'staging', envSource: 'account-default' });
 
     // The plugin answers a space the account already lists: owner edits stay.
     createsSpace('scratch', 'Scratch upstream');
@@ -273,10 +273,10 @@ describe('execution door: a resource the mission creates joins the mission', () 
     await instance.call(mission, 'depot__create_space', { space: 'fresh' });
 
     const detail = await instance.root.missions.service.get(instance.ada, mission.mission.id);
-    const connection = detail?.connections[0];
-    const fresh = connection?.resources.find((r) => r.ref === 'fresh');
+    const account = detail?.accounts[0];
+    const fresh = account?.resources.find((r) => r.ref === 'fresh');
     expect(fresh).toBeDefined();
-    expect(connection?.created_resource_ids).toEqual([fresh!.id]);
+    expect(account?.created_resource_ids).toEqual([fresh!.id]);
 
     const session = await instance.root.store.sessions.getByMission(mission.mission.id);
     const events = await instance.root.store.sessions.listEvents(session!.id);
@@ -284,7 +284,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
       actorUserId: instance.ada.id,
       details: {
         tool: 'depot__create_space',
-        connection_id: instance.connection.id,
+        account_id: instance.account.id,
         refs: ['fresh'],
       },
     });
@@ -340,10 +340,10 @@ describe('execution door: the instance’s own resource never joins', () => {
         content: [{ type: 'text', text: JSON.stringify({ created: { ref: 'home' } }) }],
       }));
       await instance.call(mission, 'depot__create_space', { space: 'home' });
-      const rows = await instance.root.store.connections.listResources(instance.connection.id);
+      const rows = await instance.root.store.accounts.listResources(instance.account.id);
       expect(rows.some((r) => r.ref === 'home')).toBe(false);
       const stored = await instance.root.store.missions.getById(mission.mission.id);
-      expect(stored?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
+      expect(stored?.accounts[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
     } finally {
       await instance.close();
     }

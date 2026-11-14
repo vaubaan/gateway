@@ -2,7 +2,7 @@
  * v4 `accepted_risks` → the explicit policy of a v5 mission, one id at a
  * time (docs/handbook/import-from-v4.md). Pure.
  *
- * The rule, for each v4 id of the connection's provider:
+ * The rule, for each v4 id of the account's provider:
  *
  *   1. The same id is an explicit id of the v5 catalog → kept.
  *   2. An account-scoped v4 id whose v5 entry became env-scoped (Supabase,
@@ -42,7 +42,7 @@ import {
 
 import { isResolvable } from '../../lib/missions/catalog-view';
 import { defaultLineOf, macroActionOfRisk } from '../../lib/missions/macro-actions';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../../lib/missions/model';
+import type { CatalogRisk, IssuanceAccount, IssuanceResource } from '../../lib/missions/model';
 
 export type DropReason =
   | 'denied-in-v4'
@@ -98,8 +98,8 @@ export interface Translation {
   }[];
 }
 
-export type TranslatableConnection = Pick<
-  IssuanceConnection,
+export type TranslatableAccount = Pick<
+  IssuanceAccount,
   'risks' | 'derives_env' | 'macro_actions' | 'authority'
 >;
 
@@ -110,14 +110,14 @@ export function providerOfV4Risk(v4RiskId: string): string | null {
 
 export function translateRisks(
   v4RiskIds: readonly string[],
-  connection: TranslatableConnection,
+  account: TranslatableAccount,
   selected: readonly Pick<IssuanceResource, 'env'>[],
   v4Denied: readonly string[] = [],
   carry: CarryUnbudgeted | null = null,
 ): Translation {
   const denied = new Set(v4Denied);
-  const byId = new Map(connection.risks.map((risk) => [risk.risk_id, risk]));
-  const held = new Set(connection.authority);
+  const byId = new Map(account.risks.map((risk) => [risk.risk_id, risk]));
+  const held = new Set(account.authority);
   const entries = new Map<RiskId, TranslatedEntry>();
   const dropped: DroppedRisk[] = [];
   const carried: CarriedRisk[] = [];
@@ -128,7 +128,7 @@ export function translateRisks(
       dropped.push({ v4RiskId, reason: 'denied-in-v4', v5RiskIds: [] });
       continue;
     }
-    const targets = targetsOf(v4RiskId, connection, byId, selected);
+    const targets = targetsOf(v4RiskId, account, byId, selected);
     if ('reason' in targets) {
       dropped.push({ v4RiskId, reason: targets.reason, v5RiskIds: targets.v5RiskIds });
       continue;
@@ -145,7 +145,7 @@ export function translateRisks(
         dropped.push({ v4RiskId, reason: 'outside-authority', v5RiskIds: [risk.risk_id] });
         continue;
       }
-      const line = importLineFor(connection, risk);
+      const line = importLineFor(account, risk);
       if (!line && carry !== null) {
         entries.set(risk.risk_id, {
           risk_id: risk.risk_id,
@@ -198,14 +198,14 @@ type Targets =
 
 function targetsOf(
   v4RiskId: string,
-  connection: TranslatableConnection,
+  account: TranslatableAccount,
   byId: ReadonlyMap<RiskId, CatalogRisk>,
   selected: readonly Pick<IssuanceResource, 'env'>[],
 ): Targets {
   const exact = byId.get(v4RiskId);
   if (exact) {
     if (exact.deprecated) return { reason: 'deprecated-in-v5', v5RiskIds: [exact.risk_id] };
-    if (!isResolvable(exact, connection, selected)) {
+    if (!isResolvable(exact, account, selected)) {
       return { reason: 'env-unresolvable', v5RiskIds: [exact.risk_id] };
     }
     return { risks: [exact], expanded: false };
@@ -215,17 +215,17 @@ function targetsOf(
   if (parsed.env !== null) {
     // `github[feature].x` → `github.x` would cover more than v4 did: never.
     const base = formatRiskId({ provider: parsed.provider, name: parsed.name });
-    const counterparts = connection.risks.filter((r) => r.risk_id === base || r.base_id === base);
+    const counterparts = account.risks.filter((r) => r.risk_id === base || r.base_id === base);
     return counterparts.length > 0
       ? { reason: 'no-exact-env-counterpart', v5RiskIds: counterparts.map((r) => r.risk_id) }
       : { reason: 'unknown-in-v5', v5RiskIds: [] };
   }
-  const perEnv = connection.risks.filter((r) => r.base_id === v4RiskId && r.env !== null);
+  const perEnv = account.risks.filter((r) => r.base_id === v4RiskId && r.env !== null);
   if (perEnv.length === 0) return { reason: 'unknown-in-v5', v5RiskIds: [] };
   const live = perEnv.filter((r) => !r.deprecated);
   if (live.length === 0)
     return { reason: 'deprecated-in-v5', v5RiskIds: perEnv.map((r) => r.risk_id) };
-  const reachable = live.filter((r) => isResolvable(r, connection, selected));
+  const reachable = live.filter((r) => isResolvable(r, account, selected));
   if (reachable.length === 0) {
     return { reason: 'env-unresolvable', v5RiskIds: live.map((r) => r.risk_id) };
   }
@@ -234,14 +234,14 @@ function targetsOf(
 
 /** The line of a risk: its macro-action's base budget at `IMPORT_TRUST_LEVEL`, gate from its row. */
 function importLineFor(
-  connection: TranslatableConnection,
+  account: TranslatableAccount,
   risk: CatalogRisk,
 ): {
   readonly macroActionId: string;
   readonly entry: Omit<MissionPolicyEntry, 'risk_id'>;
 } | null {
-  const action = macroActionOfRisk(connection, risk);
+  const action = macroActionOfRisk(account, risk);
   if (!action) return null;
-  const entry = defaultLineOf(connection, { [action.id]: IMPORT_TRUST_LEVEL }, risk);
+  const entry = defaultLineOf(account, { [action.id]: IMPORT_TRUST_LEVEL }, risk);
   return entry ? { macroActionId: action.id, entry } : null;
 }

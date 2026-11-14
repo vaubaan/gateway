@@ -1,5 +1,5 @@
 /**
- * The page of one account, as its owner reads it (spec §0 "Connection",
+ * The page of one account, as its owner reads it (spec §0 "Account",
  * "Resource", "Share"; §4.2; §7.2; §7.3): who has access and up to what, what
  * the account reaches, which missions use it.
  *
@@ -14,11 +14,11 @@
  */
 import Link from 'next/link';
 
-import { CloseOrphanedMission } from '@/components/connections/CloseOrphanedMission';
-import shared from '@/components/connections/account.module.css';
-import { AccountState, credentialKindLabel, NoticeBanner } from '@/components/connections/parts';
-import { PermissionList } from '@/components/connections/PermissionList';
-import { RevokeConnection } from '@/components/connections/RevokeConnection';
+import { CloseOrphanedMission } from '@/components/accounts/CloseOrphanedMission';
+import shared from '@/components/accounts/account.module.css';
+import { AccountState, credentialKindLabel, NoticeBanner } from '@/components/accounts/parts';
+import { PermissionList } from '@/components/accounts/PermissionList';
+import { RevokeAccount } from '@/components/accounts/RevokeAccount';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import {
   Avatar,
@@ -77,27 +77,27 @@ import {
 } from '@/lib/vocabulary';
 import type { GatewayRoot } from '@/server/compose';
 import {
-  connectionPath,
+  accountPath,
   editableMetadataKeys,
   METADATA_PREFIX,
-  NEW_CONNECTION_PATH,
+  NEW_ACCOUNT_PATH,
   type Actor,
-  type ConnectionDetail,
+  type AccountDetail,
   type Notice,
-} from '@/server/connections';
-import { providerGrantForecast, providerGrantReport } from '@/server/connections/provider-grant';
-import type { MissionOnConnection } from '@/server/missions/mission-service';
+} from '@/server/accounts';
+import { providerGrantForecast, providerGrantReport } from '@/server/accounts/provider-grant';
+import type { MissionOnAccount } from '@/server/missions/mission-service';
 import type { CatalogRisk } from '@/lib/missions/model';
 import { toolTitleOf } from '@/server/providers/tool-titles';
 import { providerPath } from '@/lib/providers/links';
 import {
   sharePath,
-  type ConnectionHolders,
+  type AccountHolders,
   type HeldShare,
   type HolderView,
   type ShareContext,
 } from '@/server/shares';
-import type { ConnectionResourceRecord, GroupRecord } from '@/server/store';
+import type { AccountResourceRecord, GroupRecord } from '@/server/store';
 import { ownResourceEnv } from '@/server/store/resource-env';
 import type { ValidationStatus } from '@/server/telemetry';
 
@@ -119,10 +119,10 @@ const ENV_LABEL_HTML_PATTERN = '[a-z][a-z0-9\\-]*';
 const MAX_NAME_LENGTH = 80;
 
 export interface AccountData {
-  readonly detail: ConnectionDetail;
+  readonly detail: AccountDetail;
   readonly context: ShareContext;
-  readonly holders: ConnectionHolders;
-  readonly missions: readonly MissionOnConnection[];
+  readonly holders: AccountHolders;
+  readonly missions: readonly MissionOnAccount[];
   /** Empty when the account takes no owner act. */
   readonly transferTargets: readonly GroupRecord[];
   readonly validation: ValidationStatus | null;
@@ -137,7 +137,7 @@ export interface AccountData {
   /**
    * The permissions of the service's guide the pasted token does not hold, as the
    * service said at connect time, with the titles of the tools that need each; empty
-   * when it holds them all or the service could not say (`ConnectionView.token_lacks`).
+   * when it holds them all or the service could not say (`AccountView.token_lacks`).
    */
   readonly tokenLacks: readonly {
     readonly name: string;
@@ -150,18 +150,18 @@ export interface AccountData {
 export async function loadAccount(
   root: GatewayRoot,
   actor: Actor,
-  connectionId: string,
+  accountId: string,
 ): Promise<AccountData> {
-  const detail = await root.connections.service.get(actor, connectionId);
+  const detail = await root.accounts.service.get(actor, accountId);
   const [context, holders, missions, validation] = await Promise.all([
-    root.shares.service.contextFor(actor, connectionId),
-    root.shares.service.holders(actor, connectionId),
-    root.missions.service.onConnection(actor.user, connectionId),
-    root.telemetry.stats.statusFor(detail.connection.provider),
+    root.shares.service.contextFor(actor, accountId),
+    root.shares.service.holders(actor, accountId),
+    root.missions.service.onAccount(actor.user, accountId),
+    root.telemetry.stats.statusFor(detail.account.provider),
   ]);
   const selfRefs = new Set(
     root.config.selfResources
-      .filter((self) => self.provider === detail.connection.provider)
+      .filter((self) => self.provider === detail.account.provider)
       .map((self) => self.ref),
   );
   return {
@@ -169,11 +169,11 @@ export async function loadAccount(
     context,
     holders,
     missions,
-    transferTargets: root.connections.service.transferTargets(actor, detail.connection),
+    transferTargets: root.accounts.service.transferTargets(actor, detail.account),
     validation,
     selfRefs,
     unboundTools: detail.resources.some((resource) => selfRefs.has(resource.ref))
-      ? Object.keys(root.registry.get(detail.connection.provider)?.plugin.unboundTools ?? {}).map(
+      ? Object.keys(root.registry.get(detail.account.provider)?.plugin.unboundTools ?? {}).map(
           (tool) => toolTitleOf(root.registry, tool) ?? tool,
         )
       : [],
@@ -196,7 +196,7 @@ interface AccessRow {
   readonly missions: number;
 }
 
-function runningBy(missions: readonly MissionOnConnection[], holder: HolderView): number {
+function runningBy(missions: readonly MissionOnAccount[], holder: HolderView): number {
   const people = new Set(holder.people.map((person) => person.id));
   return missions.filter((mission) => mission.state === 'active' && people.has(mission.creator.id))
     .length;
@@ -266,7 +266,7 @@ function ResourceEditor({
   action,
   cancelHref,
 }: {
-  resource: ConnectionResourceRecord;
+  resource: AccountResourceRecord;
   action: string;
   cancelHref: string;
 }) {
@@ -297,7 +297,7 @@ function ResourceEditor({
           optional
           htmlFor={`${formId}-env`}
           hint={
-            resource.envSource === 'connection-default'
+            resource.envSource === 'account-default'
               ? `Empty: the resource carries the account's default, ${resource.env ?? ''}. A label set here wins over it.`
               : 'A permission tied to an environment is refused on a resource without this label.'
           }
@@ -394,11 +394,11 @@ function DefaultEnvForm({
 }
 
 /** A resource's environment, and where it comes from when it is the account's default. */
-function ResourceEnv({ resource }: { resource: ConnectionResourceRecord }) {
+function ResourceEnv({ resource }: { resource: AccountResourceRecord }) {
   return (
     <span>
       <EnvTag env={resource.env} />
-      {resource.envSource === 'connection-default' && (
+      {resource.envSource === 'account-default' && (
         <span className={shared.factNote}> {ACCOUNT_WORDS.fromDefault}</span>
       )}
     </span>
@@ -408,7 +408,7 @@ function ResourceEnv({ resource }: { resource: ConnectionResourceRecord }) {
 // ── Missions ─────────────────────────────────────────────────────────────────
 
 function missionFacts(
-  mission: MissionOnConnection,
+  mission: MissionOnAccount,
   refs: ReadonlyMap<string, string>,
   youId: string,
   now: Date,
@@ -442,7 +442,7 @@ function MissionRow({
   youId,
   now,
 }: {
-  mission: MissionOnConnection;
+  mission: MissionOnAccount;
   refs: ReadonlyMap<string, string>;
   youId: string;
   now: Date;
@@ -505,14 +505,14 @@ export function AccountView({
   overlay?: React.ReactNode;
 }) {
   const { detail, context, holders, missions, transferTargets, selfRefs } = data;
-  const { connection, resources } = detail;
+  const { account, resources } = detail;
   const now = new Date();
-  const base = connectionPath(connection.id);
-  const revoked = connection.status === 'revoked';
+  const base = accountPath(account.id);
+  const revoked = account.status === 'revoked';
   // Give access, reconnect: the rule is the services' (`ownerActRefusal`, spec §2.3).
   const ownerActs = context.unshareable === null;
   // The Vaubaan account: its person's own, never shared; it offers the platform mission.
-  const personal = context.unshareable === 'connection-personal';
+  const personal = context.unshareable === 'account-personal';
   const catalog = new Map(context.risks.map((risk) => [risk.risk_id, risk] as const));
   const total = context.risks.length;
   // The missions this account still serves: a disconnection would take it from them.
@@ -532,7 +532,7 @@ export function AccountView({
   const grant = revoked
     ? providerGrantReport(
         detail.provider_label,
-        connection.providerGrant,
+        account.providerGrant,
         detail.provider_grant.byHand,
       )
     : null;
@@ -603,7 +603,7 @@ export function AccountView({
       header: ACCOUNT_WORDS.since,
       detail: true,
       nowrap: true,
-      cell: (row) => shortDate(row.share ? row.share.share.createdAt : connection.createdAt, now),
+      cell: (row) => shortDate(row.share ? row.share.share.createdAt : account.createdAt, now),
     },
   ];
 
@@ -614,10 +614,10 @@ export function AccountView({
     resources.some((resource) => resource.env !== null) ||
     (!context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null));
   // A mission reaches its lists only: a resource found later is written into them.
-  const missionsOn = (resource: ConnectionResourceRecord) =>
+  const missionsOn = (resource: AccountResourceRecord) =>
     running.filter((mission) => mission.resource_ids.includes(resource.id)).length;
 
-  const resourceColumns: readonly Column<ConnectionResourceRecord>[] = [
+  const resourceColumns: readonly Column<AccountResourceRecord>[] = [
     {
       id: 'resource',
       header: capitalize(TERMS.resource.one),
@@ -657,8 +657,8 @@ export function AccountView({
             ),
             label: ACCOUNT_WORDS.environment,
             nowrap: true,
-            cell: (resource: ConnectionResourceRecord) => <ResourceEnv resource={resource} />,
-          } satisfies Column<ConnectionResourceRecord>,
+            cell: (resource: AccountResourceRecord) => <ResourceEnv resource={resource} />,
+          } satisfies Column<AccountResourceRecord>,
         ]
       : []),
     {
@@ -674,9 +674,9 @@ export function AccountView({
     },
   ];
 
-  const resourceTable = (rows: readonly ConnectionResourceRecord[], headless: boolean) => (
+  const resourceTable = (rows: readonly AccountResourceRecord[], headless: boolean) => (
     <DataTable
-      caption={`What ${connection.displayName} reaches`}
+      caption={`What ${account.displayName} reaches`}
       columns={resourceColumns}
       rows={rows}
       rowKey={(resource) => resource.id}
@@ -720,7 +720,7 @@ export function AccountView({
       you: holders.owner.you,
       people: holders.owner.people,
     }),
-    `connected ${shortDate(connection.createdAt, now)}`,
+    `connected ${shortDate(account.createdAt, now)}`,
     !revoked && detail.discovery ? `checked ${agoWords(detail.discovery.at, now)}` : null,
     // A pasted token's expiry is said ahead of it, on the first line of the page.
     !revoked && detail.token_expires_at ? expiresOn(detail.token_expires_at, now) : null,
@@ -729,14 +729,14 @@ export function AccountView({
     .join(' · ');
   const tokenExpiresSoon =
     !revoked &&
-    connection.status !== 'expired' &&
+    account.status !== 'expired' &&
     detail.token_expires_at !== null &&
     Date.parse(detail.token_expires_at) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * MS_PER_DAY;
 
   const details = <DetailToggle key="details" />;
   const reconnect = (
     <ButtonLink
-      href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(connection.provider)}?connection=${encodeURIComponent(connection.id)}`}
+      href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(account.provider)}?account=${encodeURIComponent(account.id)}`}
     >
       {ACCOUNT_ACTIONS.reconnect}
     </ButtonLink>
@@ -748,25 +748,25 @@ export function AccountView({
         doc={DOC_PAGES.account}
         crumbs={[
           { label: PAGES.accounts.title, href: ROUTES.accounts },
-          { label: connection.displayName },
+          { label: account.displayName },
         ]}
         mark={<ServiceMark name={detail.provider_label} icon={detail.provider_icon} size="lg" />}
-        title={connection.displayName}
+        title={account.displayName}
         status={
-          ACCOUNT_STATES[connection.status].tone !== null || revoked ? (
-            <AccountState status={connection.status} />
+          ACCOUNT_STATES[account.status].tone !== null || revoked ? (
+            <AccountState status={account.status} />
           ) : undefined
         }
         lede={lede}
         secondary={ownerActs ? [details, reconnect] : [details]}
         primary={
           ownerActs ? (
-            <ButtonLink href={sharePath(connection.id)} variant="primary">
+            <ButtonLink href={sharePath(account.id)} variant="primary">
               {ACTIONS.giveAccess}
             </ButtonLink>
           ) : personal && !revoked ? (
             <ButtonLink
-              href={`${ROUTES.newMission}?platform=${encodeURIComponent(connection.id)}`}
+              href={`${ROUTES.newMission}?platform=${encodeURIComponent(account.id)}`}
               variant="primary"
             >
               {ACCOUNT_ACTIONS.createPlatformMission}
@@ -778,8 +778,8 @@ export function AccountView({
 
       {(note ||
         (personal && !revoked) ||
-        connection.status === 'expired' ||
-        connection.status === 'unowned' ||
+        account.status === 'expired' ||
+        account.status === 'unowned' ||
         revoked ||
         tokenExpiresSoon ||
         (data.tokenLacks.length > 0 && !revoked) ||
@@ -825,7 +825,7 @@ export function AccountView({
               </ul>
             </Callout>
           )}
-          {connection.status === 'expired' && (
+          {account.status === 'expired' && (
             <Callout tone="bad" title="This account needs reconnecting" testId="account-expired">
               {detail.provider_label} rejected the stored credential and it could not be renewed.
               Every call of the missions that use this account is refused until an owner reconnects
@@ -843,7 +843,7 @@ export function AccountView({
               keeps the account, its resources and who has access.
             </Callout>
           )}
-          {connection.status === 'unowned' && (
+          {account.status === 'unowned' && (
             <Callout tone="warn" title="This account has no owner" testId="account-unowned">
               Nobody can reconnect it or give access to it until an administrator names a new owner.
               The missions that use it keep running meanwhile.
@@ -852,7 +852,7 @@ export function AccountView({
           {revoked && grant && !grantSaid && (
             <Callout
               tone={grant.actionNeeded ? 'warn' : 'neutral'}
-              title={`Disconnected${connection.revokedAt ? ` on ${shortDate(connection.revokedAt, now)}` : ''}`}
+              title={`Disconnected${account.revokedAt ? ` on ${shortDate(account.revokedAt, now)}` : ''}`}
               testId="account-disconnected"
             >
               <p>Its credential is erased; this cannot be undone.</p>
@@ -892,7 +892,7 @@ export function AccountView({
                 value: (
                   <>
                     {detail.provider_label} ·{' '}
-                    <Link href={providerPath(connection.provider)} className={shared.reveal}>
+                    <Link href={providerPath(account.provider)} className={shared.reveal}>
                       what an agent can do on it
                     </Link>{' '}
                     <ValidationBadge status={data.validation} />
@@ -974,7 +974,7 @@ export function AccountView({
         testId="who-has-access"
       >
         <DataTable
-          caption={`Who has access to ${connection.displayName}`}
+          caption={`Who has access to ${account.displayName}`}
           columns={accessColumns}
           rows={accessRows}
           rowKey={(row) => row.key}
@@ -983,7 +983,7 @@ export function AccountView({
               return transferTargets.length > 0 ? (
                 <TransferOwnership
                   action={`${base}/transfer`}
-                  account={connection.displayName}
+                  account={account.displayName}
                   teams={transferTargets.map((team) => ({ id: team.id, name: team.name }))}
                 />
               ) : null;
@@ -995,7 +995,7 @@ export function AccountView({
               <>
                 {ownerActs && (
                   <ButtonLink
-                    href={`${sharePath(connection.id)}?share=${encodeURIComponent(share.id)}`}
+                    href={`${sharePath(account.id)}?share=${encodeURIComponent(share.id)}`}
                     size="sm"
                     aria-label={`Edit the access of ${who}`}
                   >
@@ -1062,7 +1062,7 @@ export function AccountView({
         {!revoked && detail.default_env_choices.length > 0 && (
           <DefaultEnvForm
             action={`${base}/default-env`}
-            current={connection.defaultEnv}
+            current={account.defaultEnv}
             choices={detail.default_env_choices}
           />
         )}
@@ -1143,9 +1143,9 @@ export function AccountView({
               ? ` and stops the ${count(running.length, TERMS.mission)} that ${running.length === 1 ? 'runs' : 'run'} on it, for good.`
               : '; no mission runs on it today.'}
           </span>
-          <RevokeConnection
+          <RevokeAccount
             action={`${base}/revoke`}
-            name={connection.displayName}
+            name={account.displayName}
             running={running.length}
             atProvider={providerGrantForecast(detail.provider_label, detail.provider_grant)}
           />
@@ -1163,7 +1163,7 @@ function agoWords(iso: string, now: Date): string {
 }
 
 /** Which broker a brokered account renews through, and whether the gateway checks the code it runs. */
-function oauthBrokerFact(broker: NonNullable<ConnectionDetail['oauth_broker']>): string {
+function oauthBrokerFact(broker: NonNullable<AccountDetail['oauth_broker']>): string {
   if (broker.attested === null) return `${broker.name} · no longer configured`;
   return broker.attested
     ? `${broker.name} · attested: the gateway checks the code it runs before each use`

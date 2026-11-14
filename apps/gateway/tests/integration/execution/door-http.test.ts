@@ -3,7 +3,7 @@
  * upstream (spec §10 "integration on an ephemeral instance"; never a real
  * provider): an MCP client — the official SDK client, as a coding agent's
  * runtime would use it — connects with the mission token, lists the tools and
- * calls one; the gateway sends the connection's token to the GitHub API and
+ * calls one; the gateway sends the account's token to the GitHub API and
  * returns the provider's answer.
  *
  * Also here: the protocol edges of the door (2025-era and 2026-07-28 clients,
@@ -19,7 +19,7 @@ import { digestApiKey } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { serializeSecret } from '../../../src/server/connections';
+import { serializeSecret } from '../../../src/server/accounts';
 import { SURFACE_RATE_LIMITED_RPC_CODE, type MissionCatalog } from '../../../src/server/execution';
 import {
   executionInstance,
@@ -28,11 +28,11 @@ import {
   type ExecutionInstance,
   type IssuedMission,
 } from '../../support/execution/testing';
-import type { ConnectionRecord } from '../../../src/server/store/types';
+import type { AccountRecord } from '../../../src/server/store/types';
 
 const INSTALLATION_ID = '4242';
 const MINT_URL = `https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens`;
-const CONNECTION_TOKEN = 'ghs_installation_token_never_returned';
+const ACCOUNT_TOKEN = 'ghs_installation_token_never_returned';
 const MODERN_REVISION = '2026-07-28';
 const BRANCHES = [{ name: 'main' }, { name: 'feature/billing' }];
 
@@ -43,7 +43,7 @@ function githubRoutes() {
       url: MINT_URL,
       status: 201,
       body: {
-        token: CONNECTION_TOKEN,
+        token: ACCOUNT_TOKEN,
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
         repositories: [{ id: 1, name: 'app', full_name: 'acme/app' }],
         permissions: { contents: 'read' },
@@ -59,7 +59,7 @@ function githubRoutes() {
 
 interface GithubInstance extends ExecutionInstance {
   readonly upstream: MockFetch;
-  readonly github: ConnectionRecord;
+  readonly github: AccountRecord;
   readonly logs: string[];
   issueGithub(trustLevels?: Readonly<Record<string, string>>): Promise<IssuedMission>;
 }
@@ -76,17 +76,17 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
     deps: { providerFetch: upstream, logWrite: (_level, text) => logs.push(text) },
   });
   const { store } = instance.root;
-  const github = await store.connections.create({
+  const github = await store.accounts.create({
     provider: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
       kind: 'api-key',
-      fields: { token: CONNECTION_TOKEN },
+      fields: { token: ACCOUNT_TOKEN },
       metadata: {},
     }),
   });
-  await store.connections.syncDiscoveredResources(github.id, [
+  await store.accounts.syncDiscoveredResources(github.id, [
     { ref: 'acme/app', displayName: 'acme/app', env: null },
     { ref: 'acme/infra', displayName: 'acme/infra', env: null },
   ]);
@@ -98,9 +98,9 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
     async issueGithub(trustLevels = { read: 'careful' }) {
       const result = await instance.root.missions.service.issue(instance.ada, {
         name: 'Read the app repository',
-        connections: [
+        accounts: [
           {
-            connection_id: github.id,
+            account_id: github.id,
             resources: { scope: 'selected', resource_refs: ['acme/app'] },
             trust_levels: trustLevels,
           },
@@ -168,17 +168,17 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       const [content] = result.content as { type: string; text: string }[];
       expect(JSON.parse(content?.text ?? 'null')).toEqual(BRANCHES);
 
-      // The gateway sent the connection's token upstream…
+      // The gateway sent the account's token upstream…
       const [api] = instance.upstream.calls;
-      expect(api?.headers.authorization).toMatch(new RegExp(`${CONNECTION_TOKEN}$`));
+      expect(api?.headers.authorization).toMatch(new RegExp(`${ACCOUNT_TOKEN}$`));
       // …and nothing of it reached the executor.
-      expect(JSON.stringify(result)).not.toContain(CONNECTION_TOKEN);
+      expect(JSON.stringify(result)).not.toContain(ACCOUNT_TOKEN);
 
       const [entry] = await instance.root.store.audit.list({ missionId: mission.mission.id });
       expect(entry).toMatchObject({
         kind: 'call',
         tool: 'github__list_branches',
-        connection_id: instance.github.id,
+        account_id: instance.github.id,
         resource_ref: 'acme/app',
         decision: 'allowed',
       });
@@ -198,7 +198,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
     expect((outside as ProtocolError).data).toMatchObject({
       code: 'resource-not-in-mission',
       cited_ref: 'acme/infra',
-      connection: { id: instance.github.id, name: 'acme-org' },
+      account: { id: instance.github.id, name: 'acme-org' },
       allowed_resources: [{ ref: 'acme/app' }],
     });
 
@@ -244,7 +244,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
   });
 
   describe('tools/list and the catalog', () => {
-    it('lists only the providers the mission holds a connection and an accepted risk for', async () => {
+    it('lists only the providers the mission holds an account and an accepted risk for', async () => {
       const githubOnly = await instance.issueGithub();
       const depotOnly = await instance.issue({ policy: [line('depot.read')] });
 
@@ -304,9 +304,9 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
           .map((t) => t.name)
           .sort(),
       );
-      expect(catalog.connections).toEqual([
+      expect(catalog.accounts).toEqual([
         {
-          id: instance.connection.id,
+          id: instance.account.id,
           provider: 'depot',
           name: 'Depot main',
           status: 'active',
@@ -514,7 +514,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
     expect(all).toContain('tools/call');
     expect(all).toContain(mission.prefix);
     expect(all).not.toContain(secret);
-    expect(all).not.toContain(CONNECTION_TOKEN);
+    expect(all).not.toContain(ACCOUNT_TOKEN);
     expect(all).not.toContain('secrets/prod.env');
     expect(all).not.toContain('BEGIN PRIVATE KEY');
     expect(all).not.toContain('github-app-client-secret-never-sent');

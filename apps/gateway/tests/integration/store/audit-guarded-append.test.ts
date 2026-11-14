@@ -42,7 +42,7 @@ function call(ts: string, label: string | null, decision: 'allowed' | 'refused')
     token_kind: null,
     token_holder: null,
     session_id: 's1',
-    connection_id: 'c1',
+    account_id: 'c1',
     resource_ref: null,
     tool: 'github__get_file',
     arguments_hash: 'abc123def4567890',

@@ -33,11 +33,11 @@ export const notionPlugin = definePlugin({
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.2.0',
   description:
-    'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal connection.',
+    'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal account.',
   summary:
-    'One account is one internal connection of a Notion workspace, connected with its token. One resource is one top-level page or database shared with that connection, with everything under it. Notion has no environments: moving a page to the trash and deleting a block are permissions of their own. Writes are sent silently, so Notion notifies nobody.',
+    'One account is one internal account of a Notion workspace, connected with its token. One resource is one top-level page or database shared with that account, with everything under it. Notion has no environments: moving a page to the trash and deleting a block are permissions of their own. Writes are sent silently, so Notion notifies nobody.',
   manualRevocation:
-    "In Notion's Developer portal, open the connection and refresh its token on the Configuration tab, or remove the connection from the shared pages (••• menu, Connections).",
+    "In Notion's Developer portal, open the account and refresh its token on the Configuration tab, or remove the account from the shared pages (••• menu, Accounts).",
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/notion.md',
   tools: notionTools,
   toolTitles: notionToolTitles,
@@ -57,7 +57,7 @@ export { classifyNotion, discoverNotionResources, executeNotion, notionDataModel
 export { readCall, slicesOf, undeclaredArgument } from './classify.ts';
 export { NOTION_API_BASE, NOTION_VERSION } from './api.ts';
 export { MAX_ANCESTRY_DEPTH } from './ancestry.ts';
-export { NOTION_CONNECTIONS_PAGE, verifyNotionToken } from './credential.ts';
+export { NOTION_ACCOUNTS_PAGE, verifyNotionToken } from './credential.ts';
 export { MAX_DISCOVERED_ROOTS, MAX_SEARCH_PAGES } from './discovery.ts';
 export {
   MAX_BLOCKS_PER_CALL,

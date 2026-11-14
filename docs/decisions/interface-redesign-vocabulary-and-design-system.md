@@ -107,3 +107,9 @@ repair first; "the most severe" becomes "the hardest to repair". The five facts 
 - **Keeping the word beside the row**: two measures of one risk, the one people read first being
   the one that decides nothing.
 - **Printing the row number**: "row 3" asks the reader to learn a scale; the name says it.
+
+## Amendment 2026-11-14: account, service and plugin are one word everywhere
+
+For these three things the bridge is gone: the code, the store and the protocol say what the
+interface says ([one-word-per-thing-account-service-plugin](one-word-per-thing-account-service-plugin.md)).
+The other words (permission, key, Waiting for you…) keep their protocol names as above.

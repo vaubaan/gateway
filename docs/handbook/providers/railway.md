@@ -58,7 +58,7 @@ tools. Resource: the Railway project.
 - `User-Agent` is always `vaubaan-gateway`: Cloudflare in front of the MCP server refuses some
   defaults (error 1010).
 - On an MCP auth failure the token is probed on the GraphQL API: refused there → 401 (rejected
-  credential); accepted → 403 "not permitted", so a healthy connection is not marked expired.
+  credential); accepted → 403 "not permitted", so a healthy account is not marked expired.
 
 ## Outside the repo
 
@@ -76,5 +76,5 @@ tools. Resource: the Railway project.
   (refresh); `… are unknown` → resource predates the metadata field (refresh once).
 - `risk-not-accepted` with hint "no environment label" → the owner labels the project; naming
   `bulk-variables-replace` → `replace` set, empty `variables`, or a `railway-agent` call.
-- `UpstreamAuthError` on every call → token deleted at Railway, or a connection made through the
+- `UpstreamAuthError` on every call → token deleted at Railway, or an account made through the
   Railway Auth app of an earlier build: reconnect with a token.

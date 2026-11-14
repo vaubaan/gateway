@@ -49,7 +49,7 @@ export default async function SignInProviderPage({ params, searchParams }: Props
       <PageHeader
         doc={DOC_PAGES.signIn}
         title={provider.name}
-        lede={`${provider.kind === 'local' ? 'Local accounts' : github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
+        lede={`${provider.kind === 'local' ? 'Sign-in accounts' : github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}
         width="narrow"
       />

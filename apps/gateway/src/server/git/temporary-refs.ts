@@ -145,7 +145,7 @@ export interface TemporaryRefsScope {
 /** The temporary refs of one push, and the write access to the provider they need. */
 export class TemporaryRefs {
   private storedRefs: readonly StoredRef[] = [];
-  private connection: { execCtx: ExecuteContext; upstream: GitUpstream } | null = null;
+  private account: { execCtx: ExecuteContext; upstream: GitUpstream } | null = null;
 
   constructor(
     private readonly deps: TemporaryRefsDeps,
@@ -158,13 +158,13 @@ export class TemporaryRefs {
 
   /** The plugin's context and the write endpoint, minted once per push. */
   async upstream(): Promise<{ execCtx: ExecuteContext; upstream: GitUpstream }> {
-    if (this.connection) return this.connection;
+    if (this.account) return this.account;
     const { ctx, target, signal } = this.scope;
     try {
       const execCtx = await executeContextFor(this.deps, ctx, target, signal);
       const upstream = await target.remote.upstream(execCtx, target.repository, 'write');
-      this.connection = { execCtx, upstream };
-      return this.connection;
+      this.account = { execCtx, upstream };
+      return this.account;
     } catch (err) {
       // The plugin declined (a permission the account lacks): its sentence, as it is.
       if (isExecutorRefusal(err)) throw new PushStop(err.message, err.message);
@@ -180,7 +180,7 @@ export class TemporaryRefs {
    * plugin may have renewed its credential since (`gitRemote.admitPush`).
    */
   async renewUpstream(): Promise<void> {
-    this.connection = null;
+    this.account = null;
     await this.upstream();
   }
 
@@ -222,7 +222,7 @@ export class TemporaryRefs {
       stored.map((r) => ({
         ref: r.temporary,
         targetRef: r.ref,
-        connectionId: target.connection.id,
+        accountId: target.account.id,
         repository: target.repository,
         missionId: ctx.mission.id,
         objectId: r.objectId,
@@ -256,7 +256,7 @@ export class TemporaryRefs {
     if (!answer.ok) {
       await answer.body?.cancel();
       if (answer.status === HTTP_UNAUTHORIZED) {
-        await this.deps.credentialCache.drop(target.connection.id);
+        await this.deps.credentialCache.drop(target.account.id);
       }
       // A 403 on the upload is the provider's own permission check: the account's
       // token cannot write to this repository.
@@ -282,7 +282,7 @@ export class TemporaryRefs {
       // A refusal may come from a credential minted before a permission was
       // granted (GitHub: "… without `workflows` permission"): the next push
       // starts from a fresh one.
-      await this.deps.credentialCache.drop(target.connection.id);
+      await this.deps.credentialCache.drop(target.account.id);
       const detail =
         report.unpack !== 'ok'
           ? report.unpack

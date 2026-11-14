@@ -38,7 +38,7 @@ describe('events.agent_label', () => {
       subject: 's',
       email: 'ada@example.com',
     });
-    const connection = await t.store.connections.create({
+    const account = await t.store.accounts.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'gh',
@@ -49,7 +49,7 @@ describe('events.agent_label', () => {
       creatorUserId: user.id,
       periodAnchor: AT,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceIds: [] }],
+      accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',

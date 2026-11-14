@@ -25,7 +25,7 @@ import type {
 
 /**
  * One accepted risk of a draft. `quota`, `rate_limit` and `gate` may be
- * omitted when the connection names `everything-i-hold`: they then come from
+ * omitted when the account names `everything-i-hold`: they then come from
  * its line for that risk.
  * A risk whose budget resolves from neither is refused (spec §3.2: "the
  * gateway refuses to issue a mission whose accepted risk has no resolved
@@ -39,7 +39,7 @@ export interface DraftPolicyEntry {
 }
 
 /**
- * The resources a mission may touch on one connection (spec §3.1 "Resource
+ * The resources a mission may touch on one account (spec §3.1 "Resource
  * selection"; ADR resource-set-is-one-environment-with-optional-future-resources).
  * A set is always stored as an explicit list of one environment:
  *
@@ -47,16 +47,16 @@ export interface DraftPolicyEntry {
  *   proposal, which only knows refs) — the set's list;
  * - `all` (legacy) is every resource known now that the owner did not hide and
  *   discovery still returns, and that no other set selects;
- * - `connection` (legacy) is `all` with `future` on.
+ * - `account` (legacy) is `all` with `future` on.
  *
- * `all` and `connection`, and a selection given without `resource_sets`, are split
+ * `all` and `account`, and a selection given without `resource_sets`, are split
  * by environment into one set per environment, each with the policy lines that
  * apply there (`previewDraft`); a resource without a label is left out of `all` and
- * `connection` when the provider's catalog has env-qualified risks.
+ * `account` when the provider's catalog has env-qualified risks.
  */
 export type DraftResources =
   | { readonly scope: 'all' }
-  | { readonly scope: 'connection' }
+  | { readonly scope: 'account' }
   | {
       readonly scope: 'selected';
       readonly resource_ids?: readonly string[];
@@ -64,11 +64,11 @@ export type DraftResources =
     };
 
 /**
- * One connection of a draft with its partition of the policy (spec §3.1 "A
- * multi-connection mission composes its authority connection by connection").
+ * One account of a draft with its partition of the policy (spec §3.1 "A
+ * multi-account mission composes its authority account by account").
  *
- * The connection is named by id, or by `provider` when the creator holds
- * exactly one usable connection of that provider (an agent's proposal).
+ * The account is named by id, or by `provider` when the creator holds
+ * exactly one usable account of that provider (an agent's proposal).
  *
  * `trust levels` + no `policy`   → what the macro-actions write at their trust levels,
  *                           bounded by the authority and the selection.
@@ -77,15 +77,15 @@ export type DraftResources =
  *                           `everything-i-hold`'s); trust levels beside it only
  *                           redraw the form.
  */
-export interface DraftConnection {
-  readonly connection_id?: string;
+export interface DraftAccount {
+  readonly account_id?: string;
   readonly provider?: string;
   /**
-   * Several resource sets on the connection (risk model §4.7), each with its
+   * Several resource sets on the account (risk model §4.7), each with its
    * resources, trust levels and policy, in order ("Resource set 1", "Resource set
    * 2"). Given, it replaces `resources`, `future`, `env`, `everything_i_hold`,
    * `policy` and `trust_levels`, which then must be absent; absent, those fields are
-   * the connection's selection, split by environment into one set per environment.
+   * the account's selection, split by environment into one set per environment.
    */
   readonly resource_sets?: readonly DraftResourceSet[];
   /** Default: `{ scope: 'all' }`. */
@@ -109,10 +109,10 @@ export interface DraftConnection {
 }
 
 /**
- * One resource set of a draft connection (risk model §4.7): the fields a connection
- * with one set gives directly. The sets of a connection partition its selection: a
+ * One resource set of a draft account (risk model §4.7): the fields an account
+ * with one set gives directly. The sets of an account partition its selection: a
  * resource in one set only, and at most one set takes "the rest" (`all` or
- * `connection`: every resource no other set selects).
+ * `account`: every resource no other set selects).
  */
 export interface DraftResourceSet {
   /** The stored set an edit keeps (its counters and requests follow it); ignored at issuance. */
@@ -120,8 +120,8 @@ export interface DraftResourceSet {
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
   /**
-   * Resources that later appear on the connection with the set's environment join its
-   * list. Absent: off, except under the legacy `{ scope: 'connection' }`.
+   * Resources that later appear on the account with the set's environment join its
+   * list. Absent: off, except under the legacy `{ scope: 'account' }`.
    */
   readonly future?: boolean;
   /**
@@ -134,19 +134,19 @@ export interface DraftResourceSet {
   readonly trust_levels?: Readonly<Record<string, string>>;
 }
 
-/** The sets of a draft connection: `resource_sets`, or the connection's own fields as one set. */
-export function draftSetsOf(connection: DraftConnection): readonly DraftResourceSet[] {
-  if (connection.resource_sets) return connection.resource_sets;
+/** The sets of a draft account: `resource_sets`, or the account's own fields as one set. */
+export function draftSetsOf(account: DraftAccount): readonly DraftResourceSet[] {
+  if (account.resource_sets) return account.resource_sets;
   return [
     {
-      ...(connection.resources ? { resources: connection.resources } : {}),
-      ...(connection.future !== undefined ? { future: connection.future } : {}),
-      ...(connection.env !== undefined ? { env: connection.env } : {}),
-      ...(connection.everything_i_hold !== undefined
-        ? { everything_i_hold: connection.everything_i_hold }
+      ...(account.resources ? { resources: account.resources } : {}),
+      ...(account.future !== undefined ? { future: account.future } : {}),
+      ...(account.env !== undefined ? { env: account.env } : {}),
+      ...(account.everything_i_hold !== undefined
+        ? { everything_i_hold: account.everything_i_hold }
         : {}),
-      ...(connection.policy ? { policy: connection.policy } : {}),
-      ...(connection.trust_levels ? { trust_levels: connection.trust_levels } : {}),
+      ...(account.policy ? { policy: account.policy } : {}),
+      ...(account.trust_levels ? { trust_levels: account.trust_levels } : {}),
     },
   ];
 }
@@ -156,7 +156,7 @@ export type DraftPeriod =
 
 export interface MissionDraft {
   readonly name: string;
-  readonly connections: readonly DraftConnection[];
+  readonly accounts: readonly DraftAccount[];
   readonly period: DraftPeriod;
   /** ISO-8601 instant, or `null` for a mission that never expires (ADR D4). */
   readonly expires_at: string | null;
@@ -206,7 +206,7 @@ export interface IssuanceResource {
   readonly display_name: string;
   readonly env: string | null;
   /**
-   * Hidden by the connection's owner: left out of "all resources", still
+   * Hidden by the account's owner: left out of "all resources", still
    * selectable explicitly.
    */
   readonly hidden: boolean;
@@ -219,8 +219,8 @@ export interface IssuanceResource {
   readonly self: boolean;
 }
 
-/** A connection the creator holds authority on, with everything issuance needs. */
-export interface IssuanceConnection {
+/** An account the creator holds authority on, with everything issuance needs. */
+export interface IssuanceAccount {
   readonly id: string;
   readonly provider: string;
   readonly provider_label: string;
@@ -235,7 +235,7 @@ export interface IssuanceConnection {
    */
   readonly derives_env: boolean;
   /**
-   * The connection owner's default environment for resources without a label of
+   * The account owner's default environment for resources without a label of
    * their own (ADR connect-driver-and-resource-curation); `null` when none. Already
    * applied to `resources[].env`: nothing reads it to resolve an environment.
    */
@@ -249,7 +249,7 @@ export interface IssuanceConnection {
   readonly resources: readonly IssuanceResource[];
   /** The whole catalog as explicit ids, catalog order. */
   readonly risks: readonly CatalogRisk[];
-  /** The creator's authority on this connection: explicit ids, a subset of `risks`. */
+  /** The creator's authority on this account: explicit ids, a subset of `risks`. */
   readonly authority: readonly RiskId[];
   /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
   readonly macro_actions: readonly MacroAction[];
@@ -276,18 +276,18 @@ export interface MissionIssuer {
 
 export const PREVIEW_ISSUE_CODES = [
   'name-missing',
-  'no-connection',
-  'connection-unknown',
-  'connection-ambiguous',
-  'connection-unavailable',
-  'duplicate-connection',
+  'no-account',
+  'account-unknown',
+  'account-ambiguous',
+  'account-unavailable',
+  'duplicate-account',
   'duplicate-provider',
-  'resource-not-in-connection',
+  'resource-not-in-account',
   'resource-stale',
   'resource-self',
   'no-resource-selected',
   /**
-   * Two resource sets of one connection hold the same resource, both take "the rest", or
+   * Two resource sets of one account hold the same resource, both take "the rest", or
    * both take the future resources of one environment.
    */
   'resource-sets-overlap',
@@ -298,7 +298,7 @@ export const PREVIEW_ISSUE_CODES = [
    * environment) on a provider whose catalog has env-qualified risks.
    */
   'resource-unlabelled',
-  /** `resource_sets` beside the connection's own `resources`, `policy`, `trust_levels`… */
+  /** `resource_sets` beside the account's own `resources`, `policy`, `trust_levels`… */
   'resource-sets-mixed',
   'unknown-macro-action',
   'unknown-risk',
@@ -319,10 +319,10 @@ export type PreviewIssueCode = (typeof PREVIEW_ISSUE_CODES)[number];
 export interface PreviewIssue {
   readonly code: PreviewIssueCode;
   readonly message: string;
-  /** Index of the draft connection the issue is about, when it is about one. */
-  readonly connection_index?: number;
-  readonly connection_id?: string;
-  /** Index of the resource set of that connection (0 for the first), when it is about one. */
+  /** Index of the draft account the issue is about, when it is about one. */
+  readonly account_index?: number;
+  readonly account_id?: string;
+  /** Index of the resource set of that account (0 for the first), when it is about one. */
   readonly resource_set_index?: number;
   /** The offending ids: for `exceeds-authority`, the uncovered list (spec §3.1). */
   readonly risk_ids?: readonly RiskId[];
@@ -332,7 +332,7 @@ export interface PreviewIssue {
 export const PREVIEW_NOTICE_CODES = [
   'resource-without-env',
   'resource-env-not-in-catalog',
-  /** `all` or `connection` left out resources without a label (`resource-unlabelled`). */
+  /** `all` or `account` left out resources without a label (`resource-unlabelled`). */
   'unlabelled-resources-left-out',
   /** A legacy selection was split into one resource set per environment. */
   'split-by-environment',
@@ -354,20 +354,20 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  * normalization of a legacy selection did (`DraftResources`).
  *
  * `everything-i-hold-expanded` is of another kind: it says what the built-in
- * expansion `everything-i-hold` wrote out on a connection — how many explicit
+ * expansion `everything-i-hold` wrote out on an account — how many explicit
  * lines, the hardest to repair, those that cannot be repaired running freely and the fallback,
  * whose ids are its `risk_ids` (ADR preset-everything-i-hold-expands-explicitly).
  */
 export interface PreviewNotice {
   readonly code: PreviewNoticeCode;
   readonly message: string;
-  readonly connection_index?: number;
-  readonly connection_id?: string;
+  readonly account_index?: number;
+  readonly account_id?: string;
   readonly resource_set_index?: number;
   /** The selected resources the notice is about. */
   readonly resource_refs: readonly string[];
   /**
-   * The env-scoped ids the draft accepts on this connection, unreachable on those
+   * The env-scoped ids the draft accepts on this account, unreachable on those
    * resources; for `everything-i-hold-expanded`, the critical ids that run freely
    * and the fallback.
    */
@@ -391,9 +391,9 @@ export interface LeftOutEntry {
   readonly env: string | null;
 }
 
-/** What the draft yields on one resource set of a connection (risk model §4.7). */
+/** What the draft yields on one resource set of an account (risk model §4.7). */
 export interface ResourceSetPreview {
-  /** Its place among the sets of the connection, from 0. */
+  /** Its place among the sets of the account, from 0. */
   readonly index: number;
   /** The stored set an edit keeps; `null` for a set the draft adds. */
   readonly id: string | null;
@@ -414,27 +414,27 @@ export interface ResourceSetPreview {
 }
 
 /**
- * What the draft yields on one connection. With one resource set, the connection's
+ * What the draft yields on one account. With one resource set, the account's
  * fields are that set's; with several, they are the sets' together (`passes` lists
  * each set's lines) and `resource_sets` tells them apart.
  */
-export interface ConnectionPreview {
-  readonly connection_id: string;
+export interface AccountPreview {
+  readonly account_id: string;
   readonly provider: string;
   readonly display_name: string;
   /** The resources the mission would be persisted with, every set together. */
   readonly resources: readonly IssuanceResource[];
   /** One set at least takes the resources that later appear in its environment. */
   readonly future: boolean;
-  /** Size of "all resources" on this connection, plus the hidden ones selected explicitly. */
+  /** Size of "all resources" on this account, plus the hidden ones selected explicitly. */
   readonly resources_total: number;
-  /** The built-in "everything I hold" wrote (or budgets) this connection's lines. */
+  /** The built-in "everything I hold" wrote (or budgets) this account's lines. */
   readonly everything_i_hold: boolean;
   /** Accepted, inside the authority, resolvable, with a resolved budget. */
   readonly passes: readonly MissionPolicyEntry[];
   /** Accepted but outside the creator's authority — the uncovered list. */
   readonly exceeds: readonly RiskId[];
-  /** Not an explicit id of this connection's catalog. */
+  /** Not an explicit id of this account's catalog. */
   readonly unknown: readonly RiskId[];
   /** Env-qualified entries whose environment no selected resource carries. */
   readonly unresolvable: readonly UnresolvableEntry[];
@@ -444,9 +444,9 @@ export interface ConnectionPreview {
    * (no explicit `policy`): they inform, they do not block.
    */
   readonly left_out: readonly LeftOutEntry[];
-  /** The draft's trust levels that name a macro-action of the connection (`knownTrustLevels`). */
+  /** The draft's trust levels that name a macro-action of the account (`knownTrustLevels`). */
   readonly trust_levels: Readonly<Record<string, TrustLevel>>;
-  /** Each set of the connection, in order; one for a connection given without sets. */
+  /** Each set of the account, in order; one for an account given without sets. */
   readonly resource_sets: readonly ResourceSetPreview[];
 }
 
@@ -458,16 +458,16 @@ export interface MissionSummaryLines {
 }
 
 /**
- * The draft with every alias resolved (connection ids, resource ids, explicit entries)
+ * The draft with every alias resolved (account ids, resource ids, explicit entries)
  * and every set split to one environment.
  */
-export interface ResolvedDraftConnection {
-  readonly connection_id: string;
-  /** The sets of the connection, in order. */
+export interface ResolvedDraftAccount {
+  readonly account_id: string;
+  /** The sets of the account, in order. */
   readonly resource_sets: readonly ResolvedDraftSet[];
 }
 
-/** One set of a resolved draft connection. */
+/** One set of a resolved draft account. */
 export interface ResolvedDraftSet {
   /** The stored set an edit keeps; absent for a new set. */
   readonly id?: string;
@@ -476,7 +476,7 @@ export interface ResolvedDraftSet {
   readonly env: string | null;
   readonly everything_i_hold: boolean;
   readonly policy: readonly MissionPolicyEntry[];
-  /** The draft's trust levels that name a macro-action of the connection. */
+  /** The draft's trust levels that name a macro-action of the account. */
   readonly trust_levels: Readonly<Record<string, TrustLevel>>;
 }
 
@@ -487,12 +487,12 @@ export interface MissionPreview {
   /** What the creator should know although the draft passes; never blocks. */
   readonly notices: readonly PreviewNotice[];
   readonly name: string;
-  readonly connections: readonly ConnectionPreview[];
+  readonly accounts: readonly AccountPreview[];
   /** What becomes callable: the mission policy as it would be persisted. */
   readonly policy: readonly MissionPolicyEntry[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
   readonly summary: MissionSummaryLines;
   /** The passing part of the draft, aliases resolved — what a form loads from a proposal. */
-  readonly resolved: readonly ResolvedDraftConnection[];
+  readonly resolved: readonly ResolvedDraftAccount[];
 }

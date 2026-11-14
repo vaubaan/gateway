@@ -16,27 +16,23 @@ import {
   QUOTA_BY_ROW,
   RATE_BY_ROW,
 } from './everything-i-hold';
-import type { IssuanceConnection, IssuanceResource, MissionDraft } from './model';
+import type { IssuanceAccount, IssuanceResource, MissionDraft } from './model';
 import { budgetProblem, previewDraft } from './preview';
-import {
-  ACME_CATALOG,
-  ACME_RESOURCES,
-  acmeConnection,
-} from '../../../tests/support/missions/testing';
+import { ACME_CATALOG, ACME_RESOURCES, acmeAccount } from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-18T09:00:00.000Z');
 
-function idsOf(connection: IssuanceConnection, selected: readonly IssuanceResource[]): RiskId[] {
-  return everythingIHold(connection, selected).entries.map((e) => e.risk_id);
+function idsOf(account: IssuanceAccount, selected: readonly IssuanceResource[]): RiskId[] {
+  return everythingIHold(account, selected).entries.map((e) => e.risk_id);
 }
 
 function draftWith(
-  connection: IssuanceConnection,
-  resources: MissionDraft['connections'][number]['resources'] = { scope: 'all' },
+  account: IssuanceAccount,
+  resources: MissionDraft['accounts'][number]['resources'] = { scope: 'all' },
 ): MissionDraft {
   return {
     name: 'My own agents',
-    connections: [{ connection_id: connection.id, everything_i_hold: true, resources }],
+    accounts: [{ account_id: account.id, everything_i_hold: true, resources }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   };
@@ -50,8 +46,8 @@ const byRef = (ref: string): IssuanceResource => {
 
 describe('everything I hold — the expansion', () => {
   it('an owner gets every non-deprecated id the selected resources reach, the fallback included', () => {
-    const connection = acmeConnection();
-    expect(idsOf(connection, ACME_RESOURCES)).toEqual([
+    const account = acmeAccount();
+    expect(idsOf(account, ACME_RESOURCES)).toEqual([
       'acme.read',
       'acme[staging].write',
       'acme[prod].write',
@@ -60,26 +56,26 @@ describe('everything I hold — the expansion', () => {
       'acme.uncategorized-write',
     ]);
     // Deprecated ids are held but left out, as "select all" and the macro-actions do.
-    expect(connection.authority).toContain('acme.legacy-export');
+    expect(account.authority).toContain('acme.legacy-export');
   });
 
   it('is bounded by the authority: a share yields what it covers, nothing more', () => {
-    const connection = acmeConnection({
+    const account = acmeAccount({
       basis: 'share',
       authority: ['acme.read', 'acme[prod].write'],
     });
-    expect(idsOf(connection, ACME_RESOURCES)).toEqual(['acme.read', 'acme[prod].write']);
-    expect(idsOf(acmeConnection({ basis: 'share', authority: [] }), ACME_RESOURCES)).toEqual([]);
+    expect(idsOf(account, ACME_RESOURCES)).toEqual(['acme.read', 'acme[prod].write']);
+    expect(idsOf(acmeAccount({ basis: 'share', authority: [] }), ACME_RESOURCES)).toEqual([]);
   });
 
   it('an env-qualified id only when a selected resource carries its label', () => {
-    const connection = acmeConnection();
-    expect(idsOf(connection, [byRef('scratch')])).toEqual([
+    const account = acmeAccount();
+    expect(idsOf(account, [byRef('scratch')])).toEqual([
       'acme.read',
       'acme.admin',
       'acme.uncategorized-write',
     ]);
-    expect(idsOf(connection, [byRef('app-staging')])).toEqual([
+    expect(idsOf(account, [byRef('app-staging')])).toEqual([
       'acme.read',
       'acme[staging].write',
       'acme[staging].bulk-delete',
@@ -88,26 +84,26 @@ describe('everything I hold — the expansion', () => {
     ]);
   });
 
-  it('a resource that carries the connection default environment reaches its ids', () => {
+  it('a resource that carries the account default environment reaches its ids', () => {
     // The default is already applied to `resources[].env` (ADR connect-driver-and-resource-curation).
     const inherited: IssuanceResource = { ...byRef('scratch'), env: 'prod' };
-    const connection = acmeConnection({ default_env: 'prod', resources: [inherited] });
-    expect(idsOf(connection, [inherited])).toContain('acme[prod].write');
-    expect(idsOf(connection, [inherited])).not.toContain('acme[staging].write');
+    const account = acmeAccount({ default_env: 'prod', resources: [inherited] });
+    expect(idsOf(account, [inherited])).toContain('acme[prod].write');
+    expect(idsOf(account, [inherited])).not.toContain('acme[staging].write');
   });
 
   it('a plugin that derives the environment from the call reaches every environment', () => {
-    const connection = acmeConnection({ derives_env: true });
-    expect(idsOf(connection, [])).toContain('acme[prod].write');
-    expect(idsOf(connection, [])).toContain('acme[staging].bulk-delete');
+    const account = acmeAccount({ derives_env: true });
+    expect(idsOf(account, [])).toContain('acme[prod].write');
+    expect(idsOf(account, [])).toContain('acme[staging].bulk-delete');
   });
 
   it('budgets: the macro-action base budget at Autonomous, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
-    const connection = acmeConnection();
+    const account = acmeAccount();
     const byId = new Map(
-      everythingIHold(connection, ACME_RESOURCES).entries.map((e) => [e.risk_id, e]),
+      everythingIHold(account, ACME_RESOURCES).entries.map((e) => [e.risk_id, e]),
     );
-    const risks = new Map(connection.risks.map((r) => [r.risk_id, r]));
+    const risks = new Map(account.risks.map((r) => [r.risk_id, r]));
     // Base 100 a day, 60 a minute, ×10.
     expect(byId.get('acme.read')).toMatchObject({
       quota: 1000,
@@ -129,7 +125,7 @@ describe('everything I hold — the expansion', () => {
       gate: 'auto',
     });
     // A risk in no macro-action: by row.
-    const lone = acmeConnection({ macro_actions: [] });
+    const lone = acmeAccount({ macro_actions: [] });
     const read = risks.get('acme.read');
     expect(
       everythingIHold(lone, ACME_RESOURCES).entries.find((e) => e.risk_id === 'acme.read'),
@@ -145,9 +141,9 @@ describe('everything I hold — the expansion', () => {
   });
 
   it('never yields a wildcard, a pattern or a base id of an env-scoped risk', () => {
-    const connection = acmeConnection({ derives_env: true });
-    const explicit = new Set(connection.risks.map((r) => r.risk_id));
-    for (const entry of everythingIHold(connection, []).entries) {
+    const account = acmeAccount({ derives_env: true });
+    const explicit = new Set(account.risks.map((r) => r.risk_id));
+    for (const entry of everythingIHold(account, []).entries) {
       expect(entry.risk_id).not.toMatch(/[*?]/);
       expect(explicit.has(entry.risk_id), entry.risk_id).toBe(true);
     }
@@ -159,21 +155,21 @@ describe('everything I hold — the preview', () => {
   const STAGING = ACME_RESOURCES.filter((r) => r.env === 'staging');
 
   it('passes at once, and the policy is the explicit list, not "everything"', () => {
-    const connection = acmeConnection({ resources: STAGING });
-    const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
+    const account = acmeAccount({ resources: STAGING });
+    const p = previewDraft({ accounts: [account], now: NOW }, draftWith(account));
     expect(p.ok).toBe(true);
     expect(p.issues).toEqual([]);
-    expect(p.policy).toEqual(everythingIHold(connection, STAGING).entries);
-    expect(p.connections[0]?.left_out).toEqual([]);
+    expect(p.policy).toEqual(everythingIHold(account, STAGING).entries);
+    expect(p.accounts[0]?.left_out).toEqual([]);
     expect(JSON.stringify(p.policy)).not.toContain(EVERYTHING_I_HOLD);
   });
 
   it('says what it wrote out: count, the hardest to repair, and the fallback by id', () => {
-    const connection = acmeConnection({ resources: STAGING });
-    const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
+    const account = acmeAccount({ resources: STAGING });
+    const p = previewDraft({ accounts: [account], now: NOW }, draftWith(account));
     const notice = p.notices.find((n) => n.code === 'everything-i-hold-expanded');
-    expect(notice?.connection_id).toBe(connection.id);
-    expect(notice?.message).toContain(`${idsOf(connection, STAGING).length} explicit risks`);
+    expect(notice?.account_id).toBe(account.id);
+    expect(notice?.message).toContain(`${idsOf(account, STAGING).length} explicit risks`);
     expect(notice?.message).toContain(
       'The hardest to repair: acme[staging].bulk-delete (Cannot be repaired)',
     );
@@ -183,15 +179,15 @@ describe('everything I hold — the preview', () => {
   });
 
   it('names the lines that cannot be repaired and run freely, without adding a gate', () => {
-    const base = acmeConnection();
+    const base = acmeAccount();
     // Put `acme.admin` in row 4: the notice must say so, the gate stays `auto`.
     const risks = base.risks.map((r) =>
       r.risk_id === 'acme.admin'
         ? { ...r, row: 4 as const, row_reason: 'irreversible' as const }
         : r,
     );
-    const connection = acmeConnection({ risks });
-    const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
+    const account = acmeAccount({ risks });
+    const p = previewDraft({ accounts: [account], now: NOW }, draftWith(account));
     const notice = p.notices.find((n) => n.code === 'everything-i-hold-expanded');
     expect(notice?.message).toContain(
       'Cannot be repaired, gate auto (no approval asked): acme[staging].bulk-delete, acme.admin.',
@@ -205,38 +201,38 @@ describe('everything I hold — the preview', () => {
   });
 
   it('follows the selection: a narrower one yields fewer lines, never an unresolvable one', () => {
-    const connection = acmeConnection();
+    const account = acmeAccount();
     const p = previewDraft(
-      { connections: [connection], now: NOW },
-      draftWith(connection, { scope: 'selected', resource_refs: ['app-prod'] }),
+      { accounts: [account], now: NOW },
+      draftWith(account, { scope: 'selected', resource_refs: ['app-prod'] }),
     );
     expect(p.ok).toBe(true);
-    const prodOnly = idsOf(connection, [byRef('app-prod')]);
+    const prodOnly = idsOf(account, [byRef('app-prod')]);
     expect(p.policy.map((l) => l.risk_id)).toEqual(prodOnly);
     expect(prodOnly).not.toContain('acme[staging].write');
-    expect(prodOnly.length).toBeLessThan(idsOf(connection, ACME_RESOURCES).length);
-    expect(p.connections[0]?.unresolvable).toEqual([]);
+    expect(prodOnly.length).toBeLessThan(idsOf(account, ACME_RESOURCES).length);
+    expect(p.accounts[0]?.unresolvable).toEqual([]);
   });
 
   it('a share holding nothing reachable accepts nothing, and says so', () => {
-    const connection = acmeConnection({ basis: 'share', authority: ['acme[prod].write'] });
+    const account = acmeAccount({ basis: 'share', authority: ['acme[prod].write'] });
     const p = previewDraft(
-      { connections: [connection], now: NOW },
-      draftWith(connection, { scope: 'selected', resource_refs: ['app-staging'] }),
+      { accounts: [account], now: NOW },
+      draftWith(account, { scope: 'selected', resource_refs: ['app-staging'] }),
     );
     expect(p.ok).toBe(false);
     expect(p.issues.map((i) => i.code)).toEqual(['no-accepted-risk']);
   });
 
   it('as the budget source of an explicit policy, it fills the missing budgets', () => {
-    const connection = acmeConnection();
+    const account = acmeAccount();
     const p = previewDraft(
-      { connections: [connection], now: NOW },
+      { accounts: [account], now: NOW },
       {
-        ...draftWith(connection),
-        connections: [
+        ...draftWith(account),
+        accounts: [
           {
-            connection_id: connection.id,
+            account_id: account.id,
             everything_i_hold: true,
             resources: { scope: 'selected', resource_refs: ['app-staging'] },
             policy: [{ risk_id: 'acme.admin' }],
@@ -254,15 +250,15 @@ describe('everything I hold — the preview', () => {
   });
 
   it('is asked by name only: `false` writes nothing on its own', () => {
-    const connection = acmeConnection();
+    const account = acmeAccount();
     const p = previewDraft(
-      { connections: [connection], now: NOW },
+      { accounts: [account], now: NOW },
       {
-        ...draftWith(connection),
-        connections: [{ connection_id: connection.id, everything_i_hold: false }],
+        ...draftWith(account),
+        accounts: [{ account_id: account.id, everything_i_hold: false }],
       },
     );
-    expect(p.connections[0]?.everything_i_hold).toBe(false);
+    expect(p.accounts[0]?.everything_i_hold).toBe(false);
     expect(p.policy).toEqual([]);
   });
 });

@@ -19,7 +19,7 @@ import { catalogPathNextTo } from '../../../src/catalog-path.ts';
 import { apiKeyCredentialFixture } from '../../../src/testing/guide.ts';
 import type {
   ClassifyOutcome,
-  ConnectionContext,
+  AccountContext,
   ExecuteContext,
   ProviderPlugin,
 } from '../../../src/plugin.ts';
@@ -100,7 +100,7 @@ export function classifyAcme(
 }
 
 async function acmeRequest(
-  ctx: ConnectionContext,
+  ctx: AccountContext,
   method: string,
   path: string,
   body?: unknown,
