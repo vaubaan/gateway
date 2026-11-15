@@ -1,7 +1,7 @@
 {
-  "gateway": "2.0.0-alpha.21",
+  "gateway": "2.0.0-alpha.22",
   "prerelease": true,
-  "date": "2026-11-14",
+  "date": "2026-11-15",
   "plugins": {
     "asana": "0.1.0",
     "axonaut": "0.1.0",
@@ -21,7 +21,7 @@
     "stripe": "0.5.0",
     "supabase": "6.0.0",
     "upstash-redis": "4.0.0",
-    "vaubaan": "0.2.0",
+    "vaubaan": "0.3.0",
     "vercel": "4.2.0"
   }
 }

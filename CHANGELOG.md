@@ -9,8 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.22] - 2026-11-15
+
 ### Added
 
+- **Activity's Overview, and the bytes of every forwarded call** (spec §4.2 Activity, §8).
+  `/activity` is now the Overview, first tab before the Record and the Timeline (an older
+  `/activity?<Record filters>` address still opens the Record). Per mission of the
+  Timeline's scope, over today, 7 or 30 days: calls allowed and refused, requests waiting,
+  bytes sent and received; behind a disclosure, the requests per account, the use per action
+  in the current period and the key holders with their share; above them, what stops working
+  within 7 days (a mission's end, a pasted key's end, an account its service refused), each
+  linked to where it is fixed. Every number opens the Record or the Timeline filtered on it.
+  The pipeline now counts the bytes of a forwarded call (MCP: arguments and result as JSON;
+  git: the relayed request and pack of a fetch, the pack of a push). Migration 0038 adds
+  `audit.request_bytes`, `audit.response_bytes` (nullable, older entries stay empty) and a
+  covering index for the Overview.
 - **The History of a mission, and restoring a version** (spec §4.2 "History"). Every change
   of a mission's configuration — issuance, edit, permission request accepted, created
   resource joined, future resources joining or leaving, gate and limits, a claim's new end —
@@ -21,6 +35,27 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   not part of a version. Versions are kept as long as the mission, never by the audit's
   retention. Migration 0039 adds `mission_versions` and writes every existing mission's
   version 1 from its current state. `POST /api/missions/:id/versions/:number/restore`.
+- **Accounts refresh themselves.** Every active account (and any a running future set
+  depends on) refreshes its resources and its key's rights once per
+  `accounts.refresh_interval` (new key, default `1h`, `15m` to `24h`, `0` turns it off;
+  `VAUBAAN_ACCOUNTS_REFRESH_INTERVAL`), each at its own slot of the interval, one after the
+  other, a failure backing it off 1, 2, 4 then 8 intervals. The account page, the Accounts
+  list and the mission form also refresh, in place, the accounts last refreshed more than
+  15 minutes ago (`POST /api/accounts/refresh`). A refresh is audited only when it changed
+  something. "Updated 12 min ago" replaces "Found".
+
+### Changed
+
+- **The Reference of a service is its plugin page.** The gateway's `/reference/<id>` renders
+  the same page the site shows at `/plugins/<id>`, from one shared package
+  (`@vaubaan/plugin-page`, ADR service-page-is-one-shared-package), built from the plugin
+  this instance runs (bundled or pinned), its links under `docs.url`; a strip above it gives
+  the version, a pinned tag, the validation badge and the git remote. Anchors `#risk-<id>`
+  and `#macro-<id>` stay.
+- **The (i) explains where you are, in a hint.** The (i) beside a page title or a concept no
+  longer opens the docs in a new tab: it shows a small popover (on hover or focus, pinned by
+  a click or a tap) with one to three sentences of context and a "Documentation ↗" line,
+  the only way out to the docs.
 
 ### Breaking
 
@@ -2835,7 +2870,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.21...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.22...HEAD
+[2.0.0-alpha.22]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.21...v2.0.0-alpha.22
 [2.0.0-alpha.21]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.20...v2.0.0-alpha.21
 [2.0.0-alpha.20]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.19...v2.0.0-alpha.20
 [2.0.0-alpha.19]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.18...v2.0.0-alpha.19
