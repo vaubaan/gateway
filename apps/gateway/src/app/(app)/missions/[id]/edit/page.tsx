@@ -7,6 +7,7 @@
  */
 import { notFound } from 'next/navigation';
 
+import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { ButtonLink, Callout, PageHeader } from '@/components/ui';
 import { DOC_PAGES, MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
@@ -82,6 +83,8 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
       : null;
 
   const context = await service.issuanceContext(session.user);
+  // The picker shows what is stored at once; the stale accounts refresh themselves.
+  const stale = await session.root.accounts.refresher.staleIds(context.map((c) => c.id));
   // The services whose data model has several planes: the editor can be sliced by one.
   const planes: Record<string, RiskPlanes> = {};
   const icons: Record<string, ServiceMarkIcon | null> = {};
@@ -96,39 +99,42 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
   const customAction = one(query.action);
 
   return (
-    <MissionForm
-      key={`edit:${view.revision}${offer ? `:raise:${offer.resource_set_id}:${offer.macro_action_id}` : ''}`}
-      context={context}
-      missions={[]}
-      initial={null}
-      planes={planes}
-      icons={icons}
-      openCustom={
-        customSet && customAction && !offer
-          ? { resourceSetId: customSet, actionId: customAction }
-          : null
-      }
-      edit={{
-        missionId: view.mission.id,
-        revision: view.revision,
-        snapshot: view.snapshot,
-        ...(offer
-          ? {
-              raise: {
-                accountId: offer.account_id,
-                resourceSetId: offer.resource_set_id,
-                macroActionId: offer.macro_action_id,
-                to: offer.to,
-                from: offer.from,
-                label: offer.macro_action_label,
-                where: TRUST_RAISE_WORDS.where(
-                  offer.account_name,
-                  offer.several_sets ? offer.resource_set_position : null,
-                ),
-              },
-            }
-          : {}),
-      }}
-    />
+    <>
+      <AutoRefresh accountIds={stale} quiet />
+      <MissionForm
+        key={`edit:${view.revision}${offer ? `:raise:${offer.resource_set_id}:${offer.macro_action_id}` : ''}`}
+        context={context}
+        missions={[]}
+        initial={null}
+        planes={planes}
+        icons={icons}
+        openCustom={
+          customSet && customAction && !offer
+            ? { resourceSetId: customSet, actionId: customAction }
+            : null
+        }
+        edit={{
+          missionId: view.mission.id,
+          revision: view.revision,
+          snapshot: view.snapshot,
+          ...(offer
+            ? {
+                raise: {
+                  accountId: offer.account_id,
+                  resourceSetId: offer.resource_set_id,
+                  macroActionId: offer.macro_action_id,
+                  to: offer.to,
+                  from: offer.from,
+                  label: offer.macro_action_label,
+                  where: TRUST_RAISE_WORDS.where(
+                    offer.account_name,
+                    offer.several_sets ? offer.resource_set_position : null,
+                  ),
+                },
+              }
+            : {}),
+        }}
+      />
+    </>
   );
 }

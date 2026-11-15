@@ -227,6 +227,17 @@ function Action({ entry }: { entry: AuditEntryView }) {
     );
   }
   if (
+    entry.act === 'resources-discovered' &&
+    (causeOf(entry.after) === 'scheduled' || causeOf(entry.after) === 'on-open')
+  ) {
+    return (
+      <span>
+        {ACT_WORDS[entry.act]}
+        <span className={styles.quiet}> · {ACTIVITY_WORDS.refreshedOnItsOwn}</span>
+      </span>
+    );
+  }
+  if (
     entry.act === 'mission-resources-added' &&
     causeOf(entry.after) === 'created-by-the-mission'
   ) {
@@ -241,7 +252,8 @@ function Action({ entry }: { entry: AuditEntryView }) {
 }
 
 /**
- * `after.cause` of an entry: `by-owner` or `after-a-call` for `resources-discovered`,
+ * `after.cause` of an entry: `by-owner`, `after-a-call`, `check-now`, `scheduled` or
+ * `on-open` for `resources-discovered`,
  * `created-by-the-mission` for `mission-resources-added`.
  */
 function causeOf(after: unknown): unknown {

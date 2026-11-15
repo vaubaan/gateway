@@ -263,6 +263,24 @@ export interface AfterCallDiscovery {
   readonly missing: number;
 }
 
+/** Who asked for a refresh the gateway ran on its own (`AccountRefresher`). */
+export type AutomaticRefreshCause = 'scheduled' | 'on-open';
+
+/** What a refresh the gateway ran on its own did. */
+export interface AutomaticRefresh {
+  readonly record: DiscoveryRecord;
+  /** Resources the account did not list before (or listed as stale). */
+  readonly added: number;
+  /** Resources it listed that the service no longer returns (now stale). */
+  readonly removed: number;
+  /** What the key may do, who it acts as or until when, as the service says it now. */
+  readonly rightsChanged: boolean;
+  /** The service rejected the key: the account now needs reconnecting. */
+  readonly expired: boolean;
+  /** Any of the above: audited, and a page that asked reads the account again. */
+  readonly changed: boolean;
+}
+
 /**
  * What revoking an account does to the grant at its service — said before
  * the act (the confirmation) and after it (the revoked account's page).
@@ -1208,6 +1226,8 @@ export class AccountService {
     const account = await this.requireOwned(actor, accountId);
     if (account.status === 'revoked') throw new ConnectError('account-revoked');
     const record = await this.rediscover(account, null, { actorId: actor.user.id });
+    // After a key's scope changed at the service: what it may do now.
+    if (record.ok) await this.reverify(account.id);
     await this.auditDiscovery(actor.user.id, account, record, null);
     return record;
   }
@@ -1259,18 +1279,118 @@ export class AccountService {
   }
 
   /**
-   * The hourly discovery of an account a running mission's future resources depend
-   * on (`HourlyDiscovery`). Not audited itself — the joins and leaves it causes are,
-   * in the name of `DISCOVERY_ACTOR_ID`; a failure is recorded on the account and
-   * logged without the service's words. `null` when the account no longer serves
-   * (gone, revoked, expired).
+   * A refresh the gateway runs on its own (`AccountRefresher`): hourly, or because a page
+   * showed the account stale. The same discovery as "Refresh" — a rejected key turns the
+   * account `expired` and tells its owners, new resources follow the plugin's hidden
+   * marks and join the future sets, missing ones go stale — then the key's check again.
+   * Audited (`resources-discovered`, actor `DISCOVERY_ACTOR_ID`, `cause` scheduled or
+   * on-open) only when something changed: a no-op refresh leaves no entry. `null` when
+   * the account does not serve (gone, revoked, expired) or is a host account.
    */
-  async discoverOnSchedule(accountId: string): Promise<DiscoveryRecord | null> {
+  async refreshOnItsOwn(
+    accountId: string,
+    cause: AutomaticRefreshCause,
+  ): Promise<AutomaticRefresh | null> {
     const account = await this.deps.store.accounts.getById(accountId);
-    if (!account || account.status === 'revoked' || account.status === 'expired') {
+    if (
+      !account ||
+      account.status === 'revoked' ||
+      account.status === 'expired' ||
+      isHostAccount(account)
+    ) {
       return null;
     }
-    return this.rediscover(account, null, { actorId: DISCOVERY_ACTOR_ID });
+    const before = await this.liveRefsOf(account.id);
+    const record = await this.rediscover(account, null, { actorId: DISCOVERY_ACTOR_ID });
+    const rightsChanged = record.ok ? await this.reverify(account.id) : false;
+    const after = await this.liveRefsOf(account.id);
+    const added = [...after].filter((ref) => !before.has(ref)).length;
+    const removed = [...before].filter((ref) => !after.has(ref)).length;
+    const expired = (await this.deps.store.accounts.getById(account.id))?.status === 'expired';
+    const changed = added > 0 || removed > 0 || rightsChanged || expired;
+    if (changed) {
+      await this.deps.audit.write({
+        kind: 'admin',
+        ts: this.nowIso(),
+        user_id: DISCOVERY_ACTOR_ID,
+        act: 'resources-discovered',
+        object: { type: 'account', id: account.id },
+        before: null,
+        after: {
+          ok: record.ok,
+          count: record.count,
+          error: record.error,
+          cause,
+          added,
+          removed,
+          rights_changed: rightsChanged,
+          ...(expired ? { expired: true } : {}),
+        },
+      });
+    }
+    return { record, added, removed, rightsChanged, expired, changed };
+  }
+
+  /** The refs of the account's resources that are not stale. */
+  private async liveRefsOf(accountId: string): Promise<Set<string>> {
+    return new Set(
+      (await this.deps.store.accounts.listResources(accountId))
+        .filter((r) => r.staleSince === null)
+        .map((r) => r.ref),
+    );
+  }
+
+  /**
+   * A pasted key's check (`verify`) asked again, after a discovery that worked: who it
+   * acts as, until when, what it holds. Written when the service says something else
+   * than what is stored; true then. A check that fails changes nothing (the discovery
+   * just proved the key works) and is logged by account only.
+   */
+  private async reverify(accountId: string): Promise<boolean> {
+    const account = await this.deps.store.accounts.getById(accountId);
+    const plugin = account ? this.deps.registry.get(account.service)?.plugin : undefined;
+    if (!account || !plugin) return false;
+    const spec = plugin.credential;
+    if (spec.kind !== 'api-key' || !spec.verify) return false;
+    if (accountCredentialKind(account, spec.kind) !== 'api-key') return false;
+    let check: CredentialCheck;
+    try {
+      const resolved = await this.deps.broker.resolve(accountId);
+      if (resolved.credential.kind !== 'api-key') return false;
+      check = await spec.verify({
+        credential: resolved.credential,
+        fetch: this.deps.fetch,
+        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+      });
+    } catch (err) {
+      this.deps.logger.warn('key check failed on refresh', {
+        account_id: accountId,
+        service: account.service,
+        failure: serviceFailureReason(err),
+      });
+      return false;
+    }
+    const said = keyFactsOf(check);
+    const metadata = account.metadata ?? {};
+    const factsDiffer =
+      (metadata.account ?? null) !== said.account ||
+      (metadata.expires_at ?? null) !== said.expires_at ||
+      (said.granted !== undefined &&
+        JSON.stringify(metadata.granted ?? null) !== JSON.stringify(said.granted));
+    const expiryDiffers = account.credentialExpiresAt !== said.expires_at;
+    if (!factsDiffer && !expiryDiffers) return false;
+    if (factsDiffer) {
+      await this.deps.store.accounts.setMetadata(accountId, {
+        ...metadata,
+        account: said.account,
+        expires_at: said.expires_at,
+        ...(said.granted === undefined ? {} : { granted: said.granted }),
+      });
+    }
+    if (expiryDiffers) {
+      await this.deps.store.accounts.setCredentialExpiresAt(accountId, said.expires_at);
+    }
+    return true;
   }
 
   /**
@@ -2030,6 +2150,21 @@ interface DiscoverySinks {
   readonly returned?: Set<string>;
   /** Filled with the joins and leaves it caused. */
   readonly moves?: ResourceMove[];
+}
+
+/** What a key's check says, as the account's metadata keeps it; an unreadable expiry is none. */
+function keyFactsOf(check: CredentialCheck): {
+  readonly account: string | null;
+  readonly expires_at: string | null;
+  readonly granted?: string[];
+} {
+  const expiresMs = check.expiresAt === null ? null : Date.parse(check.expiresAt);
+  return {
+    account: cleanName(check.account),
+    expires_at:
+      expiresMs === null || !Number.isFinite(expiresMs) ? null : new Date(expiresMs).toISOString(),
+    ...(check.granted === undefined ? {} : { granted: grantedNames(check.granted) }),
+  };
 }
 
 /** Moves grouped by set and reason, refs in the order they were written. */

@@ -122,8 +122,12 @@ carries, a callback registered at a service).
   reconnect, transfer, revoke.
 - **Resource** — one thing reachable through an account (a repository, a database project…).
   Discovered by the plugin when the account is connected, on demand, right after a gateway call that created one
-  (the plugin declares which calls create; the refresh never delays the answer), and every hour for
-  an account that a mission's future resources depend on (§4.2 Resource selection). The
+  (the plugin declares which calls create; the refresh never delays the answer), and **on its own**:
+  every account in use is refreshed once an hour (`accounts.refresh_interval`, §4.3), and again when
+  a page shows it and its last refresh is older than 15 minutes. The same refresh asks the service
+  again what the key may do and until when. Nobody needs to press "Refresh"; it stays, small, for
+  right after a key's scope was changed at the service. A refresh that changed nothing leaves no
+  trace in the record. The
   owner labels each with an **environment** (`prod`, `staging`…) and may give the account a
   **default environment**, carried by every resource without its own label, later ones included; a
   resource's own label wins; setting or clearing the default is an audited owner act.
@@ -673,7 +677,9 @@ the (i) itself never leaves the page.
   only: who has access and up to what; its resources and environment labels; every mission that
   carries it, whoever created it — name, creator, state and who holds it, only this account's part,
   nothing of the mission's other accounts; removing an access or disconnecting says how many
-  missions stop. **"Give access"**: a person or team, then the permission checklist with "select
+  missions stop. Its resources and its key's rights read "Updated 12 min ago" and refresh themselves
+  (§0 Resource): a stale account is shown at once with what is known, marked "Refreshing…", then
+  updated in place. **"Give access"**: a person or team, then the permission checklist with "select
   all", each with its row and reason; it lists the orphaned missions the access would bring back.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
   **The Vaubaan service** is among the services: "Connect" is one click, no field; its account page
@@ -831,7 +837,8 @@ committed:
   token** that opens the counters (§4.3 bis).
 
 Optional keys have defaults, among them the audit retention (ninety days), the request expiry (twenty-four hours) and the approval validity (ten minutes),
-and the git remote's largest push and longest request. Anything missing makes startup fail with a
+the git remote's largest push and longest request, and how often the accounts refresh themselves
+(`accounts.refresh_interval`, one hour; `0` turns the automatic refresh off, hourly and on open). Anything missing makes startup fail with a
 message naming it.
 
 ### 4.3 bis Ceilings and counters

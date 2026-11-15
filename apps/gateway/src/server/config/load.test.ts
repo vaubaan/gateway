@@ -217,6 +217,34 @@ describe('loadInstanceConfig — required keys', () => {
   });
 });
 
+describe('loadInstanceConfig — accounts.refresh_interval', () => {
+  const interval = (value: string | undefined) =>
+    loadInstanceConfig({ env: validEnv({ VAUBAAN_ACCOUNTS_REFRESH_INTERVAL: value }) }).config
+      .accounts.refreshIntervalSeconds;
+
+  it('is one hour by default, a duration from 15m to 24h, or 0 for off', () => {
+    expect(interval(undefined)).toBe(3600);
+    expect(interval('30m')).toBe(1800);
+    expect(interval('24h')).toBe(86_400);
+    expect(interval('0')).toBe(0);
+    // `0` in the file is a number.
+    const path = '/config/gateway.yaml';
+    const fromFile = loadInstanceConfig({
+      env: validEnv({ [CONFIG_FILE_ENV]: path }),
+      readFile: fakeFiles({ [path]: 'accounts:\n  refresh_interval: 0\n' }),
+    }).config.accounts;
+    expect(fromFile.refreshIntervalSeconds).toBe(0);
+  });
+
+  it('refuses a shorter interval than 15 minutes, a longer one than a day, or not a duration', () => {
+    for (const value of ['5m', '2d', 'hourly']) {
+      expect(paths(failure(validEnv({ VAUBAAN_ACCOUNTS_REFRESH_INTERVAL: value }))), value).toEqual(
+        ['accounts.refresh_interval'],
+      );
+    }
+  });
+});
+
 describe('loadInstanceConfig — instance name', () => {
   const FILE = '/config/gateway.yaml';
   const name = (env: Record<string, string | undefined>, file?: string) =>

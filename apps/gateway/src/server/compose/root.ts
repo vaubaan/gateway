@@ -22,7 +22,7 @@ import { upgradeSingleSignInProviderSettings } from '../auth/single-sign-in-prov
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
-import { createAccountsModule, type AccountsModule, type DiscoveryTimers } from '../accounts';
+import { createAccountsModule, type AccountsModule, type RefreshTimers } from '../accounts';
 import {
   buildInfoFromEnv,
   ConfigError,
@@ -196,8 +196,8 @@ export interface RootDeps {
   readonly updatesFetch?: typeof fetch;
   /** The versions check's timers (tests drive them by hand). */
   readonly updatesTimers?: UpdatesTimers;
-  /** The hourly discovery's timers (tests drive them by hand). */
-  readonly discoveryTimers?: DiscoveryTimers;
+  /** The automatic refresh's timers (tests drive them by hand). */
+  readonly refreshTimers?: RefreshTimers;
   /** Outbound HTTP to the browsers' push services (tests inject a fake; default: `fetch`). */
   readonly notificationFetch?: typeof fetch;
   /** Replaces the web push transport (tests assert on what would leave). */
@@ -636,12 +636,13 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     fetch: deps.serviceFetch,
     ceilings: limits,
     notifications: notifications.events,
-    discoveryTimers: deps.discoveryTimers,
+    refreshTimers: deps.refreshTimers,
+    reach: authority.service,
   });
-  // The hourly discovery of the accounts future resources depend on; stopped before
-  // the store closes (a run in progress finishes).
-  opened.push(() => accounts.hourlyDiscovery.stop());
-  accounts.hourlyDiscovery.start();
+  // The accounts refresh themselves, hourly and when a page shows one stale; stopped
+  // before the store closes (the refreshes in progress finish).
+  opened.push(() => accounts.refresher.stop());
+  accounts.refresher.start();
   const shares = createSharesModule({
     config,
     store,

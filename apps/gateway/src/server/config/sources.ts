@@ -370,6 +370,15 @@ const KEY_TABLE = [
     default: '10m',
     maxSeconds: 3_600,
   },
+  // The automatic refresh of the accounts (spec §0 "Resource"): hourly by default, `0` off.
+  {
+    path: 'accounts.refresh_interval',
+    env: 'VAUBAAN_ACCOUNTS_REFRESH_INTERVAL',
+    kind: 'string',
+    format: 'duration',
+    default: '1h',
+    maxSeconds: 86_400,
+  },
   // Ceilings (spec §4.3 bis): absent is unlimited, the default. Enforced where an
   // item would be added, never by cutting (`server/limits`).
   { path: 'limits.users', env: 'VAUBAAN_LIMITS_USERS', kind: 'int', min: 1 },

@@ -8,7 +8,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth/authenticator';
-import type { MissionGrounds } from '../authority';
+import type { AuthorityService, MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { CeilingCheck } from '../limits';
@@ -19,7 +19,7 @@ import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
 import { DiscoveryAfterCall } from './discovery-after-call';
 import { FutureResources } from './future-resources';
-import { HourlyDiscovery, type DiscoveryTimers } from './hourly-discovery';
+import { AccountRefresher, type RefreshTimers } from './account-refresh';
 import { createAccountHandlers, type AccountHandlers } from './handlers';
 import { OAuth2Clients } from './oauth2-clients';
 import { productionAttestationKit } from './attestation-kit';
@@ -50,8 +50,13 @@ export interface AccountsModuleDeps {
   readonly ceilings?: CeilingCheck;
   /** Told when an account needs reconnecting (spec §4.2 bis); default: nobody. */
   readonly notifications?: Pick<NotificationEvents, 'accountNeedsReconnecting'>;
-  /** The hourly discovery's timers (tests drive them by hand). */
-  readonly discoveryTimers?: DiscoveryTimers;
+  /** The automatic refresh's timers (tests drive them by hand). */
+  readonly refreshTimers?: RefreshTimers;
+  /**
+   * The accounts a person may use (owned or shared to them): the ones a page may ask
+   * to refresh. Absent (tests): the ones they own.
+   */
+  readonly reach?: Pick<AuthorityService, 'accountsOf'>;
 }
 
 export interface AccountsModule {
@@ -72,8 +77,11 @@ export interface AccountsModule {
    * resource-set-is-one-environment-with-optional-future-resources).
    */
   readonly futureResources: FutureResources;
-  /** The hourly discovery of the accounts future resources depend on; `start()` by the root. */
-  readonly hourlyDiscovery: HourlyDiscovery;
+  /**
+   * The automatic refresh of the accounts: hourly, and on a page that shows one stale
+   * (`accounts.refresh_interval`); `start()` by the root.
+   */
+  readonly refresher: AccountRefresher;
 }
 
 export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
@@ -126,12 +134,28 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
     futureResources,
   });
   const notices = new NoticeStore(deps.sessions);
+  const refresher = new AccountRefresher({
+    accounts: deps.store.accounts,
+    missions: deps.store.missions,
+    service,
+    logger,
+    clock,
+    intervalMs: deps.config.accounts.refreshIntervalSeconds * 1000,
+    timers: deps.refreshTimers,
+  });
   const handlers = createAccountHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     accounts: service,
     notices,
     logger,
+    refresher,
+    rateLimiter: deps.rateLimiter,
+    reachOf: async (actor) => {
+      const reached = deps.reach ? await deps.reach.accountsOf(actor.user) : [];
+      const owned = await service.listFor(actor);
+      return new Set([...reached.map((a) => a.id), ...owned.map((v) => v.account.id)]);
+    },
     connectFile: (serviceId, file) =>
       readConnectFile(
         {
@@ -156,13 +180,6 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
       broker_providers: unserved,
     });
   }
-  const hourlyDiscovery = new HourlyDiscovery({
-    missions: deps.store.missions,
-    service,
-    logger,
-    clock,
-    timers: deps.discoveryTimers,
-  });
   return {
     service,
     credentials,
@@ -170,7 +187,7 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
     handlers,
     discoveryAfterCall,
     futureResources,
-    hourlyDiscovery,
+    refresher,
   };
 }
 
@@ -201,12 +218,14 @@ export {
   type ResourceSnapshot,
 } from './future-resources';
 export {
-  HOURLY_DISCOVERY_INTERVAL_MS,
-  HourlyDiscovery,
-  type DiscoveryTimers,
-  type HourlyDiscoveryDeps,
-  type HourlyDiscoveryRun,
-} from './hourly-discovery';
+  AccountRefresher,
+  DEFAULT_REFRESH_INTERVAL_MS,
+  STALE_AFTER_MS,
+  type AccountRefresherDeps,
+  type OnOpenRefresh,
+  type RefreshRun,
+  type RefreshTimers,
+} from './account-refresh';
 export {
   DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS,
   DiscoveryAfterCall,

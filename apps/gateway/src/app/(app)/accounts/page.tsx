@@ -17,6 +17,7 @@ import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/accounts/account.module.css';
+import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { OwnerlessAccounts } from '@/components/accounts/OwnerlessAccounts';
 import { AccountState, NoticeBanner } from '@/components/accounts/parts';
 import { PermissionList } from '@/components/accounts/PermissionList';
@@ -119,6 +120,11 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
           overview.mission.accounts.some((c) => c.accountId === accountId),
       ).length,
   );
+  // Shown at once with what is stored; the stale ones refresh themselves (AutoRefresh).
+  const stale = await root.accounts.refresher.staleIds([
+    ...yours.map((row) => row.view.account.id),
+    ...shared.map((row) => row.account.id),
+  ]);
   const unfolded = firstParam(params[ACCESS_PARAM]);
   const stopped = shared.filter((row) => row.account.status !== 'active');
 
@@ -276,7 +282,11 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         <Section
           title={SECTIONS.yours}
           count={yours.length}
-          note={ACCOUNT_PAGES.yours}
+          note={
+            <>
+              <span>{ACCOUNT_PAGES.yours}</span> <AutoRefresh accountIds={stale} />
+            </>
+          }
           id="yours"
           first
         >

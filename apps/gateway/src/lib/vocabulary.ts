@@ -502,8 +502,12 @@ export const ACCOUNT_WORDS = {
   account: 'Account',
   resources: 'Resources',
   missions: 'Missions',
-  lastChecked: 'Last checked',
+  lastChecked: 'Updated',
   neverChecked: 'never checked',
+  /** Where "Refresh" was: when the account last refreshed itself, "Updated 12 min ago". */
+  updated: (when: string) => `Updated ${when}`,
+  /** While a page refreshes the stale accounts it shows. */
+  refreshing: 'Refreshing…',
   /** After the time of a check the gateway ran itself: "after a call of fly__create_app". */
   afterCallOf: 'after a call of',
   checkFailed: 'Check failed',
@@ -631,6 +635,8 @@ export const ACTIVITY_WORDS = {
   machineKey: 'machine key',
   /** Beside "refreshed what an account reaches" when the gateway ran it after a call. */
   afterCreatingCall: 'after a call that created one',
+  /** A refresh the gateway ran on its own: hourly, or a page showed the account stale. */
+  refreshedOnItsOwn: 'refreshed on its own',
   /** Beside "added resources to a mission" when the mission created them itself. */
   createdByTheMission: 'created by the mission',
   argumentsNeverStored: 'never stored',

@@ -107,6 +107,23 @@ export const E2E_SHARE_TARGET = {
   name: 'Joan',
 } as const;
 export const E2E_OPERATOR = { sub: 'idp|ops', email: 'ops@example.com', name: 'Ops' } as const;
+/** Who the auto-refresh spec signs in as: her one GitHub account was last refreshed long ago. */
+export const E2E_REFRESH_USER = {
+  sub: 'idp|katherine',
+  email: 'katherine@example.com',
+  name: 'Katherine',
+} as const;
+
+/**
+ * The auto-refresh spec's token: the mocked GitHub lists one repository more for it
+ * than its account knows, so opening the account shows the new one appear.
+ */
+export const MOCK_GITHUB_REFRESH = {
+  token: `github_pat_11E2E00000000000000_${'c'.repeat(40)}`,
+  account: 'katherine-org',
+  known: 'acme-refresh/app',
+  appearing: 'acme-refresh/new-service',
+} as const;
 
 /**
  * The mocked GitHub behind the instance (`RootDeps.serviceFetch`): one

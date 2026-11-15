@@ -27,7 +27,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - [`everything-i-hold.ts`](../../apps/gateway/src/lib/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by row for a risk in no macro-action (spec §3.2; `RATE_BY_ROW`, `QUOTA_BY_ROW`: rows 1 to 4 keep the values of the retired low to critical).
 - [`team-service.ts`](../../apps/gateway/src/server/missions/team-service.ts) — teammates and keys (member and named tokens).
 - [`mission-reach.ts`](../../apps/gateway/src/server/store/mission-reach.ts) — what a mission reaches on an account: its stored lists, less stale and self.
-- [`future-resources.ts`](../../apps/gateway/src/server/accounts/future-resources.ts) — the joins and leaves of future resources (`MissionsRepo.applyResourceChanges`); the hourly job and "check now" are in [accounts](accounts.md).
+- [`future-resources.ts`](../../apps/gateway/src/server/accounts/future-resources.ts) — the joins and leaves of future resources (`MissionsRepo.applyResourceChanges`); the automatic refresh (hourly and on open) and "check now" are in [accounts](accounts.md).
 - [`bootstrap-kit.ts`](../../apps/gateway/src/server/missions/bootstrap-kit.ts) — what the agent is told.
 - [`trust-raise.ts`](../../apps/gateway/src/server/missions/trust-raise.ts) — the count behind a trust-raise proposal (risk model §4.7); the offer is `components/missions/TrustRaiseOffer.tsx`, on the mission page and Now.
 
@@ -84,7 +84,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 
 - **`account-unknown` on an existing account** → the reader is not its owner (or left the owning group), it is `revoked`, or its plugin is not registered (`root.registry.ids`).
 - **Detail says "no resource" on an account that has some** → issued when it had none (or all hidden): it reaches none; edit the mission and pick them, or give the set `future` and let discovery bring later ones.
-- **A resource found later did not join** → the set's `future` is off, its environment is another (`env` of the set vs the resource's effective label), it is hidden or the instance's own, another set of the mission holds it, or the mission is stopped; and discovery must have seen it appear (hourly, "check now", Refresh, after a creating call). The mission's audit shows every `mission-resource-joined` / `-left`.
+- **A resource found later did not join** → the set's `future` is off, its environment is another (`env` of the set vs the resource's effective label), it is hidden or the instance's own, another set of the mission holds it, or the mission is stopped; and discovery must have seen it appear (the automatic refresh, "check now", Refresh, after a creating call). The mission's audit shows every `mission-resource-joined` / `-left`.
 - **`resource-unlabelled` on a mission that worked before** → its service has env-qualified risks: label the resource or give the account a default environment.
 - **`risk-not-accepted` on one resource only** → the preview's `notices`: the resource has no label, or one no risk is acceptable in.
 - **`unknown-risk` on `service.name`** → an env-scoped risk: write `service[env].name`.

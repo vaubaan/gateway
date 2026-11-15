@@ -226,6 +226,13 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'vercel',
     ),
   ),
+  'accounts.handlers.refreshOnOpen': json('user', 200, (rig, headers) =>
+    rig.root.accounts.handlers.refreshOnOpen(
+      post('/api/accounts/refresh', headers, {
+        account_ids: [rig.mission.accounts[0]?.accountId ?? 'missing'],
+      }),
+    ),
+  ),
   'accounts.handlers.checkMissionResources': json('user', 200, (rig, headers) =>
     rig.root.accounts.handlers.checkMissionResources(
       post(`/api/missions/${rig.mission.id}/resources/check`, headers, {

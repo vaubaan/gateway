@@ -536,20 +536,25 @@ const RULES: Readonly<Record<string, Rule>> = {
       ),
     writes: { act: 'resources-discovered', object: 'account', actor: 'alice' },
   },
-  'AccountService.discoverOnSchedule': exempt(
-    'the hourly discovery the gateway runs on its own schedule, no human actor: the joins and leaves it causes are audited (mission-resource-joined, mission-resource-left, actor `discovery`); a failure is recorded on the account and logged',
+  'AccountService.refreshOnItsOwn': exempt(
+    'the refresh the gateway runs on its own (hourly, or a page showing the account stale), no human actor: it writes one resources-discovered entry (actor `discovery`, cause scheduled / on-open) only when it changed something, and none for a no-op (tests/integration/accounts/auto-refresh.test.ts)',
   ),
   'FutureResources.snapshot': READ,
   'FutureResources.settle': exempt(
     'runs after an act that is audited itself (a discovery, a relabel, a default environment, a created resource) and writes one mission-resource-joined / mission-resource-left entry per move (tests/integration/accounts/future-resources.test.ts)',
   ),
-  'HourlyDiscovery.start': exempt('arms the timer of the hourly discovery at boot'),
-  'HourlyDiscovery.stop': exempt(
-    'the shutdown of the process (root.close): waits for a run in progress',
+  'AccountRefresher.start': exempt('arms the tick of the automatic refresh at boot'),
+  'AccountRefresher.stop': exempt(
+    'the shutdown of the process (root.close): waits for the refreshes in progress',
   ),
-  'HourlyDiscovery.runOnce': exempt(
-    'one run of the hourly discovery: each discovery goes through AccountService.discoverOnSchedule',
+  'AccountRefresher.runOnce': exempt(
+    'one tick of the hourly refresh: each refresh goes through AccountService.refreshOnItsOwn',
   ),
+  'AccountRefresher.refreshStale': exempt(
+    'a page asks for the stale accounts it shows: each refresh goes through AccountService.refreshOnItsOwn',
+  ),
+  'AccountRefresher.staleAmong': READ,
+  'AccountRefresher.staleIds': READ,
   'AccountService.updateResource': {
     kind: 'mutation',
     target: accounts,

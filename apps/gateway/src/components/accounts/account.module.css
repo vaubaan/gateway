@@ -3,6 +3,11 @@
 .quiet {
   color: var(--ink-3);
 }
+/* "Refreshing…" while a page refreshes the stale accounts it shows (AutoRefresh). */
+.refreshing {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
 .strong {
   font-weight: var(--weight-strong);
 }
