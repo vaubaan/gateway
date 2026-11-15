@@ -11,7 +11,9 @@
  *      closest to its limit, each permission on hover);
  *   4. people and keys, with what each key did in the current period;
  *   5. activity: a line of counts, the last calls one click away, the whole
- *      record on the mission's activity page.
+ *      record on the mission's activity page;
+ *   6. history: the versions of its configuration, newest first, each restorable by
+ *      the creator (spec §4.2 "History").
  *
  * The header says when the mission was created, relative ("created 2 h ago",
  * the instant in its `title`), and a details line under it its short id (the
@@ -60,6 +62,7 @@ import {
   limitsResetEvery,
   listed,
   MISSION_ACTIONS,
+  MISSION_HISTORY,
   MISSION_WORDS,
   periodWord,
   ROUTES,
@@ -89,6 +92,7 @@ import { MissionCard } from '../cards/mission-card';
 import { createdBy, missionMark } from '../mission-view';
 import { ActivityTable } from './activity-table';
 import { CheckNow } from './check-now';
+import { HistoryList } from './history-list';
 import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
 import { TeamSection, type HolderCalls } from './team-section';
 
@@ -127,14 +131,15 @@ export default async function MissionPage({ params, searchParams }: Props) {
   // Back from "Edit mission": the edit is saved (ADR mission-editable-after-issuance).
   const justEdited = isCreator && query.edited === '1';
   const now = new Date();
-  const [team, activity, inbox, context] = await Promise.all([
+  const [team, activity, inbox, context, history] = await Promise.all([
     root.missions.team.team(user, id),
     root.audit.sessions.get(user, id),
     isCreator ? root.requests.service.inbox(user) : Promise.resolve([]),
     // The cards read the creator's lines against their authority now, as "Edit mission" does.
     isCreator ? root.missions.service.issuanceContext(user) : Promise.resolve([]),
+    root.missions.service.history(user, id),
   ]);
-  if (!team || !activity) notFound();
+  if (!team || !activity || !history) notFound();
 
   const creatorName = isCreator ? null : (detail.creator.email ?? 'the creator');
   const labelOf = new Map(detail.policy.map((entry) => [entry.risk_id, entry.label]));
@@ -607,6 +612,23 @@ export default async function MissionPage({ params, searchParams }: Props) {
             </Disclosure>
           </div>
         )}
+      </Section>
+
+      <Section
+        id="history"
+        title={MISSION_HISTORY.title}
+        count={history.versions.length}
+        testId="mission-history-section"
+      >
+        <p className={styles.quiet}>{MISSION_HISTORY.note}</p>
+        <div className={styles.afterLine}>
+          <HistoryList
+            missionId={mission.id}
+            versions={history.versions}
+            restorable={history.restorable}
+            now={now.toISOString()}
+          />
+        </div>
       </Section>
     </MissionActsProvider>
   );

@@ -40,6 +40,10 @@ import {
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
 import {
+  createMissionVersionsRepo,
+  type MissionVersionsRepo,
+} from './repositories/mission-versions.ts';
+import {
   createNotificationDevicesRepo,
   type NotificationDevicesRepo,
 } from './repositories/notification-devices.ts';
@@ -97,6 +101,8 @@ export interface Store {
   readonly accounts: AccountsRepo;
   readonly shares: SharesRepo;
   readonly missions: MissionsRepo;
+  /** The versions of every mission's configuration, kept as long as the mission (0039). */
+  readonly missionVersions: MissionVersionsRepo;
   readonly sessions: SessionsRepo;
   readonly requests: RequestsRepo;
   readonly approvals: ApprovalsRepo;
@@ -158,6 +164,7 @@ export function openStore(options: StoreOptions): Store {
     accounts: createAccountsRepo(ctx),
     shares: createSharesRepo(ctx),
     missions: createMissionsRepo(ctx),
+    missionVersions: createMissionVersionsRepo(ctx),
     sessions: createSessionsRepo(ctx),
     requests: createRequestsRepo(ctx),
     approvals: createApprovalsRepo(ctx),

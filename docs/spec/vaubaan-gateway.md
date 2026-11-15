@@ -661,6 +661,19 @@ the (i) itself never leaves the page.
   its people and keys with what each did this period, its activity; stop, duplicate and replace key
   in its menu. **Edit mission** opens the creation screen prefilled (period fixed); its bar says what
   changed, and saving applies at once, back on the mission page that says it was saved.
+  **History**: the versions of its configuration, newest first — number, author (a person, a
+  mission through its Vaubaan account, or the gateway for a resource the mission created or one
+  that joined on its own), date, cause (created, edited, permission request accepted, resource
+  created, resources joined or left, end moved by an answered request, restored from version N)
+  and what moved; expanding a version shows what differs from the previous one. Every change of
+  the configuration (name, end, accounts, resource sets and their resources, permissions with
+  their limits and gate) writes one version; a write that moves nothing writes none. Keys,
+  teammates and what was used are not part of a version, and the section says so. **Restore this
+  version**, on a past version, for the creator: no confirmation (restoring again undoes it),
+  judged as an edit under the creator's authority now — a permission they no longer hold, an
+  account they lost and a resource that no longer exists are left out and said; an end already
+  past keeps the current one. It writes a new version ("restored from version N"), never
+  rewrites history, keeps the key, the session and the counters, and says "Restored".
   **Replace key**: the old key stops at once, no grace period; a machine key is replaced in one act.
   A teammate never sees a pending approval's arguments nor their fingerprint, and their home does
   not list the creator's requests.
@@ -1056,6 +1069,12 @@ again); the key is revealed once with the setup kit.
 The task grew: the creator edits the prefilled screen and saves; the agent keeps its key and
 session, and its next call sees the edited mission.
 
+### 7.4 ter Restore a version
+
+An edit went wrong: the creator opens the mission's History, reads what each version changed,
+and restores the one that worked; it becomes the newest version, within what they may still give,
+and the agent's next call sees it, with the same key.
+
 ### 7.5 Execute
 
 The first call creates the session; every allowed call decrements the touched risks' counters and is
@@ -1139,7 +1158,10 @@ One entry per call, allowed or refused, and per administrative act.
 - **Retention** is configured, 90 days by default; no cold archive. It also purges session history
   (timeline events, counters of periods ended longer ago) and never what the current period rests on
   (its counters, gates opened until it ends, credits given back by granted claims). A one-off
-  mission's counters stay as long as the mission.
+  mission's counters stay as long as the mission. The versions of a mission's configuration
+  (§4.2 "History") are not audit: retention never purges them; they stay as long as the mission
+  ([mission-versions-kept-with-the-mission](../decisions/mission-versions-kept-with-the-mission.md))
+  and are in every backup.
 
 ## 9. Community telemetry
 

@@ -21,6 +21,7 @@ import {
   type MissionResourceSetRecord,
   type MissionResourceSource,
   type MissionTrustMarkRecord,
+  type MissionVersionStamp,
   type RequestLine,
   type MissionStatus,
   type MissionTokenRecord,
@@ -33,6 +34,7 @@ import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { riskIdsOf } from './approvals.ts';
 import { requestLinesOf, storedLinesOf } from './requests.ts';
 import { createSessionPrimitives, type EventScope } from './sessions.ts';
+import { createVersionPrimitives } from './mission-versions.ts';
 import { missionScopePiece } from './audit.ts';
 
 export interface CreateMissionInput {
@@ -394,6 +396,11 @@ export interface MissionEditInput {
   readonly policy?: readonly MissionPolicyLineInput[];
   /** The session's summary event of the edit, given how many requests it closed. */
   readonly summary: (requestsClosed: number) => NewEvent;
+  /**
+   * The version this edit restores (a rollback, spec §4.2 "History"): the version it
+   * leaves says so. Absent for an ordinary edit.
+   */
+  readonly restoredFrom?: number;
 }
 
 export interface MissionEditResult {
@@ -963,6 +970,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   // The session's events belong to the sessions repository: its primitives run here,
   // inside this repository's transaction.
   const sessions = createSessionPrimitives(ctx);
+  // Every write that may move the configuration ends with `versions.recordSync`: one
+  // version when something moved, none otherwise (migration 0039).
+  const versions = createVersionPrimitives(ctx);
+  const byPerson = (userId: string): MissionVersionStamp['author'] => ({ kind: 'person', userId });
+  const byGateway: MissionVersionStamp['author'] = { kind: 'gateway' };
   // Rotation retires the token of ONE holder: the other holders keep working.
   const activeOfMember = db.prepare<[string, string], TokenRow>(
     `SELECT ${TOKEN_COLUMNS} FROM mission_tokens
@@ -1488,6 +1500,17 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         const closed = closeMootRequests(id, gone, actorUserId, now, record);
         touch.run(now, id);
         record(input.summary(closed.length));
+        versions.recordSync(
+          id,
+          input.restoredFrom === undefined
+            ? { cause: 'edit', author: byPerson(actorUserId) }
+            : {
+                cause: 'rollback',
+                author: byPerson(actorUserId),
+                restoredFrom: input.restoredFrom,
+              },
+          now,
+        );
         return { before, mission: requireMission(id), closedRequests: closed };
       });
     },
@@ -1533,6 +1556,21 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
         );
         for (const c of accounts) insertAccountWithSets(id, c);
+        // Version 1: by the person, or by the mission whose agent issued it for them.
+        versions.recordSync(
+          id,
+          {
+            cause: 'issued',
+            author: input.issuedByMissionId
+              ? {
+                  kind: 'mission',
+                  missionId: input.issuedByMissionId,
+                  userId: input.creatorUserId,
+                }
+              : byPerson(input.creatorUserId),
+          },
+          now,
+        );
       });
       return requireMission(id);
     },
@@ -1574,7 +1612,22 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           placed.push({ resourceId, resourceSetId: target.id });
           added.push(resourceId);
         }
-        if (added.length > 0) touch.run(now, missionId);
+        if (added.length > 0) {
+          touch.run(now, missionId);
+          versions.recordSync(
+            missionId,
+            {
+              cause:
+                source === 'created'
+                  ? 'resource-created'
+                  : source === 'future'
+                    ? 'resources-discovered'
+                    : 'edit',
+              author: byGateway,
+            },
+            now,
+          );
+        }
         // What the mission created is in its activity.
         const session =
           source === 'created' && created && refs.length > 0
@@ -1649,7 +1702,14 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             held.set(change.resourceId, target.id);
             move(target.id, 'joined');
           }
-          if (moves.length > before) touch.run(now, missionId);
+          if (moves.length > before) {
+            touch.run(now, missionId);
+            versions.recordSync(
+              missionId,
+              { cause: 'resources-discovered', author: byGateway },
+              now,
+            );
+          }
         }
         return moves;
       });
@@ -1694,9 +1754,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return requireMission(id);
     },
     async setExpiresAt(id, expiresAt) {
-      const result = setExpiry.run(expiresAt, nowIso(ctx), id);
-      if (result.changes === 0) throw new NotFoundError('mission', id);
-      return requireMission(id);
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const result = setExpiry.run(expiresAt, now, id);
+        if (result.changes === 0) throw new NotFoundError('mission', id);
+        versions.recordSync(id, { cause: 'edit', author: byGateway }, now);
+        return requireMission(id);
+      });
     },
     async replacePolicy(id, policy) {
       const now = nowIso(ctx);
@@ -1706,6 +1770,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         deletePolicy.run(id);
         writePolicy(id, policy);
         touch.run(now, id);
+        versions.recordSync(id, { cause: 'edit', author: byGateway }, now);
         return requireMission(id);
       });
     },
@@ -1755,6 +1820,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         deletePolicy.run(id);
         writePolicy(id, policy);
         touch.run(now, id);
+        versions.recordSync(
+          id,
+          { cause: requestId ? 'permission-request' : 'edit', author: byPerson(actor) },
+          now,
+        );
         const session = sessions.sessionOfMission(id);
         if (session) {
           for (const p of removed)
@@ -1800,7 +1870,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         const previous = parseEnum(GATES, row.gate, 'mission_policy.gate');
         const closing = previous === gate && gate === 'approval' && options.closeOpening === true;
         if (previous === gate && !closing) return { mission, previous, openingClosed: false };
-        if (!closing) setGateStmt.run(gate, target.resourceSetId, target.riskId);
+        if (!closing) {
+          setGateStmt.run(gate, target.resourceSetId, target.riskId);
+          versions.recordSync(id, { cause: 'edit', author: byPerson(actorUserId) }, now);
+        }
         touch.run(now, id);
         const session = sessions.sessionOfMission(id);
         if (session) {
@@ -1860,6 +1933,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           setLimitsStmt.run(a.after.quota, a.after.rateLimit, a.resourceSetId, a.riskId);
         }
         touch.run(now, id);
+        versions.recordSync(id, { cause: 'edit', author: byPerson(actorUserId) }, now);
         const session = sessions.sessionOfMission(id);
         if (session) {
           for (const a of moved) {

@@ -1439,6 +1439,37 @@ export const MISSION_LIST_FILTERS = {
   noneStopped: 'No stopped mission.',
 } as const;
 
+/** The History of a mission: the versions of its configuration (spec §4.2 "History"). */
+export const MISSION_HISTORY = {
+  title: 'History',
+  note: 'Every change of its configuration, newest first. Keys, teammates and what was used are not part of a version: restoring one resets no usage and replaces no key.',
+  version: (n: number) => `Version ${n}`,
+  current: 'Current',
+  restore: 'Restore this version',
+  showChanges: 'What changed',
+  hideChanges: 'Hide what changed',
+  by: (who: string) => `by ${who}`,
+  restored: 'Restored',
+  restoredAs: (from: number, to: number) =>
+    `Version ${from} is the configuration again, as version ${to}. The keys, the session and what was used this period are unchanged.`,
+  alreadyCurrent: (from: number) =>
+    `Version ${from} is already the configuration: nothing changed.`,
+  leftOut: 'Left out:',
+  notRestored: 'Not restored',
+  /** Why a version was written; a rollback names its source. */
+  causes: {
+    issued: 'Created',
+    'before-versions': 'As it was when the history began',
+    edit: 'Edited',
+    'permission-request': 'Permission request accepted',
+    'resource-created': 'A resource it created joined',
+    'resources-discovered': 'Resources joined or left on their own',
+    'claim-granted': 'End moved by an answered request',
+    rollback: 'Restored',
+  },
+  restoredFrom: (n: number) => `Restored from version ${n}`,
+} as const;
+
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
   editLede:
