@@ -680,13 +680,19 @@ the (i) itself never leaves the page.
   names the missions that use it, offers no "Give access", and offers **Create the platform
   management mission** — the creation form prefilled with that account, every macro-action at
   Careful, the form's default period and end, which the person may change before creating it.
-- **Reference** — generated for every registered plugin, read-only, for any signed-in user:
-  **Permissions** (permissions by macro-action, each with its row and the reason of the row, base
-  budget and its gate at each trust level; a permission
-  unfolds its reason, the five facts its row is read from and its tools), **Tools** ("depends on
-  the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
-  permission shown elsewhere links here. Each service names its plugin version and, when the
-  plugin is pinned by the operator rather than bundled with the image, says so.
+- **Reference** — for every registered plugin, read-only, for any signed-in user: **the
+  plugin's page, exactly the one the public site shows** at `/plugins/<id>` (website spec §2.3,
+  sections 1–8: the header, the model, the macro-actions, the map, a few calls, Anything else, the
+  tools, the retired permissions, connecting an account), one implementation shared by both, drawn
+  for the plugin version this instance runs — bundled or pinned, so a pinned older plugin shows
+  its own catalog — in the interface's tokens and themes. The site's own parts (health from the
+  collector, links, crumbs) are left out; its links to the docs go under `docs.url`. Above the
+  page, never inside it, a strip says what only the instance knows: the plugin version it runs and,
+  when the operator pinned it rather than the image bundling it, that it is pinned and which
+  bundled version it replaces; the community validation of that version; the instance's git
+  remote for the service. Every permission (`#risk-<id>`) and macro-action (`#macro-<id>`) has an
+  anchor, and every permission shown elsewhere links there. The list of services shows each with
+  its mark and its plugin's one-line description.
 - **Activity** — two tabs. **Record**: the audit, filtered by period, mission, account, tool,
   decision, person, key holder, agent label and kind; each line has a detail at its own address;
   who reads what: §8. **Timeline**: the session events (calls, requests and their answers, resets,

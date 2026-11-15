@@ -578,39 +578,9 @@ export const PART_LOSS_WORDS = {
 
 export const REFERENCE_WORDS = {
   services: 'Services',
-  tabs: { permissions: 'Permissions', tools: 'Tools', model: 'How it is modelled' },
-  permission: 'Permission',
-  comparison: 'Permissions, and what each trust level gives them',
-  comparisonNote:
-    'A macro-action at a trust level is a starting point; a mission always stores the explicit list. Figures are calls per period.',
-  macroActions: 'Macro-actions',
-  macroActionsNote: 'What a mission ticks on this service, each at a trust level.',
-  notIncluded: 'not included',
-  leftOut: 'left out',
-  asksFirst: 'asks first',
-  howToRead: 'How to read this page',
-  hideHowToRead: 'Hide how to read this page',
-  noMatch: 'Nothing matches.',
-  byArguments: 'by arguments',
-  anythingElse: 'anything not named',
-  retired: 'being retired',
-} as const;
-
-/** What each group of the catalog is, under its title. Keyed by `RiskKind`. */
-export const PERMISSION_KINDS = {
-  read: { title: 'Reads', hint: 'look without changing anything' },
-  write: { title: 'Writes', hint: 'change something that can be undone, sometimes at a price' },
-  destructive: {
-    title: 'Writes that cannot be undone',
-    hint: 'what the catalog marks as impossible to take back',
-  },
-} as const;
-
-/** Where the environment of a call comes from, in a few words. Keyed by `EnvironmentSource`. */
-export const ENVIRONMENT_WORDS = {
-  call: 'read from each call',
-  'resource-label': 'set by the label of each resource',
-  none: 'none: every permission is held once',
+  /** The strip above a service's page: what this instance runs. */
+  runs: 'This gateway runs',
+  gitRemote: 'Its git remote for this service:',
 } as const;
 
 /**

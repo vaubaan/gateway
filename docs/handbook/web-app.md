@@ -20,12 +20,14 @@ tracks:
   - apps/gateway/src/server/http/document.ts
   - apps/gateway/src/server/providers/
   - apps/gateway/src/lib/providers/
+  - apps/gateway/src/app/(app)/reference/
+  - apps/gateway/src/server/plugins/service-page.ts
   - apps/gateway/next.config.ts
   - apps/gateway/src/app/manifest.ts
   - apps/gateway/public/sw.js
   - apps/gateway/src/components/notifications/
   - apps/gateway/tests/unit/app/
-last_reviewed: 2026-11-14
+last_reviewed: 2026-11-15
 ---
 
 # Web app — handbook
@@ -63,7 +65,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - **A page links a project document through `lib/project-docs.ts`** (`…/blob/main/…` addresses, the one repository URL shape `no-hardcoded-config.test.ts` admits); a page never spells the repository.
 - **Every human page carries `BuildFooter`**, including the authorization server's HTML pages; one version source, the root `package.json`.
 - **The interface is installable** (`app/manifest.ts`, named after the instance) and the shell registers `/sw.js` (`ServiceWorkerRegistration`); the worker shows notifications and opens pages, nothing else ([notifications](notifications.md)). A yes is never given from a notification either: it opens `/r/<id>`, the mission or the account.
-- **The reference is generated** from the plugin registry (`lib/providers/reference.ts`): a registered plugin has its page; reference URLs and anchors are built only by `lib/providers/links.ts`.
+- **The Reference is the plugin's page** (spec §4.2, [ADR](../decisions/service-page-is-one-shared-package.md)): `/reference/<id>` renders `ServicePage` of `@vaubaan/plugin-page` — the site's `/plugins/<id>`, sections 1–8 — over `servicePageInfo` (`server/plugins/service-page.ts`: `pluginInfo` of the registry's plugin, bundled or pinned, once per loaded plugin, screenshots at `/reference/<id>/connect/<file>`, examples `lenient`). The gateway hands in `titleLevel={2}` (under the frame's "Reference"), the (i) as `titleAside`, and `href` = `docsSiteHref` (`lib/docs-links.ts`: `/docs/…` under `docs.url`, `/plugins/<id>` back to the Reference, any other site path beside the docs root); it never puts anything inside the page: the instance's facts (the version it runs, pinned and what it replaces, the validation badge, the git remote) are the strip above it. The sheet `@vaubaan/plugin-page/plugin-page.css` is imported by that page and reads `--pp-*` only, mapped to the interface's tokens in `reference.module.css` (`.servicePage`), so it follows the theme. The page gives every permission `#risk-<id>` (its first chip shown before any toggle, else its row of Anything else or Retired) and every macro-action `#macro-<id>`; reference URLs and anchors are built only by `lib/providers/links.ts`. `/reference` (the list) and the frame stay the gateway's (`lib/providers/reference.ts`), each service with its mark and the plugin's description.
 
 ## Traps
 

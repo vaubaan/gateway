@@ -1,6 +1,6 @@
 /**
- * The marks of a plugin page (website spec §2.3), styled in `globals.css`
- * ("The plugin page"):
+ * The marks of a service's page (website spec §2.3), styled in
+ * `plugin-page.css`:
  *
  * - `Mono` — an identifier as the protocol spells it, wrapping between words.
  * - `Gate` — what a trust level does, in one short word (yes, ask me, no),
@@ -11,14 +11,14 @@
  * - `ServiceMark` — the plugin's brand icon in its colour; a near-black brand
  *   takes the ink in the dark theme (`serviceMarkColors`, the gateway's rule).
  *
- * Imports are relative: the unit tests render these without the `@/` alias.
+ * Imports are relative: the unit tests render these without an app's alias.
  */
 import { Fragment, type CSSProperties } from 'react';
 
 import type { GateWord, Row } from '@vaubaan/policy-engine';
 import { serviceMarkColors } from '@vaubaan/shared/service-mark';
 
-import { GATE_SHORT } from '../../content/plugin-page';
+import { GATE_SHORT } from './page-data';
 
 /** `a_b.c-d/e` → where an identifier may wrap: after each separator. */
 const WORD_END = /(?<=[_.\-/:\]@])(?=[^_.\-/:\]@])/;
@@ -99,7 +99,7 @@ export function Info({ label, text, code }: { label: string; text: string; code?
 
 /**
  * The service's mark: the plugin's path in its brand colour, through
- * `--mark-color` and `--mark-color-dark` (`globals.css` picks one by the
+ * `--mark-color` and `--mark-color-dark` (`plugin-page.css` picks one by the
  * reader's theme). `size="sm"` beside a name in a list, the default in a
  * page's header.
  */

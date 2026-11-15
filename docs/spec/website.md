@@ -131,6 +131,13 @@ section opens with a numbered kicker ("3 · The map"), in order:
    plugin list's foot credits the documentation they come from.
 10. **Health** (§2.4) and **Links**: connect, handbook, catalog as code, source, Markdown twin.
 
+Sections 1–8 are **one implementation shared with the gateway**, whose Reference shows exactly
+this page for the plugin version an instance runs ([vaubaan-gateway](./vaubaan-gateway.md) §4.2):
+the page data and the view are built from a loaded plugin, and what is the site's alone — the
+crumbs, the gateways on the counts line, health, links, the foot naming the twin, where a link
+or a screenshot goes — is handed in by the site. Nothing of either app is written in the shared
+page.
+
 Static HTML (§2.6): each toggle is a CSS-only radio group; every state is in the HTML and the style
 sheet shows one. At phone width the model's boxes stack and the map scrolls sideways in its own
 box, the row column pinned; the page never scrolls sideways. Light and dark themes, both AA.

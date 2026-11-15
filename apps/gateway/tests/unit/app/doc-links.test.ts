@@ -21,7 +21,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { docHref } from '@/lib/docs-links';
+import { CONNECT_ANCHOR } from '@vaubaan/plugin-page/page-data';
+
+import { docHref, docsSiteHref } from '@/lib/docs-links';
 import {
   articleFor,
   clampHint,
@@ -131,12 +133,9 @@ function problemOf(target: DocTarget): string | null {
   return null;
 }
 
-/** The anchor of a plugin page's connect guide, read from the site (`CONNECT_ANCHOR`). */
+/** The anchor of a plugin page's connect guide: the shared page's (`@vaubaan/plugin-page`). */
 function connectAnchor(): string {
-  const source = readFileSync(join(REPO, 'apps/website/src/content/plugin-page.ts'), 'utf8');
-  const match = /export const CONNECT_ANCHOR = '([^']+)'/.exec(source);
-  if (!match) throw new Error('CONNECT_ANCHOR not found in plugin-page.ts');
-  return match[1]!;
+  return CONNECT_ANCHOR;
 }
 
 describe('doc links: every target of the table has its page on the site', () => {
@@ -167,6 +166,18 @@ describe('doc links: every target of the table has its page on the site', () => 
 });
 
 describe('doc links: addresses and names', () => {
+  it('resolves a link of a service page: a docs page, the service here, the site beside the docs', () => {
+    expect(docsSiteHref(ROOT, '/docs/missions/git-remote')).toBe(
+      'https://docs.test/docs/missions/git-remote',
+    );
+    expect(docsSiteHref(`${ROOT}/`, '/docs/operations/oauth-broker')).toBe(
+      'https://docs.test/docs/operations/oauth-broker',
+    );
+    expect(docsSiteHref(ROOT, '/plugins/github#connect')).toBe('/reference/github#connect');
+    expect(docsSiteHref(ROOT, '/trust')).toBe('https://docs.test/trust');
+    expect(docsSiteHref(ROOT, 'https://example.test/x')).toBe('https://example.test/x');
+  });
+
   it('resolves under the configured root, with or without a trailing slash', () => {
     expect(docHref('https://vaubaan.test/docs', DOC_PAGES.newMission)).toBe(
       'https://vaubaan.test/docs/missions#create-a-mission',

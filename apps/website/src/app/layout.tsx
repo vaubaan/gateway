@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { SiteFooter, SiteHeader } from '@/components/Shell';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '@/site/constants';
 
+import '@vaubaan/plugin-page/plugin-page.css';
 import './globals.css';
 
 export const metadata: Metadata = {

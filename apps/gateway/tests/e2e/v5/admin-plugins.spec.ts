@@ -51,6 +51,6 @@ test('Administration › Plugins lists every shipped plugin, bundled and enabled
   const github = SHIPPED_PLUGINS.find((plugin) => plugin.id === 'github');
   await page.getByTestId('plugin-github').getByRole('link', { name: 'GitHub' }).click();
   await expect(page).toHaveURL(/\/reference\/github$/);
-  await expect(page.getByTestId('provider-version')).toHaveText(`plugin ${github?.version}`);
+  await expect(page.getByTestId('service-version')).toContainText(`plugin ${github?.version}`);
   await expect(page.getByTestId('plugin-pinned')).toHaveCount(0);
 });

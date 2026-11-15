@@ -1,0 +1,30 @@
+{
+  "name": "@vaubaan/plugin-page",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The page of a service, drawn from its plugin: the data builder and the React view the public site's /plugins/<id> and the gateway's /reference/<id> both render",
+  "exports": {
+    ".": "./src/index.ts",
+    "./info": "./src/info.ts",
+    "./load": "./src/load.ts",
+    "./page-data": "./src/page-data.ts",
+    "./plugin-page.css": "./src/plugin-page.css"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*",
+    "@vaubaan/policy-engine": "*",
+    "@vaubaan/shared": "*"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react-dom": "19.3.1"
+  }
+}

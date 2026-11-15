@@ -26,6 +26,7 @@
     "@vaubaan/plugin-miro": "*",
     "@vaubaan/plugin-notion": "*",
     "@vaubaan/plugin-outlook": "*",
+    "@vaubaan/plugin-page": "*",
     "@vaubaan/plugin-railway": "*",
     "@vaubaan/plugin-resend": "*",
     "@vaubaan/plugin-sdk": "*",

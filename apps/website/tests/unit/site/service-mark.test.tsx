@@ -1,41 +1,14 @@
 /**
- * The service mark on the site (ADR service-icons-declared-by-the-plugin): the
- * plugin's path in its brand colour, the dark theme's colour by the gateway's
- * own rule (`serviceMarkColors`), and on `/plugins` before each plugin's name
- * in the HTML only.
+ * The service mark on the site's plugin list (ADR service-icons-declared-by-the-plugin):
+ * on `/plugins` before each plugin's name, in the HTML only. The mark itself is the
+ * shared page's (`@vaubaan/plugin-page`, tested there).
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { serviceMarkColors } from '@vaubaan/shared/service-mark';
-
-import { ServiceMark } from '../../../src/components/plugin/Codes';
 import { pluginListComponents } from '../../../src/components/plugin/PluginListLink';
 
 const PATH = 'M0 0h24v24H0z';
-
-describe('ServiceMark', () => {
-  it('draws the path in the brand colour, the dark theme by the shared rule', () => {
-    const html = renderToStaticMarkup(<ServiceMark path={PATH} color="#635BFF" />);
-    expect(html).toContain(`d="${PATH}"`);
-    expect(html).toContain('--mark-color:#635BFF');
-    expect(html).toContain('--mark-color-dark:#635BFF');
-  });
-
-  it('hands a near-black brand to the ink in the dark theme', () => {
-    expect(serviceMarkColors('#181717').dark).toBeNull();
-    const html = renderToStaticMarkup(<ServiceMark path={PATH} color="#181717" />);
-    expect(html).toContain('--mark-color:#181717');
-    expect(html).toContain('--mark-color-dark:var(--ink)');
-  });
-
-  it('keeps the ink without a colour, and has a small size for lists', () => {
-    const html = renderToStaticMarkup(<ServiceMark path={PATH} color={null} size="sm" />);
-    expect(html).not.toContain('--mark-color');
-    expect(html).toContain('class="pp-svc pp-svc-sm"');
-    expect(html).toContain('width="16"');
-  });
-});
 
 describe('the plugin list', () => {
   const components = pluginListComponents([
