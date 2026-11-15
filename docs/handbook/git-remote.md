@@ -7,7 +7,7 @@ tracks:
   - packages/plugin-sdk/src/git/
   - plugins/github/src/
   - apps/gateway/src/server/store/repositories/pending-refs.ts
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-15
 ---
 
 # Git remote — handbook
@@ -77,6 +77,13 @@ plugin: [services/github](services/github.md).
   permissions): GitHub's own refusal is named on the ref.
 - The in-flight bound (2 pushes per mission) and the relay job are
   single-process. Git LFS answers `501`.
+- Bytes on the audit entry (Activity's Overview) come from the git pipeline's
+  `gitMeter`: a relayed fetch resolves with `{ sent_bytes, relayed_bytes }`
+  (git's request counted through `counted`, the pack through `observed`); a
+  push carries its pack's size as `payload_bytes`, its result counted as
+  JSON. The pack stored at GitHub before the decision is counted on the push's
+  entry only when the push is allowed. A ref listing is not a call and counts
+  nothing.
 
 ## Outside the repo
 

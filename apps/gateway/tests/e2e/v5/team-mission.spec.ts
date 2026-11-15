@@ -376,7 +376,7 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   }
   expect(await ines.getByRole('main').innerText()).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{4}|\b[AP]M\b/);
 
-  await ines.goto('/activity');
+  await ines.goto('/activity/record');
   // Her audit also holds other missions on her accounts: this one only, at once
   // (once the filters are live: before, the form waits for its button).
   await expect(ines.locator('form[data-live="true"]')).toHaveCount(1);

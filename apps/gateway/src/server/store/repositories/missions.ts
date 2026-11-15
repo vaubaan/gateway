@@ -32,7 +32,8 @@ import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { riskIdsOf } from './approvals.ts';
 import { requestLinesOf, storedLinesOf } from './requests.ts';
-import { createSessionPrimitives } from './sessions.ts';
+import { createSessionPrimitives, type EventScope } from './sessions.ts';
+import { missionScopePiece } from './audit.ts';
 
 export interface CreateMissionInput {
   readonly name: string;
@@ -241,6 +242,12 @@ export interface MissionsRepo {
   /** The missions this user is a current member of (never the ones they created). */
   listForMember(userId: string): Promise<MissionRecord[]>;
   listForAccount(accountId: string): Promise<MissionRecord[]>;
+  /**
+   * The missions of a Timeline scope (`EventScope`: created, current member of, or all)
+   * that Activity's Overview shows: stored `active`, or with a call entry at or after
+   * `calledSince`. Oldest first.
+   */
+  listInScope(scope: EventScope, calledSince: Iso): Promise<MissionRecord[]>;
   /**
    * The client behind each of these missions that was issued through the
    * management door, keyed by mission id. A mission issued in the interface
@@ -1665,6 +1672,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     },
     async listForAccount(accountId) {
       return byAccount.all(accountId).map(toRecord);
+    },
+    async listInScope(scope, calledSince) {
+      const scoped = missionScopePiece('id', scope);
+      return db
+        .prepare<string[], MissionRow>(
+          `SELECT ${COLUMNS} FROM missions
+           WHERE ${scoped.sql}
+             AND (status = 'active'
+                  OR id IN (SELECT mission_id FROM audit WHERE kind = 'call' AND ts >= ?))
+           ORDER BY created_at`,
+        )
+        .all(...scoped.params, calledSince)
+        .map(toRecord);
     },
     async setStatus(id, status) {
       const now = nowIso(ctx);

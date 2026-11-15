@@ -98,6 +98,9 @@ describe('clone and fetch', () => {
     expect(fetches.map((e) => [e.decision, e.risks_touched])).toEqual([
       ['allowed', ['github.read-code']],
     ]);
+    // The bytes of the relay (Activity's Overview): git's request up, the pack down.
+    expect(fetches[0]?.request_bytes).toBeGreaterThan(0);
+    expect(fetches[0]?.response_bytes).toBeGreaterThan(100);
   });
 
   it('clones with protocol v0 as well', async () => {
@@ -142,6 +145,9 @@ describe('push', () => {
     expect(refs.filter((r) => r.startsWith('refs/vaubaan/'))).toEqual([]);
     const push = (await auditOf(developer)).filter((e) => e.tool === PUSH).at(-1);
     expect(push).toMatchObject({ decision: 'allowed' });
+    // What the push carried up is its pack (`payload_bytes`), not its arguments.
+    expect(push?.request_bytes).toBeGreaterThan(50);
+    expect(push?.response_bytes).toBeGreaterThan(0);
     expect([...(push?.risks_touched ?? [])].sort()).toEqual([
       'github.feature-branch-write',
       'github.git-push',

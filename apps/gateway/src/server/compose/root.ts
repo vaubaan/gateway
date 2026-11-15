@@ -678,7 +678,13 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // The retention purge runs once before the instance serves, then on a timer
   // (handbook audit). Registered before it starts: `start()` sets the timer
   // first, and `stop()` is safe on a sweeper that never started.
-  const audit = createAuditModule({ config, store, missions: missions.service, logger });
+  const audit = createAuditModule({
+    config,
+    store,
+    missions: missions.service,
+    credentialKindOf: (service) => registry.get(service)?.plugin.credential.kind ?? null,
+    logger,
+  });
   opened.push(() => audit.retention.stop());
   await audit.retention.start();
   const budget = new SessionService({

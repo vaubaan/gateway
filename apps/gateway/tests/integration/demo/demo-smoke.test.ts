@@ -276,6 +276,16 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     expect(html).toContain(seeded);
   });
 
+  it('sums the seeded calls on the Overview, bytes included', async () => {
+    const response = await browser.get('/activity');
+    expect(response.status).toBe(200);
+    const html = readable(await response.text());
+    expect(html).toContain('Ship the billing page');
+    // The seeded calls went through the door: their bytes were counted.
+    expect(html).toMatch(/Sent<\/dt>(?:<[^>]+>)*[1-9][\d.]* (?:B|KB|MB)</);
+    expect(html).toMatch(/Received<\/dt>(?:<[^>]+>)*[1-9][\d.]* (?:B|KB|MB)</);
+  });
+
   it('answers tools/list on /mcp with the mission token the tour prints', async () => {
     const response = await fetch(`${demo.origin}/mcp`, {
       method: 'POST',

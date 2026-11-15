@@ -39,11 +39,9 @@ test('the record in pages of 50: Older, Newer, Newest, the filters and the open 
   request,
 }) => {
   for (let day = 0; day < DAYS; day += 1) await seedDay(request);
-  await signIn(page, '/activity');
-  // `/activity` opens its first tab, the Record.
-  await expect(page).toHaveURL(/\/activity\/record$/);
+  await signIn(page, '/activity/record');
   const tabs = page.getByRole('navigation', { name: 'Activity' });
-  await expect(tabs.getByRole('link')).toHaveText(['Record', 'Timeline']);
+  await expect(tabs.getByRole('link')).toHaveText(['Overview', 'Record', 'Timeline']);
   await expect(tabs.getByRole('link', { name: 'Record' })).toHaveAttribute('aria-current', 'page');
 
   const entries = page.getByTestId('audit-table').locator('tbody tr[data-row]');

@@ -337,6 +337,8 @@ export type {
   AgentLabelActivity,
   AgentLabelSeen,
   AuditCallRecord,
+  CallTotalsQuery,
+  CallTotalsRow,
   AuditCursor,
   AuditFilter,
   AuditRecord,
