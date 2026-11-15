@@ -41,7 +41,7 @@ export function apiKeyCredentialFixture(
   return {
     kind: 'api-key',
     label: 'API key',
-    createUrl: 'https://provider.example.com/keys',
+    createUrl: 'https://service.example.com/keys',
     fields,
     guide: {
       steps: [{ do: 'Create a key and paste it here.' }],
@@ -51,8 +51,8 @@ export function apiKeyCredentialFixture(
         why: 'Each mission narrows what an agent may do.',
       },
       permissions: [],
-      expiry: { kind: 'none', reason: 'Delete the key at the provider to end the account.' },
-      docsUrl: 'https://provider.example.com/docs/keys',
+      expiry: { kind: 'none', reason: 'Delete the key at the service to end the account.' },
+      docsUrl: 'https://service.example.com/docs/keys',
     },
     verify: () => Promise.resolve({ account: null, expiresAt: null }),
     ...overrides,

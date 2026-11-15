@@ -22,7 +22,7 @@ state how its vector differs in some of them.
 - `vector` is the default profile: every environment without an override, and no environment.
 - `vector_overrides` maps an environment label to **only the axes that differ** there.
 - The `RiskId` carries no environment suffix; the environment appears once, as the qualifier:
-  `<provider>[prod].deploy`.
+  `<service>[prod].deploy`.
 
 ### 1.1 Resolution
 
@@ -44,7 +44,7 @@ never read.
 
 ## 2. Entries that use it
 
-Each provider's handbook lists its entries with overrides (typically deploy, environment-variable
+Each service's handbook lists its entries with overrides (typically deploy, environment-variable
 writes, remote shell, raised in `prod`).
 
 ## 3. What this rule does not cover

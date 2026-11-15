@@ -48,7 +48,7 @@ What Railway's documentation says, as read for this guide (through Context7,
 `PORT` is set by Railway and honoured by the server; do not set it. With a
 sign-in provider in the configuration no bootstrap token is needed; set
 `VAUBAAN_BOOTSTRAP_TOKEN` (32 characters or more) only if you prefer to add
-providers from the interface.
+sign-in providers from the interface.
 
 **`VAUBAAN_TRUSTED_PROXIES`: leave it unset.** The gateway believes a client
 address only from `X-Forwarded-For` written by a declared proxy. Railway
@@ -81,7 +81,7 @@ at call time, left out of the tool list, and said on the account page — and
 every other tool stays bound to the mission's projects. Still prefer **a separate Railway workspace** for the
 gateway, and never connect that workspace's token to the gateway itself. To
 protect another resource of the hosting (a backup bucket, a second service),
-list it in `VAUBAAN_SELF_RESOURCES` (`<provider>:<ref>`, comma-separated).
+list it in `VAUBAAN_SELF_RESOURCES` (`<service>:<ref>`, comma-separated).
 
 **`VAUBAAN_CLIENT_IP_HEADER=x-real-ip`: only after you verified it.** The
 trusted-edge mode reads the client address from `X-Real-IP` alone (handbook
@@ -106,7 +106,7 @@ Developer settings → OAuth Apps → New OAuth App:
 
 - **Homepage URL**: your public URL;
 - **Authorization callback URL**: `https://<your domain>/auth/callback/github`
-  (the id of the provider, `github`, ends the address);
+  (the id of the sign-in provider, `github`, ends the address);
 - leave device flow off. Generate a **client secret**; copy the client id and
   the secret into the variables of step 2.
 
@@ -122,8 +122,8 @@ in the variables.
 
 ## 4. The admin rule and who may sign in
 
-GitHub is open to anyone: the gateway refuses to start with a GitHub provider
-that has neither allowed domains nor invitation only. With invitation only,
+GitHub is open to anyone: the gateway refuses to start with a GitHub
+sign-in provider that has neither allowed domains nor invitation only. With invitation only,
 the addresses of `VAUBAAN_ADMIN_EMAILS` are admitted and are administrators;
 everybody else needs an invitation (Settings → People → Invite). A person is
 admitted on the **primary, verified** address of their GitHub account only.
@@ -181,8 +181,8 @@ would still leave your machine; the clean archive above is the procedure.
   variables set (`VAUBAAN_SIGN_IN_*`, `VAUBAAN_ADMIN_*`), the
   client secrets sealed like the rest: restored elsewhere, people sign in as
   before (register the new host's callback address at the identity provider),
-  and the new host's variables add their own, winning on a provider id they
-  share.
+  and the new host's variables add their own, winning on a sign-in provider
+  id they share.
 
   It copies `/data/gateway.db` with SQLite's `VACUUM INTO` next to it, never
   overwrites a file, refuses root (`vaubaan-entrypoint` drops to the image
@@ -202,7 +202,7 @@ would still leave your machine; the clean archive above is the procedure.
 
 ## 7. The git remote
 
-Agents clone and push through `https://<your domain>/git/<provider>/<owner>/<repo>.git`.
+Agents clone and push through `https://<your domain>/git/<service>/<owner>/<repo>.git`.
 Railway's edge limits (docs.railway.com, "Public networking — specs and
 limits", read on 2026-10-14): a request may last up to 15 minutes while data
 flows and is closed after 5 minutes without any; **a request body must finish
@@ -281,7 +281,7 @@ by hand. Handbook [store](../docs/handbook/store.md).
    the new instance needs those keys.
 
 2. **Stop the source from changing**: what it writes after the backup —
-   audit entries, and above all a provider token it refreshes (a provider that
+   audit entries, and above all a service token it refreshes (a service that
    rotates refresh tokens invalidates the one in the copy) — is not in the copy.
    Take the backup as late as you can, and stop the source (remove its domain,
    or its deployment) as soon as the file is off the volume.
@@ -314,7 +314,7 @@ by hand. Handbook [store](../docs/handbook/store.md).
    it **and** `VAUBAAN_RESTORE_FROM` and `VAUBAAN_RESTORE_SHA256`, and deploy.
    Delete the copy from the bucket.
 7. **Point the domain at the new instance.** If the public URL changes, update
-   the callback of every company app (`<public_url>/connections/callback/<provider>`,
+   the callback of every company app (`<public_url>/connections/callback/<service>`,
    the sign-in callbacks) and the addresses the agents use (MCP, the remote of
    their repositories). Keep the source's volume until the new instance has run
    for a while, then delete it; the source's key opens only the backups taken

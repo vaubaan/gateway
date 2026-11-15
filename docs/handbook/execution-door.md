@@ -37,7 +37,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 - **The plugin sees what the door allows.** `ctx.resources` is the very array the resource stage checks against; `classify` gets the account's public fields only (`classifyAccountOf`), never the credential.
 - **The agent label is attribution only.** No stage reads it, it reserves no budget; a bad value is dropped and logged (`agent label dropped`, never the value), never refused or repaired. Its shape constants live in `missions/bootstrap-kit.ts`, which prints them to agents.
 - **One client-address rule** (`clientIpOf`: right-most `X-Forwarded-For` hop not in `trusted_proxies`, else `unknown`) for the audit's `client_ip` and the request page's rate limit.
-- **Provider text stays with the agent.** `UpstreamFailureError.detail` goes to the agent only; the audit's `upstream_error` is a summary from provider id, status and class name.
+- **Service text stays with the agent.** `UpstreamFailureError.detail` goes to the agent only; the audit's `upstream_error` is a summary from service id, status and class name.
 - **Streaming decides first.** State, resource, risk and the budget transaction commit before `execute` runs; parts leave as `notifications/progress` to a caller that sent a `progressToken`; one audit entry when the stream ends; no refresh-and-retry once a part left (it would deliver the start twice).
 - **No cap stage.** Catalog `caps` are applied nowhere; the one enforced catalog limit is `infra_limits.calls_per_minute_max`, at preview. `catalog-caps-enforced.test.ts` fails a shipped catalog declaring a limit the gateway does not apply ([scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md)).
 
@@ -58,7 +58,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 ## Procedures
 
 - **Manual smoke** (`tests/manual/seed-demo.ts`): seeds a user, a GitHub account and a `read-only` mission, prints the kit; exercise `/healthz`, `initialize`, `tools/list`, a refused `tools/call`, `/mcp/catalog`, the 401 and the protected-resource document with `curl` and the official client in both eras; check the secret never appears in the log. Not done yet: Claude Code against a TLS-terminated instance with a real account.
-- **Streaming check** (`tests/manual/streaming-check.ts serve`, then `probe <url> <token>`): exits non-zero when frames arrive buffered. Done directly and behind Caddy; not done with a real provider or another proxy.
+- **Streaming check** (`tests/manual/streaming-check.ts serve`, then `probe <url> <token>`): exits non-zero when frames arrive buffered. Done directly and behind Caddy; not done with a real service or another proxy.
 
 ## Debug
 
@@ -66,7 +66,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 - **403 `wrong-credential-kind`** → a session cookie instead of a mission key. **403 on everything from a browser client** → it sends `Origin`; there is no CORS.
 - **429 `-32002`** → the mission's surface limit (`mcp.rate_limit_per_minute`, per mission).
 - **401 for a token issued before the SHA-256 digest and never used since** → migration 0028 revoked it (`hash_alg = 'argon2id'`): issue or rotate a token.
-- **`-32602` `Vaubaan rejected the call`** → unknown tool, no account of that provider, the classifier could not place the arguments, or `could not decide this call: the <stage> stage failed` (see the `error` log line).
-- **`resource-not-in-mission` on a selected resource** → it went stale; Refresh on the account page. **Listed then `risk-not-accepted`** → expected, the list is per provider.
+- **`-32602` `Vaubaan rejected the call`** → unknown tool, no account of that service, the classifier could not place the arguments, or `could not decide this call: the <stage> stage failed` (see the `error` log line).
+- **`resource-not-in-mission` on a selected resource** → it went stale; Refresh on the account page. **Listed then `risk-not-accepted`** → expected, the list is per service.
 - **`account-unavailable` after working calls** → 401 then rejected refresh; log `credential refresh rejected`.
 - **Only the result, no progress** → no `progressToken`, the plugin does not `emitPart`, or a buffering proxy (`streaming-check.ts probe`).

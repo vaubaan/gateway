@@ -25,10 +25,10 @@ in the change that removes it.
 
 ## Never run for real
 
-- **Keycloak sign-in has never been run.** Tests and the demo use a simulated provider; live instances sign in through GitHub, Google and Entra ID. → [authentication](authentication.md)
+- **Keycloak sign-in has never been run.** Tests and the demo use a simulated identity provider; live instances sign in through GitHub, Google and Entra ID. → [authentication](authentication.md)
 - **Most plugins have never executed a tool on their service.** Tests answer with doubles. Live: GitHub (REST and git remote) and Fly.io ran real tools; Supabase, Vercel and Cloudflare DNS ran discovery only; the others have no live run. → [accounts](accounts.md)
-- **Miro's tool calls have not run live**: sign-in and the tool list were verified on a real account; every discovery logs a difference from the captured list. → [miro](providers/miro.md)
-- **Railway account tokens were not checked against Railway's MCP server** (a workspace token was): a refusal fails the call naming the token kind, the account stays usable. → [railway](providers/railway.md)
+- **Miro's tool calls have not run live**: sign-in and the tool list were verified on a real account; every discovery logs a difference from the captured list. → [miro](services/miro.md)
+- **Railway account tokens were not checked against Railway's MCP server** (a workspace token was): a refusal fails the call naming the token kind, the account stays usable. → [railway](services/railway.md)
 - **The git remote has not seen every move live**: a fast-forward of an existing branch and a force-push were not; tests run the real `git` client against `git http-backend`. → [git-remote](git-remote.md)
 - **No `linux/arm64` image and no attestation have been published**: every release so far came from a private repository, which publishes `linux/amd64` only and signs nothing. → [coding workflow](../workflow/coding-workflow.md)
 - **Community statistics start empty**: telemetry is off by default, so the "validated by the community" tag stays absent until a plugin version gathers enough reports. → [telemetry](telemetry.md)
@@ -36,9 +36,9 @@ in the change that removes it.
 ## Not enforced, or more coarsely than expected
 
 - **Scope caps are not enforced**: a catalog declares only the rate ceiling; a mission bounds a permission with quota, rate and gate. → [ADR](../decisions/scope-caps-amplification-axis.md)
-- **`tools/list` is per provider, not per tool**: a tool whose own permission is missing is listed, then refused `risk-not-accepted`. → [execution-door](execution-door.md)
-- **Railway: no logs of a named deployment, no continued agent conversation**: `deploymentId` and `threadId` cannot be bound to the mission's project, so both are refused. → [railway](providers/railway.md)
-- **Railway: `railway-agent` cannot be bound**: Railway's own agent acts with the whole credential; the gateway requires four risks but cannot see what it does (threat model A18). → [railway](providers/railway.md)
+- **`tools/list` is per service, not per tool**: a tool whose own permission is missing is listed, then refused `risk-not-accepted`. → [execution-door](execution-door.md)
+- **Railway: no logs of a named deployment, no continued agent conversation**: `deploymentId` and `threadId` cannot be bound to the mission's project, so both are refused. → [railway](services/railway.md)
+- **Railway: `railway-agent` cannot be bound**: Railway's own agent acts with the whole credential; the gateway requires four risks but cannot see what it does (threat model A18). → [railway](services/railway.md)
 - **An administrative act and its audit entry are two writes**: if the entry fails, the request fails but the act stands. A call's entry is written before its answer. → [audit](audit.md)
 - **Git: a push larger than GitHub's compare API lists (300 files, 250 commits per ref) or bringing more than 100 commits is refused**, to be split. `--atomic`, push options, signed pushes and Git LFS are not served. → [git-remote](git-remote.md)
 
@@ -58,6 +58,6 @@ in the change that removes it.
 
 - **No tool moves a person to another issuer**: after a change of identity provider the same people arrive as new users, their old accounts and missions unreachable. → [authentication](authentication.md)
 - **No deprovisioning feed from the identity provider**: a user removed there stays active until an administrator deactivates them. → [authentication](authentication.md)
-- **The demo is not a deployment**: `npm run demo` signs anybody in as anybody, answers providers from memory, binds loopback, refuses a production environment and is not in the image. → [demo-mode](demo-mode.md)
+- **The demo is not a deployment**: `npm run demo` signs anybody in as anybody, answers services from memory, binds loopback, refuses a production environment and is not in the image. → [demo-mode](demo-mode.md)
 
 ## Kept until the next major version

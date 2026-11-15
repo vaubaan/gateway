@@ -43,7 +43,7 @@ body:
         - Requests, claims, approvals
         - Management door (`/mcp/manage`), OAuth delegation
         - Audit
-        - A provider plugin (name it below)
+        - A plugin (name it below)
         - Plugin SDK
         - Telemetry
         - Deployment (image, Compose, configuration)

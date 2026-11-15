@@ -1,19 +1,19 @@
 ---
-title: Miro provider plugin
+title: Miro plugin
 tracks:
   - plugins/miro/src/
   - plugins/miro/scripts/
 last_reviewed: 2026-11-04
 ---
 
-# Miro provider plugin — handbook
+# Miro plugin — handbook
 
 `@vaubaan/plugin-miro`: a rewrap of Miro's official MCP server (`https://mcp.miro.com/`,
 [rewrap-official-mcps](../../decisions/rewrap-official-mcps.md)), connected by OAuth with a client
 the gateway registers itself
 ([oauth-client-registered-by-the-gateway](../../decisions/oauth-client-registered-by-the-gateway.md)).
 One resource per board; no environment. Rules common to every plugin:
-[providers README](README.md).
+[services README](README.md).
 
 ## Start here
 

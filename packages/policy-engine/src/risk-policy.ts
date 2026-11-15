@@ -64,8 +64,8 @@ export function prepareCatalog(
   for (const { entry } of indexed.entries) {
     if (!isRiskId(entry.id)) {
       throw new Error(
-        `Risk id '${entry.id}' in catalog '${catalog.provider}' does not match expected format ` +
-          `'<provider>[<env>].<name>' or '<provider>.<name>'`,
+        `Risk id '${entry.id}' in catalog '${catalog.service}' does not match expected format ` +
+          `'<service>[<env>].<name>' or '<service>.<name>'`,
       );
     }
   }
@@ -75,7 +75,7 @@ export function prepareCatalog(
   // tooling.
   if (!hasFallbackRisk(catalog)) {
     warn(
-      `[risk-policy] catalog '${catalog.provider}' has no '<provider>.uncategorized-*' fallback ` +
+      `[risk-policy] catalog '${catalog.service}' has no '<service>.uncategorized-*' fallback ` +
         `risk — concrete slices not matching any catalog entry will silently produce empty ` +
         `risks_touched, which the runtime treats as 'deny' (safe-by-default). Add a fallback.`,
     );

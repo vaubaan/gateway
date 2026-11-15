@@ -9,7 +9,7 @@
 import { envResolverFor, evaluateCall, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import type { Resource, RiskDecision, RiskId } from '@vaubaan/shared';
 
-import type { ClassifyAccount, ProviderPlugin } from '../plugin.ts';
+import type { ClassifyAccount, ServicePlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
 
 export {
@@ -60,7 +60,7 @@ export type CallDecision =
  * accepted ones. Neither the budget nor the gate is applied : a test of what
  * a mission allows, not of how much.
  */
-export function decideCall(plugin: ProviderPlugin, call: CallUnderTest): CallDecision {
+export function decideCall(plugin: ServicePlugin, call: CallUnderTest): CallDecision {
   const classified = plugin.classify(
     call.tool,
     call.args,

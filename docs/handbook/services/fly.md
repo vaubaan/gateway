@@ -1,5 +1,5 @@
 ---
-title: Fly.io provider plugin
+title: Fly.io plugin
 tracks:
   - plugins/fly/src/
   - plugins/fly/README.md
@@ -8,13 +8,13 @@ tracks:
 last_reviewed: 2026-10-27
 ---
 
-# Fly.io provider plugin — handbook
+# Fly.io plugin — handbook
 
 `@vaubaan/plugin-fly`: native plugin on the Machines REST API (`https://api.machines.dev/v1`) and
 the logs endpoint `fly logs` uses. Fly hosts no MCP server (`fly mcp server` is a local flyctl
 process), hence native. The resource is a Fly app of the account's organization; its
 environment is the owner's label, never parsed from the name. Rules common to every plugin:
-[providers README](README.md).
+[services README](README.md).
 
 ## Start here
 

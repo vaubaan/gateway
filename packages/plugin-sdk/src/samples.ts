@@ -1,6 +1,6 @@
 /**
  * Tool samples — representative calls of each tool, declared by the plugin
- * (`ProviderPlugin.examples`).
+ * (`ServicePlugin.examples`).
  *
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md, amendment
  *        2026-11-05 — the test kit reads them from the plugin instead of the

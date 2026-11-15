@@ -1,5 +1,5 @@
 ---
-title: Axonaut provider plugin
+title: Axonaut plugin
 tracks:
   - plugins/axonaut/src/
   - plugins/axonaut/tests/unit/
@@ -8,13 +8,13 @@ tracks:
 last_reviewed: 2026-11-05
 ---
 
-# Axonaut provider plugin — handbook
+# Axonaut plugin — handbook
 
 `@vaubaan/plugin-axonaut`: the CRM, sales documents, projects and tickets of one Axonaut account,
 through Axonaut's REST API v2 with the API key of one Axonaut user. One resource per account: the
 account. Tools, slices and the catalog are tabled in the
 [plugin README](../../../plugins/axonaut/README.md); rules common to every plugin:
-[providers README](README.md).
+[services README](README.md).
 
 ## Start here
 
@@ -165,7 +165,7 @@ header`). No permission choice: the key acts as its user, with the user's rights
   `company_name`, `user_email`. An id outside `axonautId` is an `UpstreamProtocolError`.
 - **Execution.** `readCall` again, then `httpJson`. A deletion answered without content (202 for a
   company, an empty 200 otherwise) returns `{ deleted, id }`. Declines are `refusalResult` before any
-  request; provider failures are thrown typed.
+  request; service failures are thrown typed.
 - **Tests.** `plugin.test.ts` (kit, macro-actions), `classify.test.ts` (every branch and refusal),
   `execute.test.ts` (requests, failures, discovery), `identifiers.test.ts` (hostile ids on both
   sides), `credential.test.ts`.

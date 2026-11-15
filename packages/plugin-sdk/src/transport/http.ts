@@ -1,5 +1,5 @@
 /**
- * One HTTP call to a provider that answers JSON, the way the plugin contract
+ * One HTTP call to a service that answers JSON, the way the plugin contract
  * wants it made : `fetch` and the caller's `signal` from the context, the
  * failure typed, the answer bounded and read through a type guard.
  *
@@ -24,7 +24,7 @@ import { UpstreamProtocolError } from './errors.ts';
 import { DEFAULT_MAX_ANSWER_BYTES, readBoundedText, readPrefixText } from './read-bounded.ts';
 import { readShape, type Guard } from './shape.ts';
 
-/** What a call to a provider needs of the context : an `ExecuteContext` or a `AccountContext` is one. */
+/** What a call to a service needs of the context : an `ExecuteContext` or a `AccountContext` is one. */
 export interface UpstreamIo {
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;
@@ -52,7 +52,7 @@ interface HttpJsonRequestBase {
 export type RawRequestBody = string | Uint8Array<ArrayBuffer> | URLSearchParams | FormData | Blob;
 
 /**
- * One request to a provider that answers JSON. Its body is either `body`,
+ * One request to a service that answers JSON. Its body is either `body`,
  * sent as JSON with `content-type: application/json`, or `rawBody`, sent as
  * it is — never both : a form (`URLSearchParams`, `FormData`, whose
  * `content-type` `fetch` writes) or bytes and text whose `content-type` the

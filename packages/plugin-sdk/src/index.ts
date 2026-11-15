@@ -1,5 +1,5 @@
 /**
- * `@vaubaan/plugin-sdk` — everything a provider plugin needs, and nothing
+ * `@vaubaan/plugin-sdk` — everything a plugin needs, and nothing
  * from the gateway application.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins), §10 (structural tests) ;
@@ -11,7 +11,7 @@
  * included (the `no-restricted-imports` rule of `plugins/**`) ; what it needs
  * of `@vaubaan/shared` and `@vaubaan/policy-engine` is re-exported here or
  * from `/testing`. The host builds one `PluginRegistry` from the plugins it
- * ships — the single provider list every other list derives from.
+ * ships — the single service list every other list derives from.
  *
  * Two subpaths hold what most plugins never import :
  *   - `@vaubaan/plugin-sdk/testing` — the test kit every plugin runs ;
@@ -38,6 +38,7 @@ export * from './registry.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';
 export * from './version.ts';
+export * from './legacy.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {

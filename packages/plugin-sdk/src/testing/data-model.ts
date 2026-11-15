@@ -10,7 +10,7 @@ import { serializeSlice } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/shared';
 
 import { slicePathIssue } from '../data-model-paths.ts';
-import type { ProviderPlugin } from '../plugin.ts';
+import type { ServicePlugin } from '../plugin.ts';
 import { PluginAssertionError, type ToolSamples } from './assertions.ts';
 
 export interface SlicesOnDataModelOptions {
@@ -31,7 +31,7 @@ export interface SlicesOnDataModelOptions {
  * Throws `PluginAssertionError` listing every slice off the model.
  */
 export function assertSlicesOnDataModel(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   samples: ToolSamples,
   options: SlicesOnDataModelOptions = {},
 ): void {

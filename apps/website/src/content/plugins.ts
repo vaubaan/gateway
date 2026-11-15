@@ -27,7 +27,7 @@ import {
   screenshotSourceHost,
   type CredentialSpec,
   type GuideStep,
-  type ProviderPlugin,
+  type ServicePlugin,
   type Screenshot,
   type ScreenshotLicence,
   type TokenExpiry,
@@ -258,7 +258,7 @@ export interface ConnectFigureInfo {
 /** One step of the guide: the sentence, the menus to follow, its page, command and figure. */
 export interface ConnectStepInfo {
   readonly do: string;
-  /** The provider's menu labels, in order; empty when the step has none. */
+  /** The service's menu labels, in order; empty when the step has none. */
   readonly path: readonly string[];
   readonly url: string | null;
   readonly code: string | null;
@@ -305,9 +305,9 @@ export interface ConnectAlternativeInfo {
 export interface CredentialInfo {
   readonly kind: CredentialSpec['kind'];
   readonly clientSource: ClientSource;
-  /** The provider the broker runs the flow at (`google`), for a brokered way only. */
+  /** The service the broker runs the flow at (`google`), for a brokered way only. */
   readonly brokerProvider: string | null;
-  /** What the person creates, in the provider's words, when the plugin says. */
+  /** What the person creates, in the service's words, when the plugin says. */
   readonly label: string | null;
   readonly fields: readonly CredentialFieldInfo[];
   readonly createUrl: string | null;
@@ -316,7 +316,7 @@ export interface CredentialInfo {
   /** The shapes of the key, two to four when declared, each with its own steps; empty otherwise. */
   readonly alternatives: readonly ConnectAlternativeInfo[];
   readonly reach: TokenReach | null;
-  /** What to grant at the provider, each with the tools of the plugin that need it. */
+  /** What to grant at the service, each with the tools of the plugin that need it. */
   readonly permissions: readonly {
     readonly name: string;
     readonly access: string;
@@ -326,7 +326,7 @@ export interface CredentialInfo {
   readonly docsUrl: string | null;
   /** The exact scopes an `oauth2` way asks for (the broker's, for a brokered way). */
   readonly scopes: readonly string[];
-  /** How the person removes the grant by hand at the provider, when the gateway cannot. */
+  /** How the person removes the grant by hand at the service, when the gateway cannot. */
   readonly manualRevocation: string | null;
 }
 
@@ -356,7 +356,7 @@ export interface ModelPlaneInfo {
 
 /**
  * Where the environment of a call comes from (risk model §6), as the gateway's
- * provider reference says it: the call itself (the plugin declares `envOf`), the
+ * service reference says it: the call itself (the plugin declares `envOf`), the
  * label the owner puts on the resource, or nowhere (no catalog entry names one).
  */
 export type EnvironmentSource = 'call' | 'resource-label' | 'none';
@@ -437,9 +437,9 @@ function entryModuleOf(pkg: PackageJson, dir: string): string {
   return entry;
 }
 
-function isPlugin(value: unknown): value is ProviderPlugin {
+function isPlugin(value: unknown): value is ServicePlugin {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<ProviderPlugin>;
+  const candidate = value as Partial<ServicePlugin>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.version === 'string' &&
@@ -449,7 +449,7 @@ function isPlugin(value: unknown): value is ProviderPlugin {
 }
 
 /** Imports the plugin of a folder through its package entry and returns its declaration. */
-export async function importPlugin(repoRoot: string, dir: string): Promise<ProviderPlugin> {
+export async function importPlugin(repoRoot: string, dir: string): Promise<ServicePlugin> {
   const pkgPath = join(repoRoot, dir, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageJson;
   const entry = entryModuleOf(pkg, dir);
@@ -629,7 +629,7 @@ function stepInfo(
   };
 }
 
-function credentialInfo(plugin: ProviderPlugin): CredentialInfo {
+function credentialInfo(plugin: ServicePlugin): CredentialInfo {
   const spec = plugin.credential;
   const manualRevocation = plugin.manualRevocation ?? null;
   // An `oauth2` way asks for nothing: the gateway registers its own client at the service,
@@ -703,8 +703,8 @@ function dataModelInfo(model: DataModel, touched: ReadonlySet<string>): PluginIn
   };
 }
 
-/** Where the environment comes from, as the gateway's provider reference decides it. */
-function environmentInfo(plugin: ProviderPlugin): EnvironmentInfo {
+/** Where the environment comes from, as the gateway's service reference decides it. */
+function environmentInfo(plugin: ServicePlugin): EnvironmentInfo {
   const envs = [...new Set(plugin.catalog.risks.flatMap((r) => r.acceptable_in_envs ?? []))];
   return {
     source: envs.length === 0 ? 'none' : plugin.envOf ? 'call' : 'resource-label',
@@ -721,7 +721,7 @@ function environmentInfo(plugin: ProviderPlugin): EnvironmentInfo {
  * fails rather than publish a page showing what the gateway would not do.
  */
 export function pluginInfo(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   dir: string,
   packageName: string,
   examplesSource: string | null = null,

@@ -1,6 +1,6 @@
 /**
  * The client of an upstream MCP server over Streamable HTTP, for a plugin
- * that rewraps a provider's official server (ADR rewrap-official-mcps) : one
+ * that rewraps a service's official server (ADR rewrap-official-mcps) : one
  * JSON-RPC request per call, the OAuth or API token as a bearer.
  *
  * Sessions : a stateless server (Railway's, Context7's) answers a bare
@@ -35,7 +35,7 @@ export interface UpstreamMcpServer {
   readonly url: string;
   /** How messages name it (`Miro MCP server`). */
   readonly name: string;
-  /** Headers the provider asks for besides the protocol's (`user-agent`). */
+  /** Headers the service asks for besides the protocol's (`user-agent`). */
   readonly headers?: Readonly<Record<string, string>>;
   /** `'when-asked'` (default) initializes a session on a 400 / 404 ; `'never'` does not. */
   readonly session?: 'when-asked' | 'never';
@@ -72,7 +72,7 @@ export async function mcpRequest(
 
 /**
  * `tools/call` of the upstream tool `name` ; its answer read as a tool result
- * (`upstreamToolResult`), the provider's own `isError` passed through.
+ * (`upstreamToolResult`), the service's own `isError` passed through.
  */
 export async function callUpstreamTool(
   io: UpstreamIo,

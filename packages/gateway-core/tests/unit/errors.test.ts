@@ -23,7 +23,7 @@ import {
 import { REFUSAL_CODES, type RefusalCode } from '../../src/types.ts';
 
 const slice: Slice = {
-  provider: 'github',
+  service: 'github',
   path: [
     { kind: 'name', value: 'repo' },
     { kind: 'ident', value: 'acme/api' },

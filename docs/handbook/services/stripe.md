@@ -1,12 +1,12 @@
 ---
-title: Stripe provider plugin
+title: Stripe plugin
 tracks:
   - plugins/stripe/src/
   - plugins/stripe/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Stripe provider plugin — handbook
+# Stripe plugin — handbook
 
 `@vaubaan/plugin-stripe`: one account holds an optional test key and an optional live key;
 discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).

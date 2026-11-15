@@ -4,12 +4,12 @@
  * ADR : docs/decisions/plugin-contract-and-credential-spec.md.
  *
  * A plugin that passes `definePlugin` is well-formed by construction : id
- * grammar, semver, tool prefixes, catalog provider, data-model integrity,
+ * grammar, semver, tool prefixes, catalog service, data-model integrity,
  * macro-actions, credential spec. The registry repeats nothing of this ; it only
  * checks what spans several plugins (unique ids, unique tool names).
  */
 
-import { isProviderId, toolPrefixFor, validateDataModel } from '@vaubaan/shared';
+import { isServiceId, toolPrefixFor, validateDataModel } from '@vaubaan/shared';
 
 import { semanticIssues } from './catalog-rules.ts';
 import {
@@ -19,25 +19,25 @@ import {
 } from './credential-issues.ts';
 import { catalogPathIssues } from './data-model-paths.ts';
 import { isList, isRecord } from './guards.ts';
-import type { ProviderPlugin } from './plugin.ts';
+import type { ServicePlugin } from './plugin.ts';
 
 /** Semver 2.0, pre-release allowed, no build metadata. */
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
-/** Upper bound of `ProviderPlugin.summary` : a paragraph, not a handbook. */
+/** Upper bound of `ServicePlugin.summary` : a paragraph, not a handbook. */
 export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
 
 /**
- * `ProviderPlugin.icon` : the `d` attribute of one SVG path — a drawing
+ * `ServicePlugin.icon` : the `d` attribute of one SVG path — a drawing
  * command first, then commands, numbers and separators only. No markup, no
  * `url(…)`, nothing a page could not put inside `<path d="…">` as it is.
  */
 export const SVG_PATH_DATA_PATTERN = /^[Mm][0-9A-Za-z.,\s+-]*$/;
 
-/** `ProviderPlugin.iconColor` : one sRGB colour as six hex digits, `#RRGGBB`, nothing a stylesheet could misread. */
+/** `ServicePlugin.iconColor` : one sRGB colour as six hex digits, `#RRGGBB`, nothing a stylesheet could misread. */
 export const HEX_COLOUR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
-/** Upper bound of one `ProviderPlugin.toolTitles` entry : a headline, not a description. */
+/** Upper bound of one `ServicePlugin.toolTitles` entry : a headline, not a description. */
 export const TOOL_TITLE_MAX_LENGTH = 60;
 
 export class PluginDefinitionError extends Error {
@@ -51,7 +51,7 @@ export class PluginDefinitionError extends Error {
 }
 
 /** Every issue with a definition. Empty array = well-formed. Pure. */
-export function pluginIssues(plugin: ProviderPlugin): string[] {
+export function pluginIssues(plugin: ServicePlugin): string[] {
   return [
     ...identityIssues(plugin),
     ...resourceNounIssues(plugin),
@@ -72,9 +72,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
 }
 
 /** Every tool name a plugin answers for : its MCP tools and the two tools of its git remote. */
-export function declaredToolNames(
-  plugin: Pick<ProviderPlugin, 'tools' | 'gitRemote'>,
-): Set<string> {
+export function declaredToolNames(plugin: Pick<ServicePlugin, 'tools' | 'gitRemote'>): Set<string> {
   const names = new Set<string>(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
   if (plugin.gitRemote) {
     names.add(plugin.gitRemote.fetchTool);
@@ -88,7 +86,7 @@ export function declaredToolNames(
  * NOT MCP tools : listed in `tools`, an agent could call the push tool with
  * arguments of its own instead of the host's review.
  */
-function gitRemoteIssues(plugin: ProviderPlugin): string[] {
+function gitRemoteIssues(plugin: ServicePlugin): string[] {
   const remote: unknown = plugin.gitRemote;
   if (remote === undefined) return [];
   if (!isRecord(remote)) return ['gitRemote: expected an object when present'];
@@ -132,20 +130,20 @@ function gitRemoteIssues(plugin: ProviderPlugin): string[] {
 
 /**
  * `tokenHandouts` is retired (owner decision of 2026-10-31, spec §2.4): no
- * tool hands the agent a provider token. A plugin that still declares one is
+ * tool hands the agent a service token. A plugin that still declares one is
  * refused, rather than loaded with a tool nothing gates any more.
  */
-function retiredTokenHandoutIssues(plugin: ProviderPlugin): string[] {
+function retiredTokenHandoutIssues(plugin: ServicePlugin): string[] {
   return Object.hasOwn(plugin, 'tokenHandouts') ? [RETIRED_TOKEN_HANDOUTS_ISSUE] : [];
 }
 
 /** What a plugin that still declares `tokenHandouts` reads. */
 export const RETIRED_TOKEN_HANDOUTS_ISSUE =
-  'tokenHandouts: retired, no tool may hand the agent a provider token (spec §2.4) ; remove the key and route the work through the gateway';
+  'tokenHandouts: retired, no tool may hand the agent a service token (spec §2.4) ; remove the key and route the work through the gateway';
 
-function identityIssues(plugin: ProviderPlugin): string[] {
+function identityIssues(plugin: ServicePlugin): string[] {
   const issues: string[] = [];
-  if (typeof plugin.id !== 'string' || !isProviderId(plugin.id)) {
+  if (typeof plugin.id !== 'string' || !isServiceId(plugin.id)) {
     issues.push(`id: expected a lowercase slug such as 'github' or 'cloudflare-dns'`);
   }
   if (typeof plugin.displayName !== 'string' || plugin.displayName.trim().length === 0) {
@@ -186,7 +184,7 @@ function identityIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-/** Upper bound of each form of `ProviderPlugin.resourceNoun` : a word or two. */
+/** Upper bound of each form of `ServicePlugin.resourceNoun` : a word or two. */
 export const RESOURCE_NOUN_MAX_LENGTH = 40;
 
 /** A lowercase noun : starts and ends with a letter or digit, words joined by one space or a hyphen. */
@@ -202,7 +200,7 @@ function isResourceNoun(word: string): boolean {
  * digits, spaces, hyphens), without surrounding spaces — the interface puts it
  * after a count and capitalises it itself.
  */
-function resourceNounIssues(plugin: ProviderPlugin): string[] {
+function resourceNounIssues(plugin: ServicePlugin): string[] {
   const noun: unknown = plugin.resourceNoun;
   if (noun === undefined) return [];
   if (!isRecord(noun)) return ['resourceNoun: expected { one, other } when present'];
@@ -222,10 +220,10 @@ function resourceNounIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-/** Upper bound of `ProviderPlugin.manualRevocation` : a sentence or two. */
+/** Upper bound of `ServicePlugin.manualRevocation` : a sentence or two. */
 export const PLUGIN_MANUAL_REVOCATION_MAX_LENGTH = 400;
 
-function toolIssues(plugin: ProviderPlugin): string[] {
+function toolIssues(plugin: ServicePlugin): string[] {
   if (!isList(plugin.tools)) return ['tools: expected a list of McpToolDeclaration'];
   if (typeof plugin.id !== 'string') return [];
   const issues: string[] = [];
@@ -256,7 +254,7 @@ function toolIssues(plugin: ProviderPlugin): string[] {
  * a tool would silently trigger nothing. A plugin that declares it reads the
  * created resource from the answer (`createdResources`).
  */
-function resourceCreatingToolIssues(plugin: ProviderPlugin): string[] {
+function resourceCreatingToolIssues(plugin: ServicePlugin): string[] {
   const declared: unknown = plugin.resourceCreatingTools;
   const reader: unknown = plugin.createdResources;
   if (reader !== undefined && typeof reader !== 'function') {
@@ -291,7 +289,7 @@ function resourceCreatingToolIssues(plugin: ProviderPlugin): string[] {
  * `secretArguments` names declared tools and, for each, arguments its input
  * schema declares : a masked name that is not an argument would mask nothing.
  */
-function secretArgumentIssues(plugin: ProviderPlugin): string[] {
+function secretArgumentIssues(plugin: ServicePlugin): string[] {
   const masks: unknown = plugin.secretArguments;
   if (masks === undefined) return [];
   if (!isRecord(masks))
@@ -322,7 +320,7 @@ function secretArgumentIssues(plugin: ProviderPlugin): string[] {
  * A title names a declared tool and reads as a headline : a few words, sentence
  * case, no final period. Which tools have one is the plugin's choice.
  */
-function toolTitleIssues(plugin: ProviderPlugin): string[] {
+function toolTitleIssues(plugin: ServicePlugin): string[] {
   const titles: unknown = plugin.toolTitles;
   if (titles === undefined) return [];
   if (!isRecord(titles)) return ['toolTitles: expected an object keyed by tool name when present'];
@@ -348,11 +346,11 @@ function toolTitleIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-function dataModelIssues(plugin: ProviderPlugin): string[] {
+function dataModelIssues(plugin: ServicePlugin): string[] {
   if (!plugin.dataModel || typeof plugin.dataModel !== 'object') return ['dataModel: missing'];
   const issues: string[] = [];
-  if (plugin.dataModel.provider !== plugin.id) {
-    issues.push(`dataModel.provider '${plugin.dataModel.provider}' must equal the plugin id`);
+  if (plugin.dataModel.service !== plugin.id) {
+    issues.push(`dataModel.service '${plugin.dataModel.service}' must equal the plugin id`);
   }
   issues.push(...validateDataModel(plugin.dataModel).map((m) => `dataModel: ${m}`));
   return issues;
@@ -367,13 +365,13 @@ function dataModelIssues(plugin: ProviderPlugin): string[] {
  * matches nothing, silently. Walked only on a model that is itself sound,
  * whose own issues `dataModelIssues` reports.
  */
-function catalogIssues(plugin: ProviderPlugin): string[] {
+function catalogIssues(plugin: ServicePlugin): string[] {
   if (!plugin.catalog || typeof plugin.catalog !== 'object') {
     return ['catalog: missing — load it with loadCatalogFile(catalogPathNextTo(import.meta.url))'];
   }
   const issues: string[] = [];
-  if (plugin.catalog.provider !== plugin.id) {
-    issues.push(`catalog.provider '${plugin.catalog.provider}' must equal the plugin id`);
+  if (plugin.catalog.service !== plugin.id) {
+    issues.push(`catalog.service '${plugin.catalog.service}' must equal the plugin id`);
   }
   issues.push(...semanticIssues(plugin.catalog).map((m) => `catalog: ${m}`));
   if (isList(plugin.catalog.risks) && dataModelIssues(plugin).length === 0) {
@@ -382,7 +380,7 @@ function catalogIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-function hookIssues(plugin: ProviderPlugin): string[] {
+function hookIssues(plugin: ServicePlugin): string[] {
   const issues: string[] = [];
   for (const fn of ['classify', 'execute', 'discoverResources'] as const) {
     if (typeof plugin[fn] !== 'function') issues.push(`${fn}: expected a function`);
@@ -409,11 +407,11 @@ function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: 
 }
 
 /**
- * `excludedTools` names tools of the provider the plugin deliberately does not
+ * `excludedTools` names tools of the service the plugin deliberately does not
  * expose, one sentence each : a name the plugin also declares would be exposed
  * and excluded at once.
  */
-function excludedToolIssues(plugin: ProviderPlugin): string[] {
+function excludedToolIssues(plugin: ServicePlugin): string[] {
   const excluded: unknown = plugin.excludedTools;
   if (excluded === undefined) return [];
   if (!isRecord(excluded)) return ['excludedTools: expected a record tool → reason'];
@@ -472,7 +470,7 @@ function sampleIssues(samples: unknown, tools: ReadonlySet<unknown>): string[] {
  * with every issue, so a broken plugin fails at import time, not at the
  * first call.
  */
-export function definePlugin<P extends ProviderPlugin>(definition: P): P {
+export function definePlugin<P extends ServicePlugin>(definition: P): P {
   const issues = pluginIssues(definition);
   if (issues.length > 0) throw new PluginDefinitionError(String(definition.id), issues);
   return Object.freeze(definition);

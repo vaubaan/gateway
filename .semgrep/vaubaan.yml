@@ -45,7 +45,7 @@ rules:
     message: >-
       child_process is allowed only in build and test tooling (next.config.ts,
       scripts/, tests/). The running gateway and its plugins start no process:
-      a provider is reached over its API, a host over SSH (ssh2).
+      a service is reached over its API, a host over SSH (ssh2).
     severity: ERROR
     languages: [typescript, javascript]
     paths:
@@ -175,7 +175,7 @@ rules:
   - id: vaubaan-plugin-fetch-without-redirect-policy
     message: >-
       A plugin's HTTP call states its redirect policy, inline: `redirect:
-      'error'` unless a provider is known to redirect on purpose (then
+      'error'` unless a service is known to redirect on purpose (then
       'manual' or 'follow', with the reason in a comment). Followed by
       default, a redirect to another origin keeps the custom headers
       (`apikey`, `x-api-key`, …) that undici does not strip like

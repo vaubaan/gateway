@@ -1,12 +1,12 @@
 ---
-title: Vercel provider plugin
+title: Vercel plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
 last_reviewed: 2026-11-11
 ---
 
-# Vercel provider plugin — handbook
+# Vercel plugin — handbook
 
 `@vaubaan/plugin-vercel` rewraps Vercel's MCP server (`mcp.vercel.com`, tools frozen in
 `src/upstream-tools.json`) and adds REST tools ([ADR](../../decisions/rewrap-official-mcps.md)).

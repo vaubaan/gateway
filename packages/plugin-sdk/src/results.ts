@@ -1,5 +1,5 @@
 /**
- * The results an executor returns when the provider answered. A declined
+ * The results an executor returns when the service answered. A declined
  * call is `refusalResult` (`refusal.ts`) ; a failure is thrown.
  */
 

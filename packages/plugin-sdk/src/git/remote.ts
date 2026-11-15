@@ -1,6 +1,6 @@
 /**
  * `GitRemoteCapability` — what a plugin declares so that the instance can be
- * its agents' git remote (`https://<instance>/git/<provider id>/<repository>.git`).
+ * its agents' git remote (`https://<instance>/git/<service id>/<repository>.git`).
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote" (the second door
  *        of the execution surface), §2.4.
@@ -9,21 +9,21 @@
  * Handbook : docs/handbook/git-remote.md.
  *
  * The host owns the transport : it authenticates the mission key, relays
- * fetches, reads a push's command list, stores the pack at the provider
+ * fetches, reads a push's command list, stores the pack at the service
  * under a temporary ref, and decides through the call pipeline like any
- * tool call. The plugin owns everything provider-shaped :
+ * tool call. The plugin owns everything service-shaped :
  *
  *   - which URL path names a repository, and its resource ref ;
  *   - the upstream endpoint and the credential to present there, minted or
  *     decrypted in memory from the account (`upstream`) — the key of the
- *     agent never reaches the provider, the provider's credential never
+ *     agent never reaches the service, the service's credential never
  *     reaches the agent ;
  *   - the inspection of a push's own objects before anything is sent
  *     (`inspectPack`) : whether each update's tip changes the CI workflow
  *     definitions, from objects the host hashed itself ;
  *   - the review of a push before the decision (`review`) : for each ref,
  *     fast-forward or not, how many commits, which files, which of them are
- *     CI workflow files — read from the provider, never from the pack ;
+ *     CI workflow files — read from the service, never from the pack ;
  *   - the two tools the pipeline decides and audits : `fetchTool` (never
  *     executed by `execute` : the host relays the bytes) and `pushTool`,
  *     whose `execute` moves the real refs with the reviewed old ids as
@@ -69,7 +69,7 @@ export interface GitReviewedUpdate extends GitRefUpdate {
 }
 
 /**
- * What a push's own objects change in the paths the provider guards (CI
+ * What a push's own objects change in the paths the service guards (CI
  * workflow definitions), per ref update, read before the pack leaves the
  * gateway (ADR gateway-as-git-remote). `workflow_files` is
  * empty when the tip of the update provably leaves them as they are.
@@ -132,15 +132,15 @@ export interface GitRemoteCapability {
   readonly pushRisk: string;
   /**
    * The resource ref of the repository a URL path names (`acme/app` for
-   * `/git/github/acme/app.git`: the provider segment and the `.git` suffix
+   * `/git/github/acme/app.git`: the service segment and the `.git` suffix
    * already removed), or `null` when
-   * the path names no repository of this provider. Pure.
+   * the path names no repository of this service. Pure.
    */
   repositoryOf(path: string): string | null;
   /** The upstream repository endpoint and the credential to present there, for this access. */
   upstream(ctx: ExecuteContext, repository: string, access: GitAccess): Promise<GitUpstream>;
   /**
-   * Review the updates of a push whose objects the provider already holds
+   * Review the updates of a push whose objects the service already holds
    * (the host stored the pack under temporary refs first). Reads only.
    */
   review(
@@ -151,10 +151,10 @@ export interface GitRemoteCapability {
   /**
    * What the updates of a push change in the CI workflow definitions, decided
    * from the push's own objects (`objects`, hashed by the host) and the
-   * provider's existing ones — BEFORE the pack is stored at the provider, so
+   * service's existing ones — BEFORE the pack is stored at the service, so
    * that a mission that may not change CI is refused with nothing sent.
    * Fail closed: whatever cannot be determined (an object neither in the pack
-   * nor at the provider, a provider error, a limit) counts as changed. A
+   * nor at the service, a service error, a limit) counts as changed. A
    * throw refuses the push. Reads only. Absent: the plugin guards no path.
    */
   inspectPack?(
@@ -164,14 +164,14 @@ export interface GitRemoteCapability {
     objects: GitPackObjects,
   ): Promise<readonly GitInspectedUpdate[]>;
   /**
-   * Whether the provider credential of this account can carry the push,
+   * Whether the service credential of this account can carry the push,
    * asked once the mission has decided on what the inspection found and
-   * BEFORE the pack is stored at the provider: the sentence that refuses it
+   * BEFORE the pack is stored at the service: the sentence that refuses it
    * (a permission the account lacks, by name), or `null`. The mission's
    * decision never depends on it — it is asked after the precheck — and the
    * host asks `upstream` again afterwards, so a credential renewed here is
    * the one the pack is sent with. A throw refuses the push. Absent: the
-   * provider's own refusal, once the pack is sent, is the only one.
+   * service's own refusal, once the pack is sent, is the only one.
    */
   admitPush?(
     ctx: ExecuteContext,
@@ -179,15 +179,15 @@ export interface GitRemoteCapability {
     updates: readonly GitInspectedUpdate[],
   ): Promise<string | null>;
   /**
-   * The prefix of the provider's own git URLs (`https://github.com/`). The
-   * setup kit rewrites it to the instance (`url.<instance>/git/<provider id>/.insteadOf`),
-   * so a hard-coded provider URL, a submodule or a script goes through the
+   * The prefix of the service's own git URLs (`https://github.com/`). The
+   * setup kit rewrites it to the instance (`url.<instance>/git/<service id>/.insteadOf`),
+   * so a hard-coded service URL, a submodule or a script goes through the
    * mission too. Absent: the kit offers no rewrite.
    */
   readonly insteadOf?: string;
   /** What the permissions of the catalog mean for git, most common first. */
   readonly abilities?: readonly GitAbility[];
-  /** A page of the provider showing what an update brings, for the person who approves it. */
+  /** A page of the service showing what an update brings, for the person who approves it. */
   compareUrl?(repository: string, update: GitReviewedUpdate): string | null;
 }
 

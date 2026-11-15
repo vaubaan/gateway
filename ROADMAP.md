@@ -30,7 +30,7 @@ From [known limitations](docs/handbook/known-limitations.md); an issue that argu
 is welcome.
 
 - Scope caps (a bound on how much one call may touch) are not enforced.
-- `tools/list` filters per provider, not per tool.
+- `tools/list` filters per service, not per tool.
 - No deprovisioning feed from the identity provider, and no tool to move people to a new issuer.
 - No "back up now" button.
 

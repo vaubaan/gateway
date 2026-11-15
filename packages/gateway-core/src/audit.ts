@@ -56,7 +56,7 @@ export interface CallAuditEntry {
   /** Decision of the gateway (`AuditDecision` in `@vaubaan/shared`). An
    *  upstream failure after an allow stays `allowed` with `upstream_error`
    *  set: the decision is what the gateway did; the outcome is what the
-   *  provider did. */
+   *  service did. */
   readonly decision: AuditDecision;
   readonly refusal_code: RefusalCode | null;
   /** The refusal's hint, or the structural reason for a refusal that has no
@@ -100,7 +100,7 @@ export type AdminAct =
   | 'account-reassigned'
   | 'account-revoked'
   /** An account's resources were discovered again: the outcome (count or the
-   *  provider's error), never the resource list. Object: the account.
+   *  service's error), never the resource list. Object: the account.
    *  `after.cause` says who ran it: `by-owner` ("Refresh", the actor is the
    *  owner) or `after-a-call` (the gateway, after a call that created a
    *  resource; the actor is the human behind the call's key, `after` adds
@@ -226,7 +226,7 @@ export type AdminAct =
   | 'invitation-removed'
   /** A single-use link was made for a sign-in account (ADR local-accounts-sign-in-provider):
    *  an invitation to create one, or a password reset. Object: `instance-config` /
-   *  `sign-in-account:<provider>`; `after` carries the kind, the address and the expiry —
+   *  `sign-in-account:<sign-in provider>`; `after` carries the kind, the address and the expiry —
    *  never the link. The actor is the administrator, `bootstrap`, or the person
    *  (`self`, a reset asked from the sign-in page). */
   | 'local-link-created'
@@ -245,9 +245,9 @@ export type AdminAct =
    *  `after` carries the key version and the page it was asked from. Never the key. */
   | 'master-key-downloaded'
   /** A designation of an administrator was made (ADR administrators-live-in-the-instance):
-   *  a user made administrator, an address or a group of a provider named, or a pending
+   *  a user made administrator, an address or a group of a sign-in provider named, or a pending
    *  address turned into its user at their first sign-in. Object: `instance-config` /
-   *  `administrators`; `after` carries the designation (kind, user, address, provider,
+   *  `administrators`; `after` carries the designation (kind, user, address, sign-in provider,
    *  group, origin). The actor is an administrator, `bootstrap`, `configuration` or
    *  `recovery`. */
   | 'administrator-granted'
@@ -265,7 +265,7 @@ export type AdminAct =
   | 'sign-in-provider-enabled'
   /** A sign-in provider was switched off; its users' sessions ended (the actor's kept). */
   | 'sign-in-provider-disabled'
-  /** The second factor was waived for a provider, or the waiver was changed or removed:
+  /** The second factor was waived for a sign-in provider, or the waiver was changed or removed:
    *  `before` / `after` carry the waiver (`always`, `amr`, or none). */
   | 'second-factor-waiver-changed'
   /** A person's second factor was enrolled, replaced or reset (by the person, or by an

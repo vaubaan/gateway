@@ -58,26 +58,26 @@ Checked by tests or review; the reasons are in the linked documents.
   never rename a protocol name or print one as prose on a page.
 - **Nothing hard-coded**: configuration comes through the configuration module; a missing key stops
   startup, naming it ([configuration](handbook/configuration.md)).
-- **One list of providers**, the plugin registry; never a second one, in code or test.
+- **One list of services**, the plugin registry; never a second one, in code or test.
 - **A plugin classifies; it does not decide**, and a classifier that cannot tell emits every slice
   it could touch ([risk model](spec/gateway-risk-model.md) §7).
 - **Keep a larger deployment possible**: storage behind repository interfaces with portable SQL;
   in-memory state marked `// single-process only`, naming the interface that would replace it.
-- **Tests never reach a real provider**; plugins test on the SDK's mocked `fetch`.
-- **Library and provider APIs are checked, not remembered**
+- **Tests never reach a real service**; plugins test on the SDK's mocked `fetch`.
+- **Library and service APIs are checked, not remembered**
   ([workflow](workflow/coding-workflow.md), Context7).
 
 ## Where to read first
 
-| Task                                    | Start with                                                                                                                                                                  |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anything                                | [spec](spec/vaubaan-gateway.md) §0 (vocabulary), then the [handbook index](handbook/README.md)                                                                              |
-| A change to how a call is decided       | [risk model](spec/gateway-risk-model.md), handbooks [policy-engine](handbook/policy-engine.md) and [gateway-core](handbook/gateway-core.md)                                 |
-| A new provider, or a change to a plugin | [`plugins/README.md`](../plugins/README.md), [`docs/skills/provider-modeler.md`](skills/provider-modeler.md), [plugin-sdk](handbook/plugin-sdk.md), the provider's handbook |
-| A page of the interface                 | [web-app](handbook/web-app.md), [style guide](spec/style-guide.md)                                                                                                          |
-| The database                            | [store](handbook/store.md)                                                                                                                                                  |
-| Configuration, deployment               | [configuration](handbook/configuration.md), [`deploy/README.md`](../deploy/README.md)                                                                                       |
-| The process itself                      | [`CONTRIBUTING.md`](../CONTRIBUTING.md), [workflow](workflow/coding-workflow.md)                                                                                            |
+| Task                                   | Start with                                                                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Anything                               | [spec](spec/vaubaan-gateway.md) §0 (vocabulary), then the [handbook index](handbook/README.md)                                                                           |
+| A change to how a call is decided      | [risk model](spec/gateway-risk-model.md), handbooks [policy-engine](handbook/policy-engine.md) and [gateway-core](handbook/gateway-core.md)                              |
+| A new service, or a change to a plugin | [`plugins/README.md`](../plugins/README.md), [`docs/skills/service-modeler.md`](skills/service-modeler.md), [plugin-sdk](handbook/plugin-sdk.md), the service's handbook |
+| A page of the interface                | [web-app](handbook/web-app.md), [style guide](spec/style-guide.md)                                                                                                       |
+| The database                           | [store](handbook/store.md)                                                                                                                                               |
+| Configuration, deployment              | [configuration](handbook/configuration.md), [`deploy/README.md`](../deploy/README.md)                                                                                    |
+| The process itself                     | [`CONTRIBUTING.md`](../CONTRIBUTING.md), [workflow](workflow/coding-workflow.md)                                                                                         |
 
 ## Before you report a change as done
 

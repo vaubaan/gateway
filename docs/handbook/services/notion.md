@@ -1,12 +1,12 @@
 ---
-title: Notion provider plugin
+title: Notion plugin
 tracks:
   - plugins/notion/src/
   - plugins/notion/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Notion provider plugin — handbook
+# Notion plugin — handbook
 
 `@vaubaan/plugin-notion`: pages, blocks, databases and comments under the top-level pages and
 databases shared with one internal account. No administration, no file upload.

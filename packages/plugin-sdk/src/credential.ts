@@ -1,8 +1,8 @@
 /**
- * Credential declaration — how a plugin tells the host to connect a provider.
+ * Credential declaration — how a plugin tells the host to connect a service.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §2.4 (the executor
- *        never sees a provider credential), §7.2 (connect a provider).
+ *        never sees a service credential), §7.2 (connect a service).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  *
  * Three types, three moments :
@@ -45,7 +45,7 @@ export interface CredentialField {
 // CredentialSpec — one variant per kind
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Access a token permission grants at the provider, in the provider's own two words. */
+/** Access a token permission grants at the service, in the service's own two words. */
 export const TOKEN_PERMISSION_ACCESS = ['read', 'read-write'] as const;
 export type TokenPermissionAccess = (typeof TOKEN_PERMISSION_ACCESS)[number];
 
@@ -55,7 +55,7 @@ export type TokenPermissionAccess = (typeof TOKEN_PERMISSION_ACCESS)[number];
  * connect page lists these; nothing about permissions is written in the page.
  */
 export interface TokenPermission {
-  /** The permission's name as the provider's token page shows it. */
+  /** The permission's name as the service's token page shows it. */
   readonly name: string;
   readonly access: TokenPermissionAccess;
   /** Tools of the plugin that need it ; at least one. */
@@ -63,7 +63,7 @@ export interface TokenPermission {
 }
 
 /**
- * One thing the person does at the provider, in the imperative ("Open the
+ * One thing the person does at the service, in the imperative ("Open the
  * page and start a new fine-grained token."). One plain sentence, no markup:
  * the menus to follow go in `path`, a command to type in `code`, a page to
  * open in `url`, a picture of the hard screen in `screenshot`; the connect
@@ -74,13 +74,13 @@ export interface TokenPermission {
 export interface GuideStep {
   readonly do: string;
   /**
-   * The application path the person follows at the provider, in the
-   * provider's own menu labels: `['Settings', 'Developer settings', 'Personal
+   * The application path the person follows at the service, in the
+   * service's own menu labels: `['Settings', 'Developer settings', 'Personal
    * access tokens']`. 1 to `GUIDE_PATH_MAX_SEGMENTS` segments of at most
    * `GUIDE_PATH_SEGMENT_MAX_LENGTH` characters each.
    */
   readonly path?: readonly string[];
-  /** The provider page this step happens on (https). */
+  /** The service page this step happens on (https). */
   readonly url?: string;
   /** A command or a value to type, shown as code the person can copy. */
   readonly code?: string;
@@ -168,9 +168,9 @@ export function screenshotSourceHost(screenshot: Pick<Screenshot, 'source'>): st
 }
 
 /**
- * How wide the grant is at the provider (ADR
+ * How wide the grant is at the service (ADR
  * one-place-to-authorize-services-token-first, amendment 2026-10-31): the
- * person grants the widest the provider offers for what this account
+ * person grants the widest the service offers for what this account
  * connects, once, and each mission narrows it — except where the token picks
  * the resources it reaches
  * (amendment 2026-11-13: GitHub asks for the repositories the missions will
@@ -179,7 +179,7 @@ export function screenshotSourceHost(screenshot: Pick<Screenshot, 'source'>): st
  * it). The connect page shows it above the steps.
  */
 export interface TokenReach {
-  /** What the token reaches, in the provider's words: "Repository access", "Zone Resources". */
+  /** What the token reaches, in the service's words: "Repository access", "Zone Resources". */
   readonly what: string;
   /** What to pick there: "All zones", "Full access", "Only select repositories: the ones the missions will use". */
   readonly grant: string;
@@ -193,40 +193,40 @@ export interface TokenReach {
 /**
  * Who knows when the token stops working:
  *
- *   `provider-reports` `verify` reads the expiry from the provider, so the
+ *   `service-reports` `verify` reads the expiry from the service, so the
  *                      account page shows the date and warns before it;
- *   `person-types`     the person picks a lifetime at the provider, which the
+ *   `person-types`     the person picks a lifetime at the service, which the
  *                      gateway cannot read back: the page says so;
- *   `none`             the provider's tokens do not expire; `reason` says how
+ *   `none`             the service's tokens do not expire; `reason` says how
  *                      the person ends one.
  */
 export type TokenExpiry =
-  | { readonly kind: 'provider-reports' }
+  | { readonly kind: 'service-reports' }
   | { readonly kind: 'person-types'; readonly recommendedDays: number }
   | { readonly kind: 'none'; readonly reason: string };
 
-export const TOKEN_EXPIRY_KINDS = ['provider-reports', 'person-types', 'none'] as const;
+export const TOKEN_EXPIRY_KINDS = ['service-reports', 'person-types', 'none'] as const;
 export type TokenExpiryKind = TokenExpiry['kind'];
 
 /**
- * How a person creates the token by hand at the provider: the guide the
+ * How a person creates the token by hand at the service: the guide the
  * connect page shows, derived from this declaration. Required of every
  * `api-key` way: the instructions are part of the plugin contract.
  */
 export interface TokenGuide {
-  /** Where to click at the provider, in order, ending with the copy. */
+  /** Where to click at the service, in order, ending with the copy. */
   readonly steps: readonly GuideStep[];
   /** How wide to grant, and why wide. */
   readonly reach: TokenReach;
   /**
    * The permissions to grant. Every tool of the plugin that this way of
    * connecting can run is served by at least one of them (`definePlugin`).
-   * Empty when the provider's token carries no permission choice (`reach`
+   * Empty when the service's token carries no permission choice (`reach`
    * then says what it opens).
    */
   readonly permissions: readonly TokenPermission[];
   readonly expiry: TokenExpiry;
-  /** The provider's documentation of this kind of token (https). */
+  /** The service's documentation of this kind of token (https). */
   readonly docsUrl: string;
   /**
    * The screenshots the steps name, by file name, each with its provenance.
@@ -238,23 +238,23 @@ export interface TokenGuide {
 }
 
 /**
- * What the provider says about a pasted credential, read by `verify` before
+ * What the service says about a pasted credential, read by `verify` before
  * anything is stored: who it belongs to and when it stops working.
  */
 export interface CredentialCheck {
-  /** The account the credential acts as, in the provider's words (`octocat`, `acme, beta`) ; `null` when not exposed. */
+  /** The account the credential acts as, in the service's words (`octocat`, `acme, beta`) ; `null` when not exposed. */
   readonly account: string | null;
-  /** ISO-8601 ; `null` when the credential does not expire or the provider does not say. */
+  /** ISO-8601 ; `null` when the credential does not expire or the service does not say. */
   readonly expiresAt: string | null;
   /**
-   * The permission names (`TokenPermission.name`) the provider confirmed the
+   * The permission names (`TokenPermission.name`) the service confirmed the
    * token holds, for a plugin that can read them; absent when it cannot.
    */
   readonly granted?: readonly string[];
 }
 
 /**
- * One of several shapes the same key can take at the provider (Vercel: a token
+ * One of several shapes the same key can take at the service (Vercel: a token
  * scoped to a team, or to one project of it). The connect page shows the
  * alternatives as a radio before the guide's steps; the person picks one, and
  * the host asks and keeps only the fields shared by every alternative plus
@@ -277,7 +277,7 @@ export interface CredentialAlternative {
    * asked whatever the choice (the token).
    */
   readonly fields: readonly string[];
-  /** What to do at the provider for this alternative, shown before the guide's own steps. */
+  /** What to do at the service for this alternative, shown before the guide's own steps. */
   readonly steps: readonly GuideStep[];
 }
 
@@ -296,17 +296,17 @@ export interface ApiKeyCredentialSpec {
    * connect, the narrowest first ; absent when the key has one shape.
    */
   readonly alternatives?: readonly CredentialAlternative[];
-  /** URL of the provider page where the user creates the key: the token page itself, not a dashboard. */
+  /** URL of the service page where the user creates the key: the token page itself, not a dashboard. */
   readonly createUrl: string;
   /**
-   * What the person creates, in the provider's words, lower case
+   * What the person creates, in the service's words, lower case
    * ("fine-grained personal access token"). Shown on the connect page.
    */
   readonly label: string;
   /** How to create it by hand ; the connect page renders it. */
   readonly guide: TokenGuide;
   /**
-   * Ask the provider about the pasted values before anything is stored. A
+   * Ask the service about the pasted values before anything is stored. A
    * cause the plugin can name throws `CredentialRefusal` with its own
    * sentence ; a rejection otherwise throws `UpstreamAuthError` (nothing is
    * stored) ; an expiry in the past is refused by the host.
@@ -317,13 +317,13 @@ export interface ApiKeyCredentialSpec {
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
 
 /**
- * Authorization-code flow for a provider that offers no key a person can
+ * Authorization-code flow for a service that offers no key a person can
  * make. The spec declares exactly one source for the OAuth client (ADR
  * google-calendar-through-an-oauth-broker D3):
  *
  *   - `OAuth2RegisteredClientSpec` — the gateway registers its own client at
- *     the provider (`clientRegistration`, RFC 7591; Miro's MCP server) and
- *     runs the flow against the provider's endpoints;
+ *     the service (`clientRegistration`, RFC 7591; Miro's MCP server) and
+ *     runs the flow against the service's endpoints;
  *   - `OAuth2BrokeredSpec` — the client is an OAuth broker's (`broker`): the
  *     broker the instance is enrolled with runs the flow with its own client;
  *     it keeps no token (Google Calendar).
@@ -336,16 +336,16 @@ export type OAuth2CredentialSpec = OAuth2RegisteredClientSpec | OAuth2BrokeredSp
 
 /**
  * The OAuth client is an OAuth broker's (ADRs google-calendar-through-an-oauth-broker
- * D1, D2 and oauth-broker-stateless-in-an-attested-enclave D1): a service
- * outside the gateway that owns a client at the provider and runs the
+ * D1, D2 and oauth-broker-stateless-in-an-attested-enclave D1): a program
+ * outside the gateway that owns a client at the service and runs the
  * authorization-code flow for the instances enrolled with it. The host asks
  * the broker for the flow, redeems the one-time grant the browser brings
- * back, and keeps the provider's refresh token sealed beside the access
+ * back, and keeps the service's refresh token sealed beside the access
  * token, host only; it refreshes and revokes through the broker, which adds
  * its client secret and keeps no token. The plugin receives the access token
  * alone. A plugin whose broker is not configured is listed as not configured.
  *
- * The provider's endpoints, PKCE towards the provider, the client
+ * The service's endpoints, PKCE towards the service, the client
  * authentication and the revocation are the broker's: they are not declared.
  */
 export interface OAuth2BrokeredSpec {
@@ -353,11 +353,16 @@ export interface OAuth2BrokeredSpec {
   readonly broker: OAuth2Broker;
   /** Never set on this variant: one client source per spec. */
   readonly clientRegistration?: never;
-  /** The scopes the broker asks the provider for: the narrowest the tools need. */
+  /** The scopes the broker asks the service for: the narrowest the tools need. */
   readonly scopes: readonly string[];
 }
 
-/** Which provider a broker runs the flow at, in the broker's words (`google`). */
+/**
+ * Which OAuth provider a broker runs the flow at, in the broker's words (`google`,
+ * `microsoft`). The field keeps the broker protocol's word (`provider` in `POST /flows`,
+ * RFC 6749's sense): one broker provider can serve several services (Google serves
+ * Google Calendar; Microsoft serves Outlook).
+ */
 export interface OAuth2Broker {
   /** A lowercase slug (`google`): what the gateway names as `provider` in `POST /flows`. */
   readonly provider: string;
@@ -371,17 +376,17 @@ export function isBrokeredSpec(spec: OAuth2CredentialSpec): spec is OAuth2Broker
 /** A broker provider name: a lowercase slug, at most 32 characters. */
 export const BROKER_PROVIDER_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** The OAuth client is one the gateway registers itself at the provider (Miro). */
+/** The OAuth client is one the gateway registers itself at the service (Miro). */
 export interface OAuth2RegisteredClientSpec {
   readonly kind: 'oauth2';
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
   /**
-   * The provider lets a client register itself (RFC 7591 dynamic client
+   * The service lets a client register itself (RFC 7591 dynamic client
    * registration): the host registers this instance as a client the first
    * time someone connects, keeps the client (its secret sealed in the
    * instance settings), reuses it for every account of the instance, and
-   * registers again when the provider rejects it or the instance's callback
+   * registers again when the service rejects it or the instance's callback
    * address changed. Nobody declares anything: no administrator step, no
    * secret to paste (ADRs oauth-client-registered-by-the-gateway,
    * gmail-over-imap-with-an-app-password).
@@ -394,7 +399,7 @@ export interface OAuth2RegisteredClientSpec {
   readonly pkce: boolean;
   /**
    * RFC 8707 resource indicator sent with the authorization request and with
-   * every token request (code exchange and refresh), when the provider
+   * every token request (code exchange and refresh), when the service
    * requires one.
    */
   readonly resourceIndicator?: string;
@@ -402,37 +407,37 @@ export interface OAuth2RegisteredClientSpec {
   /**
    * Whether the token endpoint issues refresh tokens. The host performs the
    * standard `refresh_token` grant itself from `tokenUrl`, `clientAuthMethod`
-   * and `resourceIndicator` ; `ProviderPlugin.refresh` overrides it for a
+   * and `resourceIndicator` ; `ServicePlugin.refresh` overrides it for a
    * non-standard flow only.
    */
   readonly refreshable: boolean;
   /** Extra static query parameters (`access_type=offline`, `prompt=consent`). */
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;
   /**
-   * How the provider withdraws the grant when an account is revoked (spec
+   * How the service withdraws the grant when an account is revoked (spec
    * vaubaan-gateway §2.3). Declarative : the host sends the request, because
    * it may carry the app's client secret, which a plugin never sees. Absent
-   * when the provider documents no such endpoint : the person removes the
-   * grant by hand (`ProviderPlugin.manualRevocation`).
+   * when the service documents no such endpoint : the person removes the
+   * grant by hand (`ServicePlugin.manualRevocation`).
    */
   readonly revocation?: OAuth2Revocation;
 }
 
 /**
- * How the host registers its own OAuth client at a provider that accepts
+ * How the host registers its own OAuth client at a service that accepts
  * dynamic client registration (RFC 7591). The registration asks for the
  * authorization-code and refresh-token grants, the spec's `scopes`, the
  * instance's callback as the only redirect URI, and `clientAuthMethod` as the
  * token endpoint authentication method.
  */
 export interface OAuth2ClientRegistration {
-  /** The registration endpoint (https), as the provider's authorization server metadata names it. */
+  /** The registration endpoint (https), as the service's authorization server metadata names it. */
   readonly registrationUrl: string;
 }
 
 /**
- * The request that withdraws an OAuth grant at the provider. Two shapes, each
- * the one a shipped provider documents :
+ * The request that withdraws an OAuth grant at the service. Two shapes, each
+ * the one a shipped service documents :
  *
  *   `token-form`               `POST url`, form-encoded `token=<the refresh
  *                              token, or the access token when no refresh
@@ -442,8 +447,8 @@ export interface OAuth2ClientRegistration {
  *                              refresh_token }`. Needs a stored refresh token.
  *                              (Supabase Management API.)
  *
- * Any 2xx answer means the provider took the request ; anything else, and a
- * provider that does not answer, means the grant may still stand.
+ * Any 2xx answer means the service took the request ; anything else, and a
+ * service that does not answer, means the grant may still stand.
  */
 export interface OAuth2Revocation {
   /** The revocation endpoint (https). */
@@ -467,7 +472,7 @@ export interface SshKeyCredentialSpec {
 
 /**
  * An account the gateway itself holds, with no secret at all: nothing to
- * paste, nothing to verify, nothing to refresh or revoke at a provider. The
+ * paste, nothing to verify, nothing to refresh or revoke at a service. The
  * connect page is one button; the account belongs to the person who pressed
  * it and is never shared. Only the host creates such an account, and a plugin
  * declaring this kind loads only when the host composes it (bundled, never
@@ -500,7 +505,7 @@ export interface OAuth2Secret extends SecretBase {
   readonly kind: 'oauth2';
   readonly accessToken: string;
   readonly refreshToken: string | null;
-  /** ISO-8601 ; null when the provider does not say. */
+  /** ISO-8601 ; null when the service does not say. */
   readonly expiresAt: string | null;
   readonly scopes: readonly string[];
 }

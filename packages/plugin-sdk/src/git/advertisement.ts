@@ -9,7 +9,7 @@
  * The host's git door reads the upstream advertisement of a push and writes
  * the one git sees : the same refs minus the gateway's own temporary refs,
  * and only the capabilities the door implements. A plugin reads it to learn
- * the current value of a ref and the capabilities of its provider's server.
+ * the current value of a ref and the capabilities of its service's server.
  */
 
 import {

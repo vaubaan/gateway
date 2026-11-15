@@ -21,24 +21,24 @@ Invalid instance configuration (1 problem):
 
 ## Sign-in providers
 
-People sign in through one or more providers, offered side by side on the sign-in page:
+People sign in through one or more sign-in providers, offered side by side on the sign-in page:
 
-- **OpenID Connect**, your company's directory. One provider under `idp.*` (callback `https://your-domain/auth/callback`), or any number under `sign_in.<id>.*` with `kind: oidc` (callback `https://your-domain/auth/callback/<id>`).
+- **OpenID Connect**, your company's directory. One sign-in provider under `idp.*` (callback `https://your-domain/auth/callback`), or any number under `sign_in.<id>.*` with `kind: oidc` (callback `https://your-domain/auth/callback/<id>`).
 - **GitHub**, through a GitHub OAuth App, under `sign_in.<id>.*` with `kind: github` (callback `https://your-domain/auth/callback/<id>`).
 
-Providers can also be added from the interface, Settings → Administration → Sign-in, by an administrator; a provider set in the configuration is read-only there. Until a provider exists, the bootstrap token (`bootstrap_token`) lets the first administrator in; the first sign-in of a person matching the admin rule revokes it.
+Sign-in providers can also be added from the interface, Settings → Administration → Sign-in, by an administrator; one set in the configuration is read-only there. Until a sign-in provider exists, the bootstrap token (`bootstrap_token`) lets the first administrator in; the first sign-in of a person matching the admin rule revokes it.
 
-A provider where anyone can open an account (GitHub, personal Google or Microsoft accounts) is refused without allowed email domains (`allowed_email_domains`) or "invitation only" (`invitation_only`); invitations are made on Settings → People. A person is a pair (issuer, subject): the same person at two providers is two accounts, never merged by email.
+A sign-in provider where anyone can open an account (GitHub, personal Google or Microsoft accounts) is refused without allowed email domains (`allowed_email_domains`) or "invitation only" (`invitation_only`); invitations are made on Settings → People. A person is a pair (issuer, subject): the same person at two sign-in providers is two accounts, never merged by email.
 
 ## The admin rule
 
-Administrators are named by the configuration only: `admin.group` (a group of the identity provider, written `<provider>:<group>` once there are several providers) or `admin.emails` (verified addresses), or both. An administrator configures the instance, keeps local teams and deactivates people; they do not answer another person's requests nor create missions on accounts they do not hold.
+Administrators are named by the configuration only: `admin.group` (a group of the identity provider, written `<sign-in provider>:<group>` once there are several sign-in providers) or `admin.emails` (verified addresses), or both. An administrator configures the instance, keeps local teams and deactivates people; they do not answer another person's requests nor create missions on accounts they do not hold.
 
 ## Services
 
 Nothing is configured per service. People connect an account with a key they create at the service, and a service that signs people in through its own authorization (Miro) gets an OAuth client the gateway registers there itself. The keys `providers.<id>.*` (`VAUBAAN_PROVIDER_<ID>_<FIELD>`) of earlier versions are no longer read: an instance that still sets them starts and logs a warning naming each one, and they can be removed.
 
-Each service's steps: [connect a provider](/docs/providers).
+Each service's steps: [connect a service](/docs/services).
 
 ## Things that are not configurable
 

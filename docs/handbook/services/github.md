@@ -1,19 +1,19 @@
 ---
-title: GitHub provider plugin
+title: GitHub plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
 last_reviewed: 2026-11-14
 ---
 
-# GitHub provider plugin — handbook
+# GitHub plugin — handbook
 
 `@vaubaan/plugin-github`: repositories, pull requests, issues, releases, workflow runs and logs,
 and the instance's git remote ([git-remote](../git-remote.md),
 [gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). One account is a
 fine-grained personal access token
 ([token first](../../decisions/one-place-to-authorize-services-token-first.md)). No risk is
-env-scoped. Rules common to every plugin: [providers README](README.md).
+env-scoped. Rules common to every plugin: [services README](README.md).
 
 ## Start here
 

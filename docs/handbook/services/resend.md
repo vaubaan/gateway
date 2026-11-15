@@ -1,12 +1,12 @@
 ---
-title: Resend provider plugin
+title: Resend plugin
 tracks:
   - plugins/resend/src/
   - plugins/resend/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Resend provider plugin — handbook
+# Resend plugin — handbook
 
 `@vaubaan/plugin-resend`: sends, domains, contacts, segments and broadcasts. Zones, envelope headers
 and the catalog rationale are product rules: spec [`resend.md`](../../spec/resend.md).

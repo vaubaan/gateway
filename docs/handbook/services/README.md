@@ -1,16 +1,16 @@
 ---
-title: Provider plugin handbooks — index
+title: Plugin handbooks — index
 tracks:
   - plugins/*/src/risk-catalog.yaml
   - plugins/*/src/index.ts
-  - apps/gateway/src/server/accounts/shipped-providers.test.ts
+  - apps/gateway/src/server/accounts/shipped-services.test.ts
 last_reviewed: 2026-10-31
 ---
 
-# Provider plugin handbooks
+# Plugin handbooks
 
 One handbook per plugin (`plugins/<id>`): where to start, the classification invariants a reviewer
-checks, upstream traps, what to set up at the provider, debug. Tools, slices, risks and macro-actions are
+checks, upstream traps, what to set up at the service, debug. Tools, slices, risks and macro-actions are
 read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: spec
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) and
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5; contract:
@@ -32,7 +32,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 - Undeclared arguments are refused in `classify` and again in `execute` when the executor forwards
   its arguments; a plugin that builds each request field by field ignores them.
 - What the executor declines is an `isError` result carrying the reason (no `upstream_error` in the
-  audit); a provider failure is thrown: 401/403 `UpstreamAuthError`, other statuses
+  audit); a service failure is thrown: 401/403 `UpstreamAuthError`, other statuses
   `UpstreamHttpError`.
 - An env-scoped risk runs only on a resource labelled with an environment its entry lists: an
   **unlabelled resource cannot run env-scoped operations** (`risk-not-accepted`) until the owner
@@ -66,14 +66,14 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 | Vaubaan         | [`vaubaan.md`](./vaubaan.md)                 | `host`     | The gateway's own management tools; one click, bound by the host.      |
 | Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                         |
 
-## Revoking an account: what happens at the provider
+## Revoking an account: what happens at the service
 
-Revoking erases the credential and, where the provider documents an endpoint, withdraws the grant
+Revoking erases the credential and, where the service documents an endpoint, withdraws the grant
 there too ([accounts](../accounts.md),
 [ADR](../../decisions/provider-side-revocation-on-connection-revoke.md)). An endpoint enters this table only once read in the
-provider's documentation through Context7, never from memory.
+service's documentation through Context7, never from memory.
 
-| Provider        | Withdrawn by the gateway                                                                                                            | Otherwise, by hand                                                                                           |
+| Service         | Withdrawn by the gateway                                                                                                            | Otherwise, by hand                                                                                           |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Asana           | no                                                                                                                                  | Asana developer console, Personal access tokens: delete the gateway's token                                  |
 | Google Calendar | **yes** — `POST /revoke` with the refresh token, relayed by the OAuth broker to Google                                              | Google Account, Security, third-party apps with account access                                               |
@@ -81,11 +81,11 @@ provider's documentation through Context7, never from memory.
 | Outlook         | no — Microsoft offers no endpoint to revoke one refresh token; the broker's `/revoke` calls nothing and the gateway erases its copy | Microsoft account: Privacy → App access (personal) or My Apps → manage apps (work): remove the gateway's app |
 | Axonaut         | no                                                                                                                                  | regenerate the API key in Axonaut, Settings (Paramètres), API                                                |
 | SSH             | no                                                                                                                                  | remove the account's public key from `authorized_keys` on the host                                           |
-| every other     | no, on purpose: a pasted key or app password                                                                                        | delete it at the provider; the gateway erases its copy and deletes nothing there                             |
+| every other     | no, on purpose: a pasted key or app password                                                                                        | delete it at the service; the gateway erases its copy and deletes nothing there                              |
 
 - Keys are not withdrawn on purpose: a person created them and may use them elsewhere. GitHub's
   `POST /credentials/revoke` is a leak-report endpoint (403 on an authenticated call); no endpoint
   deleting a Supabase or Railway personal token exists.
 - Each plugin's "by hand" sentence is its `manualRevocation`, shown in the disconnect dialog.
-  `shipped-providers.test.ts` pins which plugins declare an endpoint: adding one changes the test
+  `shipped-services.test.ts` pins which plugins declare an endpoint: adding one changes the test
   and this table in the same commit.

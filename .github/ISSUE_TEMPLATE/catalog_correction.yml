@@ -1,18 +1,18 @@
 name: Catalog correction
-description: A risk of a provider plugin is wrong, missing or misdescribed, or a call is classified wrongly.
+description: A risk of a plugin is wrong, missing or misdescribed, or a call is classified wrongly.
 title: '[catalog] '
 labels: ['catalog']
 body:
   - type: markdown
     attributes:
       value: |
-        A plugin's risk catalog (`plugins/<provider>/src/risk-catalog.yaml`) and its classifier decide what a mission lets an agent do.
+        A plugin's risk catalog (`plugins/<service>/src/risk-catalog.yaml`) and its classifier decide what a mission lets an agent do.
 
         **Stop if the problem lets a mission do more than it accepted** (a write classified as a read, a call that escapes its resource, a dangerous call no risk covers). That is a vulnerability: report it privately as `SECURITY.md` says, not here.
 
         This form is for everything else: a call refused that should not be, a risk that is too broad or too narrow to be useful, a risk in the wrong row, a misleading label, a macro-action that does not fit real work.
   - type: input
-    id: provider
+    id: service
     attributes:
       label: Plugin
       description: The folder name under `plugins/`.
@@ -23,7 +23,7 @@ body:
     id: version
     attributes:
       label: Plugin version and catalog version
-      description: '`version` in `plugins/<provider>/src/index.ts` and `catalog_version` in its `risk-catalog.yaml`, or the commit you read.'
+      description: '`version` in `plugins/<service>/src/index.ts` and `catalog_version` in its `risk-catalog.yaml`, or the commit you read.'
       placeholder: plugin 2.0.0, catalog 2 / abc1234
     validations:
       required: true
@@ -64,8 +64,8 @@ body:
   - type: input
     id: source
     attributes:
-      label: Provider documentation
-      description: Link to the provider's documentation of the operation. A catalog is never changed from memory.
+      label: Service documentation
+      description: Link to the service's documentation of the operation. A catalog is never changed from memory.
     validations:
       required: true
   - type: dropdown
@@ -85,4 +85,4 @@ body:
       options:
         - label: This does not let a mission do more than it accepted (otherwise I am using private vulnerability reporting).
           required: true
-        - label: I read the plugin's handbook under `docs/handbook/providers/`, including its "Edge cases" section.
+        - label: I read the plugin's handbook under `docs/handbook/services/`, including its "Edge cases" section.

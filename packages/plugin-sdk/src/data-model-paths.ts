@@ -31,7 +31,7 @@ import type {
   SliceSegment,
 } from '@vaubaan/shared';
 
-import type { ProviderPlugin } from './plugin.ts';
+import type { ServicePlugin } from './plugin.ts';
 
 /**
  * `'pattern'` — a catalog `matches` pattern : `[*]` stands for one identifier,
@@ -52,11 +52,11 @@ export interface SlicePathOptions {
 }
 
 /**
- * Where a walk can be : at the provider (before any entity), at one of these
+ * Where a walk can be : at the service (before any entity), at one of these
  * entities, or past a virtual leaf (its name).
  */
 type Position =
-  readonly DataModelEntity[] | 'provider' | { readonly leaf: string; readonly under: string };
+  readonly DataModelEntity[] | 'service' | { readonly leaf: string; readonly under: string };
 
 /** The first issue of `slice`'s path on `model`, or `null` when the path is one of the model. */
 export function slicePathIssue(
@@ -67,7 +67,7 @@ export function slicePathIssue(
 ): string | null {
   const cardinalities = mode === 'slice' && (options.cardinalities ?? true);
   const entities = model.planes.flatMap((plane) => plane.entities);
-  let at: Position = 'provider';
+  let at: Position = 'service';
   let afterAnything = false;
   let identified = false;
   for (const segment of slice.path) {
@@ -86,7 +86,7 @@ export function slicePathIssue(
       }
       const next = entitiesNamed(entities, at, segment.value, afterAnything);
       if (next.length === 0) {
-        if (at === 'provider') return `'${segment.value}' is not an entity of the data model`;
+        if (at === 'service') return `'${segment.value}' is not an entity of the data model`;
         // A virtual leaf one or two letters away from an entity is a typo of it.
         const near = nearestEntity(entities, segment.value);
         if (near)
@@ -98,7 +98,7 @@ export function slicePathIssue(
       continue;
     }
     if (afterAnything) continue;
-    if (at === 'provider') return `identifier '${render(segment)}' before any entity`;
+    if (at === 'service') return `identifier '${render(segment)}' before any entity`;
     const name = isLeaf(at) ? at.leaf : at[0]!.name;
     if (identified) return `two identifiers in a row after '${name}'`;
     if (cardinalities && isEntities(at)) {
@@ -154,12 +154,12 @@ function isEntities(at: Position): at is readonly DataModelEntity[] {
  */
 function entitiesNamed(
   entities: readonly DataModelEntity[],
-  at: readonly DataModelEntity[] | 'provider',
+  at: readonly DataModelEntity[] | 'service',
   name: string,
   afterAnything: boolean,
 ): DataModelEntity[] {
   const named = entities.filter((e) => e.name === name);
-  if (at === 'provider') return named;
+  if (at === 'service') return named;
   const parents = new Set(at.map((e) => e.name));
   return named.filter((e) =>
     afterAnything
@@ -221,7 +221,7 @@ function render(segment: SliceSegment): string {
  * are kept for the id, not maintained) whose entity path is not one of the
  * plugin's data model, as `risks[i] '<id>' matches '<pattern>': <issue>`.
  */
-export function catalogPathIssues(plugin: Pick<ProviderPlugin, 'catalog' | 'dataModel'>): string[] {
+export function catalogPathIssues(plugin: Pick<ServicePlugin, 'catalog' | 'dataModel'>): string[] {
   const issues: string[] = [];
   plugin.catalog.risks.forEach((risk, i) => {
     if (risk.deprecated === true) return;

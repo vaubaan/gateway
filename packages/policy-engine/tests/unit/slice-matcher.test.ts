@@ -12,7 +12,7 @@ describe('matches — concrete slice against a pattern', () => {
     ).toBe(true);
   });
 
-  test('different provider does not match', () => {
+  test('different service does not match', () => {
     expect(matches(p('github.repo[foo].W'), p('vercel.repo[foo].W'))).toBe(false);
   });
 
@@ -147,11 +147,11 @@ describe('intersects — symmetric overlap', () => {
     expect(intersects(p('github.repo[*].R'), p('github.repo[*].W'))).toBe(false);
   });
 
-  test('different providers never intersect', () => {
+  test('different services never intersect', () => {
     expect(intersects(p('github.repo[*].W'), p('vercel.project[*].W'))).toBe(false);
   });
 
-  test('** intersects with anything in the same provider/action', () => {
+  test('** intersects with anything in the same service/action', () => {
     expect(intersects(p('github.**.W'), p('github.repo[foo].branch[main].W'))).toBe(true);
     expect(intersects(p('github.**.W'), p('github.W'))).toBe(true);
   });

@@ -5,7 +5,7 @@ import { checkAcceptableInEnv, prepareCatalog } from '../../src/risk-policy.ts';
 import { hasFallbackRisk } from '../../src/risk-evaluator.ts';
 
 const catalog: RiskCatalog = {
-  provider: 'supabase',
+  service: 'supabase',
   risks: [
     {
       id: 'supabase.read-rows',
@@ -106,7 +106,7 @@ describe('prepareCatalog — fallback warning is injectable', () => {
     const warnings: string[] = [];
     const warn = (m: string) => warnings.push(m);
     const noFallback: RiskCatalog = {
-      provider: 'acme',
+      service: 'acme',
       risks: [
         {
           id: 'acme.read',

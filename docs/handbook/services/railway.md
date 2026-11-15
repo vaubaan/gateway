@@ -1,12 +1,12 @@
 ---
-title: Railway provider plugin
+title: Railway plugin
 tracks:
   - plugins/railway/src/
   - plugins/railway/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Railway provider plugin — handbook
+# Railway plugin — handbook
 
 `@vaubaan/plugin-railway` rewraps Railway's MCP server (`mcp.railway.com`, tools frozen in
 `src/upstream-tools.json`, [ADR](../../decisions/rewrap-official-mcps.md)) and adds GraphQL variable

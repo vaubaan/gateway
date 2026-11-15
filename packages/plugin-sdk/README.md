@@ -1,13 +1,13 @@
 # @vaubaan/plugin-sdk
 
-The contract a provider plugin of [Vaubaan Gateway](https://github.com/vaubaan/gateway)
-implements, the test kit it runs, and the helpers it calls its provider with.
+The contract a plugin of [Vaubaan Gateway](https://github.com/vaubaan/gateway)
+implements, the test kit it runs, and the helpers it calls its service with.
 
 Vaubaan Gateway is an open-source MCP gateway: a coding agent works under a
 **mission** (resources, accepted risks, a budget) instead of holding a cloud
-credential. A plugin teaches the gateway one provider. It does two things the
+credential. A plugin teaches the gateway one service. It does two things the
 gateway cannot: it **classifies** a tool call into the **slices** of the
-provider's data model it touches, which the gateway matches against the
+service's data model it touches, which the gateway matches against the
 **risks** of the plugin's catalog; and it **executes** an allowed call with
 the credential the gateway hands it. It never sees the mission, the accepted
 risks or the budget.
@@ -30,11 +30,11 @@ export default definePlugin({ id: 'acme', displayName: 'Acme', version: '0.1.0',
 `definePlugin` checks the whole definition when the module loads and lists
 every problem at once. Three entry points:
 
-| Import                        | What it holds                                                                                                                                                                                 |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@vaubaan/plugin-sdk`         | `ProviderPlugin` and its types, `definePlugin`, the catalog loader, identifier grammars, and the one way to call a provider: `httpJson`, `readBounded`, `readShape`, the upstream MCP client. |
-| `@vaubaan/plugin-sdk/testing` | The assertions every plugin test runs (`assertCatalogCoverage`, `assertIdentifiersRefused`, `assertSlicesOnDataModel`…), `mockFetch`, `policyFromMacroActions`, `decideCall`.                 |
-| `@vaubaan/plugin-sdk/git`     | The git wire code and `GitRemoteCapability`, for a plugin that is its agents' git remote.                                                                                                     |
+| Import                        | What it holds                                                                                                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@vaubaan/plugin-sdk`         | `ServicePlugin` and its types, `definePlugin`, the catalog loader, identifier grammars, and the one way to call a service: `httpJson`, `readBounded`, `readShape`, the upstream MCP client. |
+| `@vaubaan/plugin-sdk/testing` | The assertions every plugin test runs (`assertCatalogCoverage`, `assertIdentifiersRefused`, `assertSlicesOnDataModel`…), `mockFetch`, `policyFromMacroActions`, `decideCall`.               |
+| `@vaubaan/plugin-sdk/git`     | The git wire code and `GitRemoteCapability`, for a plugin that is its agents' git remote.                                                                                                   |
 
 ## Write one
 

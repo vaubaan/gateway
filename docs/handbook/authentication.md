@@ -24,7 +24,7 @@ web sessions, the bootstrap token and recovery. Spec:
 - [`auth/admission.ts`](../../apps/gateway/src/server/auth/admission.ts) — who may sign in.
 - [`auth/administrators.ts`](../../apps/gateway/src/server/auth/administrators.ts) — designations, seed, drift, `assertNoLockout`.
 - [`auth/guard.ts`](../../apps/gateway/src/server/auth/guard.ts) — `guardMutation`, the one mutation guard.
-- [`auth/sign-in-providers.ts`](../../apps/gateway/src/server/auth/sign-in-providers.ts) — providers from the file and from Settings.
+- [`auth/sign-in-providers.ts`](../../apps/gateway/src/server/auth/sign-in-providers.ts) — sign-in providers from the file and from Settings.
 
 ## Invariants
 
@@ -32,7 +32,7 @@ web sessions, the bootstrap token and recovery. Spec:
   syncs no group. `upsertFromIdp` never changes a status, so an IdP vouching
   never reactivates anyone.
 - Operator status is recomputed at every `authenticate()`, never read from the
-  session. Only the designated group's own provider makes a member an
+  session. Only the designated group's own sign-in provider makes a member an
   operator; a local group never does.
 - Every human mutation goes through `guardMutation` (origin from `public_url`,
   never forwarded headers); every page and route under `admin/(guarded)`
@@ -73,8 +73,8 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 - `readCookie` matches the name exactly (no `trim()`: ` __Host-…` is another
   cookie a sibling may plant); a name present twice reads as none.
 - 50 wrong bootstrap tokens revoke the token for good: anyone can close the
-  bootstrap path of an instance with no provider, so deploy guides set the
-  provider in the configuration first. In setup mode (no store yet) the count
+  bootstrap path of an instance with no sign-in provider, so deploy guides set
+  the sign-in provider in the configuration first. In setup mode (no store yet) the count
   is the file `setup-misses` next to the key file, so a restart does not reset
   it; it is removed when the setup completes, and deleting it by hand is how an
   operator unlocks a setup that reached 50.
@@ -82,27 +82,28 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   assigned to the application"), not an email: tenant User Administrators can
   set `mail`. An email rule needs the optional claim `xms_edov` mapped as
   `claims.email_verified` and `require_verified_email`.
-- A provider saved from Settings stays off until a test passes since its last
+- A sign-in provider saved from Settings stays off until a test passes since its last
   save; the test runs the real flow and writes nothing (no user, session,
   group sync). It starts from a form (`POST /auth/test/<id>`, `guardMutation`,
   in another window), never a link.
-- `backup` writes every file/env provider into the copy (never the live
+- `backup` writes every file/env sign-in provider into the copy (never the live
   store), secrets sealed; on the restoring host its own configuration wins on
-  an id collision (the copy stays hidden). `registered_for` flags a provider
-  set up for another host: register the new callback, then test.
+  an id collision (the copy stays hidden). `registered_for` flags a
+  sign-in provider set up for another host: register the new callback, then
+  test.
 - Sign-in buttons are never prefetched: a prefetch starts a sign-in.
 
 ## Outside the repo
 
-- Each provider's callback, `<public_url>/auth/callback/<id>`, is registered at
-  the IdP, per public URL. The provider `idp` of earlier builds (`idp.*`, then
-  `/auth/callback`) is an ordinary provider since 2026-10-31: its stored settings
-  are moved at boot (`auth/single-provider-upgrade.ts`), its callback is
+- Each sign-in provider's callback, `<public_url>/auth/callback/<id>`, is
+  registered at the IdP, per public URL. The sign-in provider `idp` of earlier
+  builds (`idp.*`, then `/auth/callback`) is an ordinary one since 2026-10-31:
+  its stored settings are moved at boot (`auth/single-sign-in-provider-upgrade.ts`), its callback is
   `/auth/callback/idp`.
 
 ## Procedures
 
-- **Bootstrap lockout** ("no longer available"): set a provider in the
+- **Bootstrap lockout** ("no longer available"): set a sign-in provider in the
   configuration and redeploy; or set a new token (32+ characters), delete the
   `instance_config` keys `bootstrap.revoked_at` and `bootstrap.misses` from a
   shell in the container (`vaubaan-entrypoint node -e …` over

@@ -1,18 +1,18 @@
 ---
-title: Resend provider — spec
+title: Resend service — spec
 status: stable
 ---
 
-# Resend provider — spec
+# Resend service — spec
 
-> **Status:** stable. _What_ the Resend provider exposes and _why_; _how_: the
-> [Resend handbook](../handbook/providers/resend.md). Vocabulary:
+> **Status:** stable. _What_ the Resend service exposes and _why_; _how_: the
+> [Resend handbook](../handbook/services/resend.md). Vocabulary:
 > [vaubaan-gateway](./vaubaan-gateway.md) §0; risk model:
 > [gateway-risk-model](./gateway-risk-model.md).
 
 ## 0. Vision
 
-The gateway's **outbound email** provider: transactional emails from a verified domain, broadcasts
+The gateway's **outbound email** service: transactional emails from a verified domain, broadcasts
 to a curated contact list (drafted, and under a distinct risk sent), and sending domains (add,
 verify, check). The model is organised around **who the email goes to** (an arbitrary address can
 exfiltrate anything the agent read, irreversibly) and **how many it reaches** (a batch or broadcast
@@ -216,5 +216,5 @@ The environment is the owner's label on the resource the action is rooted at.
 
 ## 11. Open points
 
-- **Preset budgets are provisional**: the cross-provider decision on default quotas, rates and gates
+- **Preset budgets are provisional**: the cross-service decision on default quotas, rates and gates
   is not taken.

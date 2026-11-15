@@ -5,7 +5,7 @@
  * docs/spec/vaubaan-gateway.md §4.1 ("check `risks_touched ⊆ accepted_risks`").
  *
  * `evaluateCallForMission` classifies a call into slices, intersects them with
- * the provider catalog, and produces an allow/deny verdict. Unchanged by the
+ * the service catalog, and produces an allow/deny verdict. Unchanged by the
  * v5 pivot: v5 adds the budget *after* this decision, it does not change
  * which risks are acceptable. The pipeline (`pipeline.ts`) orchestrates
  * around it; keeping this module pure keeps it trivially unit-testable.
@@ -23,7 +23,7 @@
  */
 
 import type { RefusalCode, Resource, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
-import type { ClassifyAccount, ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ClassifyAccount, ClassifyOutcome, ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import {
   envResolverFor,
@@ -71,17 +71,17 @@ export type CallVerdict =
       missing_by_set?: readonly { resource_set_id: string; missing_risks: readonly RiskId[] }[];
     } & ResourceSetsJudged)
   | { kind: 'classify-denied'; reason: string }
-  | { kind: 'no-catalog'; provider: string };
+  | { kind: 'no-catalog'; service: string };
 
 /**
  * The classification half of the plugin contract: `classify(tool, args,
- * resources)` plus the optional `envOf` derivation. A `ProviderPlugin`
+ * resources)` plus the optional `envOf` derivation. A `ServicePlugin`
  * satisfies it as-is; tests pass a stub.
  */
-export type Classifier = Pick<ProviderPlugin, 'classify' | 'envOf'>;
+export type Classifier = Pick<ServicePlugin, 'classify' | 'envOf'>;
 
 /**
- * Pure: classify a call into slices, intersect with the provider catalog,
+ * Pure: classify a call into slices, intersect with the service catalog,
  * decide allow/deny. The caller does the resource, budget, upstream and
  * audit work around it and emits the JSON-RPC response.
  *
@@ -110,7 +110,7 @@ export function evaluateCallForMission(input: {
   const { tool, args, resources, mission, adapter, catalog } = input;
 
   if (!catalog) {
-    return { kind: 'no-catalog', provider: 'unknown' };
+    return { kind: 'no-catalog', service: 'unknown' };
   }
 
   const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.account);
@@ -221,7 +221,7 @@ export function evaluateCallForResourceSets(input: {
   envResolver?: EnvResolver | typeof UNQUALIFIED;
 }): CallVerdict {
   const { tool, args, resources, sets, adapter, catalog } = input;
-  if (!catalog) return { kind: 'no-catalog', provider: 'unknown' };
+  if (!catalog) return { kind: 'no-catalog', service: 'unknown' };
   const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.account);
   if ('denied' in classified) return { kind: 'classify-denied', reason: classified.denied };
 

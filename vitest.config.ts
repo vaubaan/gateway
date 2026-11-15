@@ -74,7 +74,7 @@ export default defineConfig({
       },
     ],
     coverage: {
-      provider: 'v8',
+      service: 'v8',
       reporter: ['text', 'html'],
       exclude: ['**/*.d.ts', '**/tests/**', '**/*.config.*', '**/dist/**'],
     },

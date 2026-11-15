@@ -8,8 +8,8 @@
  * A classifier reads the arguments it knows. An argument it does not know was
  * priced by no rule, and an executor that forwards the arguments it was given
  * (a JSON body built from `args`, a rewrapped upstream tool) would send it to
- * the provider all the same — `verify_jwt: false` next to a deployment, a
- * field the provider added after the schema was written. Dropping it silently
+ * the service all the same — `verify_jwt: false` next to a deployment, a
+ * field the service added after the schema was written. Dropping it silently
  * in `execute` would be a repair ; the call is refused in `classify`, so the
  * agent learns the argument does nothing here and the audit records the
  * refusal.

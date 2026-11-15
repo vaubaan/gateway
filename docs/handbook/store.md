@@ -67,6 +67,13 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   (`crypto/aead.ts`) never move: change one byte and no stored credential opens. A test that
   seeds an older version writes the old names and stops before 0036; `SEALED_COLUMNS` reads a
   restored copy's accounts table under its pre-0036 name (`pre-rename-backup.test.ts`).
+- **Migration 0037 renamed provider in place** (same ADR, rename R2): `accounts.service`,
+  `accounts.service_grant`, and `sign_in_provider` on `groups`, `administrators`,
+  `sign_in_accounts` and `local_links`. Its rewrite of the audit's JSON goes by the sense of the
+  act: an act of sign-in, people or administration says `sign_in_provider`, `config-changed` is
+  left as written (an OAuth broker's `providers`), any other says `service…`; the web sessions
+  are rewritten too, so nobody is signed out (`pre-service-rename-backup.test.ts`). A test that
+  seeds a version before 0037 writes `provider`.
 - `issueToken` re-checks membership and mission status inside the insert transaction
   (`TokenNotIssuableError`), because hashing the secret leaves time for a revocation.
 

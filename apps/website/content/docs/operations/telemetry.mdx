@@ -17,7 +17,7 @@ Community telemetry is an opt-in report an instance can send to a collector so t
 - `plugin-health`: one report per call a plugin executed — plugin, plugin version, gateway version, tool, outcome, error class, duration bucket.
 - `usage-stats`: the same, plus one decision per call the gateway decided (allowed or the refusal code, the permissions touched without your environment labels) and one instance profile per UTC day (counts as buckets only, the plugins and their versions, and a stable random instance identifier that this profile alone carries; see it, or regenerate it, on Settings → Administration → Telemetry).
 
-Never sent: arguments or their hash, payloads, provider answers or error text, resource references, environment labels, mission, user or account identifiers, emails, account names, host names, URLs, an identifier of the instance on a call, an address. Every field: [trust center, What leaves an instance](/trust#what-leaves-an-instance).
+Never sent: arguments or their hash, payloads, service answers or error text, resource references, environment labels, mission, user or account identifiers, emails, account names, host names, URLs, an identifier of the instance on a call, an address. Every field: [trust center, What leaves an instance](/trust#what-leaves-an-instance).
 
 ## The collector address
 

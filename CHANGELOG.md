@@ -9,6 +9,60 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Breaking
+
+- **Provider is service, in the code, the store and the protocol; the sign-in provider says
+  so** (ADR one-word-per-thing-account-service-plugin, rename R2). GitHub, Vercel or Gmail
+  is a service everywhere a person, an agent or an integration reads it; provider is left to
+  the sign-in provider people sign in through and to the OAuth provider of an OAuth broker.
+  Old → new:
+  - plugin `vaubaan` 0.3.0, `vaubaan__get_catalog`: argument `provider` → `service`; its answer’s `provider`,
+    `provider_label` → `service`, `service_label`; refusal `unknown-provider` →
+    `unknown-service`, its list `providers` → `services`;
+  - `vaubaan__list_my_accounts`: each account’s `provider`, `provider_label` → `service`,
+    `service_label`;
+  - `vaubaan__preview_policy` and `vaubaan__issue_mission`: an account named by `provider` →
+    `service`; issue code `duplicate-provider` → `duplicate-service`; `uncovered[].provider`
+    → `service`;
+  - the execution door’s catalog (`tools[].provider`, `accounts[].provider`) → `service`;
+  - an account’s fields `provider`, `provider_label`, `provider_icon`, `provider_grant` →
+    `service`, `service_label`, `service_icon`, `service_grant`; an approval’s
+    `provider_pages` → `service_pages`;
+  - connect errors `provider-unknown`, `provider-denied`, `provider-unreachable`,
+    `provider-mismatch` → `service-…`; a share’s `provider-unknown` → `service-unknown`; the
+    v4 import’s `provider-not-shipped` → `service-not-shipped`;
+  - sign-in errors `provider-unknown`, `provider-disabled`, `no-local-provider` →
+    `sign-in-provider-unknown`, `sign-in-provider-disabled`, `no-local-sign-in-provider`;
+    the forms of Settings › Sign-in, People and the recovery page post `sign_in_provider_id`
+    / `sign_in_provider`;
+  - plugin SDK 0.9.4: `ServicePlugin`, `ServiceLabel`, `serviceForTool`, the catalog and data
+    model’s `service`, a slice’s and a resource’s `service`, the token expiry
+    `service-reports`. `ProviderPlugin`, `ProviderLabel` and `providerForTool` stay as
+    deprecated aliases until 0.10, a catalog that still writes `provider:` loads, and a
+    plugin pinned from an earlier SDK is read in the new words (`fromLegacyPlugin`). The
+    OAuth broker’s `broker: { provider }` keeps its name: it is the broker protocol’s.
+
+  Store migration 0037 renames `accounts.provider` → `service`, `accounts.provider_grant` →
+  `service_grant`, and the sign-in provider of groups, administrators, sign-in accounts and
+  their links → `sign_in_provider`, in place; it rewrites the audit’s JSON snapshots (a
+  service’s `provider…` → `service…`, a sign-in provider’s `provider` → `sign_in_provider`),
+  the session events, the requests’ decisions and the web sessions (nobody is signed out).
+  No id and no sealed byte changes. A backup written before the upgrade restores. The site’s
+  `/docs/providers` is `/docs/services` (the old addresses redirect). Kept on purpose: the
+  OAuth broker’s wire and its `providers` key, the retired keys `providers.<id>.*` and
+  `VAUBAAN_PROVIDER_*`, and the telemetry payload, which never carried the word. No
+  configuration key changes.
+
+### Plugin SDK
+
+- **0.9.4 — `ServicePlugin` and the word service** (ADR
+  one-word-per-thing-account-service-plugin, rename R2): the plugin contract, its label, the
+  registry's `serviceForTool`, the `service` of a catalog, a data model, a slice and a resource,
+  and the token expiry `service-reports`. `ProviderPlugin`, `ProviderLabel` and
+  `providerForTool` stay as `@deprecated` aliases until 0.10, the catalog loader reads a
+  `provider:` key as `service:`, and `fromLegacyPlugin` reads a plugin of an earlier SDK in the
+  new words both ways: a pin built against 0.9 loads as before.
+
 ## [2.0.0-alpha.21] - 2026-11-14
 
 ### Breaking
@@ -75,7 +129,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   apps are retired** (ADR platform-management-is-a-plugin-on-the-execution-door). A
   person connects their Vaubaan account in one click, creates the platform management
   mission the account page offers (every macro-action at Careful) and gives its key to
-  the agent, which calls `vaubaan__list_my_connections`, `vaubaan__issue_mission` and the
+  the agent, which calls `vaubaan__list_my_accounts`, `vaubaan__issue_mission` and the
   five others on `/mcp` — same arguments and answers as before, but for `issued_via`,
   which names the issuing mission. A mission never rotates nor revokes itself, and a
   mission it issues never holds a Vaubaan account. `/mcp/manage` answers 404 with a

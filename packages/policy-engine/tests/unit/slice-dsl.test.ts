@@ -6,7 +6,7 @@ describe('parseSlice — happy paths', () => {
   test('simple name segments + R action', () => {
     const s = parseSlice('github.repo.code.R');
     expect(s).toEqual({
-      provider: 'github',
+      service: 'github',
       path: [
         { kind: 'name', value: 'repo' },
         { kind: 'name', value: 'code' },
@@ -18,7 +18,7 @@ describe('parseSlice — happy paths', () => {
   test('bracketed ident segment', () => {
     const s = parseSlice('github.repo[sbw-vaubaan/gateway].branch[main].W');
     expect(s).toEqual({
-      provider: 'github',
+      service: 'github',
       path: [
         { kind: 'name', value: 'repo' },
         { kind: 'ident', value: 'sbw-vaubaan/gateway' },
@@ -65,16 +65,16 @@ describe('parseSlice — happy paths', () => {
     expect(s.path).toEqual([{ kind: 'wild-rec' }]);
   });
 
-  test('degenerate slice — provider + action only is accepted', () => {
+  test('degenerate slice — service + action only is accepted', () => {
     // Edge case for fallbacks like 'github.R' — the parser accepts it,
     // path is empty.
     const s = parseSlice('github.R');
-    expect(s).toEqual({ provider: 'github', path: [], action: 'R' });
+    expect(s).toEqual({ service: 'github', path: [], action: 'R' });
   });
 });
 
 describe('parseSlice — error cases', () => {
-  test('missing provider', () => {
+  test('missing service', () => {
     expect(() => parseSlice('.repo.W')).toThrow(SliceParseError);
   });
 
@@ -98,7 +98,7 @@ describe('parseSlice — error cases', () => {
     expect(() => parseSlice('github.repo..branch.W')).toThrow(SliceParseError);
   });
 
-  test('provider with /', () => {
+  test('service with /', () => {
     expect(() => parseSlice('git/hub.repo.W')).toThrow(SliceParseError);
   });
 

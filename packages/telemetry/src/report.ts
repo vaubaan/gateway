@@ -60,7 +60,7 @@ export const ERROR_CLASSES_BY_OUTCOME = {
 
 export type NamedErrorClass =
   (typeof ERROR_CLASSES_BY_OUTCOME)[keyof typeof ERROR_CLASSES_BY_OUTCOME][number];
-/** `http_<status>`: the HTTP status of the provider's answer, 100 to 599. */
+/** `http_<status>`: the HTTP status of the service's answer, 100 to 599. */
 export type HttpErrorClass = `http_${number}`;
 export type ErrorClass = NamedErrorClass | HttpErrorClass;
 

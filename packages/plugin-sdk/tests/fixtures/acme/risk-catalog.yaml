@@ -1,5 +1,5 @@
-# Fixture catalog for the SDK's own tests. Not a real provider.
-provider: acme
+# Fixture catalog for the SDK's own tests. Not a real service.
+service: acme
 catalog_version: 4
 catalog_date: 2026-10-31
 

@@ -8,7 +8,7 @@
  *
  * Shared by the host's git door (which reads the agent's command list and
  * writes the report git prints) and by a plugin's `execute` (which sends the
- * reviewed ref updates to its provider's git server with a command list and
+ * reviewed ref updates to its service's git server with a command list and
  * an empty pack). Pure, except `sendRefUpdates`, which takes its `fetch`.
  */
 

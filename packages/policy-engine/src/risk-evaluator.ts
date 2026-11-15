@@ -1,11 +1,11 @@
 /**
- * Risk evaluator — intersect a runtime slice with a provider catalog to
+ * Risk evaluator — intersect a runtime slice with a service catalog to
  * derive the set of `RiskId` "touched" by the call.
  *
  * Spec : docs/spec/gateway-risk-model.md §1 (the runtime panel) + §4.
  * ADR  : docs/decisions/fallback-risk-only-when-uncategorized.md.
  *
- * Conceptually trivial : for each `RiskEntry` in the provider's catalog,
+ * Conceptually trivial : for each `RiskEntry` in the service's catalog,
  * check whether the entry's `matches` slice pattern *matches* the
  * concrete slice the plugin emitted. If it does, the risk is touched.
  *
@@ -18,8 +18,8 @@
  *  - Deprecated entries (`deprecated: true`) are kept in the matching
  *    pass : tokens that historically accepted them still authorize. The
  *    UI / mint UX surfaces the deprecation warning separately.
- *  - The **fallback** entry (`<provider>.uncategorized-write`, flagged
- *    `fallback: true` or detected by its catch-all pattern `<provider>.**.W`
+ *  - The **fallback** entry (`<service>.uncategorized-write`, flagged
+ *    `fallback: true` or detected by its catch-all pattern `<service>.**.W`
  *    / its `uncategorized-` id) is touched **only when no other entry of
  *    the catalog matches the slice**. A write covered by a dedicated entry
  *    touches that entry alone ; a write covered by none touches the
@@ -37,14 +37,14 @@ import { intersects } from './slice-matcher.ts';
 /**
  * Pre-indexed catalog : the `matches` patterns are parsed once at load
  * time and cached, so the hot-path intersect is O(N) where N is the
- * number of entries (typically 10-20 per provider).
+ * number of entries (typically 10-20 per service).
  *
  * A risk entry may declare ONE pattern (string) or MULTIPLE disjoint
  * patterns (string[]). All patterns are stored — `risksTouchedBy` fires
  * the risk when ANY of its patterns intersects with the executed slice.
  */
 export interface IndexedRiskCatalog {
-  readonly provider: string;
+  readonly service: string;
   readonly entries: ReadonlyArray<{
     readonly entry: RiskEntry;
     /** One or more parsed patterns. The risk is touched when at least
@@ -61,14 +61,14 @@ export interface IndexedRiskCatalog {
 
 /**
  * Id prefix of the catch-all entry every catalog declares :
- * `<provider>.uncategorized-`, dash included — `github.uncategorized-write`
+ * `<service>.uncategorized-`, dash included — `github.uncategorized-write`
  * carries it, `github.uncategorizedfoo` does not.
  */
-export function fallbackRiskPrefix(provider: string): string {
-  return `${provider}.uncategorized-`;
+export function fallbackRiskPrefix(service: string): string {
+  return `${service}.uncategorized-`;
 }
 
-/** True iff the parsed pattern is the catch-all write `<provider>.**.W` (one `[**]` segment, action W). */
+/** True iff the parsed pattern is the catch-all write `<service>.**.W` (one `[**]` segment, action W). */
 export function isCatchAllWritePattern(pattern: Slice): boolean {
   return (
     pattern.action === 'W' && pattern.path.length === 1 && pattern.path[0]!.kind === 'wild-rec'
@@ -76,9 +76,9 @@ export function isCatchAllWritePattern(pattern: Slice): boolean {
 }
 
 /**
- * Whether a catalog entry is the provider's fallback. The explicit
+ * Whether a catalog entry is the service's fallback. The explicit
  * `fallback: true` flag wins ; without it the entry is recognised by a
- * catch-all write pattern or by the `<provider>.uncategorized-` id
+ * catch-all write pattern or by the `<service>.uncategorized-` id
  * convention (every catalog written before the flag existed uses it).
  * `patterns` are the entry's parsed `matches` when the caller already has
  * them ; otherwise they are parsed here and an unparseable pattern simply
@@ -86,18 +86,18 @@ export function isCatchAllWritePattern(pattern: Slice): boolean {
  */
 export function isFallbackEntry(
   entry: RiskEntry,
-  provider: string,
+  service: string,
   patterns?: readonly Slice[],
 ): boolean {
   if (entry.fallback !== undefined) return entry.fallback;
-  if (entry.id.startsWith(fallbackRiskPrefix(provider))) return true;
+  if (entry.id.startsWith(fallbackRiskPrefix(service))) return true;
   const parsed = patterns ?? parsePatternsLeniently(entry);
   return parsed.some(isCatchAllWritePattern);
 }
 
 /**
  * True iff one of the entry's `matches` patterns is the catch-all write
- * `<provider>.**.W`. An unparseable pattern does not count. The SDK loader
+ * `<service>.**.W`. An unparseable pattern does not count. The SDK loader
  * requires it of the fallback entry : the fallback is left out of the
  * touched risks whenever another entry matches, which is only sound for the
  * entry that covers every write.
@@ -108,7 +108,7 @@ export function hasCatchAllWritePattern(entry: RiskEntry): boolean {
 
 /** The fallback entries of a catalog — exactly one in a valid catalog. */
 export function fallbackEntriesOf(catalog: RiskCatalog): RiskEntry[] {
-  return catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.provider));
+  return catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.service));
 }
 
 /** True iff the catalog declares at least one fallback entry. */
@@ -143,7 +143,7 @@ export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
   const seen = new Set<string>();
   const entries = catalog.risks.map((entry) => {
     if (seen.has(entry.id)) {
-      throw new Error(`Duplicate risk id '${entry.id}' in catalog '${catalog.provider}'`);
+      throw new Error(`Duplicate risk id '${entry.id}' in catalog '${catalog.service}'`);
     }
     seen.add(entry.id);
     const rawPatterns: readonly string[] =
@@ -154,23 +154,23 @@ export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
         pattern = parseSlice(raw);
       } catch (e) {
         throw new Error(
-          `Invalid 'matches' pattern in risk '${entry.id}' of provider '${catalog.provider}': ${
+          `Invalid 'matches' pattern in risk '${entry.id}' of service '${catalog.service}': ${
             e instanceof Error ? e.message : String(e)
           }`,
           { cause: e },
         );
       }
-      if (pattern.provider !== catalog.provider) {
+      if (pattern.service !== catalog.service) {
         throw new Error(
-          `Risk '${entry.id}' declares pattern for provider '${pattern.provider}' ` +
-            `but is in '${catalog.provider}'s catalog`,
+          `Risk '${entry.id}' declares pattern for service '${pattern.service}' ` +
+            `but is in '${catalog.service}'s catalog`,
         );
       }
       return pattern;
     });
-    return { entry, patterns, fallback: isFallbackEntry(entry, catalog.provider, patterns) };
+    return { entry, patterns, fallback: isFallbackEntry(entry, catalog.service, patterns) };
   });
-  return { provider: catalog.provider, entries };
+  return { service: catalog.service, entries };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
 
 /**
  * Compute the `risks_touched` set for one concrete slice against one
- * provider's catalog. Returns the matched `RiskId`s in catalog declaration
+ * service's catalog. Returns the matched `RiskId`s in catalog declaration
  * order (deterministic). The fallback entry is included **only** when no
  * other entry matched (ADR fallback-risk-only-when-uncategorized). Empty
  * array iff the slice matches no catalog entry at all, fallback included
@@ -193,7 +193,7 @@ export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
  * narrower `matches` predicate.
  */
 export function risksTouchedBy(slice: Slice, catalog: IndexedRiskCatalog): RiskId[] {
-  if (slice.provider !== catalog.provider) return [];
+  if (slice.service !== catalog.service) return [];
   const specific: RiskId[] = [];
   const fallbacks: RiskId[] = [];
   for (const { entry, patterns, fallback } of catalog.entries) {

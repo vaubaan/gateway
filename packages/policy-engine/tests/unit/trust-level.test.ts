@@ -243,7 +243,7 @@ describe('expandAtTrustLevel', () => {
 
 describe('macroActionsOf — the catalog\'s macro-actions, then "Anything else"', () => {
   const catalog = {
-    provider: 'acme',
+    service: 'acme',
     risks: [
       { id: 'acme.read', label: 'Read', reason: 'r', matches: 'acme.x.R', vector: mild },
       {

@@ -28,7 +28,7 @@ and the call pipeline whose stages the application fills
 ## Invariants
 
 - **The barrel names the public API** (`src/index.ts`, no `export *`, **[inv: named-package-barrels]**): a name the other packages need is added there on purpose; the package's own tests import from the module.
-- No transport, store or provider here: the package depends only on
+- No transport, store or service here: the package depends only on
   `@vaubaan/shared`, `@vaubaan/policy-engine` and `classify` / `envOf` of the
   plugin SDK. Domain types are defined once in `@vaubaan/shared`.
 - The policy's `risk_id`s are the accepted risks: no separate field that could
@@ -49,7 +49,7 @@ and the call pipeline whose stages the application fills
 ## Traps
 
 - `BearerKind` (what opens a door) is not `CredentialKind` (how an account
-  authenticates to its provider).
+  authenticates to its service).
 - A stopped mission token (`token-rotated`, `holder-deactivated`, …) is an
   `AuthError` with a reason, not a refusal: one stopped token says nothing
   about the mission, which has one token per holder.
@@ -65,7 +65,7 @@ and the call pipeline whose stages the application fills
   sequential replace would re-match inside its placeholders.
 - `upstream_error` is always a host-built summary; `upstreamErrorClassName`
   keeps a name only when identifier-shaped, so a free-text name cannot carry a
-  message. An allowed call whose provider failed stays `allowed`.
+  message. An allowed call whose service failed stays `allowed`.
 - `checkMissionActive` fails closed on an unreadable `expires_at`.
 - `noEnvResolver` makes env-scoped risks unreachable; the `'unqualified'` mode
   is for catalog tooling and tests, never a host.

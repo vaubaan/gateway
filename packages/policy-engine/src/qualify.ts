@@ -6,8 +6,8 @@
  *        environment label of the resource a call touches).
  *
  * Convention :
- *   `<provider>[<env>].<name>`  — env-scoped (per-resource) form ;
- *   `<provider>.<name>`         — account-scoped form.
+ *   `<service>[<env>].<name>`  — env-scoped (per-resource) form ;
+ *   `<service>.<name>`         — account-scoped form.
  *
  * The catalog YAML stores the **non-qualified** id ; qualification happens
  * at issuance (one entry per labelled resource) and again at the runtime,
@@ -81,7 +81,7 @@ export function qualifyRiskId(
   const parsed = parseRiskId(baseId);
   if (!parsed) return baseId; // malformed ids never reach here ; stay defensive
   if (parsed.env !== null) return baseId;
-  return formatRiskId({ provider: parsed.provider, env, name: parsed.name });
+  return formatRiskId({ service: parsed.service, env, name: parsed.name });
 }
 
 /**
@@ -92,7 +92,7 @@ export function qualifyRiskId(
 export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
   const parsed = parseRiskId(qualifiedId);
   if (!parsed || parsed.env === null) return qualifiedId;
-  return formatRiskId({ provider: parsed.provider, name: parsed.name });
+  return formatRiskId({ service: parsed.service, name: parsed.name });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export const noEnvResolver: EnvResolver = {
 
 /**
  * Default resolver : match the slice against the resources the mission may
- * touch. The slice's provider must equal `resource.provider` ; the
+ * touch. The slice's service must equal `resource.service` ; the
  * identifiers of the slice path (`ident` segments and `list` entries) that
  * equal a `resource.ref` name the resources the slice touches, and their
  * environment is the answer **when they all carry the same one**.
@@ -141,9 +141,9 @@ export const noEnvResolver: EnvResolver = {
  *
  * Returns `null` when no resource matches — either the slice is
  * account-rooted (no ref in the path, e.g. `vercel.account.team[…]`) or the
- * mission has no resource of that provider. Both mean "no env to qualify
+ * mission has no resource of that service. Both mean "no env to qualify
  * with". When the path carries no ref and the mission holds exactly one
- * resource of the provider, that resource's env applies (account-rooted
+ * resource of the service, that resource's env applies (account-rooted
  * operations still come from a specific account). Several resources and no
  * ref in the path is ambiguous → `null`.
  *
@@ -155,7 +155,7 @@ export const noEnvResolver: EnvResolver = {
 export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvResolver {
   return {
     resolveEnv(slice: Slice): string | null {
-      const matching = resources.filter((r) => r.provider === slice.provider);
+      const matching = resources.filter((r) => r.service === slice.service);
       if (matching.length === 0) return null;
       const refToEnv = new Map<string, string | null>();
       for (const r of matching) refToEnv.set(r.ref, r.env ?? null);
@@ -194,7 +194,7 @@ export const NO_SINGLE_ENV: unique symbol = Symbol.for('@vaubaan/policy-engine/n
  * segment for Vercel, the only shipped plugin with one. Returns `undefined` (or
  * `null`) when the slice carries no environment of its own, so the
  * resource label applies, and `NO_SINGLE_ENV` when it names several. Mirrors
- * `ProviderPlugin.envOf` in the SDK without importing it (the SDK depends on
+ * `ServicePlugin.envOf` in the SDK without importing it (the SDK depends on
  * this package, not the reverse).
  */
 export type EnvDeriver = (
@@ -205,7 +205,7 @@ export type EnvDeriver = (
 /**
  * The composed default resolver (ADR fallback-risk-only-when-uncategorized,
  * § environment resolution ; spec vaubaan-gateway §0 "Resource" : "for
- * providers where the environment lives in the arguments, the plugin
+ * services where the environment lives in the arguments, the plugin
  * derives it") :
  *
  *   1. the plugin's `envOf(slice, resources)` when given and non-empty —

@@ -37,7 +37,7 @@ import { refuse } from '../../src/errors.ts';
 const NOW = new Date('2026-10-13T10:00:00.000Z');
 
 const catalog: RiskCatalog = {
-  provider: 'supabase',
+  service: 'supabase',
   risks: [
     {
       id: 'supabase.read-data',
@@ -71,7 +71,7 @@ const indexed = indexCatalog(catalog);
 
 const account: MissionAccount = {
   id: 'con_1',
-  provider: 'supabase',
+  service: 'supabase',
   display_name: 'Supabase (acme)',
   status: 'active',
   owner: { kind: 'user', id: 'usr_1', display: 'ana@example.test' },
@@ -80,7 +80,7 @@ const account: MissionAccount = {
 const resource: MissionResource = {
   id: 'res_1',
   account_id: 'con_1',
-  provider: 'supabase',
+  service: 'supabase',
   ref: 'prj_x',
   env: 'staging',
   displayName: 'API staging',
@@ -124,7 +124,7 @@ const call: CallRequest = {
 
 function sliceFor(action: 'R' | 'W'): Slice {
   return {
-    provider: 'supabase',
+    service: 'supabase',
     path: [
       { kind: 'name', value: 'project' },
       { kind: 'ident', value: 'prj_x' },
@@ -653,7 +653,7 @@ describe('CallPipeline', () => {
     const { p, audit } = pipeline({
       upstream: {
         execute: async () => {
-          throw new UpstreamRefusalError(refusal, 'the provider rejected the credential');
+          throw new UpstreamRefusalError(refusal, 'the service rejected the credential');
         },
       },
     });
@@ -661,14 +661,14 @@ describe('CallPipeline', () => {
     expect(out.kind).toBe('failed');
     if (out.kind === 'failed') {
       expect(out.refusal).toBe(refusal);
-      expect(out.error).toBe('account-unavailable: the provider rejected the credential');
+      expect(out.error).toBe('account-unavailable: the service rejected the credential');
     }
     expect(audit.calls).toHaveLength(1);
     expect(audit.calls[0]).toMatchObject({
       decision: 'allowed',
       refusal_code: null,
       // The refusal and its status; the broker's message (which may quote the
-      // provider) stays on the outcome.
+      // service) stays on the outcome.
       upstream_error: 'account-unavailable: expired',
       remaining_budget: expect.any(Object) as object,
     });
@@ -681,7 +681,7 @@ describe('CallPipeline', () => {
       risks: {
         evaluate: async () => {
           evaluated = true;
-          return { kind: 'no-catalog', provider: 'x' };
+          return { kind: 'no-catalog', service: 'x' };
         },
       },
     });
@@ -878,9 +878,9 @@ describe('CallPipeline', () => {
   });
 
   test('an audit write that fails after a successful forward is not an upstream failure', async () => {
-    // The provider call happened. A writer that fails once must make the
+    // The service call happened. A writer that fails once must make the
     // call reject (no entry, no completed call) — never be caught as "the
-    // provider failed" and stored as `upstream_error` on a second write.
+    // service failed" and stored as `upstream_error` on a second write.
     const stored = new MemoryAuditWriter();
     let writes = 0;
     const failsOnce: AuditWriter = {

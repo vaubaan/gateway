@@ -1,6 +1,6 @@
 /**
  * The structure of a parsed catalog document : known keys only, the
- * provider, the version and date, the risks (`catalog-risk-entry.ts`) and
+ * service, the version and date, the risks (`catalog-risk-entry.ts`) and
  * the macro-actions. `structuralIssues` builds a typed catalog from what it
  * checked, or lists every issue, path-qualified.
  *
@@ -9,7 +9,7 @@
 
 import { isValidBudget, budgetIssues } from '@vaubaan/policy-engine';
 import {
-  isProviderId,
+  isServiceId,
   type MacroAction,
   type MacroActionEntry,
   type RiskEntry,
@@ -32,7 +32,7 @@ import { RETIRED_PRESETS_ISSUE } from './catalog-rules.ts';
 import { isList, isRecord } from './guards.ts';
 
 const CATALOG_KEYS = new Set([
-  'provider',
+  'service',
   'risks',
   'macro_actions',
   'catalog_version',
@@ -51,30 +51,48 @@ export interface StructuralResult {
   readonly issues: string[];
 }
 
+/**
+ * The name `service` had before SDK 0.9.4 (ADR one-word-per-thing-account-service-plugin):
+ * a catalog that still writes `provider:` loads, read as `service:`. Removed in 0.10.
+ */
+const DEPRECATED_SERVICE_KEY = 'provider';
+
+/** A document that names its service by the deprecated key, read with the current one. */
+function withCurrentServiceKey(doc: Rec, issues: string[]): Rec {
+  if (!(DEPRECATED_SERVICE_KEY in doc)) return doc;
+  const { [DEPRECATED_SERVICE_KEY]: deprecated, ...rest } = doc;
+  if ('service' in doc) {
+    issues.push(`${DEPRECATED_SERVICE_KEY}: the former name of service; write service only`);
+    return rest;
+  }
+  return { ...rest, service: deprecated };
+}
+
 /** Check the shape of a parsed document and build a typed catalog from it. */
-export function structuralIssues(doc: unknown): StructuralResult {
+export function structuralIssues(raw: unknown): StructuralResult {
   const issues: string[] = [];
+  const doc = isRecord(raw) ? withCurrentServiceKey(raw, issues) : raw;
   if (!isRecord(doc))
     return {
-      issues: ['document: expected a mapping with `provider`, `risks` and `macro_actions`'],
+      issues: ['document: expected a mapping with `service`, `risks` and `macro_actions`'],
     };
   const root: ParseContext = { at: '', issues };
   // A retired key reads as retired, not as unknown.
   if ('presets' in doc) issues.push(RETIRED_PRESETS_ISSUE);
   unknownKeys(doc, CATALOG_KEYS_AND_RETIRED, root);
 
-  const provider = providerFrom(doc, root);
+  const service = serviceFrom(doc, root);
   const catalogVersion = catalogVersionFrom(doc, root);
   const catalogDate = catalogDateFrom(doc, root);
-  // A provider that is not a slug is reported above ; as a string it still
+  // A service that is not a slug is reported above ; as a string it still
   // names the catalog the risk ids are compared with.
-  const declaredProvider = typeof doc.provider === 'string' ? doc.provider : null;
-  const risks = risksFrom(doc.risks, child(root, 'risks'), declaredProvider);
+  const declaredService = typeof doc.service === 'string' ? doc.service : null;
+  const risks = risksFrom(doc.risks, child(root, 'risks'), declaredService);
   const macroActions = macroActionsFrom(doc.macro_actions, child(root, 'macro_actions'));
 
-  if (issues.length > 0 || provider === undefined) return { issues };
+  if (issues.length > 0 || service === undefined) return { issues };
   const catalog: PluginCatalog = {
-    provider,
+    service,
     risks,
     macro_actions: macroActions,
     ...(catalogVersion !== undefined ? { catalog_version: catalogVersion } : {}),
@@ -83,10 +101,10 @@ export function structuralIssues(doc: unknown): StructuralResult {
   return { catalog, issues };
 }
 
-function providerFrom(doc: Rec, ctx: ParseContext): string | undefined {
-  const provider = doc.provider;
-  if (typeof provider === 'string' && isProviderId(provider)) return provider;
-  ctx.issues.push(`provider: expected a lowercase slug such as 'github' or 'cloudflare-dns'`);
+function serviceFrom(doc: Rec, ctx: ParseContext): string | undefined {
+  const service = doc.service;
+  if (typeof service === 'string' && isServiceId(service)) return service;
+  ctx.issues.push(`service: expected a lowercase slug such as 'github' or 'cloudflare-dns'`);
   return undefined;
 }
 
@@ -105,13 +123,13 @@ function catalogDateFrom(doc: Rec, ctx: ParseContext): string | undefined {
   return date;
 }
 
-function risksFrom(raw: unknown, ctx: ParseContext, provider: string | null): RiskEntry[] {
+function risksFrom(raw: unknown, ctx: ParseContext, service: string | null): RiskEntry[] {
   if (!isList(raw) || raw.length === 0) {
     ctx.issues.push(`${ctx.at}: expected a non-empty list`);
     return [];
   }
   return raw.flatMap((item, i) => {
-    const risk = riskFrom(item, { at: `${ctx.at}[${i}]`, issues: ctx.issues }, provider);
+    const risk = riskFrom(item, { at: `${ctx.at}[${i}]`, issues: ctx.issues }, service);
     return risk ? [risk] : [];
   });
 }

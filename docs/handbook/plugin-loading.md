@@ -40,16 +40,17 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 ## Invariants
 
 - **The pin wins, never silently**: one `info` line per pin at boot (`… pinned from <dir> (replaces bundled <v>)`) and one for the plugins `plugins.enabled` leaves out.
-- **Fail closed at boot**: every refusal is a `ConfigError` (exit 78) whose message holds the pin's directory, or names the provider and its account count. A pin is never skipped.
+- **Fail closed at boot**: every refusal is a `ConfigError` (exit 78) whose message holds the pin's directory, or names the service and its account count. A pin is never skipped.
 - **The accounts check runs after the store opens** (`root.ts`, before the sealed-keys probe): it counts accounts not revoked, so a revoked account of a dropped plugin does not block.
 - **The host reads SDK errors by brand only** (`isUpstreamAuthError`…, [plugin-sdk](plugin-sdk.md)): a pin carries its own SDK copy. `loader.test.ts` proves `instanceof` is false on a real bundle.
 - **`package.json` version = `plugin.version`** for a pin, as for a bundled plugin; a mismatch is refused.
-- **A pin never declares a `host` account**: such a plugin runs on the gateway's own services, which only the image binds (the `vaubaan` plugin, [providers/vaubaan](providers/vaubaan.md)); the loader refuses it and the bundle script skips it (`"vaubaan": { "bundleable": false }`).
+- **A pin never declares a `host` account**: such a plugin runs on the gateway's own services, which only the image binds (the `vaubaan` plugin, [services/vaubaan](services/vaubaan.md)); the loader refuses it and the bundle script skips it (`"vaubaan": { "bundleable": false }`).
 - **Nothing about the instance leaves with the feed request**: `User-Agent: vaubaan-gateway` (no version), no query added, no body. The feed is untrusted: `isVersionsFeed` bounds every string and allows https links only, since Administration will render them.
 
 ## Traps
 
 - **A gateway upgrade can refuse a pin**: the SDK range is checked with `semver.satisfies` (prereleases included), and before SDK `1.0.0` `^0.6.0` holds one minor. The message names the range and the host SDK version: rebuild the pin for the new gateway.
+- **A pin of an SDK before 0.9.4 says provider**: its own SDK copy wrote `provider` in its catalog, data model, slices and resources. `readPinnedPlugins` passes such a plugin (`isLegacyPlugin`: its catalog names a `provider`, no `service`) through `fromLegacyPlugin` before the registry checks it, so the host reads `service` and the plugin still reads `provider` (`loader.test.ts`, "reads a bundle of an SDK before 0.9.4"). Gone in SDK 0.10.
 - **The import is a native `import()`** with `webpackIgnore` / `turbopackIgnore`: the file is the operator's, read at run time, never traced into the standalone output. Keep both comments.
 - **`/plugins` is root's in the image** (0755): the gateway reads it, never writes it, so a compromised process cannot plant code for the next start.
 - **Tests never read the feed**: `validEnv()` sets `VAUBAAN_UPDATES_CHECK=false`. A test that wants the check sets it back and injects `updatesFetch` (`RootDeps`).

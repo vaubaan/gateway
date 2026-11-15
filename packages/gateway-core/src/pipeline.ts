@@ -22,13 +22,13 @@
  * A refused call decrements nothing and still produces an audit entry. An
  * allowed call that fails upstream keeps `decision: 'allowed'` and records
  * `upstream_error` (the decision is what the gateway did) — including when
- * the failure is the provider rejecting the account's credential for
+ * the failure is the service rejecting the account's credential for
  * good: the upstream stage then throws `UpstreamRefusalError` and the
  * outcome carries the `account-unavailable` refusal the agent reads.
  * `upstream_error` is a bounded summary the host built (`UpstreamFailureError
- * .summary`), never the provider's text: providers echo input in their
+ * .summary`), never the service's text: services echo input in their
  * errors, and the audit keeps no trace of the arguments but their hash. The
- * provider's text goes to the caller only, on the `failed` outcome. An
+ * service's text goes to the caller only, on the `failed` outcome. An
  * audit write that fails propagates: no call completes without its entry.
  *
  * A decision stage that THROWS (resource, risk, budget: a classifier that is
@@ -39,7 +39,7 @@
  *
  * Streaming (spec §4.1 "the decision is made before the stream starts"): a
  * call may carry `onPart`; the upstream stage hands it each part of a result
- * the provider delivers progressively. The order above is unchanged — the
+ * the service delivers progressively. The order above is unchanged — the
  * stage runs last — and so is the audit: one entry, written when the forward
  * ends, whose `upstream_latency_ms` therefore covers the whole stream and
  * whose `upstream_error` records a stream that broke midway.
@@ -247,7 +247,7 @@ export interface CallRequest {
   readonly agent_label: string | null;
   readonly client: ClientOrigin;
   /**
-   * Streaming (spec §4.1): receives each part of the result as the provider
+   * Streaming (spec §4.1): receives each part of the result as the service
    * delivers it. Only the upstream stage calls it, so it runs after the
    * decision — mission state, resources, risks, budget decrement — and never
    * for a refused call. Absent: the caller reads the complete result alone.
@@ -256,7 +256,7 @@ export interface CallRequest {
   /**
    * Aborted when the caller is gone (disconnect, MCP cancellation). The
    * upstream stage reads it between two parts of a streamed result; it
-   * never interrupts a provider call in flight.
+   * never interrupts a service call in flight.
    */
   readonly signal?: AbortSignal;
 }
@@ -275,7 +275,7 @@ export interface CallTarget {
  * and the classifier's slices.
  *
  * A call that has no target at all — a tool no registered plugin owns, a
- * provider the mission holds no account for — is a structural rejection
+ * service the mission holds no account for — is a structural rejection
  * (`reason`, no refusal code): the pipeline audits it as `refused` with
  * `refusal_code: null` and returns `rejected`.
  */
@@ -291,7 +291,7 @@ export interface ResourceStage {
 /**
  * Classify and decide on risks. The default implementation wraps
  * `evaluateCallForMission` (risk-gateway.ts) with the plugin classifier and
- * the provider catalog (the application wires the plugin registry).
+ * the service catalog (the application wires the plugin registry).
  */
 export interface RiskStage {
   evaluate(ctx: MissionContext, call: CallRequest, target: CallTarget): Promise<CallVerdict>;
@@ -337,8 +337,8 @@ export interface BudgetStage {
 }
 
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
- *  provider's result. The executor never sees the credential (spec §2.4).
- *  Throws `UpstreamRefusalError` when the provider rejected the credential
+ *  service's result. The executor never sees the credential (spec §2.4).
+ *  Throws `UpstreamRefusalError` when the service rejected the credential
  *  and it could not be refreshed (spec §2.3 account `expired`), and
  *  `UpstreamFailureError` for any other failure. A throw of another type is
  *  still an upstream failure, audited by its class name alone. */
@@ -348,13 +348,13 @@ export interface UpstreamStage {
 
 /**
  * Thrown by an `UpstreamStage` when the call was allowed and counted, but the
- * account turned out to be unusable while forwarding: the provider
+ * account turned out to be unusable while forwarding: the service
  * rejected the credential and the refresh failed, or the account was
  * revoked between the decision and the forward. The pipeline keeps the audit
  * entry `decision: 'allowed'` with `upstream_error` (the budget decision
  * stands, the credit is not refunded — ADR atomic-budget-accounting) and
  * returns the refusal on the `failed` outcome so the door answers
- * `account-unavailable` instead of an opaque provider error.
+ * `account-unavailable` instead of an opaque service error.
  */
 export class UpstreamRefusalError extends Error {
   constructor(
@@ -395,20 +395,20 @@ export function upstreamErrorClassName(thrown: unknown): string {
 
 /**
  * Thrown by an `UpstreamStage` when the call was allowed and counted and the
- * provider call failed. It separates what the two readers of the failure get:
+ * service call failed. It separates what the two readers of the failure get:
  *
  * - `summary` is written to the immutable audit (`upstream_error`). The stage
- *   builds it from what the host knows — the provider id, the HTTP status,
- *   the error's class name — and never from the provider's text, which can
+ *   builds it from what the host knows — the service id, the HTTP status,
+ *   the error's class name — and never from the service's text, which can
  *   echo the call's arguments. The pipeline bounds its length.
- * - `detail` is the provider's own message. It goes to the caller of the
+ * - `detail` is the service's own message. It goes to the caller of the
  *   tool, which knows its own arguments, on the `failed` outcome, and is
  *   stored nowhere.
  */
 export class UpstreamFailureError extends Error {
   readonly summary: string;
   readonly detail: string;
-  /** HTTP status of the provider's answer, when the failure carries one. */
+  /** HTTP status of the service's answer, when the failure carries one. */
   readonly status: number | null;
 
   constructor(input: {
@@ -440,7 +440,7 @@ export function isUpstreamFailureError(x: unknown): x is UpstreamFailureError {
 interface UpstreamFailure {
   /** Stored as `upstream_error`: host-built, bounded. */
   readonly summary: string;
-  /** Returned on the `failed` outcome: the provider's text. */
+  /** Returned on the `failed` outcome: the service's text. */
   readonly detail: string;
   readonly refusal: Refusal | null;
 }
@@ -574,7 +574,7 @@ export type CallOutcome =
       readonly audit: CallAuditEntry;
     }
   | {
-      /** Allowed, then the provider failed. `error` is the provider's detail,
+      /** Allowed, then the service failed. `error` is the service's detail,
        *  for the caller only: the audit entry holds a host-built summary
        *  (`audit.upstream_error`). `refusal` is set when the failure is a
        *  structured one the agent must read (`account-unavailable` after a
@@ -704,7 +704,7 @@ export class CallPipeline {
    * every risk the call touches? A refusal here is audited, exactly as
    * `execute` audits it; a call that passes is not recorded, counted or
    * executed (`null`). The git door asks it before it stores a pack at the
-   * provider, so that a push the mission can never make is refused before
+   * service, so that a push the mission can never make is refused before
    * any byte leaves; the push it then decides with `execute` touches at
    * least these risks.
    */
@@ -773,10 +773,10 @@ export class CallPipeline {
 
   /**
    * A call the door refuses on grounds no stage decides — a git push larger
-   * than the configured cap, one the provider cannot review, a request that
+   * than the configured cap, one the service cannot review, a request that
    * breaks the protocol. `reason` goes to the caller. What the audit keeps is
    * `audited` (default: `reason`), built by the host, with every argument
-   * value found in it replaced (`auditReason`): a provider's own message
+   * value found in it replaced (`auditReason`): a service's own message
    * goes to the caller only. One audit entry, `refused` with no code, like a
    * structural rejection ; the mission is not consulted and nothing is
    * counted.
@@ -838,7 +838,7 @@ export class CallPipeline {
       case 'no-catalog':
         return this.rejected(
           entry,
-          `risk catalog for '${target.account.provider}' is not loaded; refusing (fail closed).`,
+          `risk catalog for '${target.account.service}' is not loaded; refusing (fail closed).`,
           HOST_BUILT,
         );
       case 'classify-denied':
@@ -948,7 +948,7 @@ export class CallPipeline {
 
   /**
    * Upstream mint and forward, then the audit entry of the allowed call.
-   * Only the provider call sits in the `try`: a failure of the audit write
+   * Only the service call sits in the `try`: a failure of the audit write
    * after a successful forward is not an upstream failure — it propagates,
    * and is never recorded as `upstream_error` on an action that happened.
    */
@@ -971,9 +971,9 @@ export class CallPipeline {
   }
 
   /**
-   * The provider failed after an allowed decision: the entry stays `allowed`
+   * The service failed after an allowed decision: the entry stays `allowed`
    * and records the bounded, host-built summary of the failure; the
-   * provider's text leaves on the outcome only.
+   * service's text leaves on the outcome only.
    */
   private async failed(decided: CallAuditEntry, t0: number, e: unknown): Promise<CallOutcome> {
     const failure = describeUpstreamFailure(e);

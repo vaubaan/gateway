@@ -1,12 +1,12 @@
 ---
-title: Supabase provider plugin
+title: Supabase plugin
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Supabase provider plugin — handbook
+# Supabase plugin — handbook
 
 `@vaubaan/plugin-supabase`: Management API plus each project's data plane (auth, storage), one
 resource per project, the owner's label as environment.

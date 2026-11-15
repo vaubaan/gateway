@@ -1,7 +1,7 @@
 /**
  * Property-based tests of the git wire readers: a push's pkt-lines and its
  * `old new ref` commands come from the agent's git client, the advertisement
- * and the report from the provider. Each reader is fed arbitrary bytes.
+ * and the report from the service. Each reader is fed arbitrary bytes.
  *
  * Properties: a reader returns or throws its own typed error, nothing else;
  * what is encoded reads back the same. Seeded and replayable

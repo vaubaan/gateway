@@ -104,7 +104,7 @@ describe('upstreamToolResult', () => {
 });
 
 describe('mcpRequest', () => {
-  test('one POST with the bearer, the protocol headers, the provider headers and the signal', async () => {
+  test('one POST with the bearer, the protocol headers, the service headers and the signal', async () => {
     const fetch = mockFetch([answering(() => ({ tools: [] }))]);
     const signal = new AbortController().signal;
     expect(await mcpRequest({ fetch, signal }, SERVER, 'tok', 'tools/list', {})).toEqual({

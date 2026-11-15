@@ -1,12 +1,12 @@
 ---
-title: Upstash Redis provider plugin
+title: Upstash Redis plugin
 tracks:
   - plugins/upstash-redis/src/
   - plugins/upstash-redis/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Upstash Redis provider plugin — handbook
+# Upstash Redis plugin — handbook
 
 `@vaubaan/plugin-upstash-redis`: Upstash Management API and each database's REST data API under one
 plane, the database as resource, its owner label as environment. No upstream MCP server.

@@ -12,7 +12,7 @@ import { UpstreamProtocolError } from './errors.ts';
 
 /**
  * `result` as a tool result : `content` required, `structuredContent` kept
- * when it is an object, `isError: true` kept (the provider's own refusal,
+ * when it is an object, `isError: true` kept (the service's own refusal,
  * which the agent reads). A text, image or resource block is copied field by
  * field ; a block of any other type (audio, a type MCP clients may not know)
  * becomes its JSON as text. Not a tool result : `UpstreamProtocolError`

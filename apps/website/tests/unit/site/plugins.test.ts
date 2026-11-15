@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import {
   ANYTHING_ELSE_BASE_BUDGET,
   budgetAtTrustLevel,
@@ -52,7 +52,7 @@ function pluginFolders(): string[] {
 }
 
 let plugins: PluginInfo[] = [];
-let githubPlugin: ProviderPlugin | undefined;
+let githubPlugin: ServicePlugin | undefined;
 
 beforeAll(async () => {
   plugins = await loadPlugins(REPO_ROOT);
@@ -290,7 +290,7 @@ describe('the plugin catalog of the site', () => {
       ...github,
       examples: { github__list_branches: [{ args: {} }] },
       classify: () => ({ slices: [parseSlice('github.nowhere[x].W')] }),
-    } satisfies ProviderPlugin;
+    } satisfies ServicePlugin;
     expect(() => pluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(ExampleError);
     expect(() => pluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(/only on the fallback/);
 
@@ -298,7 +298,7 @@ describe('the plugin catalog of the site', () => {
       ...github,
       examples: { github__list_branches: [{ args: {} }] },
       classify: () => ({ denied: 'no' }),
-    } satisfies ProviderPlugin;
+    } satisfies ServicePlugin;
     expect(() => pluginInfo(refused, 'plugins/github', 'x')).toThrow(/classify refused it/);
   });
 
@@ -312,7 +312,7 @@ describe('the plugin catalog of the site', () => {
         args['nowhere'] === true
           ? { slices: [parseSlice('github.nowhere[x].W')] }
           : github.classify('github__list_branches', { owner: 'o', repo: 'r' }, []),
-    } satisfies ProviderPlugin;
+    } satisfies ServicePlugin;
     expect(() => pluginInfo(second, 'plugins/github', 'x')).toThrow(
       /plugin 'github'[\s\S]*'github__list_branches' sample #2 slice #1: 'github\.nowhere\[x\]\.W' lands only on the fallback/,
     );

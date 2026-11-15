@@ -24,7 +24,7 @@ describe('catalogPathNextTo', () => {
     const fixtureModule = pathToFileURL(join(here, '../fixtures/acme/acme-plugin.ts')).href;
     const path = catalogPathNextTo(fixtureModule);
     expect(existsSync(path)).toBe(true);
-    expect(loadCatalogFile(path).catalog.provider).toBe('acme');
+    expect(loadCatalogFile(path).catalog.service).toBe('acme');
   });
 
   test('rejects a module URL a bundler rewrote into an asset or http URL', () => {

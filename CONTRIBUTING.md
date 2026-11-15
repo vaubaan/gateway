@@ -10,7 +10,7 @@ Ways to contribute:
 - report a bug, or a place where the product does not do what the
   specification says;
 - propose a feature;
-- **write a provider plugin**, or correct the risk catalog of an existing
+- **write a plugin**, or correct the risk catalog of an existing
   one: see [`plugins/README.md`](plugins/README.md), the step-by-step guide;
 - improve the documentation.
 
@@ -29,7 +29,7 @@ do not do the same work.
 The usual first contribution is a plugin or a catalog correction: the
 [plugin kit](plugins/README.md) is a step-by-step guide that assumes you have never seen the
 project, and [`plugins/_template`](plugins/_template/README.md) is a complete plugin for an
-imaginary provider to copy. A correction to a risk catalog needs no knowledge of the rest of the
+imaginary service to copy. A correction to a risk catalog needs no knowledge of the rest of the
 code base.
 
 The labels in use:
@@ -53,7 +53,7 @@ planned: [ROADMAP.md](ROADMAP.md).
 - **Node.js 26 or later and npm 11 or later** (CI and the image run Node 26).
 - **Git.**
 - Nothing else for the everyday work: no database, no cloud account, no
-  provider credential. The test suite makes no network call.
+  service credential. The test suite makes no network call.
 - Optional: Chromium for the browser tests (installed by one command below),
   and Docker if you want to build the image.
 
@@ -76,7 +76,7 @@ npm run demo      # builds when the sources changed, then serves the whole inter
 ```
 
 The demo is the real application with a simulated identity provider (an
-account picker, no password), simulated providers and seeded data: sign in as
+account picker, no password), simulated services and seeded data: sign in as
 Alice and click through Now, Waiting for you, Missions, Accounts, Activity
 and Reference.
 Nothing leaves your machine, and the data is deleted when you stop it with
@@ -114,9 +114,9 @@ npm run test:e2e:v5
 
 They start their own instance on port 3105 and the one after it;
 `E2E_V5_PORT=<port>` moves both. They use a simulated identity provider and a
-simulated provider, like every other test.
+simulated service, like every other test.
 
-**No test ever calls a real provider**, and none needs a credential. A test
+**No test ever calls a real service**, and none needs a credential. A test
 that would is refused in review.
 
 A pre-commit hook checks lint and formatting on the files you stage. It is
@@ -133,7 +133,7 @@ packages/plugin-sdk/     the plugin contract, registry and test kit    @vaubaan/
 packages/gateway-core/   call pipeline, decisions, refusals, audit     @vaubaan/gateway-core
 packages/telemetry/      opt-in telemetry report                       @vaubaan/telemetry
 packages/oauth-providers/ OAuth provider table, copied into the broker @vaubaan/oauth-providers
-plugins/<provider>/      one provider plugin per folder                @vaubaan/plugin-<provider>
+plugins/<service>/       one plugin per folder                         @vaubaan/plugin-<service>
 plugins/_template/       the scaffold for a new plugin                 @vaubaan/plugin-template
 deploy/                  Dockerfile, Compose file, example configuration
 docs/                    specification, decisions, handbooks, test plans, workflow
@@ -154,7 +154,7 @@ documentation disagree is not merged.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | [`docs/spec/`](docs/spec/)           | **What** the product does and **why**, independent of the technology. The functional source of truth.   | A change of behaviour starts here. Open an issue first: the specification is discussed before any code. |
 | [`docs/decisions/`](docs/decisions/) | **Decisions** (ADRs): one file per choice, with Context, Decision, Consequences, Rejected alternatives. | Any choice somebody could question in six months: a library, a public contract, a structural change.    |
-| [`docs/handbook/`](docs/handbook/)   | **How the code works today**, one file per subsystem and one per provider plugin.                       | Whenever you change the code a handbook describes.                                                      |
+| [`docs/handbook/`](docs/handbook/)   | **How the code works today**, one file per subsystem and one per plugin.                                | Whenever you change the code a handbook describes.                                                      |
 | [`docs/tests/`](docs/tests/)         | The integration and end-to-end scenarios.                                                               | When you add or change a scenario.                                                                      |
 | [`docs/workflow/`](docs/workflow/)   | CI, branches, releases.                                                                                 | When you change the pipeline or the tooling.                                                            |
 
@@ -196,10 +196,10 @@ They are checked in review, and several by tests:
 - **No hard-coded configuration.** No URL of an instance, no secret, no
   project or account identifier in the code. Configuration comes from the
   environment or the mounted file and a missing key fails at start, naming
-  the key. The public API address of a provider inside its plugin is not
+  the key. The public API address of a service inside its plugin is not
   configuration.
-- **One list of providers.** The plugin registry is the only list; nothing
-  else enumerates providers.
+- **One list of services.** The plugin registry is the only list; nothing
+  else enumerates services.
 - **Never a wildcard in what is granted.** Accepted risks, share restrictions
   and macro-actions are explicit lists of risk identifiers. "Allow all" is the full
   list, written out.
@@ -238,9 +238,9 @@ list; every line is either done or explained.
 - [ ] **Handbook** — the handbook of each subsystem touched describes the code
       as it is now, and its `tracks:` list covers the files changed.
 - [ ] **Tests** — unit tests beside the code; new scenarios listed under
-      `docs/tests/`; no test calls a real provider.
+      `docs/tests/`; no test calls a real service.
 - [ ] **English** everywhere.
-- [ ] **No hard-coded configuration**, no second list of providers, no
+- [ ] **No hard-coded configuration**, no second list of services, no
       wildcard in a risk list.
 - [ ] **`npm run ci` is green** locally.
 - [ ] **Every commit signed off** (`git commit -s`).
@@ -257,7 +257,7 @@ project does not commit to a review delay at this stage.
 
 ## Plugins and risk catalogs
 
-A plugin's risk catalog (`plugins/<provider>/src/risk-catalog.yaml`) is a
+A plugin's risk catalog (`plugins/<service>/src/risk-catalog.yaml`) is a
 security statement: it names what an agent's call can put at risk and what a
 mission creator is asked to accept. It is reviewed like code.
 
@@ -265,13 +265,13 @@ mission creator is asked to accept. It is reviewed like code.
   [`plugins/README.md`](plugins/README.md).
 - **To report a wrong or missing risk**: open a "Catalog correction" issue.
   Say which tool call is concerned, how it is classified today and how it
-  should be, with a link to the provider's documentation.
+  should be, with a link to the service's documentation.
 - **To change a catalog yourself**: the rules are in
   [`plugins/README.md`](plugins/README.md#changing-an-existing-plugin-or-its-catalog).
   In short: a risk identifier is never renamed or deleted (it is deprecated),
   every reviewed change bumps `catalog_version`, the classifier test that
-  proves the change comes with it, and the provider handbook under
-  `docs/handbook/providers/` is updated in the same pull request.
+  proves the change comes with it, and the service handbook under
+  `docs/handbook/services/` is updated in the same pull request.
 - **If the gap lets a mission do more than it accepted** (a write classified
   as a read, a call that escapes its resource), it is a vulnerability: report
   it privately, as below, not in an issue.

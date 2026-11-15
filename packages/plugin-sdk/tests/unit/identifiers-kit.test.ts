@@ -11,7 +11,7 @@
 import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, test } from 'vitest';
 
-import type { ClassifyOutcome, ExecuteContext, ProviderPlugin } from '../../src/index.ts';
+import type { ClassifyOutcome, ExecuteContext, ServicePlugin } from '../../src/index.ts';
 import {
   assertIdentifiersRefused,
   HOSTILE_IDENTIFIERS,
@@ -35,17 +35,17 @@ const context = (fetch: MockFetch): ExecuteContext => ({
 const ident = (value: unknown): string | null =>
   typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null;
 
-type Execute = ProviderPlugin['execute'];
+type Execute = ServicePlugin['execute'];
 
 /** `acme` with one grammar for its two identifiers, in `classify` and wherever `guard` says. */
 function acmeWith(parts: {
-  readonly classify?: ProviderPlugin['classify'];
+  readonly classify?: ServicePlugin['classify'];
   readonly execute?: Execute;
-}): ProviderPlugin {
+}): ServicePlugin {
   return { ...acmePlugin, ...parts };
 }
 
-const guardedClassify: ProviderPlugin['classify'] = (tool, args): ClassifyOutcome => {
+const guardedClassify: ServicePlugin['classify'] = (tool, args): ClassifyOutcome => {
   const space = ident(args.space);
   if (space === null) return { denied: 'space: malformed' };
   if (tool === 'acme__list_things') {
@@ -83,7 +83,7 @@ const rawExecute: Execute = async (ctx, tool, args) =>
         name: args.name,
       });
 
-async function findingsOf(plugin: ProviderPlugin, options = {}): Promise<readonly string[]> {
+async function findingsOf(plugin: ServicePlugin, options = {}): Promise<readonly string[]> {
   try {
     await assertIdentifiersRefused(plugin, SAMPLES, { context, ...options });
   } catch (err) {
@@ -134,7 +134,7 @@ describe('assertIdentifiersRefused', () => {
     // `encodeURIComponent` turns `a/../b` into one segment, and leaves `..` as it is.
     const escaping: Execute = async (ctx, tool, args) =>
       send(ctx, 'GET', `/spaces/${encodeURIComponent(String(args.space))}/things`);
-    const acceptsAll: ProviderPlugin['classify'] = () => ({
+    const acceptsAll: ServicePlugin['classify'] = () => ({
       slices: [parseSlice('acme.space[*].thing[*].R')],
     });
     const findings = await findingsOf(acmeWith({ classify: acceptsAll, execute: escaping }), {
@@ -153,7 +153,7 @@ describe('assertIdentifiersRefused', () => {
     // Trims what it does not like : "repair" instead of refusal.
     const repairing: Execute = async (ctx, tool, args) =>
       send(ctx, 'GET', `/spaces/${String(args.space).replace(/[^A-Za-z0-9-]/g, '')}/things`);
-    const acceptsAll: ProviderPlugin['classify'] = () => ({
+    const acceptsAll: ServicePlugin['classify'] = () => ({
       slices: [parseSlice('acme.space[*].thing[*].R')],
     });
     const findings = await findingsOf(acmeWith({ classify: acceptsAll, execute: repairing }), {
@@ -165,7 +165,7 @@ describe('assertIdentifiersRefused', () => {
   });
 
   test('a classifier that throws is a finding, not a pass', async () => {
-    const throwing: ProviderPlugin['classify'] = (tool, args) => {
+    const throwing: ServicePlugin['classify'] = (tool, args) => {
       if (ident(args.space) === null) throw new Error('boom');
       return guardedClassify(tool, args, []);
     };
@@ -205,7 +205,7 @@ describe('assertIdentifiersRefused', () => {
         ],
         acme__nope: [{ args: { space: 'sp-1' } }],
       },
-      { context, exempt: { acme__update_thing: { name: 'free text of the provider' } } },
+      { context, exempt: { acme__update_thing: { name: 'free text of the service' } } },
     );
     expect(report.toolsChecked).toBe(2);
     expect(report.argumentsChecked).toBe(3);

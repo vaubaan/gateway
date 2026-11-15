@@ -34,7 +34,7 @@ const patternSegment: fc.Arbitrary<SliceSegment> = fc.oneof(
 
 function slice(segment: fc.Arbitrary<SliceSegment>): fc.Arbitrary<Slice> {
   return fc.record({
-    provider: fc.constant('gh'),
+    service: fc.constant('gh'),
     path: fc.array(segment, { maxLength: 4 }),
     action: fc.constantFrom('R' as const, 'W' as const),
   });
@@ -82,12 +82,12 @@ describe('slice matcher properties', () => {
     );
   });
 
-  it('never matches across providers or actions', () => {
+  it('never matches across services or actions', () => {
     fc.assert(
       fc.property(pattern, concrete, (p, c) => {
         const other: Slice = { ...c, action: c.action === 'R' ? 'W' : 'R' };
         expect(matches(p, other) && matches(p, c)).toBe(false);
-        expect(intersects(p, { ...p, provider: 'other' })).toBe(false);
+        expect(intersects(p, { ...p, service: 'other' })).toBe(false);
       }),
       RUNS,
     );

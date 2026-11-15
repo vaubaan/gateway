@@ -1,17 +1,17 @@
 ---
-title: CalDAV Calendar provider plugin
+title: CalDAV Calendar plugin
 tracks:
   - plugins/caldav/src/
   - plugins/caldav/package.json
 last_reviewed: 2026-10-31
 ---
 
-# CalDAV Calendar provider plugin — handbook
+# CalDAV Calendar plugin — handbook
 
 `@vaubaan/plugin-caldav`: any CalDAV server (iCloud, Fastmail, Nextcloud…) with a username and an
 app password over Basic auth. Not Google: its CalDAV refuses Basic auth, so a Google URL is refused
 before anything is sent (that is `google-calendar`). Rules common to every plugin:
-[providers README](README.md).
+[services README](README.md).
 
 ## Start here
 

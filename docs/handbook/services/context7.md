@@ -1,17 +1,17 @@
 ---
-title: Context7 provider plugin
+title: Context7 plugin
 tracks:
   - plugins/context7/src/
 last_reviewed: 2026-10-27
 ---
 
-# Context7 provider plugin — handbook
+# Context7 plugin — handbook
 
 `@vaubaan/plugin-context7`: Context7's two documentation tools (`resolve-library-id`,
 `query-docs`) under a mission, with no key in an env variable or `.mcp.json`. A rewrap of
 `https://mcp.context7.com/mcp` for the tools, the REST API (`https://context7.com/api`) for the
 rest ([rewrap-official-mcps](../../decisions/rewrap-official-mcps.md)). Rules common to every
-plugin: [providers README](README.md).
+plugin: [services README](README.md).
 
 ## Start here
 

@@ -24,7 +24,7 @@
  *
  * What it does not see : an identifier that is not a top-level string
  * argument (a resource ref, account metadata, a nested field), a request
- * an executor only reaches after a provider answer the catch-all `{}` does not
+ * an executor only reaches after a service answer the catch-all `{}` does not
  * give (pass `routes`), and an upstream that is not HTTP. Each plugin keeps
  * its own identifier tests for those ; this one makes sure none is without a
  * proof that runs its code.
@@ -32,7 +32,7 @@
 
 import type { Resource } from '@vaubaan/shared';
 
-import type { ExecuteContext, ProviderPlugin } from '../plugin.ts';
+import type { ExecuteContext, ServicePlugin } from '../plugin.ts';
 import { PluginAssertionError, type ToolSamples } from './assertions.ts';
 import { mockFetch, type MockFetch, type MockRoute } from './mock-fetch.ts';
 
@@ -67,7 +67,7 @@ export interface IdentifierProofOptions {
   readonly fallbackBody?: unknown;
   /**
    * Arguments left out, tool by tool, each with the reason. For a value the
-   * provider defines as free text and the kit would misread.
+   * service defines as free text and the kit would misread.
    */
   readonly exempt?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /**
@@ -115,7 +115,7 @@ interface Observed {
 }
 
 interface Run {
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   readonly options: IdentifierProofOptions;
   readonly findings: string[];
 }
@@ -162,7 +162,7 @@ async function requestsOf(
   try {
     await run.plugin.execute(run.options.context(fetch, resources), tool, args);
   } catch {
-    // A provider failure, or a refusal thrown : only what was sent is read.
+    // A service failure, or a refusal thrown : only what was sent is read.
   }
   return [...fetch.calls, ...(run.options.elsewhere?.sent() ?? [])].map((call) => ({
     method: call.method,
@@ -243,7 +243,7 @@ function checkRequests(
  * `PluginAssertionError` listing every breach of the four rules above.
  */
 export async function assertIdentifiersRefused(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   samples: ToolSamples,
   options: IdentifierProofOptions,
 ): Promise<IdentifierProofReport> {

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/shared';
 
-import type { ExecuteContext, ProviderPlugin } from '../../src/plugin.ts';
+import type { ExecuteContext, ServicePlugin } from '../../src/plugin.ts';
 import {
   PluginAssertionError,
   assertCatalogCoverage,
@@ -14,7 +14,7 @@ import {
 import { ACME_API, acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 const staging: Resource = {
-  provider: 'acme',
+  service: 'acme',
   ref: 'sp-1',
   env: 'staging',
   displayName: 'Staging space',
@@ -40,7 +40,7 @@ describe('assertCatalogCoverage', () => {
   });
 
   test('defaults to the samples the plugin declares (examples)', () => {
-    const declared: ProviderPlugin = { ...acmePlugin, examples: samples };
+    const declared: ServicePlugin = { ...acmePlugin, examples: samples };
     const report = assertCatalogCoverage(declared, undefined, { resources: [staging] });
     expect(report.samplesChecked).toBe(3);
     expect(() => assertCatalogCoverage(acmePlugin)).toThrow(
@@ -49,7 +49,7 @@ describe('assertCatalogCoverage', () => {
   });
 
   test('reports the samples that only the fallback covers', () => {
-    const uncategorized: ProviderPlugin = {
+    const uncategorized: ServicePlugin = {
       ...acmePlugin,
       tools: [
         ...acmePlugin.tools,
@@ -119,7 +119,7 @@ describe('assertCatalogCoverage', () => {
   });
 
   test('a slice no catalog risk matches fails', () => {
-    const noReadRisk: ProviderPlugin = {
+    const noReadRisk: ServicePlugin = {
       ...acmePlugin,
       catalog: {
         ...acmePlugin.catalog,
@@ -160,7 +160,7 @@ describe('assertNoWildcard / assertPluginWellFormed', () => {
   test('catalog and plugin forms', () => {
     expect(() => assertNoWildcard(acmePlugin)).not.toThrow();
     expect(() => assertNoWildcard(acmePlugin.catalog)).not.toThrow();
-    const wildRisk: ProviderPlugin = {
+    const wildRisk: ServicePlugin = {
       ...acmePlugin,
       catalog: {
         ...acmePlugin.catalog,
@@ -178,13 +178,13 @@ describe('assertNoWildcard / assertPluginWellFormed', () => {
       assertPluginWellFormed({
         ...acmePlugin,
         catalog: { ...acmePlugin.catalog, presets: [] },
-      } as ProviderPlugin),
+      } as ServicePlugin),
     ).toThrow(/presets were retired/);
     expect(() => assertPluginWellFormed({ ...acmePlugin, version: 'x' })).toThrow(
       /version: expected semver/,
     );
     // The kit holds a plugin to the explicit flag the loader only warns about.
-    const unflagged: ProviderPlugin = {
+    const unflagged: ServicePlugin = {
       ...acmePlugin,
       catalog: {
         ...acmePlugin.catalog,
@@ -251,7 +251,7 @@ describe('mockFetch', () => {
     });
     expect(fetch.pending()).toHaveLength(1);
     const resources = await acmePlugin.discoverResources(ctx(fetch));
-    expect(resources).toEqual([{ provider: 'acme', ref: 'sp-1', displayName: 'Staging' }]);
+    expect(resources).toEqual([{ service: 'acme', ref: 'sp-1', displayName: 'Staging' }]);
     expect(fetch.pending()).toHaveLength(1);
     await acmePlugin.discoverResources(ctx(fetch));
     expect(fetch.pending()).toHaveLength(0);

@@ -26,7 +26,7 @@ import {
 
 import { fallbackFlagIssues, wildcardIssues } from '../catalog-rules.ts';
 import { declaredToolNames, pluginIssues } from '../define-plugin.ts';
-import type { ProviderPlugin } from '../plugin.ts';
+import type { ServicePlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
 import type { SampleCall, ToolSamples } from '../samples.ts';
 import { sliceRoundTripIssues } from '../slices.ts';
@@ -51,7 +51,7 @@ function fail(subject: string, findings: readonly string[]): void {
  * must carry `fallback: true` (a plugin tested with the kit is first-party
  * enough to be held to it).
  */
-export function assertPluginWellFormed(plugin: ProviderPlugin): void {
+export function assertPluginWellFormed(plugin: ServicePlugin): void {
   fail(`plugin '${String(plugin.id)}' is not well-formed`, [
     ...pluginIssues(plugin),
     ...(plugin.catalog && typeof plugin.catalog === 'object'
@@ -65,7 +65,7 @@ export function assertPluginWellFormed(plugin: ProviderPlugin): void {
  * wildcard or a sentinel. Accepts a catalog, a plugin, or a plain list of
  * ids (a persisted restriction, a mission's `accepted_risks`).
  */
-export function assertNoWildcard(input: RiskCatalog | ProviderPlugin | readonly RiskId[]): void {
+export function assertNoWildcard(input: RiskCatalog | ServicePlugin | readonly RiskId[]): void {
   if (isIdList(input)) {
     const ids: readonly RiskId[] = input;
     fail(
@@ -75,15 +75,15 @@ export function assertNoWildcard(input: RiskCatalog | ProviderPlugin | readonly 
     return;
   }
   const catalog = 'catalog' in input ? input.catalog : input;
-  fail(`wildcard in catalog '${catalog.provider}'`, wildcardIssues(catalog));
+  fail(`wildcard in catalog '${catalog.service}'`, wildcardIssues(catalog));
 }
 
 /** `Array.isArray` narrows a readonly array to `any[]` ; this guard keeps the element type. */
-function isIdList(x: RiskCatalog | ProviderPlugin | readonly RiskId[]): x is readonly RiskId[] {
+function isIdList(x: RiskCatalog | ServicePlugin | readonly RiskId[]): x is readonly RiskId[] {
   return Array.isArray(x);
 }
 
-// The sample types are the contract's (`ProviderPlugin.examples`); re-exported so the kit's
+// The sample types are the contract's (`ServicePlugin.examples`); re-exported so the kit's
 // existing imports keep working.
 export type { SampleCall, ToolSamples } from '../samples.ts';
 
@@ -124,7 +124,7 @@ export interface CoverageReport {
  * the test passes its own ; the kit checks the plumbing.
  */
 export function assertCatalogCoverage(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   samples: ToolSamples | undefined = plugin.examples,
   options: CoverageOptions = {},
 ): CoverageReport {
@@ -169,7 +169,7 @@ export function assertCatalogCoverage(
 
 /** What one coverage run reads and accumulates. */
 interface CoverageRun {
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   readonly indexed: IndexedRiskCatalog;
   readonly fallbackIds: ReadonlySet<RiskId>;
   readonly defaultResources: readonly Resource[];
@@ -216,10 +216,10 @@ function classifySample(run: CoverageRun, sample: SampleCall, where: string, too
   outcome.slices.forEach((slice, s) => sliceFindings(run, slice, `${where} slice #${s + 1}`));
 }
 
-/** One emitted slice : the plugin's own provider, and at least one catalog risk. */
+/** One emitted slice : the plugin's own service, and at least one catalog risk. */
 function sliceFindings(run: CoverageRun, slice: Slice, where: string): void {
-  if (slice.provider !== run.plugin.id) {
-    run.findings.push(`${where}: provider '${slice.provider}' is not '${run.plugin.id}'`);
+  if (slice.service !== run.plugin.id) {
+    run.findings.push(`${where}: service '${slice.service}' is not '${run.plugin.id}'`);
     return;
   }
   // What is decided on is also written (audit, refusal, session) : it must read back as
@@ -243,7 +243,7 @@ function sliceFindings(run: CoverageRun, slice: Slice, where: string): void {
  * (`undeclaredArgumentDenial`), which would hide the rule the table is about.
  */
 export function declaredOnly(
-  plugin: Pick<ProviderPlugin, 'tools'>,
+  plugin: Pick<ServicePlugin, 'tools'>,
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
@@ -255,7 +255,7 @@ export function declaredOnly(
 
 /**
  * The reason of a call the executor declined : awaits `execute`, requires an
- * `isError` result (a throw would be a provider failure, and fails the test as
+ * `isError` result (a throw would be a service failure, and fails the test as
  * one) and returns its text.
  */
 export async function refusalText(run: Promise<McpToolResult>): Promise<string> {

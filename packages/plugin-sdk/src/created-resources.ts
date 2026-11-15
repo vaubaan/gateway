@@ -2,7 +2,7 @@
  * Reading a creating call's answer — the helper `createdResources` hooks share
  * (ADR created-resources-join-the-mission).
  *
- * A tool answer (`McpToolResult`) carries what the provider said in its
+ * A tool answer (`McpToolResult`) carries what the service said in its
  * `structuredContent` and in its text blocks, often as JSON. `jsonValuesOf`
  * returns those values, parsed, in order : the structured content first, then
  * every text block that is a JSON document. A text block that is not JSON is

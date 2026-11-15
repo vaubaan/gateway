@@ -1,5 +1,5 @@
 ---
-title: Vaubaan provider plugin (the gateway's own management tools)
+title: Vaubaan plugin (the gateway's own management tools)
 tracks:
   - plugins/vaubaan/src/
   - apps/gateway/src/server/vaubaan/
@@ -10,7 +10,7 @@ tracks:
 last_reviewed: 2026-11-14
 ---
 
-# Vaubaan provider plugin — handbook
+# Vaubaan plugin — handbook
 
 `@vaubaan/plugin-vaubaan`: how an agent prepares missions for other agents. A person connects their
 **Vaubaan account** (one click, a `host` account: no secret, theirs alone, never shared), issues a
@@ -18,7 +18,7 @@ mission on it — the account page offers the **platform management mission**, e
 Careful — and the agent calls the `vaubaan__*` tools on `/mcp` with that mission's key. Spec:
 [vaubaan-gateway](../../spec/vaubaan-gateway.md) §4.1 bis, §6, §8. ADR:
 [platform-management-is-a-plugin-on-the-execution-door](../../decisions/platform-management-is-a-plugin-on-the-execution-door.md).
-Rules common to every plugin: [providers README](README.md).
+Rules common to every plugin: [services README](README.md).
 
 The seven tools keep the names, arguments and answers of the retired management door
 (`list_my_accounts`, `get_catalog`, `list_my_missions`, `preview_policy`, `issue_mission`,
@@ -52,7 +52,7 @@ the door still names the right tool. One answer changed: `issued_via` names the 
   logger. `server/vaubaan/hard-deny.test.ts` (types, imports) and
   `tests/integration/vaubaan/hard-deny.test.ts` (object graph of the real root) hold it.
 - **The self rule, at every call, whatever the stored selection says** (like `isSelfResource`):
-  a draft naming a Vaubaan account, by id or by provider, is refused before any preview
+  a draft naming a Vaubaan account, by id or by service, is refused before any preview
   (`vaubaan-account-not-allowed`); the calling mission is never rotated nor revoked through its own
   key (`self-not-allowed`); a teammate's key is refused before the arguments are read
   (`teammate-key-not-allowed`) — the acts reach the creator's whole authority, wider than the
@@ -112,7 +112,7 @@ refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL
 | `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change) | `mission_id`                     |
 | `mission-inactive`            | `rotate_mission_token` on a revoked, expired or orphaned mission                             | `mission_id`, `state`, `orphan`  |
 | `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                        | `mission_id`                     |
-| `unknown-provider`            | `get_catalog` on a provider the instance does not ship                                       | `providers`                      |
+| `unknown-service`             | `get_catalog` on a service the instance does not ship                                        | `services`                       |
 | `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                  | `account_id`                     |
 | `instance-limit-reached`      | `issue_mission` while the instance holds as many active missions as `limits.active_missions` | `count`, `ceiling`               |
 | `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details               |                                  |

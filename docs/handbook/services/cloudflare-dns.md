@@ -1,15 +1,15 @@
 ---
-title: Cloudflare DNS provider plugin
+title: Cloudflare DNS plugin
 tracks:
   - plugins/cloudflare-dns/src/
   - plugins/cloudflare-dns/README.md
 last_reviewed: 2026-10-27
 ---
 
-# Cloudflare DNS provider plugin — handbook
+# Cloudflare DNS plugin — handbook
 
 `@vaubaan/plugin-cloudflare-dns`: zones, records, settings, DNSSEC, cache purge. One resource per
-zone the token reaches; no environment. Rules common to every plugin: [providers README](README.md).
+zone the token reaches; no environment. Rules common to every plugin: [services README](README.md).
 
 ## Start here
 

@@ -48,3 +48,32 @@ instruction and every bug report more than one alpha break.
 
 Not every service is a cloud, and service account already names a robot identity at GCP and in
 Kubernetes: a reader would take it for one.
+
+## Amendment 2026-11-15: rename R2 done — provider is service
+
+### Context
+
+R2 renamed provider to service; the word provider also named the sign-in provider (the identity
+provider people sign in through) and the OAuth provider an OAuth broker holds a client at, and
+the site still mixed the four words with plugin.
+
+### Decision
+
+Service everywhere for GitHub, Vercel, Gmail…: types, modules, routes, API fields, the
+`vaubaan` plugin's tools and answers, connect errors, the SDK (0.9.4) and the store (migration
+0037). The sign-in provider is always said in full — `signInProvider` in code, `sign_in_provider`
+in the store, the logs and the audit — so that no bare provider is left. The OAuth broker keeps
+provider: it is its protocol's word (`provider` in `POST /flows`, `oauth_brokers.<name>.providers`),
+shared with the deployed brokers and the RFC.
+
+### Consequences
+
+- Stored bytes do not move: a RiskId holds a service id, never the word; ids, AAD and keys are
+  unchanged. The migration rewrites the audit's JSON by the sense of each act (a sign-in act's
+  `provider` → `sign_in_provider`, any other → `service…`), and the web sessions.
+- The SDK keeps `ProviderPlugin`, `ProviderLabel`, `providerForTool` and a catalog's `provider:`
+  until 0.10; a plugin pinned from an earlier SDK is read in the new words both ways.
+- No configuration key changes (none named the service); the retired `providers.<id>.*` and
+  `VAUBAAN_PROVIDER_*` keep their names. The site's `/docs/providers` redirects to
+  `/docs/services`. The guard test also refuses provider for a service and "the <Name> plugin"
+  credited with what the service does.

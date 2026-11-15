@@ -112,11 +112,11 @@ and paste the bootstrap token; on **Settings → Administration → Sign-in**
 add a sign-in provider — your company's OpenID Connect directory (redirect URI
 `https://<your domain>/auth/callback/<id>`), or GitHub — then "Test". The
 first sign-in of a user matching the admin rule revokes the bootstrap token.
-You may instead put the providers in the configuration (`sign_in.<id>.*`, any
-number; the single-provider `idp.*` keys of earlier builds are refused and are
-written `sign_in.idp.*`); they are then read-only on that page and
-no bootstrap token is needed. Several providers may be offered at once; a
-provider where anyone can open an account (GitHub, personal Google or
+You may instead put the sign-in providers in the configuration (`sign_in.<id>.*`,
+any number; the `idp.*` keys of the single sign-in provider of earlier builds are refused
+and are written `sign_in.idp.*`); they are then read-only on that page and
+no bootstrap token is needed. Several sign-in providers may be offered at once; a
+sign-in provider where anyone can open an account (GitHub, personal Google or
 Microsoft) needs allowed email domains or "invitation only", and invitations
 are made on Settings → People (handbook
 [authentication](../docs/handbook/authentication.md)). On Railway, follow
@@ -393,7 +393,7 @@ apps/gateway/restore.mjs …`.
   ones keep their accounts and missions and are reached by nobody. When
   you upgrade an instance that already has users, let somebody sign in once
   **before** you change its issuer: the existing accounts are bound to the
-  issuer of the provider `idp` at the first start after the upgrade (handbook
+  issuer of the sign-in provider `idp` at the first start after the upgrade (handbook
   [configuration](../docs/handbook/configuration.md)).
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
@@ -422,7 +422,7 @@ apps/gateway/restore.mjs …`.
   the address it is limited and audited under). The request page keys its
   window on the signed-in user when there is one, so an anonymous flood never
   holds a creator out of an approval link.
-- **Git remote**: `https://<public_url>/git/<provider>/<owner>/<repo>.git` is the agents'
+- **Git remote**: `https://<public_url>/git/<service>/<owner>/<repo>.git` is the agents'
   git remote (handbook [git-remote](../docs/handbook/git-remote.md)). A push
   body is the pack itself, streamed and never stored: the reverse proxy must
   not cap or buffer request bodies under `/git/` (the reference Caddyfile
@@ -436,7 +436,7 @@ apps/gateway/restore.mjs …`.
 - **Agents that prepare missions**: there is no second MCP door any more. A
   person connects their Vaubaan account (one click) and gives the agent the key
   of a mission on it; the agent calls the `vaubaan__*` tools on `/mcp` (handbook
-  [providers/vaubaan](../docs/handbook/providers/vaubaan.md)). The former
+  [services/vaubaan](../docs/handbook/services/vaubaan.md)). The former
   `oauth.*` keys (`VAUBAAN_OAUTH_*`) are ignored, with one warning at start:
   remove them. Nothing to configure on the proxy.
 

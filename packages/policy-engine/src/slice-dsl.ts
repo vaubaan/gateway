@@ -5,8 +5,8 @@
  * Spec : docs/spec/gateway-risk-model.md §3.
  *
  * Grammar (recap) :
- *   slice    ::= provider '.' segment ('.' segment)* '.' action
- *   provider ::= ident
+ *   slice    ::= service '.' segment ('.' segment)* '.' action
+ *   service ::= ident
  *   segment  ::= ident | '[' inner ']'
  *   inner    ::= '*' | '**' | ident (',' ident)*
  *   ident    ::= [a-zA-Z0-9_/-]+
@@ -66,11 +66,11 @@ export class SliceParseError extends Error {
 export function parseSlice(input: string): Slice {
   const dot = input.indexOf('.');
   if (dot <= 0) {
-    throw new SliceParseError(input, 0, "expected '<provider>.<segments>.<action>'");
+    throw new SliceParseError(input, 0, "expected '<service>.<segments>.<action>'");
   }
-  const provider = input.slice(0, dot);
-  if (!BARE_NAME_CHARS.test(provider) || provider.includes('/')) {
-    throw new SliceParseError(input, 0, `invalid provider name '${provider}'`);
+  const service = input.slice(0, dot);
+  if (!BARE_NAME_CHARS.test(service) || service.includes('/')) {
+    throw new SliceParseError(input, 0, `invalid service name '${service}'`);
   }
 
   const cursor: SliceCursor = { input, rest: input.slice(dot + 1), pos: dot + 1 };
@@ -79,7 +79,7 @@ export function parseSlice(input: string): Slice {
 
   while (i < cursor.rest.length) {
     const read = cursor.rest[i] === '[' ? readBracketSegment(cursor, i) : readBareToken(cursor, i);
-    if ('action' in read) return { provider, path: segments, action: read.action };
+    if ('action' in read) return { service, path: segments, action: read.action };
     segments.push(read.segment);
     i = skipSeparator(cursor, read.next);
   }
@@ -87,7 +87,7 @@ export function parseSlice(input: string): Slice {
   throw new SliceParseError(input, input.length, "missing terminal action ('.R' or '.W')");
 }
 
-/** The text being parsed : `rest` is `input` after `<provider>.`, which starts at `pos`. */
+/** The text being parsed : `rest` is `input` after `<service>.`, which starts at `pos`. */
 interface SliceCursor {
   readonly input: string;
   readonly rest: string;
@@ -181,9 +181,9 @@ function parseBracket(inner: string, input: string, position: number): SliceSegm
  */
 export function serializeSlice(slice: Slice): string {
   if (slice.path.length === 0) {
-    return `${slice.provider}.${slice.action}`;
+    return `${slice.service}.${slice.action}`;
   }
-  let out = slice.provider;
+  let out = slice.service;
   for (let i = 0; i < slice.path.length; i++) {
     const seg = slice.path[i]!;
     const prev = i === 0 ? null : slice.path[i - 1]!;

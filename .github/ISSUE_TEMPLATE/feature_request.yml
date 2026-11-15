@@ -8,7 +8,7 @@ body:
       value: |
         Features are specified before they are coded: the specification (`docs/spec/vaubaan-gateway.md`) says what the product does and why. A good request explains the problem; the design comes after, in the discussion.
 
-        A new provider is a "Plugin request"; a wrong or missing risk is a "Catalog correction".
+        A new service is a "Plugin request"; a wrong or missing risk is a "Catalog correction".
   - type: textarea
     id: problem
     attributes:
@@ -23,7 +23,7 @@ body:
       multiple: true
       options:
         - The operator who installs and runs the instance
-        - A user who connects providers and shares accounts
+        - A user who connects services and shares accounts
         - A user who issues missions and answers requests
         - A coding agent working under a mission
         - An agent that prepares missions for a user (management door)

@@ -12,7 +12,7 @@
  * only on the fallback (a missing catalog entry), when no catalog entry
  * matches it, or when `classify` refuses a sample that did not expect it.
  */
-import type { ProviderPlugin, Resource, SampleCall } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin, Resource, SampleCall } from '@vaubaan/plugin-sdk';
 import {
   envResolverFor,
   evaluateCall,
@@ -125,7 +125,7 @@ export class ExampleError extends Error {
 
 /** The candidates of the worked macro-actions, each env-scoped entry once per environment. */
 function workedCandidates(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   envs: readonly string[] | 'acceptable',
 ): TrustLevelCandidate[] {
   const byId = new Map(plugin.catalog.risks.map((r) => [r.id, r]));
@@ -162,7 +162,7 @@ function workedCandidates(
   return out;
 }
 
-function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'): WorkedMission {
+function expand(plugin: ServicePlugin, envs: readonly string[] | 'acceptable'): WorkedMission {
   const expansion = expandAtTrustLevel(workedCandidates(plugin, envs), WORKED_TRUST_LEVEL);
   const withGate = (gate: Gate): RiskId[] =>
     expansion.lines.filter((line) => line.gate === gate).map((line) => line.risk_id);
@@ -187,7 +187,7 @@ function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'):
 }
 
 /** The worked mission, written out in `/plugins.json` (the Atlas page no longer shows it). */
-export function workedMission(plugin: ProviderPlugin): WorkedMission {
+export function workedMission(plugin: ServicePlugin): WorkedMission {
   return expand(plugin, 'acceptable');
 }
 
@@ -208,7 +208,7 @@ function envsOf(
 
 /** What a Careful mission on this call's resources does with it, decided by `evaluateCall`. */
 function decide(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   indexed: IndexedRiskCatalog,
   slices: readonly Slice[],
   resources: readonly Resource[],
@@ -240,7 +240,7 @@ function decide(
  * that environment (`acceptable_in_envs`) no mission holds: `null`.
  */
 function atCareful(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   indexed: IndexedRiskCatalog,
   slices: readonly Slice[],
   resources: readonly Resource[],
@@ -283,7 +283,7 @@ function sliceFindings(indexed: IndexedRiskCatalog, slice: Slice, where: string)
   return [];
 }
 
-function titleOf(plugin: ProviderPlugin, tool: string): string {
+function titleOf(plugin: ServicePlugin, tool: string): string {
   return plugin.toolTitles?.[tool] ?? tool;
 }
 
@@ -293,7 +293,7 @@ function titleOf(plugin: ProviderPlugin, tool: string): string {
  * a call the page shows: it is checked (it must be refused) and left out.
  * Throws `ExampleError` with every finding when one sample fails.
  */
-export function classifyExamples(plugin: ProviderPlugin): ExampleInfo[] {
+export function classifyExamples(plugin: ServicePlugin): ExampleInfo[] {
   const indexed = indexCatalog(plugin.catalog);
   const findings: string[] = [];
   const examples: ExampleInfo[] = [];

@@ -6,7 +6,7 @@ import type { Slice } from '@vaubaan/shared';
 import { ANY_IDENT, identSegment, isSliceIdent, sliceRoundTripIssues } from '../../src/slices.ts';
 
 const sliceWith = (value: string): Slice => ({
-  provider: 'acme',
+  service: 'acme',
   action: 'W',
   path: [{ kind: 'name', value: 'user' }, identSegment(value)],
 });
@@ -44,7 +44,7 @@ describe('identSegment — what a classifier may write into a slice', () => {
 
 describe('sliceRoundTripIssues — a slice is written, so it must read back as itself', () => {
   const raw = (value: string): Slice => ({
-    provider: 'acme',
+    service: 'acme',
     action: 'W',
     path: [
       { kind: 'name', value: 'user' },

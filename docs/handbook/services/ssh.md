@@ -1,12 +1,12 @@
 ---
-title: SSH provider plugin
+title: SSH plugin
 tracks:
   - plugins/ssh/src/
   - plugins/ssh/README.md
 last_reviewed: 2026-10-27
 ---
 
-# SSH provider plugin — handbook
+# SSH plugin — handbook
 
 `@vaubaan/plugin-ssh`: one tool, `ssh__exec`, one shell line on one host per account; the host is
 the resource and its owner label (`dev | staging | prod`) its environment.

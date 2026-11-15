@@ -1,12 +1,12 @@
 ---
-title: Google Calendar provider plugin
+title: Google Calendar plugin
 tracks:
   - plugins/google-calendar/src/
   - plugins/google-calendar/package.json
 last_reviewed: 2026-11-02
 ---
 
-# Google Calendar provider plugin — handbook
+# Google Calendar plugin — handbook
 
 `@vaubaan/plugin-google-calendar`: its own nine tools on Google's Calendar REST API v3
 (`https://www.googleapis.com/calendar/v3`), called with an access token from the OAuth broker the
@@ -14,7 +14,7 @@ instance is enrolled with
 ([google-calendar-through-an-oauth-broker](../../decisions/google-calendar-through-an-oauth-broker.md),
 [oauth-broker-stateless-in-an-attested-enclave](../../decisions/oauth-broker-stateless-in-an-attested-enclave.md),
 [broker contract](../oauth-broker-contract.md)). One resource per calendar; no environment. Rules
-common to every plugin: [providers README](README.md).
+common to every plugin: [services README](README.md).
 
 ## Start here
 
@@ -66,7 +66,7 @@ common to every plugin: [providers README](README.md).
   `calendar.events` (which covers events and freeBusy). The broker's allowlist holds these two only
   (broker 0.2.2).
 - Discovery seeds `internal_domains` with the account's domain unless it is a consumer one.
-- Provider facts read through Context7 (`/websites/developers_google_workspace_calendar_api`,
+- Service facts read through Context7 (`/websites/developers_google_workspace_calendar_api`,
   2026-11-02): reference pages `calendarList/list`, `events/list`, `events/get`, `events/insert`,
   `events/patch`, `events/delete`, `freebusy/query`, the `events` resource (attendees, `self`,
   `responseStatus`, `attendeesOmitted`), guide `errors`.

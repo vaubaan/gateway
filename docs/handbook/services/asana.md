@@ -1,5 +1,5 @@
 ---
-title: Asana provider plugin
+title: Asana plugin
 status: current
 date: 2026-11-05
 last_synced: 2026-11-05
@@ -10,11 +10,11 @@ tracks:
   - plugins/asana/README.md
 ---
 
-# Asana provider plugin — handbook
+# Asana plugin — handbook
 
 `@vaubaan/plugin-asana`: projects, sections, tasks, subtasks and comments of one Asana account, on
 the REST API (`https://app.asana.com/api/1.0`), with a personal access token. One resource per
-project; no environment. Rules common to every plugin: [providers README](README.md).
+project; no environment. Rules common to every plugin: [services README](README.md).
 
 ## Start here
 

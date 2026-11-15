@@ -18,8 +18,8 @@ last_reviewed: 2026-11-05
 
 ## Scope
 
-- The acceptance criterion is manual: the instance owner, on their own instance behind TLS with their own IdP, providers and Claude Code, connects every service, issues one mission per code project and works a day with **no unexpected refusal** (spec [§10](../spec/vaubaan-gateway.md#10-tests) "End to end"; checklist in handbook [first-install](../handbook/first-install.md)). Everything automated exists to make that run boring.
-- Automated, and never touching a real IdP, provider or coding agent: the browser specs (`npm run test:e2e:v5`), among them `cutover-smoke.spec.ts` walking the acceptance path in-process; and the container smoke (`deploy/docker/smoke.sh <image>`, `npm run docker:smoke`), which proves the image boots from configuration, runs as non-root and ships no test file.
+- The acceptance criterion is manual: the instance owner, on their own instance behind TLS with their own IdP, services and Claude Code, connects every service, issues one mission per code project and works a day with **no unexpected refusal** (spec [§10](../spec/vaubaan-gateway.md#10-tests) "End to end"; checklist in handbook [first-install](../handbook/first-install.md)). Everything automated exists to make that run boring.
+- Automated, and never touching a real IdP, service or coding agent: the browser specs (`npm run test:e2e:v5`), among them `cutover-smoke.spec.ts` walking the acceptance path in-process; and the container smoke (`deploy/docker/smoke.sh <image>`, `npm run docker:smoke`), which proves the image boots from configuration, runs as non-root and ships no test file.
 - Nothing automated runs the application path inside the image: the browser suite runs the shipped standalone `server.js`, the container smoke stops at boot, configuration and operator commands.
 - Cross-module behaviour without a browser is in [integration-tests.md](./integration-tests.md).
 
@@ -27,7 +27,7 @@ last_reviewed: 2026-11-05
 
 - Playwright, one config (`apps/gateway/tests/e2e/v5/playwright.config.ts`); not part of `npm run ci`. In CI the `e2e` job runs weekly, on a manual run, in the release gates, and on a pull request only when it carries the label `e2e` (put it on a change to pages, components, styles, the mission form or a plugin's catalog).
 - `webServer` is `ephemeral-instance.ts`: the real composition root (`testRootDeps`, `:memory:` store, shipped plugins) served by the shipped standalone `server.js` as the Dockerfile runs it, so a file the build fails to trace fails the suite.
-- Fakes enter through `RootDeps` only: `FakeIdp` as the relying party's `fetch`, a mocked GitHub (`mockFetch`) as `providerFetch`, `FakeGithubHost` for the git remote spec's repository. Any other outbound request rejects.
+- Fakes enter through `RootDeps` only: `FakeIdp` as the relying party's `fetch`, a mocked GitHub (`mockFetch`) as `serviceFetch`, `FakeGithubHost` for the git remote spec's repository. Any other outbound request rejects.
 - `public_url` is `https://gateway.e2e.test`, routed by `browser.ts` to the local listener so cookies stay `Secure` and the origin check sees the public origin; redirects are answered as navigating pages (Playwright does not route redirect hops).
 - Listeners keep idle sockets 180 s (`IDLE_SOCKET_MS`): Playwright reuses connections without retrying a reset, and Node's 5 s default gave `socket hang up`.
 - Manual scripts live in `apps/gateway/tests/manual/`: `seed-demo.ts` (a throw-away instance with a kit) and `streaming-check.ts` (`serve` then `probe`; exits non-zero when progress frames arrive together). Rerun the streaming check after a change of Next.js, the MCP SDK, `next.config.ts` or the proxy configuration, also behind the pinned Caddy of `deploy/caddy/`.

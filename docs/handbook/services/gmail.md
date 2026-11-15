@@ -1,18 +1,18 @@
 ---
-title: Gmail provider plugin
+title: Gmail plugin
 tracks:
   - plugins/gmail/src/
   - plugins/gmail/package.json
 last_reviewed: 2026-10-31
 ---
 
-# Gmail provider plugin — handbook
+# Gmail plugin — handbook
 
 `@vaubaan/plugin-gmail`: reads, drafts and labels over IMAP (`imap.gmail.com:993`) and sends over
 SMTP (`smtp.gmail.com:465`, implicit TLS), both with the mailbox's app password
 ([gmail-over-imap-with-an-app-password](../../decisions/gmail-over-imap-with-an-app-password.md)).
 One resource, the mailbox; no environment. Rules common to every plugin:
-[providers README](README.md).
+[services README](README.md).
 
 ## Start here
 

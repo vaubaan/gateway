@@ -7,7 +7,7 @@ import { noEnvResolver, resourceEnvResolver, type EnvResolver } from '../../src/
 import { parseSlice } from '../../src/slice-dsl.ts';
 
 const catalog: RiskCatalog = {
-  provider: 'github',
+  service: 'github',
   risks: [
     {
       id: 'github.read-code',
@@ -132,7 +132,7 @@ describe('evaluateCall — denied paths', () => {
       evaluateCall({
         executed_slices: [parseSlice('github.repo[foo].W')],
         accepted_risks: new Set(),
-        catalog: indexCatalog({ provider: 'github', risks: [] }),
+        catalog: indexCatalog({ service: 'github', risks: [] }),
       }),
       evaluateCall({
         executed_slices: [parseSlice('github.repo[foo].branch[main].W')],
@@ -196,7 +196,7 @@ describe('evaluateCall — denied paths', () => {
     const d = evaluateCall({
       executed_slices: [
         {
-          provider: 'github',
+          service: 'github',
           action: 'R',
           path: [
             { kind: 'name', value: 'repo' },
@@ -213,7 +213,7 @@ describe('evaluateCall — denied paths', () => {
   });
 
   test('no risk in catalog matches the slice → deny', () => {
-    const otherCatalog: RiskCatalog = { provider: 'github', risks: [] };
+    const otherCatalog: RiskCatalog = { service: 'github', risks: [] };
     const d = evaluateCall({
       executed_slices: [parseSlice('github.repo[foo].W')],
       accepted_risks: new Set(),
@@ -274,7 +274,7 @@ describe('evaluateCall — every slice must be covered, not the union', () => {
     expect(d.covered_risks).toEqual(['github.read-code']);
   });
 
-  test('a slice of another provider is not dropped: it denies', () => {
+  test('a slice of another service is not dropped: it denies', () => {
     const d = evaluateCall({
       executed_slices: [
         parseSlice('github.repo[foo].file[a.ts].R'),
@@ -314,7 +314,7 @@ describe('evaluateCallSimple — convenience wrapper', () => {
 
 describe('evaluateCall — env-qualified subset check', () => {
   const supabaseCatalog: RiskCatalog = {
-    provider: 'supabase',
+    service: 'supabase',
     risks: [
       {
         id: 'supabase.bulk-row-write',
@@ -335,13 +335,13 @@ describe('evaluateCall — env-qualified subset check', () => {
   const supabaseIdx = indexCatalog(supabaseCatalog);
 
   const stagingResource: Resource = {
-    provider: 'supabase',
+    service: 'supabase',
     ref: 'staging-ref',
     env: 'staging',
     displayName: 'staging-ref',
   };
   const prodResource: Resource = {
-    provider: 'supabase',
+    service: 'supabase',
     ref: 'prod-ref',
     env: 'prod',
     displayName: 'prod-ref',
@@ -432,7 +432,7 @@ describe('evaluateCall — env-qualified subset check', () => {
 describe('evaluateCall — acceptable_in_envs runtime filter', () => {
   // Post-merge: single upsert-variable entry with vector_overrides for prod.
   const railwayCatalog: RiskCatalog = {
-    provider: 'railway',
+    service: 'railway',
     risks: [
       {
         id: 'railway.upsert-variable',
@@ -469,14 +469,14 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
   const railwayIdx = indexCatalog(railwayCatalog);
 
   const prodResource: Resource = {
-    provider: 'railway',
+    service: 'railway',
     ref: 'pid-123',
     env: 'prod',
     displayName: 'pid-123',
   };
 
   const stagingResource: Resource = {
-    provider: 'railway',
+    service: 'railway',
     ref: 'pid-456',
     env: 'staging',
     displayName: 'pid-456',
@@ -540,7 +540,7 @@ describe('evaluateCall — env-scoped risk outside its acceptable envs', () => {
     visibility: 'internal',
   } as const;
   const acme: RiskCatalog = {
-    provider: 'acme',
+    service: 'acme',
     risks: [
       // Broad, account-scoped read that co-fires with the specific one below.
       {
@@ -578,7 +578,7 @@ describe('evaluateCall — env-scoped risk outside its acceptable envs', () => {
   };
   const acmeIdx = indexCatalog(acme);
   const resource = (ref: string, env: string | null): Resource => ({
-    provider: 'acme',
+    service: 'acme',
     ref,
     env,
     displayName: ref,

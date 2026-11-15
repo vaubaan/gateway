@@ -137,12 +137,9 @@ describe('the words of the risk model', () => {
 });
 
 describe('the data model words of the plugin page', () => {
-  // The gateway's provider reference holds them in `apps/gateway`, which the site may not
+  // The gateway's service reference holds them in `apps/gateway`, which the site may not
   // import (ADR website-nextjs-on-vercel D1): the site restates them, and this compares.
-  const reference = readRepoFile('apps/gateway/src/lib/providers/reference.ts').replace(
-    /\s+/g,
-    ' ',
-  );
+  const reference = readRepoFile('apps/gateway/src/lib/services/reference.ts').replace(/\s+/g, ' ');
 
   it('say each cardinality as the gateway reference says it', () => {
     for (const [cardinality, words] of Object.entries(CARDINALITY_WORDS)) {

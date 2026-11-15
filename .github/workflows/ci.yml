@@ -193,7 +193,7 @@ jobs:
 
   # Browser tests against an ephemeral instance (apps/gateway/tests/e2e/v5):
   # the built app on the real composition root with the `:memory:` store, a
-  # simulated identity provider and a mocked provider. No credential, no
+  # simulated identity provider and a mocked service. No credential, no
   # network beyond the browser download. Includes the cutover smoke
   # (docs/tests/e2e-tests.md). About five billed minutes.
   #

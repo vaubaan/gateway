@@ -1,5 +1,5 @@
 /**
- * The transport helpers on real `Response` objects : what a provider answers
+ * The transport helpers on real `Response` objects : what a service answers
  * becomes a typed value or a typed failure, never more than the bound.
  */
 import { describe, expect, test } from 'vitest';

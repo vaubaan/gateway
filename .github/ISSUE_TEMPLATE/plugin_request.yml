@@ -1,25 +1,25 @@
 name: Plugin request
-description: Ask for a new provider plugin, or announce that you will write one.
+description: Ask for a new plugin, or announce that you will write one.
 title: '[plugin] '
 labels: ['plugin']
 body:
   - type: markdown
     attributes:
       value: |
-        A provider plugin lives under `plugins/<provider>`. The guide to write one is `plugins/README.md`; this issue is its step 0. Its purpose is to agree on the tools and on the dangerous operations before any code: the risk catalog is the part that is reviewed hardest.
+        A plugin lives under `plugins/<service>`. The guide to write one is `plugins/README.md`; this issue is its step 0. Its purpose is to agree on the tools and on the dangerous operations before any code: the risk catalog is the part that is reviewed hardest.
 
         To correct a plugin that already exists, use "Catalog correction" or "Bug report".
   - type: input
-    id: provider
+    id: service
     attributes:
-      label: Provider
+      label: Service
       placeholder: e.g. Linear, Datadog, AWS IAM
     validations:
       required: true
   - type: input
     id: docs
     attributes:
-      label: Link to the provider's API documentation
+      label: Link to the service's API documentation
       description: The classifier is written from this documentation, never from memory.
     validations:
       required: true
@@ -33,8 +33,8 @@ body:
   - type: dropdown
     id: credential
     attributes:
-      label: How does the provider authenticate
-      description: The three kinds a plugin can declare. A token the user creates once at the provider and pastes is the default; OAuth is kept for a provider that gives no such token (ADR one-place-to-authorize-services-token-first).
+      label: How does the service authenticate
+      description: The three kinds a plugin can declare. A token the user creates once at the service and pastes is the default; OAuth is kept for a service that gives no such token (ADR one-place-to-authorize-services-token-first).
       options:
         - API key or personal token pasted by the user (`api-key`)
         - OAuth 2.0 with user consent, through the gateway's broker (`oauth2`)
@@ -46,8 +46,8 @@ body:
     id: resources
     attributes:
       label: Resources and environments
-      description: What an account reaches and a mission should be limited to (repositories, projects, zones, databases…), and whether the provider tells production from staging or test (separate projects, a mode, a branch, nothing).
-      placeholder: One resource per project. No notion of environment at the provider; the owner labels each project.
+      description: What an account reaches and a mission should be limited to (repositories, projects, zones, databases…), and whether the service tells production from staging or test (separate projects, a mode, a branch, nothing).
+      placeholder: One resource per project. No notion of environment at the service; the owner labels each project.
     validations:
       required: true
   - type: textarea
@@ -69,7 +69,7 @@ body:
   - type: input
     id: existing
     attributes:
-      label: Existing MCP server for this provider, if any
+      label: Existing MCP server for this service, if any
       description: A link. A plugin may wrap one, provided every tool can be classified.
   - type: dropdown
     id: contribution

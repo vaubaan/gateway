@@ -19,14 +19,14 @@ deployed.
 
 - [`main.ts`](../../apps/gateway/tests/demo/main.ts) — the command: guards, build, global `fetch` guard, start, tour (`DEMO_PORT`, `DEMO_KEEP`, `DEMO_SKIP_BUILD`).
 - [`demo-instance.ts`](../../apps/gateway/tests/demo/demo-instance.ts) — `startDemo()`: in-memory configuration, the composition root through its existing `RootDeps`, seed, then Next.
-- [`providers.ts`](../../apps/gateway/tests/demo/providers.ts) — every simulated provider route.
+- [`services.ts`](../../apps/gateway/tests/demo/services.ts) — every simulated service route.
 - [`seed.ts`](../../apps/gateway/tests/demo/seed.ts), [`people.ts`](../../apps/gateway/tests/demo/people.ts), [`tour.ts`](../../apps/gateway/tests/demo/tour.ts) — who signs in, what exists, what the command prints.
 
 ## Invariants
 
 - **Nothing under `apps/gateway/src/` knows the demo**: no flag, option or variable; only pre-existing injection points of the root are used. Held by `demo-safety.test.ts`, which also checks that no `tests/` file is in `.next/standalone` and no built file names `/__demo`.
 - **The launcher refuses a real environment**: `NODE_ENV=production`, `VAUBAAN_CONFIG_FILE` or `VAUBAAN_PUBLIC_URL` set → exit 2 before anything opens (`guards.ts`).
-- **Nothing leaves the machine**: the listener binds `127.0.0.1`; provider calls go to `providers.ts`; telemetry and client-document fetches refuse; the global `fetch` refuses any non-loopback host; SSH is not registered.
+- **Nothing leaves the machine**: the listener binds `127.0.0.1`; service calls go to `services.ts`; telemetry and client-document fetches refuse; the global `fetch` refuses any non-loopback host; SSH is not registered.
 - **The seed writes nothing to the store directly**: sign-ins, accounts, shares, missions, the OAuth handshake and the calls all go through the application's handlers and services, so every seeded state is one the application can reach. The surface rate limits are lifted while it runs only.
 - **No lasting secret or data**: keys generated per run, the SQLite file in a `mkdtemp` directory deleted on exit unless `DEMO_KEEP=1`.
 
@@ -42,7 +42,7 @@ deployed.
 
 ## Procedures
 
-- **Add a simulated endpoint**: one route in `providers.ts`, the URL read off the plugin that calls it.
+- **Add a simulated endpoint**: one route in `services.ts`, the URL read off the plugin that calls it.
 - The browser tests' ephemeral instance ([`ephemeral-instance.ts`](../../apps/gateway/tests/e2e/v5/ephemeral-instance.ts)) is the same construction on the standalone `server.js`; keep the two in step.
 
 ## Debug

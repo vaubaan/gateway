@@ -1,5 +1,5 @@
 ---
-title: Outlook provider plugin
+title: Outlook plugin
 tracks:
   - plugins/outlook/src/
   - plugins/outlook/tests/unit/
@@ -7,7 +7,7 @@ tracks:
 last_reviewed: 2026-11-05
 ---
 
-# Outlook provider plugin — handbook
+# Outlook plugin — handbook
 
 `@vaubaan/plugin-outlook`: mail and calendar of one Microsoft 365 or Outlook.com account, its own 23
 tools on Microsoft Graph v1.0 (`https://graph.microsoft.com/v1.0`), called with an access token from
@@ -15,7 +15,7 @@ the OAuth broker's `microsoft` provider
 ([outlook-through-the-oauth-broker-microsoft-provider](../../decisions/outlook-through-the-oauth-broker-microsoft-provider.md),
 [broker contract](../oauth-broker-contract.md)). One resource per account, the account's
 mailbox; no environment. Mail is Gmail's zoning model, the calendar Google Calendar's. Rules
-common to every plugin: [providers README](README.md).
+common to every plugin: [services README](README.md).
 
 ## Start here
 
@@ -194,7 +194,7 @@ The first two lines are the plugin's `excludedTools` (`identity.ts`), shown on i
   `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`), with publisher verification
   ([broker contract](../oauth-broker-contract.md), "Outside the repo").
 - A tenant whose consent policy blocks user consent needs an administrator's consent once.
-- Provider facts read through Context7 (`/microsoftgraph/microsoft-graph-docs-contrib`, 2026-11-05):
+- Service facts read through Context7 (`/microsoftgraph/microsoft-graph-docs-contrib`, 2026-11-05):
   concepts `auth-v2-user`, `permissions-reference`, `outlook-immutable-id`,
   `outlook-create-send-messages`, `search-query-parameter`, `query-parameters`,
   `filter-query-parameter`, `outlook-get-free-busy-schedule`; v1.0 reference `user-get`,
