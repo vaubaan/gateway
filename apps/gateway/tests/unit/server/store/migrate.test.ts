@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the thirty-eight migrations 0001 to 0038 in the default directory', () => {
+  it('ships the migrations 0001 to 0039 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -146,7 +146,7 @@ describe('migration runner', () => {
       [35, 'platform_management_plugin'],
       [36, 'one_word_per_thing'],
       [37, 'provider_is_service'],
-      [38, 'mission_versions'],
+      [39, 'mission_versions'],
     ]);
   });
 });

@@ -1,4 +1,4 @@
--- Migration 0038 — the versions of a mission's configuration (spec §4.2 "History",
+-- Migration 0039 — the versions of a mission's configuration (spec §4.2 "History",
 -- §8 "Retention").
 --
 --   mission_versions  one immutable row per change of a mission's configuration, numbered

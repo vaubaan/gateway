@@ -16,7 +16,7 @@ mission's configuration with rollback, kept as long as the mission.
 
 ## Decision
 
-`mission_versions` (migration 0038) holds one row per change of a mission's configuration:
+`mission_versions` (migration 0039) holds one row per change of a mission's configuration:
 number, author (person, mission through its `vaubaan` account, or the gateway), cause, the
 whole configuration as JSON and a compact summary of what moved. The store's write of the change
 appends it in the same transaction (`recordSync`), only when the configuration differs from the

@@ -101,7 +101,7 @@ export interface Store {
   readonly accounts: AccountsRepo;
   readonly shares: SharesRepo;
   readonly missions: MissionsRepo;
-  /** The versions of every mission's configuration, kept as long as the mission (0038). */
+  /** The versions of every mission's configuration, kept as long as the mission (0039). */
   readonly missionVersions: MissionVersionsRepo;
   readonly sessions: SessionsRepo;
   readonly requests: RequestsRepo;

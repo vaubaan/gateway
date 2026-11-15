@@ -1,5 +1,5 @@
 /**
- * Migration 0038 — the versions of a mission's configuration. Its backfill writes every
+ * Migration 0039 — the versions of a mission's configuration. Its backfill writes every
  * existing mission's version 1 from its current state (`before-versions`, by the
  * gateway), in SQL: what it writes must be the configuration the store's own writer
  * (`recordSync`) reads, or the first write after the upgrade would leave a version that
@@ -18,15 +18,15 @@ import { DEFAULT_MIGRATIONS_DIR, type Store } from '../../../src/server/store/in
 import { sameConfig } from '../../../src/lib/missions/versions.ts';
 import { openTestStore } from '../../support/store/testing.ts';
 
-/** The INSERT … SELECT of migration 0038, as shipped. */
+/** The INSERT … SELECT of migration 0039, as shipped. */
 function backfillStatement(): string {
-  const sql = readFileSync(join(DEFAULT_MIGRATIONS_DIR, '0038_mission_versions.sql'), 'utf8');
+  const sql = readFileSync(join(DEFAULT_MIGRATIONS_DIR, '0039_mission_versions.sql'), 'utf8');
   const start = sql.indexOf('INSERT INTO mission_versions');
-  if (start < 0) throw new Error('no backfill in 0038');
+  if (start < 0) throw new Error('no backfill in 0039');
   return sql.slice(start);
 }
 
-describe('migration 0038: version 1 of every existing mission', () => {
+describe('migration 0039: version 1 of every existing mission', () => {
   let store: Store;
   let missionIds: string[];
 

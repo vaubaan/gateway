@@ -46,7 +46,7 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   `notification_devices` (0030) and the URLs of `notification_addresses` (0031) included: a new
   sealed column joins that list, or `reseal`, the boot probe and the restore check never see it.
   `notification_mail` (0032) holds no secret: a row is a person who switched mail on.
-- `mission_versions` (0038) is immutable by trigger and deleted only with its mission row (the
+- `mission_versions` (0039) is immutable by trigger and deleted only with its mission row (the
   delete trigger lets the `ON DELETE CASCADE` through, nothing else): the audit's retention never
   reaches it, and `VACUUM INTO` carries it in every backup. It holds no secret (no sealed column),
   so the restore check has nothing to open in it. One writer, `recordSync`

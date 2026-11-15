@@ -19,7 +19,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   creator restores a past version at once, as a new version, bounded by their authority
   today (what they no longer hold is left out and said). Keys, teammates and counters are
   not part of a version. Versions are kept as long as the mission, never by the audit's
-  retention. Migration 0038 adds `mission_versions` and writes every existing mission's
+  retention. Migration 0039 adds `mission_versions` and writes every existing mission's
   version 1 from its current state. `POST /api/missions/:id/versions/:number/restore`.
 
 ### Breaking

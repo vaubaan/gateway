@@ -1,5 +1,5 @@
 /**
- * The versions of a mission's configuration (migration 0038, spec §4.2 "History").
+ * The versions of a mission's configuration (migration 0039, spec §4.2 "History").
  *
  * One writer: `createVersionPrimitives(ctx).recordSync`, called at the end of every
  * transaction that may change a mission's configuration — issuance, edit, permission
@@ -8,7 +8,7 @@
  * transaction left it and appends a version when it differs from the latest one, so a
  * write that moved nothing leaves no version and one that moved something leaves exactly
  * one. Versions are never updated, and deleted only with their mission (triggers of
- * 0038): the audit's retention never reaches them.
+ * 0039): the audit's retention never reaches them.
  */
 import type { MissionChangedEventDetails } from '@vaubaan/shared';
 
@@ -85,7 +85,7 @@ function authorOf(row: VersionRow): MissionVersionAuthor {
   return { kind };
 }
 
-/** `config_json` as written by `recordSync` or migration 0038; its shape is checked at the top. */
+/** `config_json` as written by `recordSync` or migration 0039; its shape is checked at the top. */
 function configOf(json: string): MissionVersionConfig {
   const value = parseJsonObject(json, 'mission_versions.config_json');
   if (

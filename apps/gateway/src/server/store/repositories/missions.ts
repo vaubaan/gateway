@@ -964,7 +964,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   // inside this repository's transaction.
   const sessions = createSessionPrimitives(ctx);
   // Every write that may move the configuration ends with `versions.recordSync`: one
-  // version when something moved, none otherwise (migration 0038).
+  // version when something moved, none otherwise (migration 0039).
   const versions = createVersionPrimitives(ctx);
   const byPerson = (userId: string): MissionVersionStamp['author'] => ({ kind: 'person', userId });
   const byGateway: MissionVersionStamp['author'] = { kind: 'gateway' };

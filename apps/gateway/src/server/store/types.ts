@@ -218,7 +218,7 @@ export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit', 'future'
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
 /**
- * Who wrote a version of a mission's configuration (migration 0038): a person; a
+ * Who wrote a version of a mission's configuration (migration 0039): a person; a
  * mission whose key made the change through the `vaubaan` plugin, for the person it
  * acts for; or the gateway itself (a resource the mission created, future resources).
  */
