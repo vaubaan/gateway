@@ -706,7 +706,14 @@ the (i) itself never leaves the page.
   remote for the service. Every permission (`#risk-<id>`) and macro-action (`#macro-<id>`) has an
   anchor, and every permission shown elsewhere links there. The list of services shows each with
   its mark and its plugin's one-line description.
-- **Activity** — two tabs. **Record**: the audit, filtered by period, mission, account, tool,
+- **Activity** — three tabs. **Overview**, its home (`/activity`): one block per mission the reader
+  reads on the Timeline, over today, 7 or 30 days — calls allowed and refused, requests waiting,
+  bytes sent to the services and received from them (counted on every forwarded call, MCP and git;
+  older calls carry none); behind each block, the requests per account, the use of each action
+  against its limit in the mission's current period (the permission closest to its limit), and the
+  key holders with their share of the calls; above them, what stops working within 7 days — a
+  mission's end, an account's pasted key ending, an account its service refused — each linked to
+  where it is fixed. Every number opens the Record or the Timeline filtered on it. **Record**: the audit, filtered by period, mission, account, tool,
   decision, person, key holder, agent label and kind; each line has a detail at its own address;
   who reads what: §8. **Timeline**: the session events (calls, requests and their answers, resets,
   limits, gates, keys) of the missions I created or am a teammate of — of every mission for an
@@ -1132,7 +1139,9 @@ One entry per call, allowed or refused, and per administrative act.
   hash, slices executed, risks touched, snapshot of accepted risks (each distinct snapshot stored
   once, [audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md)),
   decision and refusal reason, approval consumed, remaining budget after the call for each risk it
-  touched, agent label, upstream latency, client origin. Risk field shapes:
+  touched, agent label, upstream latency, bytes sent to the service and received from it (a
+  forwarded call only: what the arguments or a git push's pack weighed, what the result or a fetch's
+  pack weighed; nothing for a refused call), client origin. Risk field shapes:
   [gateway-risk-model](./gateway-risk-model.md) §12.
 - **An administrative act**: timestamp, user, act, object, previous and new state when meaningful,
   and, when it came through the `vaubaan` plugin (§4.1 bis), the mission whose key made the call

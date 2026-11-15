@@ -29,6 +29,7 @@ import {
   type Slice,
 } from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
+import type { EventScope } from './sessions.ts';
 import { InvariantError } from '../errors.ts';
 import type { Iso, Principal, RiskId } from '../types.ts';
 import {
@@ -192,6 +193,31 @@ export interface TokenHolderActivity {
 }
 
 /**
+ * The call entries of one mission, account and key holder over a span (Activity's
+ * Overview): counted by decision, their bytes summed. Counts of audit entries, never a
+ * budget. `kind: null` gathers the calls written before tokens had a holder.
+ */
+export interface CallTotalsRow {
+  readonly missionId: string;
+  /** `null` for a call refused before its account was resolved. */
+  readonly accountId: string | null;
+  readonly kind: MissionTokenKind | null;
+  readonly holder: string | null;
+  readonly allowed: number;
+  readonly refused: number;
+  /** Sums of the known counts (migration 0038); 0 when none is known. */
+  readonly requestBytes: number;
+  readonly responseBytes: number;
+}
+
+export interface CallTotalsQuery {
+  /** The missions whose calls are summed: the Timeline's scope (`EventScope`). */
+  readonly scope: EventScope;
+  /** Inclusive lower bound of `ts`. */
+  readonly since: Iso;
+}
+
+/**
  * When `appendUnlessLatest` holds its entry back: the most recent administrative entry
  * on the same object whose act is one of `among` carries the same act and was written
  * at or after `since`.
@@ -265,6 +291,12 @@ export interface AuditRepo {
    * calls of the day of the counters (spec §4.3 bis).
    */
   countCallsSince(since: Iso): Promise<CallDecisionCounts>;
+  /**
+   * The call entries since `query.since` of the missions in `query.scope`, one row per
+   * mission, account and key holder (`audit_calls_overview`, migration 0038): one
+   * statement for every mission of the Overview.
+   */
+  callTotals(query: CallTotalsQuery): Promise<CallTotalsRow[]>;
   /** Retention purge: deletes entries strictly older than `cutoff`. The only delete path. */
   purgeOlderThan(cutoff: Iso): Promise<number>;
   /** `purgeOlderThan(now - retentionDays)`; default 90 days (spec §8). */
@@ -298,6 +330,8 @@ interface AuditRow {
   agent_label: string | null;
   upstream_latency_ms: number | null;
   upstream_error: string | null;
+  request_bytes: number | null;
+  response_bytes: number | null;
   client_ip: string | null;
   client_user_agent: string | null;
   user_id: string | null;
@@ -308,6 +342,17 @@ interface AuditRow {
   after_json: string | null;
   delegated_client_id: string | null;
   accepted_set_id: string | null;
+}
+
+interface CallTotalsDbRow {
+  mission_id: string;
+  account_id: string | null;
+  token_kind: string | null;
+  token_holder: string | null;
+  allowed: number;
+  refused: number;
+  request_bytes: number;
+  response_bytes: number;
 }
 
 interface RiskRow {
@@ -339,6 +384,8 @@ const AUDIT_COLUMNS = [
   'agent_label',
   'upstream_latency_ms',
   'upstream_error',
+  'request_bytes',
+  'response_bytes',
   'client_ip',
   'client_user_agent',
   'user_id',
@@ -382,6 +429,8 @@ function callParams(id: string, e: CallAuditEntry, acceptedSetId: string): SqlPa
     agent_label: e.agent_label,
     upstream_latency_ms: e.upstream_latency_ms,
     upstream_error: e.upstream_error,
+    request_bytes: e.request_bytes ?? null,
+    response_bytes: e.response_bytes ?? null,
     client_ip: e.client_ip,
     client_user_agent: e.client_user_agent,
     accepted_set_id: acceptedSetId,
@@ -472,7 +521,7 @@ const SHARES_OF_ACCOUNT = 'SELECT id FROM shares WHERE account_id';
  * statement is the same on Postgres.
  */
 /** A piece of SQL with the values of its own placeholders, in order. */
-interface SqlPiece {
+export interface SqlPiece {
   readonly sql: string;
   readonly params: readonly string[];
 }
@@ -560,6 +609,28 @@ function scopePredicate(scope: AuditScope): SqlPiece {
     sql: `((kind = 'call' AND ${calls.sql}) OR (kind = 'admin' AND ${admin.sql}))`,
     params: [...calls.params, ...admin.params],
   };
+}
+
+/**
+ * `<column> IN` the missions of a Timeline scope (`EventScope`): created by the user,
+ * of which they are a current member, or every mission. An empty scope matches nothing.
+ */
+export function missionScopePiece(column: string, scope: EventScope): SqlPiece {
+  const pieces: SqlPiece[] = [];
+  if (scope.allMissions) pieces.push(EVERYTHING);
+  if (scope.missionCreatorUserId !== null) {
+    pieces.push({
+      sql: `${column} IN (SELECT id FROM missions WHERE creator_user_id = ?)`,
+      params: [scope.missionCreatorUserId],
+    });
+  }
+  if (scope.missionMemberUserId !== null) {
+    pieces.push({
+      sql: `${column} IN (SELECT mission_id FROM mission_members WHERE user_id = ? AND removed_at IS NULL)`,
+      params: [scope.missionMemberUserId],
+    });
+  }
+  return pieces.length === 0 ? NOTHING : anyOf(pieces);
 }
 
 function searchStatement(query: AuditSearch): { sql: string; params: (string | number)[] } {
@@ -859,6 +930,8 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       agent_label: row.agent_label,
       upstream_latency_ms: row.upstream_latency_ms,
       upstream_error: row.upstream_error,
+      request_bytes: row.request_bytes,
+      response_bytes: row.response_bytes,
       client_ip: row.client_ip,
       client_user_agent: row.client_user_agent,
       resource_set_ids: resourceSetsOf.all(row.id).map((r) => r.resource_set_id),
@@ -1033,6 +1106,36 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     },
     async countAllowedTouches(missionId, resourceSetId, riskId, since, until) {
       return countTouches.get(missionId, resourceSetId, riskId, since, until)?.n ?? 0;
+    },
+    async callTotals(query) {
+      const scoped = missionScopePiece('mission_id', query.scope);
+      // `COALESCE(SUM(…), 0)`: an entry with no count adds nothing; plain SQL on Postgres
+      // too, where the driver returns SUM as text (map with `Number()` at the port).
+      const rows = db
+        .prepare<(string | number)[], CallTotalsDbRow>(
+          `SELECT mission_id, account_id, token_kind, token_holder,
+                  SUM(CASE WHEN decision = 'allowed' THEN 1 ELSE 0 END) AS allowed,
+                  SUM(CASE WHEN decision = 'refused' THEN 1 ELSE 0 END) AS refused,
+                  COALESCE(SUM(request_bytes), 0) AS request_bytes,
+                  COALESCE(SUM(response_bytes), 0) AS response_bytes
+           FROM audit
+           WHERE kind = 'call' AND ts >= ? AND ${scoped.sql}
+           GROUP BY mission_id, account_id, token_kind, token_holder`,
+        )
+        .all(query.since, ...scoped.params);
+      return rows.map((r) => {
+        const kind = isMissionTokenKind(r.token_kind) ? r.token_kind : null;
+        return {
+          missionId: r.mission_id,
+          accountId: r.account_id,
+          kind,
+          holder: kind === null ? null : r.token_holder,
+          allowed: r.allowed,
+          refused: r.refused,
+          requestBytes: r.request_bytes,
+          responseBytes: r.response_bytes,
+        };
+      });
     },
     async countCallsSince(since) {
       let allowed = 0;

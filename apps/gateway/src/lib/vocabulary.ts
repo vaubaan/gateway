@@ -597,8 +597,89 @@ export const TRUST_LEVEL_CUSTOM = 'Custom';
 
 /** The tabs of Activity, in their order. */
 export const ACTIVITY_TABS = {
+  overview: { label: 'Overview', href: ROUTES.activity, exact: true },
   record: { label: 'Record', href: ROUTES.activityRecord },
   timeline: { label: 'Timeline', href: ROUTES.activityTimeline },
+} as const;
+
+/** The Overview's spans, as its segments name them. Keyed by `OverviewPeriod`. */
+export const OVERVIEW_PERIODS = {
+  today: 'Today',
+  '7d': '7 days',
+  '30d': '30 days',
+} as const;
+
+/** What the Overview holds, said under its title. */
+export const OVERVIEW_LEDE =
+  'What each mission did: calls, bytes to and from the services, who holds its keys, and what expires soon.';
+
+/** Whose missions the Overview sums, said once above them (the Timeline's scope). */
+export const OVERVIEW_SCOPE = {
+  administrator: 'As an administrator you read every mission.',
+  person:
+    'The missions you created and those shared with you; the calls through the accounts you own are in the Record.',
+  installer: 'The setup token reads no mission: sign in as a person.',
+} as const;
+
+export const OVERVIEW_WORDS = {
+  allowed: 'Allowed',
+  refused: 'Refused',
+  waiting: 'Waiting',
+  up: 'Sent',
+  down: 'Received',
+  /** The disclosure of a mission's block. */
+  show: 'Accounts, permissions and keys',
+  hide: 'Hide accounts, permissions and keys',
+  accounts: 'Requests per account',
+  actions: 'Use per action',
+  holders: 'Who holds the keys',
+  noCall: 'No call in this period',
+  sentWord: 'sent',
+  receivedWord: 'received',
+  notAttributed: 'Calls before keys had a holder',
+  record: 'its record',
+  timeline: 'its timeline',
+  expiringTitle: (days: number) =>
+    `Stops working within ${count(days, { one: 'day', many: 'days' })}`,
+  /** No mission to show in the span. */
+  nothing: 'No mission ran in this period.',
+  notRunning: 'Not running: no period, no use to show.',
+  daysUtc: 'Days are in UTC; calls recorded before bytes were counted show none.',
+} as const;
+
+/**
+ * Bytes in decimal units, one decimal under ten: "0 B", "512 B", "1.2 KB", "34 MB",
+ * "2.5 GB". Locale-independent, like `formatNumber`.
+ */
+export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+  let value = Math.max(0, bytes);
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  if (unit === 0) return `${Math.round(value)} B`;
+  const shown = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+  // 999.95 KB rounds to 1000: say it in the next unit.
+  if (shown >= 1000 && unit < units.length - 1) return `1 ${units[unit + 1]}`;
+  return `${shown} ${units[unit]}`;
+}
+
+/** "42%": a holder's part of a mission's calls. */
+export function percentOf(share: number): string {
+  return `${Math.round(share * 100)}%`;
+}
+
+/** One line of the Overview's "expires soon" list, in words. */
+export const EXPIRY_WORDS = {
+  missionEnds: (mission: string, day: string) => `Mission ${mission} ends on ${day}`,
+  keyEnds: (account: string, day: string) => `The key of ${account} ends on ${day}`,
+  accountExpired: (account: string) => `${account} needs reconnecting: the service refused its key`,
+  extend: 'Edit the mission',
+  reconnect: 'Reconnect',
+  openMission: 'Open the mission',
+  ownerFixes: 'its owner reconnects it',
 } as const;
 
 /** What the Timeline holds, said under its title. */
@@ -1720,6 +1801,11 @@ export const DOC_PAGES = {
     label: PAGES.activity.title,
     path: 'interface#activity',
     hint: 'The record of every call, allowed or refused, and of every change a person made, newest first. Filter it, and open a line for its key, the permissions it touched and what is left.',
+  },
+  activityOverview: {
+    label: 'The overview',
+    path: 'interface#the-overview',
+    hint: 'Each mission at a glance over today, 7 or 30 days: calls allowed, refused and waiting, bytes sent and received, use per action, who holds the keys, and what stops working soon. Every number opens the Record or the Timeline.',
   },
   activityTimeline: {
     label: 'The timeline',

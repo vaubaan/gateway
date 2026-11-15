@@ -55,7 +55,7 @@ describe('composition root over the embedded SQLite store', () => {
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(38);
+    ).toBe(39);
     await expect(root.store.ping()).resolves.toBeUndefined();
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
 
@@ -93,7 +93,7 @@ describe('composition root over the embedded SQLite store', () => {
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(38);
+    ).toBe(39);
     await expect(second.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
       's3cret-value',
     );

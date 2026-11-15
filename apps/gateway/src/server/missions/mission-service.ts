@@ -2286,6 +2286,19 @@ export class MissionService {
     return this.budget.stateOf(budgetMissionOf(mission), this.deps.clock.now());
   }
 
+  /**
+   * A stored mission as it stands now, for a reader the caller already scoped (the
+   * Overview of Activity reads the missions of the Timeline's scope): its derived status
+   * (`orphaned` while its authority is missing) and its state with the period's
+   * remaining budget. Reads only; no authority check of the reader here.
+   */
+  async standing(
+    stored: MissionRecord,
+  ): Promise<{ readonly mission: MissionRecord; readonly state: MissionState }> {
+    const { mission } = await this.deps.grounds.inspect(stored);
+    return { mission, state: await this.stateOf(mission) };
+  }
+
   /** The active member token this user holds on the mission, if any. */
   private async ownToken(missionId: string, userId: string): Promise<MissionTokenRecord | null> {
     const tokens = await this.deps.store.missions.listTokens(missionId);

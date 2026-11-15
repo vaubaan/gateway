@@ -17,7 +17,7 @@ import { systemClock, type Clock } from '../store/clock';
 import { GitDoor } from './door';
 import { inMemoryInFlightPushes } from './in-flight';
 import { startPendingRefSweeper, type PendingRefSweeper } from './sweeper';
-import { createGitUpstreamStage, RelayJobs } from './upstream';
+import { createGitUpstreamStage, gitMeter, RelayJobs } from './upstream';
 
 export interface GitModuleDeps {
   readonly config: Pick<InstanceConfig, 'git'>;
@@ -55,6 +55,7 @@ export function createGitModule(deps: GitModuleDeps): GitModule {
       credentialCache,
       logger,
     }),
+    meter: gitMeter,
   });
   const door = new GitDoor({
     config: deps.config,

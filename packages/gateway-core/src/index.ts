@@ -95,3 +95,5 @@ export type {
   RiskStage,
   UpstreamStage,
 } from './pipeline.ts';
+export { jsonBytes, jsonMeter, requestBytesOf } from './bytes.ts';
+export type { CallBytes, CallMeter } from './bytes.ts';

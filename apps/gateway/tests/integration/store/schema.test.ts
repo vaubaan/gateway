@@ -146,7 +146,7 @@ describe('store schema v1', () => {
     expect(second.schemaVersion).toBe(39);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(38);
+    ).toBe(39);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {
