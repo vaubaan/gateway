@@ -17,7 +17,7 @@ import { configKeysMarkdown, CONFIG_HANDBOOK, parseConfigKeys } from './config-k
 import { loadHandwrittenDocs, orderDocs, withSectionLists, type DocPage } from './docs';
 import { unreadSnapshot, type HealthSnapshot } from './health';
 import { escapeMdx, rewriteRelativeLinks, splitFrontmatter, splitTitle } from './markdown';
-import { llmsTxt, robotsTxt, sitemapXml, type SitePage } from './outputs';
+import { llmsTxt, robotsTxt, siteDir, sitemapXml, type SitePage } from './outputs';
 import {
   PLUGIN_GROUP_PATH,
   pluginGroupMarkdown,
@@ -202,7 +202,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
       title: pluginPageTitle(plugin),
       description: pluginPageDescription(plugin),
       markdown: md(`/plugins/${plugin.id}`),
-      lastModified: lastModified([plugin.dir]),
+      lastModified: lastModified([siteDir(plugin)]),
     })),
     {
       path: '/trust',

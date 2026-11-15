@@ -9,7 +9,7 @@
 import type { ComponentProps } from 'react';
 
 import { MARKDOWN_COMPONENTS, type MarkdownComponents } from '../MarkdownBody';
-import { ServiceMark } from './Codes';
+import { ServiceMark } from '@vaubaan/plugin-page';
 
 export interface ListedMark {
   readonly id: string;

@@ -419,7 +419,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   expect(await checkToken(request, second)).toMatchObject({ outcome: 'verified' });
 });
 
-test('the reference explains each service: permissions against the trust levels, tools, model', async ({
+test('the reference shows each service’s page, the site’s, for the version this instance runs', async ({
   page,
 }) => {
   await signIn(page);
@@ -465,222 +465,63 @@ test('the reference explains each service: permissions against the trust levels,
   await snap(page, 'providers-index');
 
   await page.getByTestId('provider-supabase').getByRole('link', { name: 'Supabase' }).click();
-  // The place keeps its title; the service is the heading under it.
+  // The place keeps its title; the service's page is under it, its name the heading.
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Supabase', level: 2 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Supabase/, level: 2 })).toBeVisible();
   await expect(services.getByRole('link', { name: 'Supabase' })).toHaveAttribute(
     'aria-current',
     'page',
   );
-  await expect(page.getByTestId('provider-summary')).toContainText('one resource is one project');
+  // Above the page, what only this instance knows: the version it runs.
+  await expect(page.getByTestId('instance-strip')).toContainText('This gateway runs plugin');
+  await expect(page.getByTestId('instance-git-remote')).toHaveCount(0);
 
-  // One section in view at a time, behind tabs; the permissions come first.
-  const tabs = page.getByRole('tablist', { name: 'Supabase reference' });
-  await expect(tabs.getByRole('tab')).toHaveText([/Permissions/, /Tools/, /How it is modelled/]);
-  await expect(tabs.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByRole('tabpanel')).toHaveCount(1);
-  // Help is on demand: closed by default, and remembered once opened.
-  const help = page.getByTestId('reference-help');
-  await expect(help).toBeHidden();
-  await page.getByRole('button', { name: 'How to read this page' }).click();
-  await expect(help.getByText('can it be undone, and at what price?')).toBeVisible();
-  await expect(help).toContainText('runs freely');
-  await page.reload();
-  await expect(help).toBeVisible();
-  await page.getByRole('button', { name: 'Hide how to read this page' }).click();
-  await expect(help).toBeHidden();
-
-  // The macro-actions first, then the permissions against the trust levels: a column per trust level.
-  const actions = page.getByTestId('macro-action-list');
-  await expect(actions.locator('li')).toHaveCount(6);
-  await expect(page.getByTestId('macro-change-data')).toContainText('Change data');
-  await expect(page.getByTestId('macro-change-data')).toContainText(/\d+ permissions/);
-  await expect(page.getByTestId('macro-anything-else')).toContainText('Anything else');
-  const matrix = page.getByTestId('trust-level-matrix');
-  await expect(matrix.getByRole('columnheader')).toHaveText([
-    'Permission',
-    'Risk',
-    'Careful',
-    'Trusting',
-    'Autonomous',
+  // The page is the site's page of the plugin: its sections, in order.
+  const sections = page.locator('.plugin-page section');
+  await expect(sections).toHaveCount(8);
+  await expect(page.locator('.plugin-page .pp-k')).toHaveText([
+    /^1 · The model/,
+    /^2 · Macro-actions/,
+    /^3 · The map/,
+    /^4 · A few calls/,
+    /^5 · Anything else/,
+    /^6 · Tools/,
+    /^7 · Retired permissions/,
+    /^8 · Connecting an account/,
   ]);
-  await expect(page.getByTestId('trust-level-careful')).toHaveAttribute('title', /left out/);
-  // A costly write (row 3): asks first until Autonomous, its limit ×1, ×3, ×10.
-  const bulkCell = (trustLevel: string) =>
-    page.getByTestId(`cell-${trustLevel}-supabase.bulk-row-write`);
-  await expect(bulkCell('careful')).toContainText('staging');
-  await expect(bulkCell('careful')).toContainText('asks first');
-  await expect(bulkCell('careful')).toContainText('50');
-  await expect(bulkCell('trusting')).toContainText('150');
-  await expect(bulkCell('autonomous')).toContainText('500');
-  await expect(bulkCell('autonomous')).not.toContainText('asks first');
-  // An irreversible one (row 4): left out at Careful, asks first above.
-  await expect(page.getByTestId('cell-careful-supabase.storage.bulk-object-write')).toContainText(
-    'left out',
-  );
-  await expect(page.getByTestId('cell-trusting-supabase.storage.bulk-object-write')).toContainText(
-    'asks first',
-  );
-  await snap(page, 'provider-macro-actions');
+  await snap(page, 'provider-model');
 
-  // A text filter narrows the list in view.
-  const rows = matrix.locator('tr[data-risk]');
-  const all = await rows.count();
-  await page.getByLabel('Filter the permissions').fill('migration');
-  await expect(rows.first()).toContainText(/migration/i);
-  expect(await rows.count()).toBeLessThan(all);
-  await page.getByLabel('Filter the permissions').fill('no such permission');
-  await expect(page.getByText('Nothing matches.')).toBeVisible();
-  await page.getByLabel('Filter the permissions').fill('');
-  await expect(rows).toHaveCount(all);
-
-  // The parts of the service slice every tab at once.
-  const planes = page.getByTestId('plane-control');
-  await expect(planes.getByRole('button')).toHaveText([
-    'All',
-    'db',
-    'storage',
-    'auth',
-    'functions',
-    'other',
-  ]);
-  await planes.getByRole('button', { name: 'storage' }).click();
-  await expect(rows).toHaveCount(6);
-  await expect(matrix).not.toContainText('Apply a migration');
-  await tabs.getByRole('tab', { name: /Tools/ }).click();
-  await expect(page).toHaveURL(/#tools$/);
-  const tool = (name: string) => page.getByTestId('tool-table').locator(`tr[data-row="${name}"]`);
-  await expect(tool('supabase__list_buckets')).toBeVisible();
-  await expect(tool('supabase__list_users')).toHaveCount(0);
-  await expect(tool('supabase__list_buckets')).toContainText('by arguments');
-  // What no part can be read for is under "other", not guessed.
-  await planes.getByRole('button', { name: 'other' }).click();
-  await expect(tool('supabase__execute_sql')).toBeVisible();
-  // The keyboard moves between tabs.
-  await tabs.getByRole('tab', { name: /Tools/ }).press('ArrowRight');
-  await expect(tabs.getByRole('tab', { name: /How it is modelled/ })).toBeFocused();
-  await expect(tabs.getByRole('tab', { name: /How it is modelled/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  // The map: Careful by default, the trust level and the environment switch without a script.
+  const map = page.locator('section#map');
+  const bulk = map.locator('li[data-risk-id="supabase.bulk-row-write"]:visible').first();
+  await expect(bulk).toBeVisible();
+  await map.locator('label[for="lvl-a"]').click();
+  await expect(map.locator('label[for="lvl-a"]')).toBeVisible();
+  await map.locator('label', { hasText: 'staging' }).click();
+  await expect(map.locator('li[data-risk-id="supabase.bulk-row-write"]:visible')).not.toHaveCount(
+    0,
   );
-  await planes.getByRole('button', { name: 'All' }).click();
-  // The model as an outline, with what carries the environment.
-  await expect(page.getByRole('region', { name: 'Part db' })).toContainText('schema');
-  await expect(page.getByTestId('provider-environment')).toContainText(
-    'the label the owner of the account puts on each resource',
-  );
-  await expect(page.getByText('carries the environment').first()).toBeVisible();
-  await snap(page, 'provider-data-model');
+  await snap(page, 'provider-map');
 
-  // An anchor of a permission opens Permissions on a part that shows the entry, and unfolds it.
-  await planes.getByRole('button', { name: 'auth' }).click();
+  // An anchor of a permission lands on its chip in the map.
   await page.goto('/reference/supabase#risk-supabase.bulk-row-write');
-  await expect(tabs.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  const entry = page.getByTestId('risk-supabase.bulk-row-write');
-  await expect(entry).toBeInViewport();
-  await expect(entry.getByRole('button', { name: /Bulk write on a table/ })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
-  await expect(entry).toContainText('supabase.bulk-row-write');
-  const unfolded = page.locator('[id="risk-supabase.bulk-row-write-detail"]');
-  await expect(unfolded).toContainText('once per environment');
-  await expect(unfolded).toContainText('supabase[staging].bulk-row-write');
-  // The five facts behind the row (the Reference alone prints them), what it covers, and
-  // its line at each trust level, named by its row.
-  await expect(unfolded.getByText('Blast radius').first()).toBeVisible();
-  await expect(unfolded.getByText('Lasts')).toHaveCount(0);
-  await expect(unfolded).toContainText('Write: project');
-  await expect(unfolded).toContainText('supabase.project');
-  await expect(unfolded).toContainText('Change data');
-  await expect(unfolded).toContainText('Careful');
-  await expect(unfolded).toContainText('Autonomous');
-  await expect(unfolded).toContainText('Repairable, at a price');
-  await expect(unfolded).not.toContainText('Tier');
-  await expect(unfolded).toContainText(/\d+\/min/);
-  // The reader was on `auth`, which does not show this entry: its own part was opened.
-  await expect(planes.getByRole('button', { name: 'db' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('risk-supabase.auth.generate-link')).toHaveCount(0);
-  await planes.getByRole('button', { name: 'All' }).click();
-  // A row is compact until asked: folded, what it covers is not on the page.
-  const folded = page.getByTestId('risk-supabase.read-data');
-  await expect(folded.getByRole('button', { name: /Read data and schema/ })).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  );
-  await expect(page.getByText('Read anything in supabase')).toHaveCount(0);
-  await folded.getByRole('button', { name: /Read data and schema/ }).click();
-  await expect(page.locator('[id="risk-supabase.read-data-detail"]')).toContainText(
-    'Read anything in supabase',
-  );
-  // "Anything not named" is explained where it is listed, once unfolded.
-  const fallback = page.getByTestId('risk-supabase.uncategorized-write');
-  await expect(fallback).toContainText('anything not named');
-  await fallback.getByRole('button', { name: /Uncategorized Supabase write/ }).click();
-  await expect(page.locator('[id="risk-supabase.uncategorized-write-detail"]')).toContainText(
-    'Counts only for a write no other entry of the catalog names',
-  );
-  await snap(page, 'provider-risks');
-  // The macro-action of a permission is the link to it in the list.
-  await page
-    .getByTestId('risk-supabase.migration-write')
-    .getByRole('link', { name: 'Change the schema' })
-    .click();
-  await expect(page).toHaveURL(/#macro-change-schema$/);
-  await expect(page.getByTestId('macro-change-schema')).toBeInViewport();
+  await expect(page.locator('[id="risk-supabase.bulk-row-write"]')).toBeInViewport();
 
-  // A macro-action anchor; a service with one part has no filter by part.
+  // A macro-action anchor lands on its card.
   await page.goto('/reference/github#macro-administer');
-  await expect(page.getByTestId('macro-administer')).toBeInViewport();
-  await expect(page.getByTestId('plane-control')).toHaveCount(0);
-  await expect(page.getByTestId('trust-level-matrix')).toContainText(
-    'Modify a GitHub Actions workflow',
-  );
-  await expect(page.getByTestId('cell-careful-github.workflow-write-via-file')).toContainText(
-    'asks first',
-  );
-  await expect(
-    page.getByTestId('cell-autonomous-github.workflow-write-via-file'),
-  ).not.toContainText('asks first');
-  await expect(page.getByTestId('cell-careful-github.delete-release')).toContainText('left out');
-  // The earlier sections still lead somewhere: `#presets`, `#macro-actions` and `#risks`
-  // open Permissions.
-  for (const section of ['presets', 'macro-actions']) {
-    await page.goto(`/reference/github#tools`);
-    await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
-    await page.goto(`/reference/github#${section}`);
-    await expect(page.getByRole('tab', { name: /Permissions/ }), section).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-  }
-  // Nineteen permissions today, folded, read in about two screens.
-  await page.goto('/reference/github#risks');
-  await expect(page.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(GITHUB.permissions);
-  const first = await page.getByTestId('risk-github.read-code').boundingBox();
-  const last = await page.getByTestId('risk-github.delete-release').boundingBox();
-  const viewport = page.viewportSize();
-  if (!first || !last || !viewport) throw new Error('the list of permissions is not laid out');
-  expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(2.1);
-  // The page does not scroll sideways at this width.
+  await expect(page.locator('#macro-administer')).toBeInViewport();
+  await expect(page.locator('#macro-administer')).toContainText(/\d+ permissions?/);
+  // The tools, all of them; the mint tool of earlier builds is gone, its risks retired.
+  const tools = page.locator('section#tools');
+  await expect(tools.locator('tbody tr')).toHaveCount(GITHUB.tools);
+  await expect(tools).not.toContainText('github__mint_install_token');
+  await expect(page.locator('section#retired')).toContainText('github.mint-install-token-push');
+  // Its git remote, on this instance.
+  await expect(page.getByTestId('instance-git-remote')).toContainText('/git/github/');
+  // The page's links to the docs go under the instance's docs root, never to a path of its own.
+  await expect(page.locator('.plugin-page a[href^="/docs/"]')).toHaveCount(0);
+  // The page does not scroll sideways at this width: the map scrolls inside its own box.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
-  // The mint tool of the App of earlier builds is gone, its two risks retired: git goes
-  // through the gateway's remote.
-  await page.goto('/reference/github#tools');
-  await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('tool-table')).not.toContainText('github__mint_install_token');
-  await page.goto('/reference/github#permissions');
-  await expect(page.getByTestId('risk-github.mint-install-token-push')).toContainText('retired');
   await snap(page, 'provider-tools');
   // An unknown service is not found.
   const missing = await page.goto('/reference/no-such-provider');

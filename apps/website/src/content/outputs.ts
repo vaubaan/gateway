@@ -7,6 +7,8 @@
  * `llms-full.txt` and `plugins.json` repeat the plugin pages, so a route
  * renders them with the collector read (`src/site/live.ts`).
  */
+import { CONNECT_ANCHOR } from '@vaubaan/plugin-page/page-data';
+
 import { GITHUB_REPO, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '../site/constants';
 import {
   healthFootnote,
@@ -15,9 +17,19 @@ import {
   type LineFigures,
   type PluginHealth,
 } from './health';
-import { connectGuidePath } from './plugin-page';
 import type { PluginWithHealth } from './plugin-pages';
-import type { LevelBudgets, MacroActionInfo, RiskInfo } from './plugins';
+import type { LevelBudgets, MacroActionInfo, PluginInfo, RiskInfo } from './plugins';
+
+/** The folder of a plugin the site loaded (`plugins/github`): the site always knows it. */
+export function siteDir(plugin: Pick<PluginInfo, 'dir'>): string {
+  if (plugin.dir === null) throw new Error('a plugin of the site always has its folder');
+  return plugin.dir;
+}
+
+/** The address of a service's connect guide (the old `/docs/providers/<id>` redirects here). */
+export function connectGuidePath(pluginId: string): string {
+  return `/plugins/${pluginId}#${CONNECT_ANCHOR}`;
+}
 import type { ValidationThresholds } from './thresholds';
 
 /** The files served by a route rather than from `public/` (rendered with the collector read). */
@@ -227,7 +239,7 @@ function pluginJson(p: PluginWithHealth): Record<string, unknown> {
     icon_color: p.iconColor,
     resource_noun: p.resourceNoun,
     page: absolute(`/plugins/${p.id}`),
-    source: `${GITHUB_REPO}/tree/main/${p.dir}`,
+    source: `${GITHUB_REPO}/tree/main/${siteDir(p)}`,
     health: healthJson(p.health),
     counts: {
       permissions: p.counts.permissions,

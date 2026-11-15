@@ -19,7 +19,7 @@ import {
   CONFIG_HANDBOOK,
   parseConfigKeys,
 } from '../../../src/content/config-keys';
-import { CARDINALITY_WORDS, ENVIRONMENT_RULES } from '../../../src/content/plugin-page';
+import { CARDINALITY_WORDS, ENVIRONMENT_RULES } from '@vaubaan/plugin-page/page-data';
 import { factsOf, loadPlugins } from '../../../src/content/plugins';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
@@ -120,17 +120,20 @@ describe('the words of the risk model', () => {
           ),
       )
       .filter((word) => word.length > 8);
+    // The page's own code is shared with the gateway's Reference (`@vaubaan/plugin-page`).
     const files = [
-      'content/plugins.ts',
-      'content/plugin-examples.ts',
-      'content/plugin-page.ts',
-      'content/plugin-pages.ts',
-      'content/outputs.ts',
-      'components/plugin/Codes.tsx',
-      'components/plugin/PluginPage.tsx',
+      'apps/website/src/content/plugins.ts',
+      'apps/website/src/content/plugin-pages.ts',
+      'apps/website/src/content/outputs.ts',
+      'apps/website/src/components/plugin/PluginPage.tsx',
+      'packages/plugin-page/src/info.ts',
+      'packages/plugin-page/src/examples.ts',
+      'packages/plugin-page/src/page-data.ts',
+      'packages/plugin-page/src/marks.tsx',
+      'packages/plugin-page/src/ServicePage.tsx',
     ];
     for (const file of files) {
-      const source = readRepoFile(`apps/website/src/${file}`);
+      const source = readRepoFile(file);
       for (const word of words) expect(source, `${file}: '${word}'`).not.toContain(`'${word}'`);
     }
   });
