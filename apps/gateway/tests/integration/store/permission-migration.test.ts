@@ -29,7 +29,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
       email: 'owner@example.com',
     });
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       displayName: 'GitHub',
       owner: { kind: 'user', id: user.id },
       credential: null,
@@ -73,7 +73,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(36);
+    expect(store.schemaVersion).toBe(37);
     expect(await store.requests.getById(request.id)).toEqual(request);
     expect(await heldArguments(store, request.id)).toEqual({
       marker: 'preserved encrypted content',

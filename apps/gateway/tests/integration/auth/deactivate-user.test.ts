@@ -78,7 +78,7 @@ describe('deactivating a user: sessions end, member keys are revoked, missions f
     const team = await rig.root.groups.service.create(ops.id, 'reviewers');
     await rig.root.groups.service.addMember(ops.id, team.id, bob.email);
     const own = await rig.root.store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: bob.id },
       displayName: 'Bob’s GitHub',
       credential: null,

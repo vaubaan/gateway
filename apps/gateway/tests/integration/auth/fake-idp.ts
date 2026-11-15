@@ -1,5 +1,5 @@
 /**
- * An in-process OpenID Connect provider for the integration tests (spec §10
+ * An in-process OpenID Connect sign-in provider for the integration tests (spec §10
  * "integration on an ephemeral instance with embedded store and simulated
  * IdP"). No listener: it is handed to the relying party as `customFetch` and
  * answers discovery, JWKS, token and userinfo from memory. The "browser" step
@@ -232,7 +232,7 @@ function oauthError(error: string, status = 400): Response {
 
 /**
  * Answers the discovery document of any issuer with a minimal valid one naming that
- * issuer: for a test that saves an OpenID Connect provider through the form (which
+ * issuer: for a test that saves an OpenID Connect sign-in provider through the form (which
  * checks discovery before saving) and never signs in through it.
  */
 export const answerAnyDiscovery: CustomFetch = (url) => {

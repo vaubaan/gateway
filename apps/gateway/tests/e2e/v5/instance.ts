@@ -109,9 +109,9 @@ export const E2E_SHARE_TARGET = {
 export const E2E_OPERATOR = { sub: 'idp|ops', email: 'ops@example.com', name: 'Ops' } as const;
 
 /**
- * The mocked GitHub behind the instance (`RootDeps.providerFetch`): one
+ * The mocked GitHub behind the instance (`RootDeps.serviceFetch`): one
  * fine-grained token, reaching two repositories. Nothing here is a real
- * account; the launcher answers every provider request itself.
+ * account; the launcher answers every service request itself.
  */
 export const MOCK_GITHUB = {
   /** Of the shape the plugin's field accepts; opens nothing anywhere. */

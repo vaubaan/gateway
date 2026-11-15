@@ -32,7 +32,7 @@ async function main(): Promise<void> {
       displayName: 'Demo user',
     });
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'acme-org',
       credential: serializeSecret({

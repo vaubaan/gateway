@@ -1,6 +1,6 @@
 /**
  * Rig of the git remote's integration tests: the real composition root with
- * the shipped GitHub plugin, a `FakeGithubHost` behind `RootDeps.providerFetch`,
+ * the shipped GitHub plugin, a `FakeGithubHost` behind `RootDeps.serviceFetch`,
  * the git door served on a local listener, and the real `git` client.
  *
  * Nothing reaches github.com. The agent's side runs git with an empty
@@ -122,12 +122,12 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       VAUBAAN_LOG_LEVEL: 'debug',
       ...options.env,
     },
-    deps: { providerFetch: host.fetch, logWrite: (_level, text) => logs.push(text) },
+    deps: { serviceFetch: host.fetch, logWrite: (_level, text) => logs.push(text) },
   });
   const { store } = instance.root;
   host.acceptToken(ACCOUNT_TOKEN, { metadata: 'read', contents: 'write', workflows: 'write' });
   const github = await store.accounts.create({
-    provider: 'github',
+    service: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
@@ -180,7 +180,7 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
     async tokenHolding(token, permissions) {
       host.acceptToken(token, permissions);
       const account = await store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: instance.ada.id },
         displayName: `acme-${token.slice(-6)}`,
         credential: serializeSecret({ kind: 'api-key', fields: { token }, metadata: {} }),

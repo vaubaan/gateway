@@ -2,7 +2,7 @@
  * Structural test (ADR service-icons-declared-by-the-plugin): every plugin the image ships declares its
  * icon — the `d` of one SVG path on a 24×24 grid — and the brand colour it is
  * drawn in, so no service of this repository falls back to two letters on a
- * hue or to the plain ink, and the interface never keeps a list of provider
+ * hue or to the plain ink, and the interface never keeps a list of service
  * icons or colours of its own.
  *
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`), not

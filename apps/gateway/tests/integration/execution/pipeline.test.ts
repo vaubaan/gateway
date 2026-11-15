@@ -481,7 +481,7 @@ describe('execution door: the call pipeline', () => {
   });
 
   describe('structural rejections (no refusal code)', () => {
-    it('rejects an unknown tool, a provider the mission has no account for, and unplaceable arguments', async () => {
+    it('rejects an unknown tool, a service the mission has no account for, and unplaceable arguments', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
 
       const unknown = await instance.call(mission, 'nope__anything');
@@ -571,7 +571,7 @@ describe('execution door: the call pipeline', () => {
   });
 
   describe('upstream', () => {
-    it('reports a provider failure as a tool error; the call stays allowed and counted', async () => {
+    it('reports a service failure as a tool error; the call stays allowed and counted', async () => {
       const mission = await instance.issue({ policy: [line(READ, 5)] });
       instance.depot.script(async () => {
         throw new Error('depot answered 502');
@@ -592,9 +592,9 @@ describe('execution door: the call pipeline', () => {
       });
     });
 
-    it("keeps the provider's text out of the audit: a host-built summary there, the detail to the agent", async () => {
-      // Providers echo input in their errors (an object id, a SQL fragment), and
-      // plugins quote the provider's body in the error they throw.
+    it("keeps the service's text out of the audit: a host-built summary there, the detail to the agent", async () => {
+      // Services echo input in their errors (an object id, a SQL fragment), and
+      // plugins quote the service's body in the error they throw.
       const marker = 'item-marker-7f3a9c';
       const mission = await instance.issue({ policy: [line(READ, 5)] });
       instance.depot.script(async (_ctx, _tool, args) => {
@@ -607,7 +607,7 @@ describe('execution door: the call pipeline', () => {
         item: marker,
       });
 
-      // The agent, which knows its own arguments, reads the provider's answer.
+      // The agent, which knows its own arguments, reads the service's answer.
       expect(body.result).toMatchObject({
         isError: true,
         content: [
@@ -617,7 +617,7 @@ describe('execution door: the call pipeline', () => {
           },
         ],
       });
-      // The audit holds the provider id, the status and the error class — nothing else.
+      // The audit holds the service id, the status and the error class — nothing else.
       const [entry] = await callEntries(mission);
       expect(entry?.upstream_error).toBe('depot answered HTTP 403 (UpstreamAuthError)');
       expect(JSON.stringify(entry)).not.toContain(marker);
@@ -686,7 +686,7 @@ describe('execution door: the call pipeline', () => {
       expect((await callEntries(mission))[1]?.decision).toBe('refused');
     });
 
-    it('403 is the provider refusing the action, not a dead credential: no refresh, no expiry', async () => {
+    it('403 is the service refusing the action, not a dead credential: no refresh, no expiry', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       let refreshes = 0;
       instance.depot.scriptRefresh(async () => {
@@ -737,7 +737,7 @@ describe('execution door: the call pipeline', () => {
       );
       expect(minted).toBe(1);
 
-      // The provider rejects the cached credential: dropped, minted again, same stored credential.
+      // The service rejects the cached credential: dropped, minted again, same stored credential.
       rejectCached = true;
       expect(text(await instance.call(mission, 'depot__read_item', { space: 'scratch' }))).toBe(
         'minted',

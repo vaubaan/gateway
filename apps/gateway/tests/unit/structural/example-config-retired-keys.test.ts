@@ -1,6 +1,6 @@
 /**
  * Structural test: the deployment examples (`deploy/config/gateway.example.yaml`,
- * `deploy/config/.env.example`) show no OAuth client declared per provider.
+ * `deploy/config/.env.example`) show no OAuth client declared per service.
  *
  * The `providers.<id>.<field>` keys and the `VAUBAAN_PROVIDER_<ID>_<FIELD>`
  * variables are retired (ADR gmail-over-imap-with-an-app-password): the loader no
@@ -24,7 +24,7 @@ function retiredLines(source: string): string[] {
   return source.split('\n').filter((line) => block.test(line) || variable.test(line));
 }
 
-describe('the deployment examples declare no OAuth client per provider', () => {
+describe('the deployment examples declare no OAuth client per service', () => {
   it.each(['gateway.example.yaml', '.env.example'])('%s', (name) => {
     expect(retiredLines(readFileSync(resolve(CONFIG_DIR, name), 'utf8'))).toEqual([]);
   });

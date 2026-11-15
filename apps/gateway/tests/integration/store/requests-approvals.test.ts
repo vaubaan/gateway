@@ -46,7 +46,7 @@ describe('requests repository', () => {
       })
     ).id;
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
       credential: null,
@@ -208,7 +208,7 @@ describe('approvals repository', () => {
       })
     ).id;
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
       credential: null,

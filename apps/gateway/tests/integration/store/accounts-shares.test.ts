@@ -30,7 +30,7 @@ describe('accounts repository', () => {
 
   it('creates a user-owned account and seals the credential with the account id', async () => {
     const c = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       displayName: 'GitHub (acme)',
       credential: 'ghp_secret',
@@ -38,7 +38,7 @@ describe('accounts repository', () => {
       metadata: { installation_id: 42 },
     });
     expect(c).toMatchObject({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       status: 'active',
       keyVersion: 1,
@@ -50,7 +50,7 @@ describe('accounts repository', () => {
 
     // The blob is bound to the account id: moving it to another row fails to open.
     const other = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       displayName: 'other',
       credential: null,
@@ -68,7 +68,7 @@ describe('accounts repository', () => {
 
   it('never exposes the ciphertext on the record', async () => {
     const c = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: 'ghp_plain_secret_value',
@@ -80,7 +80,7 @@ describe('accounts repository', () => {
 
   it('supports group ownership, transfer and the unowned state', async () => {
     const c = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'group', id: group },
       displayName: 'x',
       credential: null,
@@ -104,7 +104,7 @@ describe('accounts repository', () => {
 
   it('reconnection replaces the credential and reactivates an expired account', async () => {
     const c = await store.accounts.create({
-      provider: 'vercel',
+      service: 'vercel',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: 'old',
@@ -116,20 +116,20 @@ describe('accounts repository', () => {
     expect(await store.accounts.getCredential(c.id)).toBe('new');
   });
 
-  it('lists by provider, status and owning principals', async () => {
+  it('lists by service, status and owning principals', async () => {
     const mine = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       displayName: 'mine',
       credential: null,
     });
     const theirs = await store.accounts.create({
-      provider: 'supabase',
+      service: 'supabase',
       owner: { kind: 'group', id: group },
       displayName: 'group',
       credential: null,
     });
-    expect((await store.accounts.list({ provider: 'github' })).map((c) => c.id)).toEqual([mine.id]);
+    expect((await store.accounts.list({ service: 'github' })).map((c) => c.id)).toEqual([mine.id]);
     expect((await store.accounts.list({ status: 'active' })).map((c) => c.id)).toEqual([
       mine.id,
       theirs.id,
@@ -147,7 +147,7 @@ describe('accounts repository', () => {
 
   it('syncs discovered resources by ref, keeping ids and owner labels', async () => {
     const c = await store.accounts.create({
-      provider: 'supabase',
+      service: 'supabase',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: null,
@@ -181,7 +181,7 @@ describe('accounts repository', () => {
 
   it('reads every unlabelled resource under the account default, never stores it, and lets own labels win', async () => {
     const c = await store.accounts.create({
-      provider: 'stripe',
+      service: 'stripe',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: null,
@@ -248,7 +248,7 @@ describe('accounts repository', () => {
 
   it('merges a discovery without touching owner edits, and never deletes', async () => {
     const c = await store.accounts.create({
-      provider: 'resend',
+      service: 'resend',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: null,
@@ -342,7 +342,7 @@ describe('accounts repository', () => {
 
   it('follows the plugin’s hidden hint until the owner hides or shows the resource', async () => {
     const c = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: null,
@@ -384,7 +384,7 @@ describe('accounts repository', () => {
 
   it('refreshes, expires, reconnects and revokes without ever resurrecting a revoked account', async () => {
     const c = await store.accounts.create({
-      provider: 'supabase',
+      service: 'supabase',
       owner: { kind: 'user', id: owner },
       displayName: 'x',
       credential: 'token-1',
@@ -449,7 +449,7 @@ describe('shares repository', () => {
     group = (await store.groups.getOrCreate('devs', 'idp', 'idp')).id;
     account = (
       await store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: owner },
         displayName: 'gh',
         credential: null,

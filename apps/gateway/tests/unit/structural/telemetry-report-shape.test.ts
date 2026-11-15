@@ -6,7 +6,7 @@
  * `:memory:` store, telemetry enabled towards a mocked collector, and a
  * fixture plugin whose `execute` ends in a randomly drawn outcome — results
  * echoing the arguments, error results, and thrown values of every kind
- * carrying arguments, resource refs, tokens and provider messages in their
+ * carrying arguments, resource refs, tokens and service messages in their
  * message, `name`, `code`, `status` and `cause`.
  *
  * What must hold for everything that reached the collector (URL, headers and
@@ -22,7 +22,7 @@
  *      user and account identifiers, the mission tokens and their
  *      holders (a member's id and email, the name of a named token: who is
  *      calling never leaves the instance), the agent label, the caller's
- *      address and user agent, the instance's host name, the provider's
+ *      address and user agent, the instance's host name, the service's
  *      messages;
  *   4. one report per call that reached the plugin, none for a call the
  *      gateway refused before it, in order, with the expected outcome class.
@@ -110,7 +110,7 @@ const TIMEOUT_CODES = ['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_
 
 /** One of the ways a `plugin.execute` can end, with secrets planted wherever an error can hold text. */
 function drawOutcome(rng: Rng, args: Readonly<Record<string, unknown>>): DrawnOutcome {
-  const message = rng.poison('provider-message');
+  const message = rng.poison('service-message');
   const leak = `${message} args=${JSON.stringify(args)} token=${DEPOT_API_KEY}`;
   const poisons = [message];
   const upstream = (errorClass: string) => ({

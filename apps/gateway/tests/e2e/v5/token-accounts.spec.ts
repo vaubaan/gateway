@@ -1,7 +1,7 @@
 /**
  * Connecting an account with a token pasted by hand, the one way of
  * connecting these services (ADR one-place-to-authorize-services-token-first),
- * in a browser against the ephemeral instance. The providers are mocked in
+ * in a browser against the ephemeral instance. The services are mocked in
  * the launcher: nothing reaches a network.
  *
  *   - Supabase: a personal access token, with the guide its plugin declares,

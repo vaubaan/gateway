@@ -17,7 +17,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
 import { silentLogger } from '../../../src/server/logging';
 import { openMemoryStore, type Store } from '../../../src/server/store';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const IDP = 'https://idp.example.com';
@@ -96,7 +96,7 @@ describe('administrators live in the instance', () => {
     const designations = await root.store.administrators.list();
     expect(designations).toEqual([
       expect.objectContaining({ kind: 'user', userId: opsId, origin: 'configuration' }),
-      expect.objectContaining({ kind: 'email', email: 'later@example.com', provider: null }),
+      expect.objectContaining({ kind: 'email', email: 'later@example.com', signInProvider: null }),
     ]);
     expect(await isAdmin(root, await sessionOf(root, opsId, 'ops@example.com'))).toBe(true);
     const [seeded] = (await root.store.audit.list({ kind: 'admin' })).filter(
@@ -122,7 +122,7 @@ describe('administrators live in the instance', () => {
       },
     );
     roots.push(root);
-    await saveTestOidcProvider(root.store.config, {
+    await saveTestOidcSignInProvider(root.store.config, {
       issuer: IDP,
       clientId: 'c',
       clientSecret: 's',
@@ -131,7 +131,11 @@ describe('administrators live in the instance', () => {
       invitationOnly: true,
     });
     expect(await root.store.administrators.list()).toEqual([
-      expect.objectContaining({ kind: 'group', groupName: 'idp:5f0c-admins', provider: null }),
+      expect.objectContaining({
+        kind: 'group',
+        groupName: 'idp:5f0c-admins',
+        signInProvider: null,
+      }),
     ]);
     expect(await isAdmin(root, await sessionOf(root, memberId, 'm@corp.example'))).toBe(true);
     // A member of the group who never signed in is admitted by the invitation-only provider.
@@ -206,7 +210,7 @@ describe('administrators live in the instance', () => {
     expect(await root.store.administrators.count()).toBe(0);
   });
 
-  it('a pending address becomes its person at the first sign-in through that provider', async () => {
+  it('a pending address becomes its person at the first sign-in through that sign-in provider', async () => {
     const root = await boot({ store: null }, { VAUBAAN_ADMIN_EMAILS: undefined });
     roots.push(root);
     await root.auth.administrators.grantEmail('ada@example.com', 'idp', 'bootstrap');
@@ -218,13 +222,13 @@ describe('administrators live in the instance', () => {
       displayName: null,
       groups: [],
     };
-    // Through another provider, the address names nobody.
+    // Through another sign-in provider, the address names nobody.
     expect(await root.auth.administrators.admits(identity, 'github')).toBe(false);
     expect(await root.auth.administrators.admits(identity, 'idp')).toBe(true);
     const outcome = await completeLogin(
       { store: root.store, bootstrap: root.auth.bootstrap, logger: silentLogger },
       identity,
-      { providerId: 'idp', administrators: root.auth.administrators },
+      { signInProviderId: 'idp', administrators: root.auth.administrators },
     );
     expect(outcome.isOperator).toBe(true);
     expect(await root.store.administrators.list()).toEqual([
@@ -232,10 +236,10 @@ describe('administrators live in the instance', () => {
     ]);
   });
 
-  it('no self-lockout: the last administrator with a way in is neither unmade nor deactivated, nor their provider removed', async () => {
+  it('no self-lockout: the last administrator with a way in is neither unmade nor deactivated, nor their sign-in provider removed', async () => {
     const root = await boot({ store: null }, { VAUBAAN_ADMIN_EMAILS: undefined });
     roots.push(root);
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'github',
         kind: 'github',
@@ -272,7 +276,7 @@ describe('administrators live in the instance', () => {
       'github',
     );
     expect(removal.headers.get('location')).toContain('problem=');
-    expect(await root.auth.providers.view('github')).not.toBeNull();
+    expect(await root.auth.signInProviders.view('github')).not.toBeNull();
 
     // A second administrator: now the first may go, and the remover keeps their session.
     await root.users.handlers.makeAdministrator(
@@ -293,14 +297,14 @@ describe('administrators live in the instance', () => {
     expect((await root.store.users.getById(ops.id))?.status).toBe('active');
   });
 
-  it('removing a provider ends the sessions of its users, never the remover’s own', async () => {
+  it('removing a sign-in provider ends the sessions of its users, never the remover’s own', async () => {
     const root = await boot({ store: null }, { VAUBAAN_ADMIN_EMAILS: undefined });
     roots.push(root);
     for (const [id, issuer] of [
       ['github', ''],
       ['other', 'https://ghe.example.com'],
     ] as const) {
-      await root.auth.providers.save(
+      await root.auth.signInProviders.save(
         {
           id,
           kind: 'github',
@@ -357,7 +361,7 @@ describe('the setup ends by an explicit step', () => {
       expect((await root.auth.bootstrap.state()).status).toBe('active');
 
       // A local administrator named by the setup is a way in.
-      await root.auth.providers.save(
+      await root.auth.signInProviders.save(
         {
           id: 'local',
           kind: 'local',

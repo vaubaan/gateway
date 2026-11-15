@@ -63,7 +63,7 @@ describe('every shipped token way guides the person and checks the token', () =>
     });
 
     it('says who knows the expiry', () => {
-      expect(['provider-reports', 'person-types', 'none']).toContain(spec.guide.expiry.kind);
+      expect(['service-reports', 'person-types', 'none']).toContain(spec.guide.expiry.kind);
     });
 
     it('checks the token at paste and never shows it back', () => {

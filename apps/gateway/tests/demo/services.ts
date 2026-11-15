@@ -1,12 +1,12 @@
 /**
- * The simulated providers of the demo: one `fetch` double handed to the
- * composition root as `RootDeps.providerFetch`, so every outbound request of
+ * The simulated services of the demo: one `fetch` double handed to the
+ * composition root as `RootDeps.serviceFetch`, so every outbound request of
  * a connect flow, of a discovery or of a tool call is answered here, from
  * memory, with a plausible canned payload.
  *
  * Nothing in this file opens a socket. A request no route below answers is
- * refused loudly (`DemoProviderError`, also written on the demo's stderr): it
- * is never forwarded to the real provider.
+ * refused loudly (`DemoServiceError`, also written on the demo's stderr): it
+ * is never forwarded to the real service.
  *
  * Simulated:
  *   - GitHub — two fine-grained tokens (one per organisation): the check at
@@ -27,7 +27,7 @@
  *     environment-variable tools of the REST API, the deployment lookup, and
  *     the rewrapped tools of the remote MCP server answered with canned text.
  *
- * Every provider URL is read off the plugin that calls it (its credential
+ * Every service URL is read off the plugin that calls it (its credential
  * spec or its exported API base), never spelled a second time here.
  */
 import { randomBytes } from 'node:crypto';
@@ -44,12 +44,12 @@ import { VERCEL_API_BASE, VERCEL_MCP_URL } from '@vaubaan/plugin-vercel';
 const random = (bytes = 20): string => randomBytes(bytes).toString('hex');
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-export class DemoProviderError extends Error {
+export class DemoServiceError extends Error {
   constructor(method: string, url: string) {
     super(
-      `demo mode: no simulated answer for ${method} ${url} — nothing was sent to the real provider`,
+      `demo mode: no simulated answer for ${method} ${url} — nothing was sent to the real service`,
     );
-    this.name = 'DemoProviderError';
+    this.name = 'DemoServiceError';
   }
 }
 
@@ -565,7 +565,7 @@ export const DEMO_REDIS_DATABASES = [
 /**
  * REST endpoint of a simulated database. The plugin posts a database token to a host
  * of Upstash's REST domain and to no other, so the simulated one is named there too;
- * like every provider URL here it is answered from memory and never dialled.
+ * like every service URL here it is answered from memory and never dialled.
  */
 const redisRestHost = (name: string): string => `${name}${UPSTASH_REST_HOST_SUFFIX}`;
 const redisRestUrl = (name: string): string => `https://${redisRestHost(name)}`;
@@ -876,19 +876,19 @@ function axonautRoutes(): MockRoute[] {
 /* The one `fetch`                                                           */
 /* ------------------------------------------------------------------------ */
 
-export interface DemoProviders {
-  /** `RootDeps.providerFetch`. */
+export interface DemoServices {
+  /** `RootDeps.serviceFetch`. */
   readonly fetch: typeof fetch;
   /** Every outbound request the instance made, in order (the smoke test reads it). */
   readonly calls: readonly RecordedCall[];
 }
 
-export interface DemoProvidersOptions {
+export interface DemoServicesOptions {
   /** Told about every request no route answers, before it is refused. */
-  readonly onUnmatched?: (error: DemoProviderError) => void;
+  readonly onUnmatched?: (error: DemoServiceError) => void;
 }
 
-export function createDemoProviders(options: DemoProvidersOptions = {}): DemoProviders {
+export function createDemoServices(options: DemoServicesOptions = {}): DemoServices {
   const mock = mockFetch([
     ...githubRoutes(),
     ...stripeRoutes(),
@@ -905,7 +905,7 @@ export function createDemoProviders(options: DemoProvidersOptions = {}): DemoPro
     } catch {
       // `mockFetch` rejects a request no route matches; say what it means here.
       const last = mock.calls[mock.calls.length - 1];
-      const error = new DemoProviderError(last?.method ?? 'GET', last?.url ?? String(input));
+      const error = new DemoServiceError(last?.method ?? 'GET', last?.url ?? String(input));
       options.onUnmatched?.(error);
       throw error;
     }

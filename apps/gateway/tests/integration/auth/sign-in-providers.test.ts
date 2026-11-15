@@ -80,7 +80,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       },
       ...memoryStoreDeps,
     });
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'company',
         kind: 'oidc',
@@ -94,7 +94,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       },
       'create',
     );
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'github',
         kind: 'github',
@@ -115,22 +115,23 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     await root.close();
   });
 
-  /** /auth/login/<id> → the provider's consent → /auth/callback/<callbackId>. */
+  /** /auth/login/<id> → the sign-in provider's consent → /auth/callback/<callbackId>. */
   async function signIn(
     b: Browser,
-    providerId: 'company' | 'github',
+    signInProviderId: 'company' | 'github',
     options: { callbackId?: string } = {},
   ): Promise<Response> {
     const start = await root.auth.handlers.loginStart(
-      new Request(`${PUBLIC_URL}/auth/login/${providerId}?return_to=/`),
-      providerId,
+      new Request(`${PUBLIC_URL}/auth/login/${signInProviderId}?return_to=/`),
+      signInProviderId,
     );
     expect(start.status).toBe(303);
     absorbCookies(b, start);
     const location = new URL(start.headers.get('location') ?? '', PUBLIC_URL);
     if (location.origin === PUBLIC_URL) return start;
-    const callback = providerId === 'github' ? github.authorize(location) : idp.authorize(location);
-    const callbackId = options.callbackId ?? providerId;
+    const callback =
+      signInProviderId === 'github' ? github.authorize(location) : idp.authorize(location);
+    const callbackId = options.callbackId ?? signInProviderId;
     const finish = await root.auth.handlers.loginCallback(
       new Request(callback.href, { headers: { cookie: cookieHeader(b) } }),
       callbackId,
@@ -145,8 +146,8 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
 
   const fresh = (): Browser => ({ cookies: new Map() });
 
-  it('lists both providers, and /auth/login without a provider sends the person to choose', async () => {
-    expect((await root.auth.providers.views()).map((p) => [p.id, p.kind, p.name])).toEqual([
+  it('lists both sign-in providers, and /auth/login without a sign-in provider sends the person to choose', async () => {
+    expect((await root.auth.signInProviders.views()).map((p) => [p.id, p.kind, p.name])).toEqual([
       ['company', 'oidc', 'Acme'],
       ['github', 'github', 'GitHub'],
     ]);
@@ -156,7 +157,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(res.headers.get('location')).toBe('/login?return_to=%2Fmissions');
   });
 
-  it('each provider has its own callback, the provider idp too', () => {
+  it('each sign-in provider has its own callback, the sign-in provider idp too', () => {
     expect(root.auth.flows.callbackUrl('github').href).toBe(`${PUBLIC_URL}/auth/callback/github`);
     expect(root.auth.flows.callbackUrl('idp').href).toBe(`${PUBLIC_URL}/auth/callback/idp`);
   });
@@ -191,12 +192,16 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     const principal = await root.auth.authenticator.authenticate(
       new Headers({ cookie: cookieHeader(b) }),
     );
-    expect(principal).toMatchObject({ kind: 'user', providerId: 'github', isOperator: false });
+    expect(principal).toMatchObject({
+      kind: 'user',
+      signInProviderId: 'github',
+      isOperator: false,
+    });
     // read:org is asked only when a team must be read: the admin rule names one of GitHub's.
     expect(github.requests).toContain('authorize scope=read:user user:email read:org');
   });
 
-  it('never merges identities by email: the same address through two providers is two users', async () => {
+  it('never merges identities by email: the same address through two sign-in providers is two users', async () => {
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     idp.nextClaims = { sub: 'emp-ada', email: 'ada@example.com', name: 'Ada', groups: [] };
     await signIn(fresh(), 'company');
@@ -231,7 +236,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect((await root.auth.bootstrap.state()).status).toBe('active');
   });
 
-  it('a callback for provider A never completes an attempt started for provider B', async () => {
+  it('a callback for sign-in provider A never completes an attempt started for sign-in provider B', async () => {
     github.nextUser = ADA_GITHUB;
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     const b = fresh();
@@ -242,7 +247,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(await root.store.users.list()).toEqual([]);
   });
 
-  it('the admin rule names its provider: a GitHub team counts, the same group from the directory does not', async () => {
+  it('the admin rule names its sign-in provider: a GitHub team counts, the same group from the directory does not', async () => {
     await root.users.invitations.invite('bootstrap', 'grace@example.com');
     github.nextUser = {
       id: 3003,
@@ -285,7 +290,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(await root.store.users.list()).toEqual([]);
   });
 
-  it('the admin emails are admitted on an invitation-only provider', async () => {
+  it('the admin emails are admitted on an invitation-only sign-in provider', async () => {
     github.nextUser = {
       id: 4004,
       login: 'ops',
@@ -300,7 +305,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(ops).toMatchObject({ isOperator: true });
   });
 
-  it('a member of the admin team is admitted on the invitation-only provider, and is an operator', async () => {
+  it('a member of the admin team is admitted on the invitation-only sign-in provider, and is an operator', async () => {
     github.nextUser = {
       id: 5005,
       login: 'hal',
@@ -343,7 +348,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
             mode: 'create',
             kind: 'oidc',
             preset: 'entra',
-            provider_id: 'entra',
+            sign_in_provider_id: 'entra',
             name: 'Entra ID',
             client_id: 'app-client-id',
             client_secret: 'app-secret',
@@ -361,11 +366,11 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(back.searchParams.get('kind')).toBe('entra');
     expect(back.searchParams.get('tenant')).toBe('common');
     expect(back.searchParams.get('problem')).toContain('not an Entra ID tenant');
-    expect(await root.auth.providers.view('entra')).toBeNull();
+    expect(await root.auth.signInProviders.view('entra')).toBeNull();
 
     const saved = await save({ tenant: 'Contoso.onmicrosoft.com' });
     expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=entra');
-    const view = await root.auth.providers.view('entra');
+    const view = await root.auth.signInProviders.view('entra');
     expect(view?.kind).toBe('oidc');
     expect(view?.issuer.href).toBe(
       'https://login.microsoftonline.com/contoso.onmicrosoft.com/v2.0',
@@ -387,7 +392,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(again.headers.get('location')).toBe('/login?error=not-invited');
   });
 
-  it('removing a provider: its users cannot sign in, their sessions end, their missions follow the deactivation rules', async () => {
+  it('removing a sign-in provider: its users cannot sign in, their sessions end, their missions follow the deactivation rules', async () => {
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     github.nextUser = ADA_GITHUB;
     const b = fresh();
@@ -395,7 +400,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     const ada = await root.store.users.getByIdentity(github.issuer, '1001');
     if (!ada) throw new Error('Ada was not created');
     const seeded = await seedAccount(root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: ada.id },
       displayName: 'ada-org',
       resources: [{ ref: 'ada/app' }],
@@ -413,7 +418,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     });
     if (!issued.ok) throw new Error('the mission was not issued');
 
-    await root.auth.providers.remove('github');
+    await root.auth.signInProviders.remove('github');
     await root.store.users.endSessionsOfIssuer(github.issuer);
 
     // The session is over and no new sign-in can start.
@@ -424,7 +429,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       new Request(`${PUBLIC_URL}/auth/login/github`),
       'github',
     );
-    expect(start.headers.get('location')).toBe('/login?error=provider-unknown');
+    expect(start.headers.get('location')).toBe('/login?error=sign-in-provider-unknown');
     // Nothing else changed: the user is active and the mission still serves, as for anyone
     // the identity provider stopped vouching for, until an administrator deactivates them.
     expect((await root.store.users.getById(ada.id))?.status).toBe('active');
@@ -439,7 +444,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(done.orphaned).toBe(1);
   });
 
-  it('Settings removes a provider for an administrator: audited, sessions of its users ended at once', async () => {
+  it('Settings removes a sign-in provider for an administrator: audited, sessions of its users ended at once', async () => {
     // Ops signs in through GitHub (an admin email: admitted, administrator).
     github.nextUser = {
       id: 4004,
@@ -481,9 +486,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(JSON.stringify(removal)).not.toContain(CLIENT.clientSecret);
   });
 
-  it('refuses to add a second provider of the same issuer', async () => {
+  it('refuses to add a second sign-in provider of the same issuer', async () => {
     await expect(
-      root.auth.providers.save(
+      root.auth.signInProviders.save(
         {
           id: 'company-two',
           kind: 'oidc',
@@ -496,12 +501,14 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
         },
         'create',
       ),
-    ).rejects.toMatchObject({ problems: [expect.stringContaining("provider 'company' already")] });
+    ).rejects.toMatchObject({
+      problems: [expect.stringContaining("sign-in provider 'company' already")],
+    });
   });
 
-  it('refuses a GitHub provider without an admission rule, saying why', async () => {
+  it('refuses a GitHub sign-in provider without an admission rule, saying why', async () => {
     await expect(
-      root.auth.providers.save(
+      root.auth.signInProviders.save(
         {
           id: 'github-two',
           kind: 'github',

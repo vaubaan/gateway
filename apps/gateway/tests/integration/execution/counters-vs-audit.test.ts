@@ -84,7 +84,7 @@ describe('structural: session counters agree with the audit', () => {
       policy: POLICY,
       spaces: ['app-staging', 'scratch'],
     });
-    // The provider misbehaves now and then: a failure, or a rejected key that a
+    // The service misbehaves now and then: a failure, or a rejected key that a
     // refresh repairs. Neither changes what was decided.
     instance.depot.scriptRefresh(async () => depotSecret('sk-rotated'));
     instance.depot.script(async (ctx) => {

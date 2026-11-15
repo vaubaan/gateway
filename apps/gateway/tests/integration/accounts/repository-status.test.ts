@@ -22,7 +22,7 @@ describe('account statuses at the repository', () => {
       email: 'o@example.com',
     });
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: owner.id },
       displayName: 'GitHub',
       credential: 'token-1',

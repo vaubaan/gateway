@@ -1,7 +1,7 @@
 /**
  * What the demo refuses to start next to, decided before anything is opened.
  *
- * The demo signs anybody in without a password and answers every provider
+ * The demo signs anybody in without a password and answers every service
  * from memory: it must never be mistaken for, or started beside, a real
  * instance. It therefore refuses a production environment and any sign that
  * the shell it runs in is configured for a real instance. It never reads the

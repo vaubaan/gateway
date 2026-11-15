@@ -145,7 +145,7 @@ describe('a backup written before the rename of connection to account', () => {
 
     const store = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
     try {
-      expect(store.schemaVersion).toBe(36);
+      expect(store.schemaVersion).toBe(37);
       expect(await store.accounts.getCredential(ACCOUNT_ID)).toBe(CREDENTIAL);
       expect((await store.accounts.getById(ACCOUNT_ID))?.displayName).toBe('acme');
       // The mission still reaches its account and its resource.
@@ -175,7 +175,7 @@ describe('a backup written before the rename of connection to account', () => {
           object_id: ACCOUNT_ID,
           account_id: null,
           refusal_code: null,
-          after_json: JSON.stringify({ account_id: ACCOUNT_ID, provider: 'github' }),
+          after_json: JSON.stringify({ account_id: ACCOUNT_ID, service: 'github' }),
         },
         {
           id: 'a2',

@@ -2,7 +2,7 @@
  * Streaming on the execution door (spec §4.1 "the gateway forwards streamed
  * responses […]; the decision is made before the stream starts").
  *
- * A plugin whose provider answers progressively emits the parts of its result
+ * A plugin whose service answers progressively emits the parts of its result
  * (`ExecuteContext.emitPart`, through the SDK's `streamToolResult`). The door
  * turns each part into a `notifications/progress` frame on the call's event
  * stream — for a caller that sent a `progressToken` — while the plugin keeps
@@ -12,7 +12,7 @@
  * MCP client in both protocol eras:
  *
  *   - a part reaches the caller while the plugin is still blocked on the
- *     provider (nothing is held back until the end);
+ *     service (nothing is held back until the end);
  *   - at that moment the decision is already taken and counted;
  *   - a refused call is answered by its error alone and reaches no plugin;
  *   - the one audit entry is written when the stream ends: its latency covers
@@ -161,7 +161,7 @@ describe('streaming on the execution door', () => {
     throw new Error('no audit entry was written');
   };
 
-  it('delivers a part while the plugin still reads its provider; decision and credit come first', async () => {
+  it('delivers a part while the plugin still reads its service; decision and credit come first', async () => {
     const upstream = gate();
     instance.depot.script((ctx) =>
       streamToolResult(
@@ -234,7 +234,7 @@ describe('streaming on the execution door', () => {
         {
           onprogress: (progress) => {
             seen.push({ progress: progress.progress, message: progress.message });
-            // Only the first part can be here: the provider has not delivered the second.
+            // Only the first part can be here: the service has not delivered the second.
             if (seen.length === 1) upstream.open();
           },
         },
@@ -250,11 +250,11 @@ describe('streaming on the execution door', () => {
     });
   }
 
-  it('forwards a streamed provider body chunk by chunk (textParts over the response body)', async () => {
+  it('forwards a streamed service body chunk by chunk (textParts over the response body)', async () => {
     const chunks = ['{"rows":[', '1,2,', '3]}'];
     instance.depot.script(async (ctx) => {
       const encoder = new TextEncoder();
-      const provider = new Response(
+      const service = new Response(
         new ReadableStream<Uint8Array>({
           async start(controller) {
             for (const chunk of chunks) {
@@ -265,8 +265,8 @@ describe('streaming on the execution door', () => {
           },
         }),
       );
-      if (!provider.body) throw new Error('unreachable');
-      return streamToolResult(ctx, textParts(provider.body));
+      if (!service.body) throw new Error('unreachable');
+      return streamToolResult(ctx, textParts(service.body));
     });
 
     const received: unknown[] = [];
@@ -337,7 +337,7 @@ describe('streaming on the execution door', () => {
           yield text('row 1\n');
           yield text('row 2\n');
           await pause(UPSTREAM_PAUSE_MS);
-          throw new Error('connection reset by the provider near row 3 of table customers');
+          throw new Error('connection reset by the service near row 3 of table customers');
         })(),
       ),
     );
@@ -358,7 +358,7 @@ describe('streaming on the execution door', () => {
         content: [
           {
             type: 'text',
-            text: 'Upstream error: the stream was interrupted after 2 parts: connection reset by the provider near row 3 of table customers',
+            text: 'Upstream error: the stream was interrupted after 2 parts: connection reset by the service near row 3 of table customers',
           },
         ],
       },
@@ -368,7 +368,7 @@ describe('streaming on the execution door', () => {
     expect(entry).toMatchObject({
       decision: 'allowed',
       refusal_code: null,
-      // Host-built: the provider's sentence is not in the audit.
+      // Host-built: the service's sentence is not in the audit.
       upstream_error: 'depot stream failed after 2 parts (Error)',
     });
     expect(entry.kind === 'call' && entry.upstream_latency_ms).toBeGreaterThanOrEqual(
@@ -415,7 +415,7 @@ describe('streaming on the execution door', () => {
     }));
     instance.depot.script(async (ctx) => {
       attempts += 1;
-      // The provider's response is opened before the first part: a 401 lands here.
+      // The service's response is opened before the first part: a 401 lands here.
       if (attempts === 1) throw new UpstreamAuthError('expired', 401);
       return streamToolResult(
         ctx,
@@ -555,7 +555,7 @@ describe('streaming and community telemetry (spec §9)', () => {
     expect((await reports()).map((report) => report.outcome)).toEqual(['success']);
   });
 
-  it('reports nothing either when the plugin fails after the caller left (not a timeout of the provider)', async () => {
+  it('reports nothing either when the plugin fails after the caller left (not a timeout of the service)', async () => {
     const started = gate();
     const upstream = gate();
     instance.depot.script(async () => {
@@ -577,13 +577,13 @@ describe('streaming and community telemetry (spec §9)', () => {
     expect(await reports()).toEqual([]);
   });
 
-  it('reports once, as an upstream error, when the provider breaks the stream of a caller that is still there', async () => {
+  it('reports once, as an upstream error, when the service breaks the stream of a caller that is still there', async () => {
     instance.depot.script((ctx) =>
       streamToolResult(
         ctx,
         (async function* () {
           yield text('row 1\n');
-          throw new Error('connection reset by the provider near row 2');
+          throw new Error('connection reset by the service near row 2');
         })(),
       ),
     );

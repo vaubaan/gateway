@@ -110,7 +110,7 @@ describe('the application has no demo seam', () => {
         expect(github.credential.createUrl).toMatch(/^https:\/\/github\.com\//);
       }
       expect(root.config.publicUrl.protocol).toBe('https:');
-      expect(await root.auth.providers.views()).toEqual([]);
+      expect(await root.auth.signInProviders.views()).toEqual([]);
     } finally {
       await root.close();
     }

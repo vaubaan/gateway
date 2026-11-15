@@ -69,7 +69,7 @@ describe('self resources: never reachable by a mission', () => {
 
   it('reads the configured self resource', () => {
     expect(instance.root.config.selfResources).toEqual([
-      { provider: 'depot', ref: SELF, source: 'config' },
+      { service: 'depot', ref: SELF, source: 'config' },
     ]);
   });
 

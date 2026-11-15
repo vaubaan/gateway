@@ -3,7 +3,7 @@
  *
  * `fixturePlugin()` builds the smallest plugin `definePlugin` accepts around
  * a given `CredentialSpec`, so every credential kind can be driven without a
- * real provider plugin; the `*_SPEC` constants are one spec per kind, with
+ * real plugin; the `*_SPEC` constants are one spec per kind, with
  * endpoints on RFC 2606 hosts. `accountsHarness()` assembles the
  * module over the `:memory:` store, in-memory ports and a `mockFetch`.
  */
@@ -16,7 +16,7 @@ import {
   type CredentialSpec,
   type OAuth2RegisteredClientSpec,
   type PluginRegistry,
-  type ProviderPlugin,
+  type ServicePlugin,
   type Resource,
   type SshKeyCredentialSpec,
 } from '@vaubaan/plugin-sdk';
@@ -52,9 +52,9 @@ export const PUBLIC_URL = new URL('https://gateway.example.com');
  */
 export const OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
-  authorizationUrl: 'https://provider.example.com/oauth/authorize',
-  tokenUrl: 'https://provider.example.com/oauth/token',
-  clientRegistration: { registrationUrl: 'https://provider.example.com/oauth/register' },
+  authorizationUrl: 'https://service.example.com/oauth/authorize',
+  tokenUrl: 'https://service.example.com/oauth/token',
+  clientRegistration: { registrationUrl: 'https://service.example.com/oauth/register' },
   scopes: ['read', 'write'],
   pkce: true,
   clientAuthMethod: 'client_secret_basic',
@@ -64,12 +64,12 @@ export const OAUTH_SPEC: OAuth2RegisteredClientSpec = {
 /** An `oauth2` way whose client the gateway registers itself (RFC 7591), like Miro's MCP server. */
 export const REGISTERED_OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
-  authorizationUrl: 'https://mcp.provider.example.com/authorize',
-  tokenUrl: 'https://mcp.provider.example.com/token',
-  clientRegistration: { registrationUrl: 'https://mcp.provider.example.com/register' },
+  authorizationUrl: 'https://mcp.service.example.com/authorize',
+  tokenUrl: 'https://mcp.service.example.com/token',
+  clientRegistration: { registrationUrl: 'https://mcp.service.example.com/register' },
   scopes: ['boards:read', 'boards:write'],
   pkce: true,
-  resourceIndicator: 'https://mcp.provider.example.com/',
+  resourceIndicator: 'https://mcp.service.example.com/',
   clientAuthMethod: 'client_secret_post',
   refreshable: true,
 };
@@ -110,7 +110,7 @@ export interface FixturePluginOptions {
 }
 
 /** A valid plugin whose id is a slug without dashes (so the tool prefix is `<id>__`). */
-export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
+export function fixturePlugin(options: FixturePluginOptions): ServicePlugin {
   const { id } = options;
   const vector = {
     reversibility: 'reversible',
@@ -123,7 +123,7 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
     id,
     displayName: options.displayName ?? id,
     version: '0.0.1',
-    description: `Fixture provider ${id}.`,
+    description: `Fixture service ${id}.`,
     tools: [
       {
         name: `${id}__list_things`,
@@ -132,7 +132,7 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
       },
     ],
     dataModel: {
-      provider: id,
+      service: id,
       planes: [
         {
           slug: 'space',
@@ -155,7 +155,7 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
       ],
     },
     catalog: {
-      provider: id,
+      service: id,
       risks: [
         {
           id: `${id}.read-things`,
@@ -234,7 +234,7 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
 }
 
 export interface HarnessOptions {
-  readonly plugins: readonly ProviderPlugin[];
+  readonly plugins: readonly ServicePlugin[];
   readonly routes?: readonly MockRoute[];
   /**
    * The OAuth brokers the instance is enrolled with. Calls to their URLs go to
@@ -270,10 +270,10 @@ export interface AccountsHarness extends TestStore {
   /** Creates a user (and optional groups they belong to) and returns the actor. */
   actor(email: string, groupNames?: readonly string[]): Promise<Actor>;
   /**
-   * Keeps a client as if the gateway had registered it at the provider for this
+   * Keeps a client as if the gateway had registered it at the service for this
    * instance's callback: what a test of the flows, not of the registration, starts from.
    */
-  seedClient(providerId: string, clientId: string, clientSecret: string | null): Promise<void>;
+  seedClient(serviceId: string, clientId: string, clientSecret: string | null): Promise<void>;
 }
 
 export function accountsHarness(options: HarnessOptions): AccountsHarness {
@@ -359,12 +359,12 @@ export function accountsHarness(options: HarnessOptions): AccountsHarness {
       }
       return { user, groups };
     },
-    async seedClient(providerId, clientId, clientSecret) {
+    async seedClient(serviceId, clientId, clientSecret) {
       await seedRegisteredClient(test.store.config, {
-        providerId,
+        serviceId,
         clientId,
         clientSecret,
-        redirectUri: service.callbackUrl(providerId).href,
+        redirectUri: service.callbackUrl(serviceId).href,
         at: test.clock.now(),
       });
     },
@@ -373,37 +373,37 @@ export function accountsHarness(options: HarnessOptions): AccountsHarness {
 
 /**
  * Keeps a client in `instance_config` as `OAuth2Clients` keeps one it registered
- * at the provider for `redirectUri`: the starting point of a test of the flows,
+ * at the service for `redirectUri`: the starting point of a test of the flows,
  * not of the registration (oauth2-clients.test.ts).
  */
 export async function seedRegisteredClient(
   config: Pick<ConfigRepo, 'apply'>,
   client: {
-    readonly providerId: string;
+    readonly serviceId: string;
     readonly clientId: string;
     readonly clientSecret: string | null;
     readonly redirectUri: string;
     readonly at: Date;
   },
 ): Promise<void> {
-  const { providerId } = client;
+  const { serviceId } = client;
   await config.apply([
-    { kind: 'value', key: registeredClientKey(providerId, 'client_id'), value: client.clientId },
+    { kind: 'value', key: registeredClientKey(serviceId, 'client_id'), value: client.clientId },
     client.clientSecret === null
-      ? { kind: 'delete', key: registeredClientKey(providerId, 'client_secret') }
+      ? { kind: 'delete', key: registeredClientKey(serviceId, 'client_secret') }
       : {
           kind: 'secret',
-          key: registeredClientKey(providerId, 'client_secret'),
+          key: registeredClientKey(serviceId, 'client_secret'),
           plain: client.clientSecret,
         },
     {
       kind: 'value',
-      key: registeredClientKey(providerId, 'redirect_uri'),
+      key: registeredClientKey(serviceId, 'redirect_uri'),
       value: client.redirectUri,
     },
     {
       kind: 'value',
-      key: registeredClientKey(providerId, 'registered_at'),
+      key: registeredClientKey(serviceId, 'registered_at'),
       value: client.at.toISOString(),
     },
   ]);

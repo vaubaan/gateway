@@ -110,7 +110,7 @@ describe('recovery by the master key', () => {
       post(
         '/api/recover/name',
         jar,
-        'kind=email&provider=idp&email=x%40example.com',
+        'kind=email&sign_in_provider=idp&email=x%40example.com',
         'application/x-www-form-urlencoded',
       ),
     );
@@ -193,7 +193,7 @@ describe('recovery by the master key', () => {
   });
 
   it('naming an address of sign-in accounts hands its account link over, once', async () => {
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'local',
         kind: 'local',
@@ -212,7 +212,7 @@ describe('recovery by the master key', () => {
       post(
         '/api/recover/name',
         jar,
-        'kind=email&provider=local&email=new%40example.com',
+        'kind=email&sign_in_provider=local&email=new%40example.com',
         'application/x-www-form-urlencoded',
       ),
     );

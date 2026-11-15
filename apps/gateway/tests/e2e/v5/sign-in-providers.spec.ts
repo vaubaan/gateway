@@ -4,11 +4,11 @@
  * administrator adds GitHub (the in-process `FakeGithub`) beside the company
  * directory (the `FakeIdp`) from Settings → Sign-in, the sign-in page then offers
  * both, an uninvited GitHub address is refused, invited from People it is
- * admitted, and the provider is removed again — asked first. Every page is also
+ * admitted, and the sign-in provider is removed again — asked first. Every page is also
  * checked for the security headers the application sets.
  *
- * GitHub stays a provider only for the length of this spec: the others start a
- * sign-in with `/auth/login`, which goes straight to the one provider.
+ * GitHub stays a sign-in provider only for the length of this spec: the others start a
+ * sign-in with `/auth/login`, which goes straight to the one sign-in provider.
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -64,7 +64,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   page,
   request,
 }) => {
-  // The operator signs in through the company directory, the one provider so far.
+  // The operator signs in through the company directory, the one sign-in provider so far.
   await signInAs(request, E2E_OPERATOR);
   await page.goto('/auth/login?return_to=/admin/identity-provider');
   await passSecondFactor(page, request, E2E_OPERATOR.email);
@@ -95,7 +95,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await expect(page.getByRole('radio', { name: /^Everyone your directory/ })).toHaveCount(0);
   await expect(page.getByRole('radio', { name: 'Invited people only' })).toBeChecked();
   await snap(page, 'settings-sign-in-add-github');
-  await page.getByRole('button', { name: 'Add the provider' }).click();
+  await page.getByRole('button', { name: 'Add the sign-in provider' }).click();
 
   await expect(page.getByTestId('idp-saved')).toBeVisible();
   await expect(table.getByRole('row')).toHaveCount(3);
@@ -109,7 +109,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await nextGithubUser(request, GUEST);
   const [popup] = await Promise.all([
     page.context().waitForEvent('page'),
-    page.getByTestId('test-provider-github').click(),
+    page.getByTestId('test-sign-in-provider-github').click(),
   ]);
   await popup.waitForURL(/\/admin\/identity-provider\/github\/test/);
   await expect(popup.getByTestId('test-passed')).toContainText(GUEST.email);
@@ -117,7 +117,7 @@ test('an administrator adds GitHub, an invited address signs in through it, and 
   await snap(popup, 'settings-sign-in-test');
   await popup.close();
   await page.reload();
-  await page.getByTestId('enable-provider-github').click();
+  await page.getByTestId('enable-sign-in-provider-github').click();
   await expect(page.getByTestId('idp-enabled')).toBeVisible();
   // Its people are asked no second factor of the gateway's: the administrator waives it
   // (never for administrators). It can be switched back, so it is not asked first.

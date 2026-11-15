@@ -83,7 +83,7 @@ describe('the Activity’s Timeline', () => {
 
   it('the owner of an account reads the calls through it in the Record, not the session of the mission', async () => {
     const bobs = await seedAccount(rig.root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
       resources: [],

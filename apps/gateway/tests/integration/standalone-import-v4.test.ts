@@ -6,7 +6,7 @@
  * tree, with the instance's configuration in its environment and its store
  * file on disk — and runs a dry run of a bundle read on stdin: the shipped
  * plugins load their catalogs, the store opens with its migrations, the
- * native addons load, nothing is written and no provider is contacted.
+ * native addons load, nothing is written and no service is contacted.
  *
  * Skipped when the bundle is absent (no build yet). CI builds before testing;
  * the container smoke test (`deploy/docker/smoke.sh`) runs `--help` inside the

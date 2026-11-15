@@ -1,6 +1,6 @@
 /**
  * Sign-in accounts (spec §0 "Sign-in account", §6; ADR local-accounts-sign-in-provider):
- * the composition root over the `:memory:` store, a provider of kind `local`
+ * the composition root over the `:memory:` store, a sign-in provider of kind `local`
  * added from Settings, the forms driven with web-standard `Request`s. No
  * network, no mail: the links are taken from the service as an administrator
  * would copy them from People.
@@ -79,7 +79,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       clock,
       openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
     });
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'local',
         kind: 'local',
@@ -128,7 +128,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     await root.users.invitations.invite('bootstrap', ADA);
     const issued = await root.auth.signInAccounts.createLink({
       kind: 'invite',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: ADA,
       createdBy: 'bootstrap',
     });
@@ -142,8 +142,8 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     expect(sessionCookieOf(created)).not.toBeNull();
   }
 
-  it('the provider is one of the instance: listed, its users keyed by its urn issuer', async () => {
-    const views = await root.auth.providers.views();
+  it('the sign-in provider is one of the instance: listed, its users keyed by its urn issuer', async () => {
+    const views = await root.auth.signInProviders.views();
     expect(views.map((v) => [v.id, v.kind, v.issuer.href])).toEqual([
       ['local', 'local', 'urn:vaubaan:local:local'],
     ]);
@@ -179,13 +179,13 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     await root.users.invitations.invite('bootstrap', ADA);
     const first = await root.auth.signInAccounts.createLink({
       kind: 'invite',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: ADA,
       createdBy: 'bootstrap',
     });
     const second = await root.auth.signInAccounts.createLink({
       kind: 'invite',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: ADA,
       createdBy: 'bootstrap',
     });
@@ -203,7 +203,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     await root.users.invitations.invite('bootstrap', ADA);
     const issued = await root.auth.signInAccounts.createLink({
       kind: 'invite',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: ADA,
       createdBy: 'bootstrap',
     });
@@ -253,7 +253,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     expect(refused.headers.get('location')).toBe('/login?error=not-invited');
   });
 
-  it('a deactivated person is refused, as through any provider', async () => {
+  it('a deactivated person is refused, as through any sign-in provider', async () => {
     await invitedAccount();
     const [user] = await root.store.users.list();
     if (!user) throw new Error('no user');
@@ -266,7 +266,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     await invitedAccount();
     const issued = await root.auth.signInAccounts.createLink({
       kind: 'reset',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: ADA,
       createdBy: 'ops-id',
     });
@@ -298,7 +298,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     await expect(
       root.auth.signInAccounts.createLink({
         kind: 'reset',
-        providerId: 'local',
+        signInProviderId: 'local',
         email: 'nobody@example.com',
         createdBy: 'ops-id',
       }),
@@ -367,7 +367,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       await root.users.invitations.invite('bootstrap', OPS);
       const issued = await root.auth.signInAccounts.createLink({
         kind: 'invite',
-        providerId: 'local',
+        signInProviderId: 'local',
         email: OPS,
         createdBy: 'bootstrap',
       });
@@ -676,7 +676,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
           },
         },
       });
-      await root.auth.providers.save(
+      await root.auth.signInProviders.save(
         {
           id: 'local',
           kind: 'local',
@@ -735,7 +735,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
           },
         },
       });
-      await root.auth.providers.save(
+      await root.auth.signInProviders.save(
         {
           id: 'local',
           kind: 'local',
@@ -749,7 +749,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
         'create',
       );
       await root.auth.signInAccounts.createSignInAccount({
-        providerId: 'local',
+        signInProviderId: 'local',
         email: ADA,
         password: PASSWORD,
         actor: 'bootstrap',

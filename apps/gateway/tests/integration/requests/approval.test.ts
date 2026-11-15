@@ -318,8 +318,8 @@ describe('approval gate: refusal, decision, replay', () => {
             gate: 'approval',
           },
         ],
-        // Not a git push: no page of the provider to read.
-        provider_pages: [],
+        // Not a git push: no page of the service to read.
+        service_pages: [],
       });
       expect(view.gate).toEqual({ policy: 'approval', open_until: null });
       expect(view.approval).toBeNull();

@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
 
-/** The tools spec §7.2 names, per provider. */
+/** The tools spec §7.2 names, per service. */
 const LEFT_OUT_BY_THE_RISK_MODEL: Readonly<Record<string, readonly string[]>> = {
   github: [
     'github__dispatch_workflow',

@@ -46,7 +46,7 @@ describe('the arguments of an approval request are for the creator only', () => 
     const team = await root.store.groups.getOrCreate('platform', 'local', null);
     await root.store.groups.setMembers(team.id, [seeded.ada.id, carol.id]);
     const account = await seedAccount(root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'group', id: team.id },
       displayName: 'team-org',
       resources: [{ ref: 'team/app', displayName: 'team/app' }],

@@ -343,7 +343,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
       name: 'Review the pricing PR',
       accounts: [
         {
-          provider: 'github',
+          service: 'github',
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
           policy: [
             {
@@ -359,7 +359,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
           ],
         },
         {
-          provider: 'supabase',
+          service: 'supabase',
           policy: [
             {
               risk_id: 'supabase.read-data',
@@ -429,19 +429,19 @@ test('the reference explains each service: permissions against the trust levels,
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   // One line per shipped plugin, from the registry; none is tagged experimental.
-  await expect(page.getByTestId('provider-github')).toContainText(
+  await expect(page.getByTestId('service-github')).toContainText(
     `${GITHUB.permissions} permissions`,
   );
-  await expect(page.getByTestId('provider-github')).toContainText(
+  await expect(page.getByTestId('service-github')).toContainText(
     `${GITHUB.macroActions} macro-actions`,
   );
-  await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
+  await expect(page.getByTestId('service-github')).toContainText(`${GITHUB.tools} tools`);
   // Each line names its plugin's version; a bundled plugin carries no "pinned" tag.
-  await expect(page.getByTestId('provider-github').getByTestId('provider-version')).toHaveText(
+  await expect(page.getByTestId('service-github').getByTestId('service-version')).toHaveText(
     `plugin ${githubPlugin.version}`,
   );
   await expect(page.getByTestId('services').getByTestId('plugin-pinned')).toHaveCount(0);
-  await expect(page.getByTestId('provider-gmail')).not.toContainText('experimental');
+  await expect(page.getByTestId('service-gmail')).not.toContainText('experimental');
   // The services are a local navigation beside the content.
   const services = page.getByRole('navigation', { name: 'Services' });
   await expect(services.getByRole('link', { name: 'All services' })).toHaveAttribute(
@@ -462,9 +462,9 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
-  await snap(page, 'providers-index');
+  await snap(page, 'services-index');
 
-  await page.getByTestId('provider-supabase').getByRole('link', { name: 'Supabase' }).click();
+  await page.getByTestId('service-supabase').getByRole('link', { name: 'Supabase' }).click();
   // The place keeps its title; the service is the heading under it.
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Supabase', level: 2 })).toBeVisible();
@@ -472,7 +472,7 @@ test('the reference explains each service: permissions against the trust levels,
     'aria-current',
     'page',
   );
-  await expect(page.getByTestId('provider-summary')).toContainText('one resource is one project');
+  await expect(page.getByTestId('service-summary')).toContainText('one resource is one project');
 
   // One section in view at a time, behind tabs; the permissions come first.
   const tabs = page.getByRole('tablist', { name: 'Supabase reference' });
@@ -524,7 +524,7 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(page.getByTestId('cell-trusting-supabase.storage.bulk-object-write')).toContainText(
     'asks first',
   );
-  await snap(page, 'provider-macro-actions');
+  await snap(page, 'service-macro-actions');
 
   // A text filter narrows the list in view.
   const rows = matrix.locator('tr[data-risk]');
@@ -569,11 +569,11 @@ test('the reference explains each service: permissions against the trust levels,
   await planes.getByRole('button', { name: 'All' }).click();
   // The model as an outline, with what carries the environment.
   await expect(page.getByRole('region', { name: 'Part db' })).toContainText('schema');
-  await expect(page.getByTestId('provider-environment')).toContainText(
+  await expect(page.getByTestId('service-environment')).toContainText(
     'the label the owner of the account puts on each resource',
   );
   await expect(page.getByText('carries the environment').first()).toBeVisible();
-  await snap(page, 'provider-data-model');
+  await snap(page, 'service-data-model');
 
   // An anchor of a permission opens Permissions on a part that shows the entry, and unfolds it.
   await planes.getByRole('button', { name: 'auth' }).click();
@@ -626,7 +626,7 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(page.locator('[id="risk-supabase.uncategorized-write-detail"]')).toContainText(
     'Counts only for a write no other entry of the catalog names',
   );
-  await snap(page, 'provider-risks');
+  await snap(page, 'service-risks');
   // The macro-action of a permission is the link to it in the list.
   await page
     .getByTestId('risk-supabase.migration-write')
@@ -681,8 +681,8 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(page.getByTestId('tool-table')).not.toContainText('github__mint_install_token');
   await page.goto('/reference/github#permissions');
   await expect(page.getByTestId('risk-github.mint-install-token-push')).toContainText('retired');
-  await snap(page, 'provider-tools');
+  await snap(page, 'service-tools');
   // An unknown service is not found.
-  const missing = await page.goto('/reference/no-such-provider');
+  const missing = await page.goto('/reference/no-such-service');
   expect(missing?.status()).toBe(404);
 });

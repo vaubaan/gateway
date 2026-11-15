@@ -24,7 +24,7 @@ import type { UserRecord } from '../../../src/server/store/types';
 import {
   isSecondFactorStep,
   passSecondFactor,
-  saveTestOidcProvider,
+  saveTestOidcSignInProvider,
 } from '../../support/auth/testing';
 import { memoryStoreDeps } from '../../support/compose/testing';
 import { validEnv } from '../../support/config/testing';
@@ -62,7 +62,7 @@ const ROUTES: readonly Route[] = [
   { path: '/mcp', handle: (root, request) => root.execution.handlers.mcp(request) },
   { path: '/auth/login', handle: (root, request) => root.auth.handlers.loginStart(request) },
   {
-    path: '/auth/callback/:provider',
+    path: '/auth/callback/:service',
     handle: (root, request, id) => root.auth.handlers.loginCallback(request, id),
   },
 ];
@@ -112,7 +112,7 @@ export async function openInstance(options: InstanceOptions = {}): Promise<Insta
     ...memoryStoreDeps,
     ...options.deps,
   });
-  await saveTestOidcProvider(root.store.config, {
+  await saveTestOidcSignInProvider(root.store.config, {
     issuer: idp.issuer.href,
     clientId: IDP_CLIENT.clientId,
     clientSecret: IDP_CLIENT.clientSecret,

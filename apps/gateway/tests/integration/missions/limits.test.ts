@@ -308,7 +308,7 @@ describe('changing the limits of a mission after issuance', () => {
 
   it('a raise is capped as at creation: the catalog ceiling refuses the change with issuance’s own words', async () => {
     const stripe = await seedAccount(rig.root.store, {
-      provider: 'stripe',
+      service: 'stripe',
       owner: { kind: 'user', id: rig.seeded.ada.id },
       displayName: 'Acme Stripe',
       resources: [{ ref: 'acct_test', displayName: 'acme (test)', env: 'test' }],

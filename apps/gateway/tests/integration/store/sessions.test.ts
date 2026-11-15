@@ -47,7 +47,7 @@ describe('sessions repository', () => {
       })
     ).id;
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: creator },
       displayName: 'gh',
       credential: null,
@@ -152,7 +152,7 @@ describe('sessions repository', () => {
         })
       ).id;
       const account = await a.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: user },
         displayName: 'gh',
         credential: null,

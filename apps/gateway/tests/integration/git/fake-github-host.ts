@@ -1,6 +1,6 @@
 /**
  * A GitHub stand-in for the git remote's tests (spec §10: no call to a real
- * provider, ever): no request leaves the machine.
+ * service, ever): no request leaves the machine.
  *
  *   https://github.com/<owner>/<repo>.git/…   served by the real `git http-backend`
  *                                             over bare repositories in a temporary
@@ -15,7 +15,7 @@
  * The git endpoint behaves like GitHub where it matters to the gateway: Basic
  * authentication with a minted token (`x-access-token:<token>`), and a push
  * only with a token that holds `contents: write`. `fetch` is the
- * `RootDeps.providerFetch` of the instance.
+ * `RootDeps.serviceFetch` of the instance.
  */
 import { execFile, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -177,7 +177,7 @@ export class FakeGithubHost {
     return refs;
   }
 
-  /** `RootDeps.providerFetch`: GitHub's two hosts, nothing else. */
+  /** `RootDeps.serviceFetch`: GitHub's two hosts, nothing else. */
   readonly fetch: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.origin === GITHUB_WEB) {

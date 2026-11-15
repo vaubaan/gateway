@@ -5,7 +5,7 @@
  *
  *   - the real composition root, built here with the `:memory:` store, the
  *     plugins the image ships, the in-process `FakeIdp` as the relying
- *     party's `fetch` and a mocked GitHub as `RootDeps.providerFetch`, and
+ *     party's `fetch` and a mocked GitHub as `RootDeps.serviceFetch`, and
  *     published on `globalThis` exactly as production does;
  *   - the server that ships: the standalone `server.js` of the build
  *     (`.next/standalone/apps/gateway/server.js`), started in this process
@@ -30,7 +30,7 @@
  *     composed from the GitHub plugin's macro-actions at their trust levels
  *     (`DEVELOPER_TRUST_LEVELS`), for a user of their own, and its token), `share-scenario` (an owner with a
  *     GitHub account of their own, a beneficiary and the operator, for
- *     the share spec), `upstream` (what the mocked provider
+ *     the share spec), `upstream` (what the mocked service
  *     received) and `seed-day` — the one fixture written below the door: a
  *     day of calls recorded through `root.budget` and the audit writer, with
  *     gated and exhausted risks, for the audit pages.
@@ -79,7 +79,7 @@ import {
   MOCK_VERCEL_PROJECT,
   PUBLIC_URL,
 } from './instance';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const CLIENT = { clientId: 'vaubaan-gateway-e2e', clientSecret: 'e2e-client-secret' };
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -343,7 +343,7 @@ const DEVELOPER_TRUST_LEVELS = {
  * A mission of the approver on a GitHub account of their own, composed from
  * the plugin's macro-actions as shipped at `DEVELOPER_TRUST_LEVELS`: its gated entries
  * are what the "approve an action" scenario is about. The account holds a token of the
- * mocked GitHub, so an approved call goes all the way to the provider.
+ * mocked GitHub, so an approved call goes all the way to the service.
  */
 async function issueDeveloperMission(
   root: GatewayRoot,
@@ -357,7 +357,7 @@ async function issueDeveloperMission(
   });
   const [repository] = MOCK_GITHUB.repositories;
   const seeded = await seedAccount(root.store, {
-    provider: 'github',
+    service: 'github',
     owner: { kind: 'user', id: user.id },
     displayName: 'hedy-org',
     resources: [{ ref: repository }],
@@ -392,7 +392,7 @@ async function issueGitMission(
     displayName: E2E_APPROVER_USER.name,
   });
   const seeded = await seedAccount(root.store, {
-    provider: 'github',
+    service: 'github',
     owner: { kind: 'user', id: user.id },
     displayName: 'acme-git',
     resources: [{ ref: E2E_GIT.repository }],
@@ -429,7 +429,7 @@ async function main(): Promise<void> {
   // signs in (`idp/next-user`), so a spec that forgets to fails at its sign-in.
   const mocked = mockedGithub();
   // The git remote spec's repository: real git behind a GitHub stand-in, reached
-  // with its own token; every other provider request goes to the mock.
+  // with its own token; every other service request goes to the mock.
   const gitHost = await FakeGithubHost.start();
   await gitHost.createRepository(E2E_GIT.repository);
   gitHost.acceptToken(E2E_GIT.token, { contents: 'write', workflows: 'write', metadata: 'read' });
@@ -456,7 +456,7 @@ async function main(): Promise<void> {
             [githubSignIn.base.origin]: githubSignIn.fetch,
           }),
         },
-        providerFetch: github,
+        serviceFetch: github,
         // Messaging addresses (the notifications spec): a stand-in for the services'
         // incoming webhooks, which answers the status a path ends with (`…/status-404`), 200
         // otherwise; nothing leaves the machine and no name is resolved.
@@ -477,7 +477,7 @@ async function main(): Promise<void> {
       },
     }),
   );
-  await saveTestOidcProvider(root.store.config, {
+  await saveTestOidcSignInProvider(root.store.config, {
     issuer: idp.issuer.href,
     clientId: CLIENT.clientId,
     clientSecret: CLIENT.clientSecret,
@@ -487,11 +487,11 @@ async function main(): Promise<void> {
   // The company directory of the specs enforces its own second factor: its people sign
   // in without the gateway's code — its administrators never (ADR
   // administrators-live-in-the-instance §7), and the specs answer it for them.
-  await root.auth.providers.setWaiver('idp', 'always');
+  await root.auth.signInProviders.setWaiver('idp', 'always');
   // Seeded under the issuer their ID tokens will carry: the same people sign in below.
   const seeded = await seedInstance(root, idp.iss);
   // Ada's GitHub account holds a token of the mocked GitHub, so her
-  // missions' calls go all the way through the door to the mocked provider.
+  // missions' calls go all the way through the door to the mocked service.
   await root.store.accounts.reconnect(
     seeded.github.account.id,
     serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
@@ -543,9 +543,9 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/local/setup` && req.method === 'POST') {
-        // The sign-in-accounts spec's second scenario starts with the provider in place.
-        if (!(await root.auth.providers.view('local'))) {
-          await root.auth.providers.save(
+        // The sign-in-accounts spec's second scenario starts with the service in place.
+        if (!(await root.auth.signInProviders.view('local'))) {
+          await root.auth.signInProviders.save(
             {
               id: 'local',
               kind: 'local',
@@ -597,13 +597,14 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/local/cleanup` && req.method === 'POST') {
-        // What the sign-in-accounts spec leaves behind: the provider, its accounts and
-        // their people (keyed by the provider's urn issuer), the invitations.
+        // What the sign-in-accounts spec leaves behind: the service, its accounts and
+        // their people (keyed by the service's urn issuer), the invitations.
         for (const account of await root.store.signInAccounts.list('local')) {
           await root.store.signInAccounts.remove(account.id);
         }
         root.store.db.prepare("DELETE FROM users WHERE issuer = 'urn:vaubaan:local:local'").run();
-        if (await root.auth.providers.view('local')) await root.auth.providers.remove('local');
+        if (await root.auth.signInProviders.view('local'))
+          await root.auth.signInProviders.remove('local');
         for (const invitation of await root.store.invitations.list()) {
           await root.store.invitations.remove(invitation.email);
         }
@@ -612,25 +613,26 @@ async function main(): Promise<void> {
       }
       if (url.pathname === `${CONTROL_PREFIX}/github/cleanup` && req.method === 'POST') {
         // What the sign-in spec leaves behind when it fails half-way.
-        if (await root.auth.providers.view('github')) await root.auth.providers.remove('github');
+        if (await root.auth.signInProviders.view('github'))
+          await root.auth.signInProviders.remove('github');
         for (const invitation of await root.store.invitations.list()) {
           await root.store.invitations.remove(invitation.email);
         }
         sendJson(res, 200, { ok: true });
         return;
       }
-      if (url.pathname === `${CONTROL_PREFIX}/provider-pages`) {
-        // The provider pages a browser is sent to during a connect flow: none
+      if (url.pathname === `${CONTROL_PREFIX}/service-pages`) {
+        // The service pages a browser is sent to during a connect flow: none
         // today, every shipped service of these specs connects with a pasted token.
         sendJson(res, 200, { pages: [] });
         return;
       }
-      if (url.pathname === `${CONTROL_PREFIX}/provider-page`) {
-        sendJson(res, 404, { error: 'not a page of a mocked provider' });
+      if (url.pathname === `${CONTROL_PREFIX}/service-page`) {
+        sendJson(res, 404, { error: 'not a page of a mocked service' });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/upstream`) {
-        // What the mocked provider received, and whether each request carried
+        // What the mocked service received, and whether each request carried
         // the token of Ada's account. The token itself is handed over so a
         // spec can check it never reached the executor.
         sendJson(res, 200, {
@@ -684,7 +686,7 @@ async function main(): Promise<void> {
         );
         if (!owner) throw new Error('the share owner was not created');
         const { account } = await seedAccount(root.store, {
-          provider: 'github',
+          service: 'github',
           owner: { kind: 'user', id: owner.id },
           displayName: name,
           resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
@@ -708,7 +710,7 @@ async function main(): Promise<void> {
           displayName: E2E_SHARE_OWNER.name,
         });
         const { account: github } = await seedAccount(root.store, {
-          provider: 'github',
+          service: 'github',
           owner: { kind: 'user', id: owner.id },
           displayName: name,
           resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
@@ -718,7 +720,7 @@ async function main(): Promise<void> {
           serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
         );
         const { account: supabase } = await seedAccount(root.store, {
-          provider: 'supabase',
+          service: 'supabase',
           owner: { kind: 'user', id: owner.id },
           displayName: `${name} Supabase`,
           resources: [{ ref: MOCK_SUPABASE_PROJECT, displayName: 'app', env: null }],
@@ -772,13 +774,13 @@ async function main(): Promise<void> {
           displayName: E2E_AUDIT_USER.name,
         });
         const account = await seedAccount(root.store, {
-          provider: 'github',
+          service: 'github',
           owner: { kind: 'user', id: user.id },
           displayName: 'grace-org',
           resources: [{ ref: 'grace/app' }],
         });
         // Recorded below the door, through the root's own budget: the day
-        // holds gated and refused calls no mocked provider could answer.
+        // holds gated and refused calls no mocked service could answer.
         const rig: AuditRig = {
           root,
           seeded: { ...seeded, ada: user, github: account },

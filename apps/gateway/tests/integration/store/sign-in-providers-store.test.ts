@@ -2,7 +2,7 @@
  * Migration 0014 and what it gives the store (spec §0 "Invitation"; see
  * docs/handbook/authentication.md): the invitation list, IdP groups
  * bound to the sign-in provider that claims them, and the end of the sessions of
- * a removed provider's users.
+ * a removed sign-in provider's users.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -44,7 +44,7 @@ describe('IdP groups belong to their sign-in provider', () => {
   });
   afterEach(() => t.store.close());
 
-  it('a name claimed by one provider is skipped for a user of another, never joined', async () => {
+  it('a name claimed by one sign-in provider is skipped for a user of another, never joined', async () => {
     const ada = await t.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
       subject: 'ada',
@@ -63,10 +63,10 @@ describe('IdP groups belong to their sign-in provider', () => {
     });
     expect(await t.store.groups.groupsOf(eve.id)).toEqual([]);
     expect(await t.store.groups.groupsOf(ada.id)).toEqual([
-      expect.objectContaining({ name: 'platform', source: 'idp', provider: 'company' }),
+      expect.objectContaining({ name: 'platform', source: 'idp', signInProvider: 'company' }),
     ]);
-    // A local group has no provider.
-    expect(await t.store.groups.createLocal('reviewers')).toMatchObject({ provider: null });
+    // A local group has no sign-in provider.
+    expect(await t.store.groups.createLocal('reviewers')).toMatchObject({ signInProvider: null });
   });
 
   it('ends the sessions of the users of one issuer, with or without a trailing slash', async () => {
@@ -88,7 +88,7 @@ describe('IdP groups belong to their sign-in provider', () => {
 });
 
 describe('migration 0014 over an earlier database', () => {
-  it('binds every IdP group that exists to the provider idp and leaves local groups without one', () => {
+  it('binds every IdP group that exists to the sign-in provider idp and leaves local groups without one', () => {
     const clock = { now: () => new Date(AT) };
     const db = openDb({ path: MEMORY_PATH });
     const shipped = loadMigrations();
@@ -103,9 +103,9 @@ describe('migration 0014 over an earlier database', () => {
     insert.run('g1', 'platform', 'idp', AT);
     insert.run('g2', 'reviewers', 'local', AT);
     runMigrations(db, shipped, clock);
-    expect(db.prepare('SELECT id, provider FROM groups ORDER BY id').all()).toEqual([
-      { id: 'g1', provider: 'idp' },
-      { id: 'g2', provider: null },
+    expect(db.prepare('SELECT id, sign_in_provider FROM groups ORDER BY id').all()).toEqual([
+      { id: 'g1', sign_in_provider: 'idp' },
+      { id: 'g2', sign_in_provider: null },
     ]);
     expect(
       db

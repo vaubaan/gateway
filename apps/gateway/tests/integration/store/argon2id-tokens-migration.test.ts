@@ -39,7 +39,7 @@ it('revokes the active argon2id tokens, and only them', async () => {
       email: 'owner@example.com',
     });
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       displayName: 'GitHub',
       owner: { kind: 'user', id: user.id },
       credential: null,

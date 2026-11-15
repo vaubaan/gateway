@@ -1,10 +1,10 @@
 /**
  * A sign-in provider is tested beside the session, and switched on after a passed
- * test (ADR administrators-live-in-the-instance, §5): the test runs the provider's
+ * test (ADR administrators-live-in-the-instance, §5): the test runs the sign-in provider's
  * flow to its end and signs nobody in — no user, no session, no group — while the
- * tester's own session stays; its result says what the provider returned and the
+ * tester's own session stays; its result says what the sign-in provider returned and the
  * verdict a sign-in would get, and the setup can make the tested identity the first
- * administrator. A provider switched off is refused at sign-in, and switching off
+ * administrator. A sign-in provider switched off is refused at sign-in, and switching off
  * the last administrator's way in is refused.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -49,7 +49,7 @@ function post(path: string, b: Browser): Request {
   });
 }
 
-describe('a provider is tested beside the session, then switched on', () => {
+describe('a sign-in provider is tested beside the session, then switched on', () => {
   let root: GatewayRoot;
   let idp: FakeIdp;
   let github: FakeGithub;
@@ -70,7 +70,7 @@ describe('a provider is tested beside the session, then switched on', () => {
       },
       ...memoryStoreDeps,
     });
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'company',
         kind: 'oidc',
@@ -84,7 +84,7 @@ describe('a provider is tested beside the session, then switched on', () => {
       },
       'create',
     );
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'github',
         kind: 'github',
@@ -108,31 +108,35 @@ describe('a provider is tested beside the session, then switched on', () => {
   }
 
   /** The Test button of Settings → Sign-in, posted from the tester's browser. */
-  function testForm(b: Browser, providerId: string): Request {
-    return new Request(`${PUBLIC_URL}/auth/test/${providerId}`, {
+  function testForm(b: Browser, signInProviderId: string): Request {
+    return new Request(`${PUBLIC_URL}/auth/test/${signInProviderId}`, {
       method: 'POST',
       headers: { cookie: cookieHeader(b), origin: PUBLIC_URL },
     });
   }
 
-  /** Test → the provider's consent → the callback, in the tester's browser. */
-  async function test(b: Browser, providerId: 'company' | 'github'): Promise<Response> {
-    const start = await root.auth.handlers.testStart(testForm(b, providerId), providerId);
+  /** Test → the sign-in provider's consent → the callback, in the tester's browser. */
+  async function test(b: Browser, signInProviderId: 'company' | 'github'): Promise<Response> {
+    const start = await root.auth.handlers.testStart(
+      testForm(b, signInProviderId),
+      signInProviderId,
+    );
     expect(start.status).toBe(303);
     absorb(b, start);
     const location = new URL(start.headers.get('location') ?? '', PUBLIC_URL);
     if (location.origin === PUBLIC_URL) return start;
-    const callback = providerId === 'github' ? github.authorize(location) : idp.authorize(location);
+    const callback =
+      signInProviderId === 'github' ? github.authorize(location) : idp.authorize(location);
     const finish = await root.auth.handlers.loginCallback(
       new Request(callback.href, { headers: { cookie: cookieHeader(b) } }),
-      providerId,
+      signInProviderId,
     );
     absorb(b, finish);
     return finish;
   }
 
-  it('a new provider is saved off: not offered, refused at sign-in, not switched on untested', async () => {
-    expect((await root.auth.providers.views()).map((p) => [p.id, p.enabled])).toEqual([
+  it('a new sign-in provider is saved off: not offered, refused at sign-in, not switched on untested', async () => {
+    expect((await root.auth.signInProviders.views()).map((p) => [p.id, p.enabled])).toEqual([
       ['company', false],
       ['github', false],
     ]);
@@ -140,17 +144,17 @@ describe('a provider is tested beside the session, then switched on', () => {
       new Request(`${PUBLIC_URL}/auth/login/company`),
       'company',
     );
-    expect(start.headers.get('location')).toBe('/login?error=provider-disabled');
+    expect(start.headers.get('location')).toBe('/login?error=sign-in-provider-disabled');
     const b = await bootstrapBrowser();
     const refused = await root.auth.handlers.enableSignInProvider(
       post('/api/admin/sign-in-providers/company/enable', b),
       'company',
     );
     expect(refused.headers.get('location')).toContain('problem=');
-    expect((await root.auth.providers.view('company'))?.enabled).toBe(false);
+    expect((await root.auth.signInProviders.view('company'))?.enabled).toBe(false);
   });
 
-  it('the test signs nobody in and keeps the tester’s session; a passed test lets the provider on', async () => {
+  it('the test signs nobody in and keeps the tester’s session; a passed test lets the sign-in provider on', async () => {
     const b = await bootstrapBrowser();
     const session = b.get(SESSION_COOKIE);
     idp.nextClaims = {
@@ -170,7 +174,7 @@ describe('a provider is tested beside the session, then switched on', () => {
     expect(
       (await root.auth.authenticator.authenticate(new Headers({ cookie: cookieHeader(b) })))?.kind,
     ).toBe('bootstrap');
-    const state = await root.auth.providers.state('company');
+    const state = await root.auth.signInProviders.state('company');
     expect(state.test).toMatchObject({
       outcome: 'passed',
       by: 'bootstrap',
@@ -192,9 +196,9 @@ describe('a provider is tested beside the session, then switched on', () => {
       'company',
     );
     expect(on.headers.get('location')).toBe('/admin/identity-provider?enabled=company');
-    expect((await root.auth.providers.view('company'))?.enabled).toBe(true);
+    expect((await root.auth.signInProviders.view('company'))?.enabled).toBe(true);
     // An edit afterwards keeps it on, and makes the test stale.
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'company',
         kind: 'oidc',
@@ -208,7 +212,7 @@ describe('a provider is tested beside the session, then switched on', () => {
       },
       'update',
     );
-    const after = await root.auth.providers.state('company');
+    const after = await root.auth.signInProviders.state('company');
     expect(after.enabled).toBe(true);
     expect((after.changedAt ?? '') >= (after.test?.at ?? '')).toBe(true);
   });
@@ -222,7 +226,7 @@ describe('a provider is tested beside the session, then switched on', () => {
       emails: [{ email: 'x@example.com', primary: true, verified: false }],
     };
     await test(b, 'github');
-    expect((await root.auth.providers.state('github')).test).toMatchObject({
+    expect((await root.auth.signInProviders.state('github')).test).toMatchObject({
       outcome: 'failed',
       error: 'email-not-verified',
     });
@@ -243,7 +247,7 @@ describe('a provider is tested beside the session, then switched on', () => {
     };
     await test(b, 'github');
     // The verdict: refused, nobody invited this address on an invitation-only provider.
-    expect((await root.auth.providers.state('github')).test?.verdict).toMatchObject({
+    expect((await root.auth.signInProviders.state('github')).test?.verdict).toMatchObject({
       admitted: false,
       refusal: 'not-invited',
     });
@@ -281,7 +285,7 @@ describe('a provider is tested beside the session, then switched on', () => {
       'company',
     );
     expect(res.headers.get('location')).toBe('/login?error=state-mismatch');
-    expect((await root.auth.providers.state('company')).test).toBeNull();
+    expect((await root.auth.signInProviders.state('company')).test).toBeNull();
   });
 
   it('switching off ends its users’ sessions but the actor’s, and never the last way in', async () => {
@@ -307,6 +311,6 @@ describe('a provider is tested beside the session, then switched on', () => {
       'github',
     );
     expect(refused.headers.get('location')).toContain('problem=');
-    expect((await root.auth.providers.view('github'))?.enabled).toBe(true);
+    expect((await root.auth.signInProviders.view('github'))?.enabled).toBe(true);
   });
 });

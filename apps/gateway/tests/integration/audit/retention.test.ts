@@ -97,7 +97,7 @@ describe('audit retention sweeper', () => {
       })
     ).id;
     const account = await t.store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: userId },
       displayName: 'gh',
       credential: null,

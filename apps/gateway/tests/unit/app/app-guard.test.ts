@@ -57,7 +57,7 @@ const REDIRECTING_PAGES: Readonly<Record<string, string>> = {
  * `src/server/accounts/handlers.ts` and authenticates before anything
  * else: `connect`, `discover`, `revoke` and `updateResource` through
  * `guardMutation` (origin, then session, then "a user"), `callback` through
- * `guardSession` (a top-level GET from the provider carries no `Origin`).
+ * `guardSession` (a top-level GET from the service carries no `Origin`).
  * `oauth.handlers.revokeDelegation` (`src/server/oauth-as/handlers.ts`) goes
  * through `guardMutation` too. The behaviour is asserted below, route by route.
  */
@@ -88,7 +88,7 @@ const DELEGATION = /\(await getRoot\(\)\)\.([a-zA-Z]+\.handlers\.[a-zA-Z]+)\(req
 /** Values for every dynamic segment of the surface; none names an existing object. */
 const PARAMS = {
   id: 'no-such-id',
-  provider: 'no-such-provider',
+  service: 'no-such-service',
   resourceId: 'no-such-resource',
   shareId: 'no-such-share',
   file: 'no-such-file.png',

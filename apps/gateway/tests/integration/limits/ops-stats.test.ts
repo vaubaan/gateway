@@ -66,7 +66,7 @@ describe('the counters endpoint', () => {
     const body = JSON.parse(text) as OpsStats;
     expect(body).toMatchObject({
       users: 2,
-      accounts: { total: 3, by_provider: { github: 1, supabase: 1, vercel: 1 } },
+      accounts: { total: 3, by_service: { github: 1, supabase: 1, vercel: 1 } },
       active_missions: 1,
       calls_today: { allowed: 1, refused: 0 },
       store: { kind: 'memory' },
@@ -110,14 +110,14 @@ describe('the counters endpoint', () => {
   it('the telemetry profile and the ceilings read the same counts', async () => {
     await issueMission(rig, rig.seeded.ada, githubDraft(rig));
     const listed = (await root.store.accounts.list()).filter((c) => c.status !== 'revoked');
-    const byProvider: Record<string, number> = {};
-    for (const c of listed) byProvider[c.provider] = (byProvider[c.provider] ?? 0) + 1;
+    const byService: Record<string, number> = {};
+    for (const c of listed) byService[c.service] = (byService[c.service] ?? 0) + 1;
     const users = (await root.store.users.list()).filter((u) => u.status === 'active').length;
 
     expect(await root.limits.counts.users()).toBe(users);
     expect(await root.limits.counts.accounts()).toEqual({
       total: listed.length,
-      byProvider,
+      byService,
     });
     expect(await root.limits.usage()).toEqual([
       { ceiling: 'users', count: users, limit: 10 },

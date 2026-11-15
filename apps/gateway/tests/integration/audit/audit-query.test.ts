@@ -57,7 +57,7 @@ describe('audit search: visibility, filters, paging', () => {
   /** A mission Bob creates on a GitHub account of his own: nothing of Ada's is in it. */
   async function bobsMission(name = 'Bob own'): Promise<MissionRecord> {
     const bobs = await seedAccount(rig.root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
       resources: [],
@@ -119,7 +119,7 @@ describe('audit search: visibility, filters, paging', () => {
   it('the owner of an account sees the calls made through it by a mission they did not create', async () => {
     // What a share will allow: Ada's mission calls through Bob's account.
     const bobs = await seedAccount(rig.root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
       displayName: 'bob-org',
       resources: [],
@@ -132,7 +132,7 @@ describe('audit search: visibility, filters, paging', () => {
     expect(bob[0]?.account).toEqual({
       id: bobs.account.id,
       display_name: 'bob-org',
-      provider: 'github',
+      service: 'github',
     });
     expect(bob[0]?.resource_ref).toBe('bob/app');
   });
@@ -141,7 +141,7 @@ describe('audit search: visibility, filters, paging', () => {
     const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const shared = await seedAccount(rig.root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'group', id: group.id },
       displayName: 'platform-org',
       resources: [],
@@ -289,7 +289,7 @@ describe('audit search: visibility, filters, paging', () => {
     const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const groupOwned = await seedAccount(rig.root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'group', id: group.id },
       displayName: 'platform-org',
       resources: [],
@@ -614,7 +614,7 @@ describe('audit search: visibility, filters, paging', () => {
     it('by account', async () => {
       const entries = await search(ada(), { accountId: rig.seeded.github.account.id });
       expect(calls(entries)).toHaveLength(4);
-      expect(calls(entries).every((c) => c.account?.provider === 'github')).toBe(true);
+      expect(calls(entries).every((c) => c.account?.service === 'github')).toBe(true);
     });
 
     it('by tool, exact name', async () => {

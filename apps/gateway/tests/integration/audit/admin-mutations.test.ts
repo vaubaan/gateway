@@ -42,7 +42,7 @@ import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import type { SignInAccountRecord } from '../../../src/server/store';
 import { VaubaanActs } from '../../../src/server/vaubaan';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   AccountRecord,
@@ -112,7 +112,7 @@ function publicMethods(): string[] {
   return found.sort();
 }
 
-// ── The rig: a real root over fixture plugins and a mocked provider ─────────
+// ── The rig: a real root over fixture plugins and a mocked service ─────────
 
 interface Rig {
   readonly root: GatewayRoot;
@@ -144,7 +144,7 @@ interface Rig {
 }
 
 async function openRig(): Promise<Rig> {
-  const provider = mockFetch([
+  const service = mockFetch([
     {
       method: 'POST',
       url: OAUTH_SPEC.tokenUrl,
@@ -164,20 +164,20 @@ async function openRig(): Promise<Rig> {
           credential: API_KEY_SPEC,
           envs: ['staging', 'prod'],
           discoverResources: async () => [
-            { provider: 'keyco', ref: 'acct-a', displayName: 'Account A' },
+            { service: 'keyco', ref: 'acct-a', displayName: 'Account A' },
           ],
         }),
         fixturePlugin({
           id: 'sshco',
           credential: SSH_KEY_SPEC,
           discoverResources: async () => [
-            { provider: 'sshco', ref: 'vps.example.com', displayName: 'VPS' },
+            { service: 'sshco', ref: 'vps.example.com', displayName: 'VPS' },
           ],
         }),
         fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
         vaubaanPlugin,
       ]),
-    providerFetch: provider,
+    serviceFetch: service,
     // The identity-provider form checks the issuer's discovery document before saving.
     oidc: { fetch: answerAnyDiscovery },
     ...memoryStoreDeps,
@@ -223,9 +223,9 @@ async function openRig(): Promise<Rig> {
       return started.account;
     },
     async registerOAuthApp() {
-      // The client the gateway would have registered at the provider (not what is audited here).
+      // The client the gateway would have registered at the service (not what is audited here).
       await seedRegisteredClient(root.store.config, {
-        providerId: 'oauthco',
+        serviceId: 'oauthco',
         clientId: 'cid',
         clientSecret: 'csecret',
         redirectUri: root.accounts.service.callbackUrl('oauthco').href,
@@ -377,9 +377,9 @@ const signInAccounts = (root: GatewayRoot) => root.auth.signInAccounts;
 const LOCAL_OBJECT = 'sign-in-account:local';
 const LOCAL_PASSWORD = 'a sentence long enough';
 
-/** A provider of kind `local`, added as Settings would. */
-async function localProvider(rig: Rig): Promise<void> {
-  await rig.root.auth.providers.save(
+/** A service of kind `local`, added as Settings would. */
+async function localService(rig: Rig): Promise<void> {
+  await rig.root.auth.signInProviders.save(
     {
       id: 'local',
       kind: 'local',
@@ -394,11 +394,11 @@ async function localProvider(rig: Rig): Promise<void> {
   );
 }
 
-/** The provider and one account, created by the operator. */
+/** The service and one account, created by the operator. */
 async function signInAccount(rig: Rig): Promise<SignInAccountRecord> {
-  await localProvider(rig);
+  await localService(rig);
   return rig.root.auth.signInAccounts.createSignInAccount({
-    providerId: 'local',
+    signInProviderId: 'local',
     email: 'local@example.com',
     password: LOCAL_PASSWORD,
     actor: rig.operator.id,
@@ -422,8 +422,8 @@ async function sharedWithBob(rig: Rig): Promise<{ mission: MissionRecord; bob: U
 
 const RULES: Readonly<Record<string, Rule>> = {
   // ── accounts ───────────────────────────────────────────────────────────
-  'AccountService.providers': READ,
-  'AccountService.provider': READ,
+  'AccountService.services': READ,
+  'AccountService.service': READ,
   'AccountService.listFor': READ,
   'AccountService.get': READ,
   'AccountService.defaultEnvChoices': READ,
@@ -449,7 +449,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.accounts.service.importPastedKey(rig.alice, 'keyco', {
         displayName: 'Imported key',
         fields: { token: 'key-0123456789', team_id: 'team_abc' },
-        importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'provider_admins/1' },
+        importedFrom: { system: 'vaubaan-v4', org: 'acme', source: 'service_admins/1' },
       }),
     writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
@@ -458,7 +458,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: accounts,
     drive: (rig) =>
       rig.root.accounts.service.importSshKey(rig.alice, {
-        providerId: 'sshco',
+        serviceId: 'sshco',
         displayName: 'vps',
         fields: { host: 'vps.example.com', user: 'dev' },
         keyPair: generateEd25519KeyPair('v4'),
@@ -573,7 +573,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'account-revoked', object: 'account', actor: 'alice' },
   },
   'AccountService.transferTargets': READ,
-  'AccountService.providerGrantOf': READ,
+  'AccountService.serviceGrantOf': READ,
   'AccountService.listOwnerless': READ,
   'AccountService.reassignTargets': READ,
   'AccountService.transfer': {
@@ -607,16 +607,16 @@ const RULES: Readonly<Record<string, Rule>> = {
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
   'CredentialBroker.forRevocation': READ,
-  'CredentialBroker.withdrawAtProvider': exempt(
-    'a step of AccountService.revoke, whose account-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
+  'CredentialBroker.withdrawAtService': exempt(
+    'a step of AccountService.revoke, whose account-revoked entry carries what the service answered (after.service_grant); it writes nothing in the store itself',
   ),
   'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
   'OAuth2Clients.forTokenRequest': READ,
   'OAuth2Clients.forAuthorization': exempt(
-    "registers the instance's own OAuth client at a service that accepts dynamic registration, as a step of a person's connect (ADR oauth-client-registered-by-the-gateway): nobody chose it, and the account-created entry follows; the instance log names the provider and the client id",
+    "registers the instance's own OAuth client at a service that accepts dynamic registration, as a step of a person's connect (ADR oauth-client-registered-by-the-gateway): nobody chose it, and the account-created entry follows; the instance log names the service and the client id",
   ),
   'OAuth2Clients.rejected': exempt(
-    'forgets a registered client the provider refused (invalid_client), during an exchange or a refresh, with no human act: the next connect registers again; the instance log says so',
+    'forgets a registered client the service refused (invalid_client), during an exchange or a refresh, with no human act: the next connect registers again; the instance log says so',
   ),
   'OAuthBrokers.forProvider': READ,
   'OAuthBrokers.byName': READ,
@@ -628,7 +628,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
   'OAuthBrokerClient.token': exempt(SYSTEM_REFRESH),
   'OAuthBrokerClient.revoke': exempt(
-    'a step of AccountService.revoke, whose account-revoked entry carries what the broker answered (after.provider_grant)',
+    'a step of AccountService.revoke, whose account-revoked entry carries what the broker answered (after.service_grant)',
   ),
   'AttestationVerifier.verify': READ,
   'AttestedChannel.send': exempt(
@@ -1045,9 +1045,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInProvidersService.state': READ,
   'SignInProvidersService.setWaiver': {
     kind: 'mutation',
-    target: (root) => root.auth.providers,
+    target: (root) => root.auth.signInProviders,
     prepare: (rig) =>
-      saveTestOidcProvider(rig.root.store.config, {
+      saveTestOidcSignInProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
@@ -1065,13 +1065,13 @@ const RULES: Readonly<Record<string, Rule>> = {
     },
   },
   'SignInProvidersService.recordTest': exempt(
-    'the outcome of a test beside the session, recorded by the handler that writes its `sign-in-provider-tested` entry (tests/integration/auth/provider-test.test.ts)',
+    'the outcome of a test beside the session, recorded by the handler that writes its `sign-in-provider-tested` entry (tests/integration/auth/service-test.test.ts)',
   ),
   'SignInProvidersService.setEnabled': {
     kind: 'mutation',
-    target: (root) => root.auth.providers,
+    target: (root) => root.auth.signInProviders,
     prepare: async (rig) => {
-      await rig.root.auth.providers.save(
+      await rig.root.auth.signInProviders.save(
         {
           id: 'github',
           kind: 'github',
@@ -1103,12 +1103,12 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
   'SignInProvidersService.save': {
     kind: 'mutation',
-    target: (root) => root.auth.providers,
+    target: (root) => root.auth.signInProviders,
     drive: async (rig) =>
       rig.root.auth.handlers.saveIdpSettings(
         await rig.operatorPost('/api/admin/sign-in-providers', {
           mode: 'create',
-          provider_id: 'github',
+          sign_in_provider_id: 'github',
           kind: 'github',
           client_id: 'Ov23liAuditTest',
           client_secret: 'github-sign-in-secret',
@@ -1124,9 +1124,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'SignInProvidersService.remove': {
     kind: 'mutation',
-    target: (root) => root.auth.providers,
+    target: (root) => root.auth.signInProviders,
     prepare: (rig) =>
-      rig.root.auth.providers.save(
+      rig.root.auth.signInProviders.save(
         {
           id: 'github',
           kind: 'github',
@@ -1200,9 +1200,9 @@ const RULES: Readonly<Record<string, Rule>> = {
     // "Finish setup" revokes the bootstrap token (ADR administrators-live-in-the-instance, §8):
     // an administrator with a way in exists (a sign-in account named by the setup).
     prepare: async (rig) => {
-      await localProvider(rig);
+      await localService(rig);
       const account = await rig.root.auth.signInAccounts.createSignInAccount({
-        providerId: 'local',
+        signInProviderId: 'local',
         email: 'first@example.com',
         password: LOCAL_PASSWORD,
         actor: rig.operator.id,
@@ -1229,7 +1229,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'AdministratorsService.current': READ,
   'AdministratorsService.any': READ,
   'AdministratorsService.isAdministrator': READ,
-  'AdministratorsService.providerIdOf': READ,
+  'AdministratorsService.signInProviderIdOf': READ,
   'AdministratorsService.admits': READ,
   'AdministratorsService.designationOfUser': READ,
   'AdministratorsService.withAWayIn': READ,
@@ -1287,7 +1287,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.administrators,
     prepare: (rig) =>
-      saveTestOidcProvider(rig.root.store.config, {
+      saveTestOidcSignInProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
@@ -1295,7 +1295,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     drive: async (rig) =>
       rig.root.users.handlers.addAdministratorGroup(
         await rig.operatorPost('/admin/users/administrators/group', {
-          provider: 'idp',
+          sign_in_provider: 'idp',
           group: 'platform',
         }),
       ),
@@ -1373,7 +1373,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     drive: (rig, prepared: never) =>
       rig.root.auth.signInAccounts.createLink({
         kind: 'reset',
-        providerId: 'local',
+        signInProviderId: 'local',
         email: (prepared as SignInAccountRecord).email,
         createdBy: rig.operator.id,
       }),
@@ -1387,10 +1387,10 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInAccountsService.createSignInAccount': {
     kind: 'mutation',
     target: signInAccounts,
-    prepare: localProvider,
+    prepare: localService,
     drive: (rig) =>
       rig.root.auth.signInAccounts.createSignInAccount({
-        providerId: 'local',
+        signInProviderId: 'local',
         email: 'fresh@example.com',
         password: LOCAL_PASSWORD,
         actor: rig.operator.id,
@@ -1406,10 +1406,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: signInAccounts,
     prepare: async (rig) => {
-      await localProvider(rig);
+      await localService(rig);
       return rig.root.auth.signInAccounts.createLink({
         kind: 'invite',
-        providerId: 'local',
+        signInProviderId: 'local',
         email: 'invited@example.com',
         createdBy: rig.operator.id,
       });
@@ -1433,7 +1433,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       const account = await signInAccount(rig);
       return rig.root.auth.signInAccounts.createLink({
         kind: 'reset',
-        providerId: 'local',
+        signInProviderId: 'local',
         email: account.email,
         createdBy: rig.operator.id,
       });
@@ -1889,7 +1889,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
     const account = await rig.connectByKey();
     await root.store.accounts.revoke(account.id);
     const reconnectable = await root.store.accounts.create({
-      provider: 'keyco',
+      service: 'keyco',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'No credential',
       credential: null,

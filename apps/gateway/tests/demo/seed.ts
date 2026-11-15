@@ -1,7 +1,7 @@
 /**
  * What the demo instance contains on first load, created the way its users
  * would have created it: through the real sign-in, the real connect flows
- * (against the simulated providers), the mission, share and group services,
+ * (against the simulated services), the mission, share and group services,
  * the OAuth authorization server, and tool calls through the execution door.
  * Nothing is written to the store directly, so every state shown is one the
  * application itself can reach:
@@ -48,8 +48,8 @@ import {
   type DemoGithubToken,
   DEMO_REDIS_DATABASES,
   DEMO_RESEND_DOMAINS,
-  type DemoProviders,
-} from './providers';
+  type DemoServices,
+} from './services';
 
 const DAY_SECONDS = 86_400;
 /** Quota of the tour's "exhaust it yourself" mission, and of the seeded exhausted one. */
@@ -62,7 +62,7 @@ export const CI_TOKEN_NAME = 'CI runner';
 export interface SeedContext {
   readonly root: GatewayRoot;
   readonly idp: DemoIdp;
-  readonly providers: DemoProviders;
+  readonly services: DemoServices;
 }
 
 export interface SeededMission {
@@ -177,16 +177,16 @@ class Seeder {
 
   async connectWithKey(
     user: UserRecord,
-    provider: string,
+    service: string,
     name: string,
     fields: Record<string, string>,
   ): Promise<AccountRecord> {
     const actor = await this.actor(user);
-    const result = await this.ctx.root.accounts.service.start(actor, provider, {
+    const result = await this.ctx.root.accounts.service.start(actor, service, {
       displayName: name,
       fields,
     });
-    if (result.kind !== 'connected') fail(`${provider} connect did not complete`, result.kind);
+    if (result.kind !== 'connected') fail(`${service} connect did not complete`, result.kind);
     return result.account;
   }
 

@@ -6,7 +6,7 @@
  * tools, the mission page and the management door say which account is gone, and
  * the audit names the owner who revoked. Nothing widens.
  *
- * Real composition root on the `:memory:` store, two providers: the Depot fixture
+ * Real composition root on the `:memory:` store, two services: the Depot fixture
  * and Acme (`fakePlugin`).
  */
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
@@ -37,7 +37,7 @@ describe('a revoked account removes only its part of a mission', () => {
     instance = await executionInstance({ plugins: [fakePlugin()] });
     const { root, ada } = instance;
     acme = await root.store.accounts.create({
-      provider: 'acme',
+      service: 'acme',
       owner: { kind: 'user', id: ada.id },
       displayName: 'Acme main',
       credential: serializeSecret({ kind: 'api-key', fields: { api_key: 'k' }, metadata: {} }),

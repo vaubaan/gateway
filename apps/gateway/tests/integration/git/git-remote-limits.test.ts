@@ -122,7 +122,7 @@ describe('a token account (fine-grained personal access token)', () => {
     const { store } = rig.root;
     // Another GitHub account of Ada: the same repository, a token instead of the App.
     const tokenAccount = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: rig.ada.id },
       displayName: 'acme-token',
       credential: serializeSecret({ kind: 'api-key', fields: { token: pat }, metadata: {} }),
@@ -248,9 +248,9 @@ describe('one execution surface', () => {
       }),
     );
     const catalog = (await response.json()) as {
-      accounts: { provider: string; resources: { ref: string; git_remote?: string }[] }[];
+      accounts: { service: string; resources: { ref: string; git_remote?: string }[] }[];
     };
-    const github = catalog.accounts.find((c) => c.provider === 'github');
+    const github = catalog.accounts.find((c) => c.service === 'github');
     expect(github?.resources).toEqual([
       expect.objectContaining({
         ref: REPOSITORY,

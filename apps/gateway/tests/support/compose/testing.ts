@@ -4,10 +4,10 @@
  * `memoryStoreDeps` swaps the SQLite file for the store's `:memory:` mode
  * (same schema, same repositories, gone on `close()`); `fakePlugin()` is the
  * smallest plugin `definePlugin` accepts, so registry-dependent behaviour
- * (provider-app check, catalog index) can be exercised without
+ * (service-app check, catalog index) can be exercised without
  * real plugins.
  */
-import { definePlugin, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { definePlugin, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { RiskCatalog } from '@vaubaan/shared';
@@ -21,7 +21,7 @@ export const memoryStoreDeps: Pick<RootDeps, 'openStore'> = {
 };
 
 const FAKE_CATALOG: RiskCatalog = {
-  provider: 'acme',
+  service: 'acme',
   risks: [
     {
       id: 'acme.read-things',
@@ -84,8 +84,8 @@ const FAKE_CATALOG: RiskCatalog = {
   ],
 };
 
-/** A valid plugin with provider id `acme`, one tool, one env-scoped risk. */
-export function fakePlugin(): ProviderPlugin {
+/** A valid plugin with service id `acme`, one tool, one env-scoped risk. */
+export function fakePlugin(): ServicePlugin {
   return definePlugin({
     id: 'acme',
     displayName: 'Acme',
@@ -98,7 +98,7 @@ export function fakePlugin(): ProviderPlugin {
       },
     ],
     dataModel: {
-      provider: 'acme',
+      service: 'acme',
       planes: [
         {
           slug: 'space',

@@ -8,7 +8,7 @@ import type { Resource } from '@vaubaan/plugin-sdk';
 import { vercelPlugin } from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
-import { createDemoProviders, DEMO_VERCEL_PROJECTS, DEMO_VERCEL_TEAM } from '../../demo/providers';
+import { createDemoServices, DEMO_VERCEL_PROJECTS, DEMO_VERCEL_TEAM } from '../../demo/services';
 
 const credential = {
   kind: 'api-key' as const,
@@ -17,12 +17,12 @@ const credential = {
 };
 
 async function connected() {
-  const providers = createDemoProviders();
+  const services = createDemoServices();
   const resources = await vercelPlugin.discoverResources({
     credential,
-    fetch: providers.fetch,
+    fetch: services.fetch,
   });
-  return { providers, resources };
+  return { services, resources };
 }
 
 function textOf(result: { content: readonly unknown[] }): string {
@@ -45,9 +45,9 @@ describe('demo: simulated Vercel', () => {
   });
 
   it('answers a REST tool and a rewrapped tool of the shipped plugin', async () => {
-    const { providers, resources } = await connected();
+    const { services, resources } = await connected();
     const [project] = DEMO_VERCEL_PROJECTS;
-    const ctx = { credential, appConfig: {}, fetch: providers.fetch, resources };
+    const ctx = { credential, appConfig: {}, fetch: services.fetch, resources };
 
     const envs = await vercelPlugin.execute(ctx, 'vercel__list_env_vars', {
       projectId: project.id,
@@ -64,9 +64,9 @@ describe('demo: simulated Vercel', () => {
     expect(textOf(deployments)).toContain('preview');
   });
 
-  it('never dials the provider: discovery was answered by simulated routes', async () => {
-    const { providers } = await connected();
-    expect(providers.calls.length).toBeGreaterThan(0);
-    for (const call of providers.calls) expect(call.method).toBe('GET');
+  it('never dials the service: discovery was answered by simulated routes', async () => {
+    const { services } = await connected();
+    expect(services.calls.length).toBeGreaterThan(0);
+    for (const call of services.calls) expect(call.method).toBe('GET');
   });
 });

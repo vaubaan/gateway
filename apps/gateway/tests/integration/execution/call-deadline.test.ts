@@ -1,7 +1,7 @@
 /**
  * A deadline on every plugin call (`execution.call_timeout_seconds`).
  *
- * A provider that never answers must not hold the request, the decrypted
+ * A service that never answers must not hold the request, the decrypted
  * credential, the pending audit entry and the surface slot for ever: the
  * plugin receives a signal that fires at the deadline, and the stage stops
  * waiting at that moment even when the plugin does not listen. The call was

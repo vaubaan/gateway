@@ -59,7 +59,7 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
     accounts: [
       {
         id: f.accountId,
-        provider: 'github',
+        service: 'github',
         display_name: 'gh',
         status: 'active',
         owner: { kind: 'user', id: f.creatorId, display: 'c@x' },
@@ -93,7 +93,7 @@ function buildPipeline(f: BudgetFixture, now: () => Date): CallPipeline {
   };
   const upstream: UpstreamStage = {
     async execute(_ctx, call) {
-      if (call.args.fail) throw new Error('provider 502');
+      if (call.args.fail) throw new Error('service 502');
       return { ok: true };
     },
   };

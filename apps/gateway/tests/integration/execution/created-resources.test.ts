@@ -25,7 +25,7 @@ import {
 const CREATE = 'depot.uncategorized-write';
 const READ = 'depot.read';
 
-const space = (ref: string): Resource => ({ provider: DEPOT, ref, displayName: ref });
+const space = (ref: string): Resource => ({ service: DEPOT, ref, displayName: ref });
 const SEEDED: readonly Resource[] = DEFAULT_SPACES.map((s) => ({
   ...space(s.ref),
   ...(s.env ? { env: s.env } : {}),
@@ -43,7 +43,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
   const idle = (): Promise<void> => instance.root.accounts.discoveryAfterCall.idle();
 
-  /** The provider answers the creation with the new space, as Miro answers a board. */
+  /** The service answers the creation with the new space, as Miro answers a board. */
   function createsSpace(ref: string, name = `Space ${ref}`): void {
     instance.depot.script(async () => ({
       content: [{ type: 'text', text: JSON.stringify({ created: { ref, name } }) }],
@@ -73,7 +73,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
       policy: [line(CREATE), line(READ)],
       spaces: ['scratch'],
     });
-    // The provider lists the new space late: discovery does not return it yet.
+    // The service lists the new space late: discovery does not return it yet.
     instance.depot.scriptDiscovery(async () => [...SEEDED]);
     createsSpace('fresh');
 

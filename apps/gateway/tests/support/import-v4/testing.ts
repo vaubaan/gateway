@@ -47,7 +47,7 @@ export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
     accounts: [
       {
         id: ACCOUNT_GITHUB,
-        provider: 'github',
+        service: 'github',
         status: 'connected',
         team_id: null,
         installation_id: '4242',
@@ -55,7 +55,7 @@ export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
       },
       {
         id: ACCOUNT_CLOUDFLARE,
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         status: 'connected',
         team_id: null,
         installation_id: null,
@@ -63,7 +63,7 @@ export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
       },
       {
         id: ACCOUNT_VERCEL,
-        provider: 'vercel',
+        service: 'vercel',
         status: 'connected',
         team_id: VERCEL_TEAM,
         installation_id: null,
@@ -71,7 +71,7 @@ export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
       },
       {
         id: ACCOUNT_SUPABASE,
-        provider: 'supabase',
+        service: 'supabase',
         status: 'connected',
         team_id: null,
         installation_id: null,
@@ -81,28 +81,28 @@ export function fixtureBundle(exportedAt: Date = new Date()): V4Bundle {
     bindings: [
       {
         project_id: PROJECT_WEB,
-        provider: 'github',
+        service: 'github',
         resource_ref: 'acme/web',
         display_name: 'web',
         environment: null,
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'vercel',
+        service: 'vercel',
         resource_ref: 'prj_web',
         display_name: 'web',
         environment: 'prod',
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'vercel',
+        service: 'vercel',
         resource_ref: 'prj_web',
         display_name: 'web',
         environment: 'prod',
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         resource_ref: 'zone_web',
         display_name: 'acme.example',
         environment: 'web',

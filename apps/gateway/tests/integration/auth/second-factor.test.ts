@@ -15,7 +15,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { FakeIdp } from './fake-idp';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };
@@ -50,7 +50,7 @@ describe('a second factor for everyone', () => {
       oidc: { fetch: idp.fetch, allowInsecureIssuer: true },
       ...memoryStoreDeps,
     });
-    await saveTestOidcProvider(root.store.config, {
+    await saveTestOidcSignInProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -77,14 +77,14 @@ describe('a second factor for everyone', () => {
     return finish;
   }
 
-  it('a person enrols at their first sign-in, whatever the provider, then gives the code at every one', async () => {
+  it('a person enrols at their first sign-in, whatever the sign-in provider, then gives the code at every one', async () => {
     const b: Browser = new Map();
     const first = await signIn(b, { sub: 'ada', email: 'ada@example.com' });
     expect(first.headers.get('location')).toBe('/login/second-factor');
     expect(b.has(SESSION_COOKIE)).toBe(false);
     // The user exists (the sign-in was admitted); the session waits for the factor.
     const step = await root.auth.sessions.peekLocalStep(new Headers({ cookie: cookieHeader(b) }));
-    expect(step).toMatchObject({ step: 'enrol', providerId: 'idp' });
+    expect(step).toMatchObject({ step: 'enrol', signInProviderId: 'idp' });
     const wrong = await root.auth.handlers.enrolAtSignIn(
       new Request(`${PUBLIC_URL}/auth/factor/enrol`, {
         method: 'POST',
@@ -113,8 +113,8 @@ describe('a second factor for everyone', () => {
     expect(passed?.headers.get('location')).toBe('/missions');
   });
 
-  it('a waiver lets the provider’s people in without the code — never an administrator', async () => {
-    await root.auth.providers.setWaiver('idp', 'always');
+  it('a waiver lets the sign-in provider’s people in without the code — never an administrator', async () => {
+    await root.auth.signInProviders.setWaiver('idp', 'always');
     const ada: Browser = new Map();
     const res = await signIn(ada, { sub: 'ada', email: 'ada@example.com' });
     expect(res.headers.get('location')).toBe('/missions');
@@ -124,8 +124,8 @@ describe('a second factor for everyone', () => {
     expect(admin.headers.get('location')).toBe('/login/second-factor');
   });
 
-  it('the waiver "amr" holds only when the ID token says the provider asked its own (mfa)', async () => {
-    await root.auth.providers.setWaiver('idp', 'amr');
+  it('the waiver "amr" holds only when the ID token says the sign-in provider asked its own (mfa)', async () => {
+    await root.auth.signInProviders.setWaiver('idp', 'amr');
     const withMfa = await signIn(new Map(), {
       sub: 'ada',
       email: 'ada@example.com',
@@ -137,7 +137,7 @@ describe('a second factor for everyone', () => {
   });
 
   it('sign-in accounts are never waived, GitHub only "always"; the change is audited', async () => {
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'local',
         kind: 'local',
@@ -150,10 +150,10 @@ describe('a second factor for everyone', () => {
       },
       'create',
     );
-    await expect(root.auth.providers.setWaiver('local', 'always')).rejects.toMatchObject({
+    await expect(root.auth.signInProviders.setWaiver('local', 'always')).rejects.toMatchObject({
       problems: [expect.stringContaining('cannot be waived')],
     });
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'github',
         kind: 'github',
@@ -166,7 +166,7 @@ describe('a second factor for everyone', () => {
       },
       'create',
     );
-    await expect(root.auth.providers.setWaiver('github', 'amr')).rejects.toMatchObject({
+    await expect(root.auth.signInProviders.setWaiver('github', 'amr')).rejects.toMatchObject({
       problems: [expect.stringContaining('waive it always')],
     });
     const session = await root.auth.sessions.create({ kind: 'bootstrap' });
@@ -183,7 +183,7 @@ describe('a second factor for everyone', () => {
       'github',
     );
     expect(res.headers.get('location')).toBe('/admin/identity-provider?waiver=github');
-    expect((await root.auth.providers.state('github')).waiver).toBe('always');
+    expect((await root.auth.signInProviders.state('github')).waiver).toBe('always');
     const acts = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
       e.kind === 'admin' ? [e.act] : [],
     );
@@ -191,7 +191,7 @@ describe('a second factor for everyone', () => {
   });
 
   it('the factor a sign-in account kept moves to its person at the boot, and still works', async () => {
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'local',
         kind: 'local',
@@ -205,7 +205,7 @@ describe('a second factor for everyone', () => {
       'create',
     );
     const account = await root.store.signInAccounts.create({
-      provider: 'local',
+      signInProvider: 'local',
       email: 'eve@example.com',
     });
     const secret = root.auth.secondFactors.beginEnrolment('Test', 'eve@example.com').secret;

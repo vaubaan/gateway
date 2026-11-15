@@ -8,7 +8,7 @@
  * response back unchanged: the page lives on `https://gateway.e2e.test`, with
  * real cookies and a real `Origin` header, exactly as behind a TLS
  * terminator. The pages a browser is sent to outside the instance — the
- * simulated IdP's consent screen, the pages of a mocked provider —
+ * simulated IdP's consent screen, the pages of a mocked service —
  * are answered by the launcher's control endpoints: the "user" consents and
  * the browser is sent back with what the real page would hand over.
  */
@@ -110,14 +110,14 @@ export async function routeToInstance(context: BrowserContext): Promise<void> {
     await fulfillRedirect(route, callback, []);
   });
 
-  // The provider pages of the connect flows (which ones is the launcher's to say).
-  const listed = await context.request.get(controlUrl('/provider-pages'));
+  // The service pages of the connect flows (which ones is the launcher's to say).
+  const listed = await context.request.get(controlUrl('/service-pages'));
   const { pages } = (await listed.json()) as { pages: string[] };
   for (const page of pages) {
     await context.route(`${page}**`, async (route) => {
       const visited = encodeURIComponent(route.request().url());
       const step = await route.fetch({
-        url: `${controlUrl('/provider-page')}?url=${visited}`,
+        url: `${controlUrl('/service-page')}?url=${visited}`,
       });
       const { callback } = (await step.json()) as { callback: string };
       await fulfillRedirect(route, callback, []);
@@ -157,7 +157,7 @@ export async function passSecondFactor(
   request: APIRequestContext,
   email: string,
 ): Promise<void> {
-  // The sign-in hops through the provider and the callback: wait for the page it lands on.
+  // The sign-in hops through the service and the callback: wait for the page it lands on.
   const gateway = new URL(PUBLIC_URL).host;
   await page.waitForURL((url) => url.host === gateway && !url.pathname.startsWith('/auth/'));
   await page.waitForLoadState();
@@ -261,7 +261,7 @@ export interface UpstreamLog {
   }[];
 }
 
-/** What the mocked provider received since the instance started. */
+/** What the mocked service received since the instance started. */
 export async function upstreamLog(request: APIRequestContext): Promise<UpstreamLog> {
   const response = await request.get(controlUrl('/upstream'));
   if (!response.ok()) throw new Error(`upstream answered ${response.status()}`);
@@ -277,7 +277,7 @@ export interface SeededDay {
 /**
  * Issues a mission for the audit user and leaves a day of calls on it. The one
  * fixture recorded below the door (through the root's budget and audit
- * writer): it holds gated and refused calls no mocked provider could answer.
+ * writer): it holds gated and refused calls no mocked service could answer.
  */
 export async function seedDay(request: APIRequestContext): Promise<SeededDay> {
   const response = await request.post(controlUrl('/seed-day'));

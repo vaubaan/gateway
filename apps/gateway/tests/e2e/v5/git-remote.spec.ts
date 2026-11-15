@@ -152,7 +152,7 @@ test('an agent with a mission key and nothing else clones, pushes, is refused, a
   await page.goto(approvalUrl!);
   await expect(page.getByTestId('approval-tool')).toContainText('github__git_push');
   await expect(page.getByTestId('approval-arguments')).toContainText('feature/hello');
-  await expect(page.getByTestId('approval-provider-pages')).toContainText(
+  await expect(page.getByTestId('approval-service-pages')).toContainText(
     'refs/heads/feature/hello',
   );
   await page.getByRole('button', { name: 'Approve this call' }).click();

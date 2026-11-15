@@ -39,7 +39,7 @@ describe('events.agent_label', () => {
       email: 'ada@example.com',
     });
     const account = await t.store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'gh',
       credential: null,
