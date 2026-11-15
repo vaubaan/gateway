@@ -1,10 +1,10 @@
 /**
- * Upstream calls of the `supabase` provider : Management API, per-project
+ * Upstream calls of the `supabase` service : Management API, per-project
  * data plane, and resource discovery.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned to the executor).
- * Handbook : docs/handbook/providers/supabase.md.
+ * Handbook : docs/handbook/services/supabase.md.
  *
  * Rules :
  *   - every request goes through the SDK's transport, with `fetch` and the
@@ -16,8 +16,8 @@
  *     the plugin reads `UpstreamProtocolError` ;
  *   - what this executor declines itself (an unknown tool, a call the
  *     classifier denies) is an `isError` result (`refusalResult`,
- *     `ExecutorRefusal` under `declining`) : nothing failed at the provider ;
- *   - the Management API base URL is a fact about the provider, hence a
+ *     `ExecutorRefusal` under `declining`) : nothing failed at the service ;
+ *   - the Management API base URL is a fact about the service, hence a
  *     constant of the plugin (`identity.ts`), not configuration of the instance ;
  *   - `execute_sql`, `list_tables` and `list_migrations` go through the
  *     **read-only** query endpoint : Postgres refuses any mutation there,
@@ -74,7 +74,7 @@ import {
   type ToolIdentifiers,
 } from './classify.ts';
 import { supabaseBearerOf } from './credential.ts';
-import { PROVIDER_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
+import { SERVICE_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
 import { projectRefIdent, tableSchemas } from './identifiers.ts';
 import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
 import { SUPABASE_DATA_PLANE_TOOLS, SUPABASE_TOOL_NAMES } from './tools.ts';
@@ -88,7 +88,7 @@ const NO_CONTENT_PAYLOAD = { ok: true };
 const DATA_PLANE_TOOLS: ReadonlySet<string> = new Set(SUPABASE_DATA_PLANE_TOOLS);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ProviderPlugin entry points
+// ServicePlugin entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function executeSupabase(
@@ -108,7 +108,7 @@ export async function executeSupabase(
   if ('denied' in target) return refusalResult(target.denied);
   const read = readIdentifiers(tool, args);
   if ('denied' in read) return refusalResult(read.denied);
-  const token = supabaseBearerOf(PROVIDER_ID, ctx.credential);
+  const token = supabaseBearerOf(SERVICE_ID, ctx.credential);
   const call: SupabaseCall = { io: ctx, token, projectRef: target.ref, id: read.id };
   return declining(async () => {
     const payload = DATA_PLANE_TOOLS.has(tool)
@@ -137,7 +137,7 @@ interface SupabaseCall {
  * on the account page.
  */
 export async function discoverSupabaseResources(ctx: AccountContext): Promise<readonly Resource[]> {
-  const token = supabaseBearerOf(PROVIDER_ID, ctx.credential);
+  const token = supabaseBearerOf(SERVICE_ID, ctx.credential);
   const [organizations, projects] = await Promise.all([
     managementJson(ctx, token, '/organizations', isRecordList),
     managementJson(ctx, token, '/projects', isRecordList),
@@ -160,11 +160,11 @@ export async function discoverSupabaseResources(ctx: AccountContext): Promise<re
   const unusable = all.find(({ ref }) => projectRefIdent(ref) === null);
   if (unusable) {
     throw new UpstreamProtocolError(
-      `${PROVIDER_ID}: project ref ${JSON.stringify(unusable.ref)} is not a project ref (a host label)`,
+      `${SERVICE_ID}: project ref ${JSON.stringify(unusable.ref)} is not a project ref (a host label)`,
     );
   }
   if (all.length > MAX_DISCOVERED_PROJECTS) {
-    ctx.logger?.warn(`${PROVIDER_ID}: more projects than the discovery cap, list truncated`, {
+    ctx.logger?.warn(`${SERVICE_ID}: more projects than the discovery cap, list truncated`, {
       total: all.length,
       cap: MAX_DISCOVERED_PROJECTS,
     });
@@ -177,7 +177,7 @@ export async function discoverSupabaseResources(ctx: AccountContext): Promise<re
     const region = stringField(project, 'region');
     const status = stringField(project, 'status');
     return {
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref,
       displayName: orgName ? `${orgName} / ${name}` : name,
       metadata: {
@@ -248,7 +248,7 @@ async function projectKey(call: SupabaseCall, name: ProjectKeyName): Promise<str
   const keys = await managementJson(call.io, call.token, path, isRecordList);
   const key = keys.find((entry) => entry.name === name)?.api_key;
   if (typeof key !== 'string' || key.length === 0) {
-    throw new UpstreamProtocolError(`${PROVIDER_ID} ${path} returned no '${name}' entry`);
+    throw new UpstreamProtocolError(`${SERVICE_ID} ${path} returned no '${name}' entry`);
   }
   return key;
 }

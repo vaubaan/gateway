@@ -1,11 +1,11 @@
 /**
  * Catalog lint — parses the YAML, validates the static schema, parses every
- * `matches` slice pattern, and walks every MCP tool exposed by the provider
+ * `matches` slice pattern, and walks every MCP tool exposed by the service
  * to assert that AT LEAST ONE non-fallback risk matches at least one of the
  * tool's emitted slices.
  *
  * Spec : docs/spec/gateway-risk-model.md §4, §14.
- * Research : .vaubaan/research/providers/vercel.md §4.
+ * Research : .vaubaan/research/services/vercel.md §4.
  *
  * The lint fails the build (CI gate) on :
  *   - malformed YAML
@@ -43,7 +43,7 @@ const rawYaml = readFileSync(yamlPath, 'utf8');
 // The schema of the production loader (plugin-sdk catalog-loader): YAML 1.2 core, no custom tag.
 const parsedCatalog = load(rawYaml, { schema: CORE_SCHEMA }) as RiskCatalog;
 
-const resource: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
+const resource: Resource = { service: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
 
 // Mirror the regex from shared/src/risk.ts so we can lint catalog ids
 // without importing a private symbol (cf. risk-policy.ts:RISK_ID_REGEX).
@@ -52,7 +52,7 @@ const RISK_ID_REGEX =
 
 describe('vercel risk-catalog — YAML structural validation', () => {
   test('YAML parses into a valid RiskCatalog shape', () => {
-    expect(parsedCatalog.provider).toBe('vercel');
+    expect(parsedCatalog.service).toBe('vercel');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
     expect(parsedCatalog.risks.length).toBeGreaterThanOrEqual(10);
   });
@@ -117,7 +117,7 @@ describe('vercel risk-catalog — every `matches` pattern parses via parseSlice'
         typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
       for (const raw of raws) {
         const parsed = parseSlice(raw);
-        expect(parsed.provider).toBe('vercel');
+        expect(parsed.service).toBe('vercel');
       }
     });
   }

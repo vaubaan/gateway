@@ -1,7 +1,7 @@
-# Risk catalog of the `miro` provider.
+# Risk catalog of the `miro` service.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4, §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/miro.md.
+# Handbook : docs/handbook/services/miro.md.
 #
 # 13 named risks + 1 fallback. Every slice of a tool that names a board lives
 # under `board[<ref>]`, the mission resource ; a new board (`board.W`) and
@@ -18,7 +18,7 @@
 # deletion risks on every call.
 #
 # Catalog 2 (2026-10-21) : the plugin rewraps Miro's official MCP server
-# (docs/handbook/providers/miro.md). The six risks of catalog 1 keep
+# (docs/handbook/services/miro.md). The six risks of catalog 1 keep
 # their ids and their meaning ; their reasons name the new tools, and
 # `read-board-content` / `content-write` now cover comments. Two risks are
 # added : `board-create`, `read-format-guide`.
@@ -53,7 +53,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 8 (2026-11-14) : wording only, one word per thing (ADR
 #   one-word-per-thing-account-service-plugin).
-provider: miro
+service: miro
 catalog_version: 8
 catalog_date: 2026-11-14
 

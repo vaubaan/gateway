@@ -23,7 +23,7 @@ const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
 
 describe('resend risk-catalog — shape', () => {
   test('18 entries : 15 live named risks + 1 fallback + 2 deprecated ids, version 4', () => {
-    expect(catalog.provider).toBe('resend');
+    expect(catalog.service).toBe('resend');
     expect(catalog.catalog_version).toBe(8);
     expect(catalog.risks).toHaveLength(18);
     const fallback = catalog.risks.filter((r) => r.fallback);
@@ -141,7 +141,7 @@ describe('resend risk-catalog — slices resolve to the expected risk, and only 
         { from: 'bot@notifications.acme.com', to, subject: 's' },
         [
           {
-            provider: 'resend',
+            service: 'resend',
             ref: 'notifications.acme.com',
             displayName: 'notifications.acme.com',
             metadata: { kind: 'domain' },

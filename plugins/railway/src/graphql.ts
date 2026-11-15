@@ -2,12 +2,12 @@
  * Railway's public GraphQL API, `https://backboard.railway.com/graphql/v2` :
  * the variable tools, discovery and the token checks.
  *
- * Handbook : docs/handbook/providers/railway.md.
+ * Handbook : docs/handbook/services/railway.md.
  *
  * Railway answers a query it could not run with HTTP 200 and an `errors`
  * list (a refused token included : `Not Authorized`). Two readers, for the
  * two ways the plugin asks :
- *   - `railwayGraphql` — a call whose failure is the provider's : 401 / 403
+ *   - `railwayGraphql` — a call whose failure is the service's : 401 / 403
  *     `UpstreamAuthError`, another failed status `UpstreamHttpError`, and an
  *     answer that carries `errors`, no `data`, or `data` of the wrong shape
  *     `UpstreamProtocolError` naming the operation ;
@@ -44,7 +44,7 @@ export interface GraphqlRequest {
 export type GraphqlAnswer<T> =
   { readonly ok: true; readonly data: T } | { readonly ok: false; readonly said: string };
 
-/** The `data` of `request`, read through `guard` ; the provider's failure thrown (module comment). */
+/** The `data` of `request`, read through `guard` ; the service's failure thrown (module comment). */
 export async function railwayGraphql<T>(
   io: UpstreamIo,
   token: string,

@@ -11,7 +11,7 @@ import { classifyResend } from '../../src/classify.ts';
 import { collectRecipients, parseAddress } from '../../src/zones.ts';
 
 const domain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'notifications.acme.com',
   displayName: 'notifications.acme.com',
   env: 'prod',

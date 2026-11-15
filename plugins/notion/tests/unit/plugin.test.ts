@@ -18,7 +18,7 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { API_TOKEN_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { API_TOKEN_FIELD, SERVICE_ID, TOOL } from '../../src/identity.ts';
 import defaultExport, { notionCatalog, notionPlugin } from '../../src/index.ts';
 import { SAMPLES } from './samples.ts';
 import { DISCUSSION, TOKEN, echoWrites, pageRoot, world } from './fixtures.ts';
@@ -76,14 +76,14 @@ describe('notion plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(notionCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(notionCatalog.catalog.service).toBe(SERVICE_ID);
     expect(notionCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and each has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and each has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(notionPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);
     expect(Object.keys(notionPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());

@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `ssh` provider.
+ * MCP tools of the `ssh` service.
  *
  * One tool : `ssh__exec`. The host is a mission resource named by its ref
  * (hostname or IP) ; it may be omitted when the mission holds a single SSH

@@ -1,11 +1,11 @@
 /**
- * Command-line analysis of the `ssh` provider : decide read vs write for each
+ * Command-line analysis of the `ssh` service : decide read vs write for each
  * simple command of a shell line and detect the classes the catalog prices
  * apart (credential-file read, destructive, package, service, privilege).
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 (classification is the
  *            plugin's responsibility ; a classification error is a security hole).
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure : no IO, no `Date`. **Fail closed** :
  *   - the read allow-list (`policy.ts`) is the only way to be a read, and it

@@ -9,7 +9,7 @@ const entity = (name: string) => entities.find((e) => e.name === name)!;
 describe('resendDataModel', () => {
   test('referential integrity, one plane (email), nine entities', () => {
     expect(validateDataModel(resendDataModel)).toEqual([]);
-    expect(resendDataModel.provider).toBe('resend');
+    expect(resendDataModel.service).toBe('resend');
     expect(resendDataModel.planes.map((p) => p.slug)).toEqual(['email']);
     expect(entities).toHaveLength(9);
   });

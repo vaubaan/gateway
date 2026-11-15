@@ -1,7 +1,7 @@
 /**
  * The one reader of an `outlook` call, for `classify` and `execute` alike.
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  *
  * `readOutlookCall(tool, args, resources)` checks the tool, the closed
@@ -37,7 +37,7 @@ import {
   DRAFTS_FOLDER,
   MAILBOX_ARGUMENT,
   NO_MOVE_FOLDERS,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
 } from './identity.ts';
@@ -134,7 +134,7 @@ const MAX_COMMENT = 10_000;
 
 /** The mission's Outlook mailboxes. */
 export function mailboxesOf(resources: readonly Resource[]): Resource[] {
-  return resources.filter((r) => r.provider === PROVIDER_ID);
+  return resources.filter((r) => r.service === SERVICE_ID);
 }
 
 /** The mailbox a `mailbox` argument names, when it is one of the mission's. */

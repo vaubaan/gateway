@@ -27,7 +27,7 @@ const DATA = `https://${REF}.supabase.co`;
 const UUID = '6f1c2a3e-9b7d-4c5a-8e21-0d3f4a5b6c7d';
 
 const project: Resource = {
-  provider: 'supabase',
+  service: 'supabase',
   ref: REF,
   env: 'staging',
   displayName: 'Acme / app',

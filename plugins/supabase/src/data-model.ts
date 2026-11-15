@@ -1,8 +1,8 @@
 /**
- * Data model of the `supabase` provider — four planes under one project.
+ * Data model of the `supabase` service — four planes under one project.
  *
  * Spec : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/supabase.md.
+ * Handbook : docs/handbook/services/supabase.md.
  *
  * A Supabase project (`project_ref`, the resource the owner labels with an
  * environment) federates four heterogeneous sub-systems : Postgres (`db`),
@@ -14,17 +14,17 @@
  *
  * Some entities are declared *ahead of any tool* (`publication`,
  * `bucket-policy`, `mfa-factor`, `identity`, `functions-config`) so the
- * model is a faithful picture of the provider : a future tool drops into an
+ * model is a faithful picture of the service : a future tool drops into an
  * existing risk slot instead of opening a hole. `db-role` and `extension`
  * have no tool of their own ; `apply_migration` reaches them.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const supabaseDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     // ─────────────────────────────────────────────────────────────────────
     // Plane `db` — Postgres, RLS policies and the migrations ledger.
@@ -313,7 +313,7 @@ export const supabaseDataModel: DataModel = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * What a provider-managed schema is to a reader of free-form SQL :
+ * What a service-managed schema is to a reader of free-form SQL :
  *
  *   - `sensitive`  it holds what Supabase keeps for itself — identities,
  *                  sessions, secrets, storage internals, queued requests. A

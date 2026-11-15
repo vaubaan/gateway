@@ -71,14 +71,14 @@ const OTHER = '10.0.0.7';
 const FINGERPRINT = 'SHA256:' + 'A'.repeat(43);
 
 const staging: Resource = {
-  provider: 'ssh',
+  service: 'ssh',
   ref: HOST,
   env: 'staging',
   displayName: `deploy@${HOST}:22`,
 };
-const prod: Resource = { provider: 'ssh', ref: OTHER, env: 'prod', displayName: `ops@${OTHER}:22` };
-const dev: Resource = { provider: 'ssh', ref: HOST, env: 'dev', displayName: `deploy@${HOST}:22` };
-const unlabelled: Resource = { provider: 'ssh', ref: HOST, displayName: HOST };
+const prod: Resource = { service: 'ssh', ref: OTHER, env: 'prod', displayName: `ops@${OTHER}:22` };
+const dev: Resource = { service: 'ssh', ref: HOST, env: 'dev', displayName: `deploy@${HOST}:22` };
+const unlabelled: Resource = { service: 'ssh', ref: HOST, displayName: HOST };
 
 const credential = {
   kind: 'ssh-key' as const,
@@ -1299,7 +1299,7 @@ describe('discoverResources over an injected transport', () => {
     expect(transport.calls.map((c) => c.cmd)).toEqual([DISCOVERY_PROBE]);
     expect(resources).toEqual([
       {
-        provider: 'ssh',
+        service: 'ssh',
         ref: HOST,
         displayName: `deploy@${HOST}:2222`,
         metadata: {

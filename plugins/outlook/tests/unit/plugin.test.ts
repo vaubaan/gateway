@@ -19,7 +19,7 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { PROVIDER_ID, SCOPES, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, SCOPES, TOOL } from '../../src/identity.ts';
 import defaultExport, { outlookCatalog, outlookPlugin } from '../../src/index.ts';
 import { READ_FIRST, SAMPLES, context, mailbox } from './fixtures.ts';
 
@@ -68,14 +68,14 @@ describe('outlook plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(outlookCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(outlookCatalog.catalog.service).toBe(SERVICE_ID);
     expect(outlookCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and every tool has a title', () => {
-    expect(toolPrefixFor(PROVIDER_ID)).toBe('outlook__');
+  test('tool names are derived from the service id, once, and every tool has a title', () => {
+    expect(toolPrefixFor(SERVICE_ID)).toBe('outlook__');
     expect(outlookPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(outlookPlugin.tools).toHaveLength(23);
     expect(Object.keys(outlookPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());

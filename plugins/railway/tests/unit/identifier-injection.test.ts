@@ -33,7 +33,7 @@ const OTHER_ENV = '00000000-0000-4000-8000-0000000000e2';
 const FOREIGN_ENV = '00000000-0000-4000-8000-0000000000ef';
 
 const project: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: PROJECT,
   env: 'staging',
   displayName: 'api',
@@ -43,7 +43,7 @@ const project: Resource = {
   },
 };
 const other: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: OTHER_PROJECT,
   env: 'prod',
   displayName: 'web',

@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `resend` provider — Resend REST API, JSON bodies.
+ * Upstream calls of the `resend` service — Resend REST API, JSON bodies.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives decrypted
  *        in the context, is used for one call, and never reaches the agent.
@@ -49,7 +49,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { MALFORMED_CONTACT, MALFORMED_ID, classifyResend } from './classify.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   contactSelector,
   domainIdOf,
@@ -65,7 +65,7 @@ import {
 import { EMAIL_FIELDS, RESEND_TOOL_NAMES, declaredFieldsOf } from './tools.ts';
 import { parseAddress } from './zones.ts';
 
-/** Public API of the provider — a fact about Resend, not instance configuration. */
+/** Public API of the service — a fact about Resend, not instance configuration. */
 export const RESEND_API_BASE = 'https://api.resend.com';
 
 /** Page size of the list endpoints (Resend's maximum). */
@@ -229,7 +229,7 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       const created = await request(ctx, 'POST', '/contacts', body);
       if (args.segment_id === undefined) return created;
       const seg = segmentRef(args.segment_id, ctx.resources);
-      // The id comes from the provider's answer : it is not trusted to be a path segment.
+      // The id comes from the service's answer : it is not trusted to be a path segment.
       const contact = isRecord(created) ? pathIdent(created.id) : null;
       if (!isRecord(created) || contact === null) {
         // Resend answered a creation without the id its API promises : its failure.
@@ -306,12 +306,12 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
  * refused by `GET /domains` and surfaces as `UpstreamAuthError`.
  */
 export async function discoverResendResources(ctx: AccountContext): Promise<readonly Resource[]> {
-  expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const domains = await listAll(ctx, '/domains', isDomainDto);
   const segments = await listAll(ctx, '/segments', isSegmentDto);
   return [
     ...domains.map((d): Resource => ({
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref: domainRef(d.name),
       displayName: d.status === 'verified' || !d.status ? d.name : `${d.name} (${d.status})`,
       metadata: {
@@ -325,7 +325,7 @@ export async function discoverResendResources(ctx: AccountContext): Promise<read
       },
     })),
     ...segments.map((s): Resource => ({
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref: s.id,
       // A segment Resend lists without a name is shown by its id.
       displayName: s.name ?? s.id,
@@ -466,7 +466,7 @@ function toQueryString(query: Args): string {
 
 /** The `authorization` header of a Resend account. */
 export function authorizationOf(ctx: AccountContext): Readonly<Record<string, string>> {
-  const key = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key').fields.api_key;
+  const key = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key').fields.api_key;
   if (!key) throw new Error('resend: the credential carries no api_key');
   return { authorization: `Bearer ${key}` };
 }

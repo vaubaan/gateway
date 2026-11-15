@@ -1,8 +1,8 @@
 /**
- * Classifier of the `ssh` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `ssh` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure. The host is a mission resource : named by `host`, or the mission's
  * single SSH host when the argument is absent ; a host the mission does not
@@ -31,7 +31,7 @@ import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@va
 
 import { MAX_CMD_LENGTH, profileCommandLine } from './command/profile.ts';
 import { hostRef } from './credential.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export interface ExecArgs {
   readonly host: string;
@@ -81,7 +81,7 @@ export function classifySsh(
 
   const slices: Slice[] = [];
   const emit = (suffix: string): void => {
-    slices.push(parseSlice(`${PROVIDER_ID}.host[${exec.host}].command${suffix}`));
+    slices.push(parseSlice(`${SERVICE_ID}.host[${exec.host}].command${suffix}`));
   };
   if (profile.read) emit('.R');
   if (profile.secretFile) emit('.secret-file.R');
@@ -104,7 +104,7 @@ function resolveHost(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { ref: string } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.host !== undefined) {
     const explicit = hostRef(args.host);
     if (explicit === null) return { denied: 'host: malformed ref' };

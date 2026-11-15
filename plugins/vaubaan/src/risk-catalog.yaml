@@ -1,13 +1,13 @@
-# Risk catalog of the `vaubaan` provider: the gateway's own management tools.
+# Risk catalog of the `vaubaan` service: the gateway's own management tools.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/vaubaan.md (why each row is where it is).
+# Handbook : docs/handbook/services/vaubaan.md (why each row is where it is).
 # ADR      : docs/decisions/platform-management-is-a-plugin-on-the-execution-door.md.
 #
 # Rules the loader enforces at boot :
-#   - `provider` is the plugin id ; every risk id starts with it ;
-#   - every `matches` pattern parses as a slice of this provider ;
-#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
+#   - `service` is the plugin id ; every risk id starts with it ;
+#   - every `matches` pattern parses as a slice of this service ;
+#   - exactly one `<service>.uncategorized-*` fallback exists, flagged `fallback: true` ;
 #   - every risk but the fallback in exactly one macro-action, with an
 #     explicit base budget (quota and rate limit) — never a wildcard, no gate.
 #
@@ -30,7 +30,7 @@
 #
 # catalog_version 1 (2026-11-14) : first catalog, from the seven tools of the retired
 # management door (ADR platform-management-is-a-plugin-on-the-execution-door).
-provider: vaubaan
+service: vaubaan
 catalog_version: 1
 catalog_date: 2026-11-14
 

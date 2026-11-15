@@ -1,8 +1,8 @@
 /**
- * Data model of the `upstash-redis` provider.
+ * Data model of the `upstash-redis` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/upstash-redis.md.
+ * Handbook : docs/handbook/services/upstash-redis.md.
  *
  * Upstash Redis exposes a single plane, `cache`. Every entity lives under
  * the `account` the Management API key belongs to, and every data operation
@@ -21,10 +21,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const upstashRedisDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'cache',

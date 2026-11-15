@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `railway` provider — rewrap of the official Railway MCP
+ * MCP tools of the `railway` service — rewrap of the official Railway MCP
  * server at mcp.railway.com, plus four GraphQL-backed variable tools.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5.

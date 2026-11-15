@@ -26,10 +26,10 @@
 
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /**
- * An identifier of the provider (the id of an email, a contact, a broadcast,
+ * An identifier of the service (the id of an email, a contact, a broadcast,
  * a segment or a domain — UUIDs upstream) : one path segment, no dot, no
  * separator, no escape. Every one of them lands in a slice **and** in the
  * request path, so one grammar serves both. A wider class is not safe for a
@@ -115,9 +115,9 @@ export const EMPTY_ZONE_CONFIG: ZoneConfig = {
   allowlist_addresses: [],
 };
 
-/** The kind a resource carries ; `null` for a resource of another provider or without the marker. */
+/** The kind a resource carries ; `null` for a resource of another service or without the marker. */
 export function kindOf(resource: Resource): ResendResourceKind | null {
-  if (resource.provider !== PROVIDER_ID) return null;
+  if (resource.service !== SERVICE_ID) return null;
   const kind = resource.metadata?.kind;
   return kind === 'domain' || kind === 'segment' ? kind : null;
 }

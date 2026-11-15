@@ -24,7 +24,7 @@ const DATABASE_ID = 'db-abc-123';
 const REST_URL = 'https://us1-app-cache.upstash.io';
 
 const database: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: DATABASE_ID,
   env: 'staging',
   displayName: 'app-cache',
@@ -234,7 +234,7 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
           times: 1,
         },
       ]);
-      // The provider's answer is unusable: an upstream failure, thrown for the host to record.
+      // The service's answer is unusable: an upstream failure, thrown for the host to record.
       const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' });
       await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
       await expect(attempt).rejects.toThrow(/REST endpoint\/token/);

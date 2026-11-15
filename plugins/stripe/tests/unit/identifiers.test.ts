@@ -36,7 +36,7 @@ const HOSTILE: readonly string[] = [
 ];
 
 const testResource: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_1/test',
   env: 'test',
   displayName: 'Acme (test)',

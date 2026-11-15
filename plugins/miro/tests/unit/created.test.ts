@@ -22,7 +22,7 @@ describe('miro createdResources', () => {
     const created = createdMiroResources(TOOL.boardCreate, { name: 'x' }, LIVE_ANSWER);
     expect(created).toEqual([
       {
-        provider: 'miro',
+        service: 'miro',
         ref: 'uXjVEVgYKSE~',
         displayName: 'Vaubaan test board (delete me)',
         metadata: { url: 'https://miro.com/app/board/uXjVEVgYKSE=/' },
@@ -60,7 +60,7 @@ describe('miro createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'miro',
+        service: 'miro',
         ref: 'o9J_kzlUDmo~',
         displayName: 'Plan',
         metadata: { url: 'https://miro.com/app/board/o9J_kzlUDmo=/' },

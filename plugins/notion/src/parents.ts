@@ -2,7 +2,7 @@
  * Notion's parent object reference, read once for the ancestry walk and for
  * discovery.
  *
- * Handbook : docs/handbook/providers/notion.md ; Notion's parent
+ * Handbook : docs/handbook/services/notion.md ; Notion's parent
  *            object reference.
  */
 

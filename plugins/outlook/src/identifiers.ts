@@ -1,9 +1,9 @@
 /**
- * The identifier grammars of the `outlook` provider, shared by `classify`,
+ * The identifier grammars of the `outlook` service, shared by `classify`,
  * `execute` and discovery. Each returns the value or `null`; a value outside
  * its grammar is refused, never repaired.
  *
- * Handbook : docs/handbook/providers/outlook.md ("Identifiers").
+ * Handbook : docs/handbook/services/outlook.md ("Identifiers").
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  */
 

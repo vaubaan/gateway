@@ -56,7 +56,7 @@ describe('root resolution', () => {
     expect(denial(TOOL.getPage, { root: OTHER_ROOT, page_id: PAGE })).toBe(
       `root '${OTHER_ROOT}' is not selected in this mission`,
     );
-    const foreign: Resource = { provider: 'other', ref: OTHER_ROOT, displayName: 'x' };
+    const foreign: Resource = { service: 'other', ref: OTHER_ROOT, displayName: 'x' };
     expect(denial(TOOL.getPage, { root: OTHER_ROOT, page_id: PAGE }, [pageRoot, foreign])).toMatch(
       /not selected/,
     );

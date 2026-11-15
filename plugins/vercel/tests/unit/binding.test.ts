@@ -143,7 +143,7 @@ describe('executeVercel — a deployment-addressed tool runs only on a deploymen
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 401 });
   });
 
-  test('a lookup the provider fails (5xx) is an upstream failure, thrown ; nothing is forwarded', async () => {
+  test('a lookup the service fails (5xx) is an upstream failure, thrown ; nothing is forwarded', async () => {
     const lookup = /\/v13\/deployments\/dpl_x\?/;
     const broken = mockFetch([{ method: 'GET', url: lookup, status: 503, body: {} }, mcpRoute]);
     await expect(

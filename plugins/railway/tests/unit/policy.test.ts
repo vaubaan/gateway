@@ -5,7 +5,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §8
  *            (strict-fail runtime) ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/railway.md.
+ * Handbook : docs/handbook/services/railway.md.
  *
  * What the slice-shape tests (`classify.test.ts`) cannot show :
  *   - a single-variable write touches `upsert-variable` alone, so the
@@ -33,7 +33,7 @@ const OTHER_ENV_ID = '00000000-0000-4000-8000-0000000000e2';
 /** The Railway project of the mission, labelled by its owner (or not). */
 function project(env?: string): Resource {
   return {
-    provider: 'railway',
+    service: 'railway',
     ref: PROJECT,
     displayName: 'api',
     ...(env === undefined ? {} : { env }),
@@ -346,7 +346,7 @@ describe('railway env-scoped risks — a label is required', () => {
 describe('railway environmentId — must belong to the resolved project', () => {
   const accepted = [...missionRisks('operator'), 'railway.agent-action'];
   const other: Resource = {
-    provider: 'railway',
+    service: 'railway',
     ref: OTHER_PROJECT,
     env: 'prod',
     displayName: 'billing',
@@ -388,7 +388,7 @@ describe('railway environmentId — must belong to the resolved project', () => 
 
   test('a call naming an environment is refused when the project has none discovered', () => {
     const undiscovered: Resource = {
-      provider: 'railway',
+      service: 'railway',
       ref: PROJECT,
       env: 'staging',
       displayName: 'api',

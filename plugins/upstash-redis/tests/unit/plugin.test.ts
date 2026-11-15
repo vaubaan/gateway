@@ -43,18 +43,18 @@ import {
 } from '../../src/index.ts';
 
 const cache: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: 'db-abc-123',
   env: 'staging',
   displayName: 'app-cache',
 };
 const queue: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: 'db-def-456',
   env: 'prod',
   displayName: 'app-queue',
 };
-const foreign: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
+const foreign: Resource = { service: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
 const credential = {
   kind: 'api-key' as const,
@@ -334,7 +334,7 @@ describe('environment — resolved from the owner label of the database resource
       'staging',
     );
     expect(envOf('upstash_redis__list_databases', {}, [cache, queue])).toBeNull();
-    const unlabelled: Resource = { provider: 'upstash-redis', ref: 'db-x', displayName: 'x' };
+    const unlabelled: Resource = { service: 'upstash-redis', ref: 'db-x', displayName: 'x' };
     expect(envOf('upstash_redis__get', { key: 'k' }, [unlabelled])).toBeNull();
   });
 });
@@ -478,7 +478,7 @@ describe('executeUpstashRedis with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
   });
 
-  test('a provider failure is thrown with its status, on both surfaces (never an isError result)', async () => {
+  test('a service failure is thrown with its status, on both surfaces (never an isError result)', async () => {
     const http = mockFetch([{ url: /\/redis\/stats\//, status: 500, body: 'boom' }]);
     await expect(
       upstashRedisPlugin.execute(ctx(http), 'upstash_redis__get_database_stats', {
@@ -565,7 +565,7 @@ describe('discoverUpstashRedisResources with mockFetch', () => {
     const resources = await upstashRedisPlugin.discoverResources(ctx(fetch));
     expect(resources.map((r) => r.ref)).toEqual(['db-abc-123', 'db-def-456']);
     expect(resources[0]).toEqual({
-      provider: 'upstash-redis',
+      service: 'upstash-redis',
       ref: 'db-abc-123',
       displayName: 'app-cache',
       metadata: {
@@ -620,7 +620,7 @@ describe('discoverUpstashRedisResources with mockFetch', () => {
     ]);
     expect(await upstashRedisPlugin.discoverResources(ctx(fetch))).toEqual([
       {
-        provider: 'upstash-redis',
+        service: 'upstash-redis',
         ref: 'db-1',
         displayName: 'db-1',
         metadata: { state: 'active' },

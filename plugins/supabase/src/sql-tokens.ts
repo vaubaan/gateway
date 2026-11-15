@@ -3,7 +3,7 @@
  * free-form SQL : `migration-sql.ts` (`apply_migration`) and `query-sql.ts`
  * (`execute_sql`).
  *
- * Handbook : docs/handbook/providers/supabase.md, "Reading a migration" and
+ * Handbook : docs/handbook/services/supabase.md, "Reading a migration" and
  * "Reading a query".
  *
  * Pure : no IO. Not a SQL parser : it removes comments and literals and

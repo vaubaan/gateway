@@ -3,7 +3,7 @@
   "version": "6.0.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Railway — rewrap of mcp.railway.com plus GraphQL variable tools, a workspace token pasted by hand",
+  "description": "Vaubaan Gateway plugin for Railway — rewrap of mcp.railway.com plus GraphQL variable tools, a workspace token pasted by hand",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

@@ -32,7 +32,7 @@ describe('upstash-redis createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'upstash-redis',
+        service: 'upstash-redis',
         ref: '96ad0856-03b1-4ee7-9666-e81abd0349e1',
         displayName: 'cache',
         metadata: {

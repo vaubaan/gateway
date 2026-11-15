@@ -1,9 +1,9 @@
 /**
- * Classifier of the `supabase` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `supabase` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/supabase.md.
+ * Handbook : docs/handbook/services/supabase.md.
  *
  * Pure : no IO, no credential, no `Date`. Every tool maps to at least one
  * slice ; a call the plugin cannot place on the data model is `denied`,
@@ -83,7 +83,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   advisorType,
   base64Text,
@@ -156,7 +156,7 @@ const UNNAMED = i('any');
 /** The schema marker of a read that reaches the schemas Supabase manages. */
 const MANAGED = 'managed';
 function slice(path: readonly SliceSegment[], action: 'R' | 'W'): Slice {
-  return { provider: PROVIDER_ID, path: [...path], action };
+  return { service: SERVICE_ID, path: [...path], action };
 }
 function project(ref: string): SliceSegment[] {
   return [n('project'), i(ref)];
@@ -550,7 +550,7 @@ export function readIdentifiers(
     id: (name) => {
       const value = values.get(name);
       if (value === undefined) {
-        throw new Error(`${PROVIDER_ID}: tool '${tool}' reads no identifier '${name}'`);
+        throw new Error(`${SERVICE_ID}: tool '${tool}' reads no identifier '${name}'`);
       }
       return value;
     },
@@ -582,7 +582,7 @@ export function resolveProjectRef(
   if (args.projectRef !== undefined) {
     return { denied: 'projectRef: unknown argument, name the project with project_ref.' };
   }
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.project_ref !== undefined) {
     const explicit = projectRefIdent(args.project_ref);
     if (explicit === null) return { denied: missing('project_ref') };

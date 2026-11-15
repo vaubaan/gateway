@@ -5,7 +5,7 @@
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/outlook-through-the-oauth-broker-microsoft-provider.md.
- * Handbook : docs/handbook/providers/outlook.md ; guide : plugins/outlook/README.md.
+ * Handbook : docs/handbook/services/outlook.md ; guide : plugins/outlook/README.md.
  *
  * Credential : `oauth2` whose client is the broker's (`broker: { provider:
  * 'microsoft' }`). Discovery yields one resource, the account's mailbox. The
@@ -20,7 +20,7 @@ import { outlookDataModel } from './data-model.ts';
 import { discoverOutlookResources, executeOutlook } from './execute.ts';
 import { outlookExamples } from './examples.ts';
 import { OUTLOOK_ICON, OUTLOOK_ICON_COLOR } from './icon.ts';
-import { EXCLUDED_TOOLS, PROVIDER_ID } from './identity.ts';
+import { EXCLUDED_TOOLS, SERVICE_ID } from './identity.ts';
 import { outlookToolTitles } from './tool-titles.ts';
 import { outlookTools } from './tools.ts';
 
@@ -29,7 +29,7 @@ import { outlookTools } from './tools.ts';
 export const outlookCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const outlookPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Outlook',
   icon: OUTLOOK_ICON,
   iconColor: OUTLOOK_ICON_COLOR,
@@ -42,7 +42,7 @@ export const outlookPlugin = definePlugin({
     "One account is one Microsoft 365 or Outlook.com account: you sign in at Microsoft through the OAuth broker this gateway is enrolled with, with nothing to create or paste. Its one resource is the account's mailbox, which also holds its calendars. Reads are priced by who sent the mail, drafts and sends by who receives them, invitations by who is invited; a draft to an address outside the internal domains and the allowlists is refused, and a send there is its own permission, external and irreversible.",
   manualRevocation:
     "In your Microsoft account, under Privacy → App access (personal accounts) or My Apps → manage apps (work accounts), remove the gateway's app.",
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/outlook.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/outlook.md',
   tools: outlookTools,
   toolTitles: outlookToolTitles,
   excludedTools: EXCLUDED_TOOLS,
@@ -79,7 +79,7 @@ export {
   BROKER_PROVIDER,
   EXCLUDED_TOOLS,
   GRAPH_API_BASE,
-  PROVIDER_ID,
+  SERVICE_ID,
   SCOPES,
   TOOL,
 } from './identity.ts';

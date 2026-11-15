@@ -1,15 +1,15 @@
 /**
- * Classifier of the `vaubaan` provider: `(tool, args) → slices`.
+ * Classifier of the `vaubaan` service: `(tool, args) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7.
- * Handbook : docs/handbook/providers/vaubaan.md.
+ * Handbook : docs/handbook/services/vaubaan.md.
  *
  * Pure: no IO, no clock. The account carries no resource, so no call names
  * one; every slice is placed on the plugin's own data model:
  *
  *   list_my_accounts    vaubaan.account[*].R
  *   preview_policy         vaubaan.account[*].R          (reads the authority, writes nothing)
- *   get_catalog            vaubaan.catalog[<provider>].R
+ *   get_catalog            vaubaan.catalog[<service>].R
  *   list_my_missions       vaubaan.mission[<id> | *].R
  *   issue_mission          vaubaan.mission[*].issue.W
  *   rotate_mission_token   vaubaan.mission[<id>].token.W
@@ -30,16 +30,16 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { actOf, PROVIDER_ID } from './identity.ts';
+import { actOf, SERVICE_ID } from './identity.ts';
 import { vaubaanTools } from './tools.ts';
 
-/** The longest id the host accepts (`mission_id`, `provider`, `account_id`). */
+/** The longest id the host accepts (`mission_id`, `service`, `account_id`). */
 export const MAX_ID_LENGTH = 300;
 
 const DECLARED_ARGUMENTS = declaredArgumentsOf(vaubaanTools);
 
 export const MALFORMED_MISSION_ID = 'mission_id: expected the id of one of the user’s missions.';
-export const MALFORMED_PROVIDER = 'provider: expected a provider id, e.g. `github`.';
+export const MALFORMED_SERVICE = 'service: expected a service id, e.g. `github`.';
 
 /** The value as an id: a non-empty string of at most `MAX_ID_LENGTH` characters, or `null`. */
 export function idOf(value: unknown): string | null {
@@ -49,7 +49,7 @@ export function idOf(value: unknown): string | null {
 }
 
 function slice(path: readonly SliceSegment[], action: 'R' | 'W'): Slice {
-  return { provider: PROVIDER_ID, path, action };
+  return { service: SERVICE_ID, path, action };
 }
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
@@ -68,9 +68,9 @@ export function classifyVaubaan(
     case 'previewPolicy':
       return { slices: [slice([name('account'), ANY_IDENT], 'R')] };
     case 'getCatalog': {
-      const provider = idOf(args.provider);
-      if (provider === null) return { denied: MALFORMED_PROVIDER };
-      return { slices: [slice([name('catalog'), identSegment(provider)], 'R')] };
+      const service = idOf(args.service);
+      if (service === null) return { denied: MALFORMED_SERVICE };
+      return { slices: [slice([name('catalog'), identSegment(service)], 'R')] };
     }
     case 'listMyMissions': {
       if (args.mission_id === undefined) {

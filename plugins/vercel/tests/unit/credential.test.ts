@@ -54,7 +54,7 @@ describe('vercel token — the guide', () => {
     expect(vercelCredential.guide.reach.why).toMatch(
       /^A key per project keeps a leak or a mistake inside that project/,
     );
-    expect(vercelCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
+    expect(vercelCredential.guide.expiry).toEqual({ kind: 'service-reports' });
   });
 
   test('each alternative reads its ID first, then scopes the token', () => {

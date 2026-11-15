@@ -1,6 +1,6 @@
-# Risk catalog of the `notion` provider.
+# Risk catalog of the `notion` service.
 #
-# Handbook : docs/handbook/providers/notion.md.
+# Handbook : docs/handbook/services/notion.md.
 #
 # No risk is env-scoped (product owner, 2026-10-16) : the destructive
 # operations are gated by their row instead. Write patterns do not
@@ -19,7 +19,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 6 (2026-11-14) : wording only, one word per thing (ADR
 #   one-word-per-thing-account-service-plugin).
-provider: notion
+service: notion
 catalog_version: 6
 catalog_date: 2026-11-14
 

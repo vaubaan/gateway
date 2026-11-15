@@ -1,9 +1,9 @@
 /**
- * `@vaubaan/plugin-vercel` — the Vercel provider plugin.
+ * `@vaubaan/plugin-vercel` — the Vercel plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/vercel.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/vercel.md ; guide : plugins/README.md.
  *
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
@@ -35,7 +35,7 @@ import {
 } from './execute.ts';
 import { VERCEL_ICON, VERCEL_ICON_COLOR } from './icon.ts';
 import {
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   VERCEL_API_BASE,
   VERCEL_MCP_SERVER,
@@ -52,7 +52,7 @@ export const VERCEL_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 export const vercelCatalog = loadCatalogFile(VERCEL_CATALOG_PATH);
 
 export const vercelPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Vercel',
   icon: VERCEL_ICON,
   iconColor: VERCEL_ICON_COLOR,
@@ -63,7 +63,7 @@ export const vercelPlugin = definePlugin({
   summary:
     "One account is one Vercel access token pinned to a team; one resource is one project of that team. The environment is not a label you set: Vercel's own production, preview and development environments are read from each call, so the same project can run freely on preview and ask first on production.",
   manualRevocation: 'Delete the access token in your Vercel account settings, under Tokens.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/vercel.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/vercel.md',
   tools: vercelTools,
   toolTitles: vercelToolTitles,
   examples: vercelExamples,
@@ -93,7 +93,7 @@ export {
   vercelTools,
   DISCOVERY_MAX_PAGES,
   DISCOVERY_PAGE_SIZE,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   VERCEL_API_BASE,
   VERCEL_ENVS,

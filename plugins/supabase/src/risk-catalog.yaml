@@ -1,10 +1,10 @@
-# Risk catalog of the `supabase` provider — four planes under one project.
+# Risk catalog of the `supabase` service — four planes under one project.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/supabase.md.
+# Handbook : docs/handbook/services/supabase.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; the loader refuses
-# unknown keys, malformed ids, patterns of another provider, a missing
+# unknown keys, malformed ids, patterns of another service, a missing
 # fallback, a `presets` key, a live risk in no macro-action, a macro-action
 # entry that is not a risk of this catalog, a non-numeric base budget.
 #
@@ -53,7 +53,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 9 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: supabase
+service: supabase
 catalog_version: 9
 catalog_date: 2026-11-13
 

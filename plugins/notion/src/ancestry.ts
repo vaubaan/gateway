@@ -2,7 +2,7 @@
  * The ancestry check : proving that an object a call names is under the
  * root the call claims.
  *
- * Handbook : docs/handbook/providers/notion.md ; Notion's parent object
+ * Handbook : docs/handbook/services/notion.md ; Notion's parent object
  *            reference.
  *
  * The classifier prices a call on `root[<R>]` without being able to know
@@ -94,7 +94,7 @@ export class Ancestry {
 
   /**
    * The object a call targets, read by its own `GET` : the first hop of its
-   * walk. A failure is the provider's answer to the agent's call, thrown.
+   * walk. A failure is the service's answer to the agent's call, thrown.
    */
   async fetch(kind: NodeKind, id: string): Promise<Json> {
     this.requests += 1;

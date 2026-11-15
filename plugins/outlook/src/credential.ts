@@ -6,7 +6,7 @@
  * authentication was disabled, and no dynamic client registration; the
  * broker owns one Entra app registration with one redirect URI.
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * The host runs the flow and refreshes through the broker; this plugin
  * receives an access token and never sees the refresh token or the broker key.

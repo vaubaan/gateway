@@ -1,9 +1,9 @@
 /**
- * Data model of the `vaubaan` provider: what the gateway's own management
+ * Data model of the `vaubaan` service: what the gateway's own management
  * tools read and change.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/vaubaan.md.
+ * Handbook : docs/handbook/services/vaubaan.md.
  *
  * Three planes, one root each:
  *
@@ -19,10 +19,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const vaubaanDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'accounts',

@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/oauth-client-registered-by-the-gateway.md.
- * Handbook : docs/handbook/providers/miro.md ; guide : plugins/miro/README.md.
+ * Handbook : docs/handbook/services/miro.md ; guide : plugins/miro/README.md.
  *
  * Credential : `oauth2` against Miro's MCP authorization server, with a
  * client the gateway registers itself. Discovery yields one resource per
@@ -20,7 +20,7 @@ import { createdMiroResources } from './created.ts';
 import { discoverMiroResources, executeMiro } from './execute.ts';
 import { MIRO_ICON, MIRO_ICON_COLOR } from './icon.ts';
 import { miroExamples } from './examples.ts';
-import { EXCLUDED_TOOLS, PROVIDER_ID, TOOL } from './identity.ts';
+import { EXCLUDED_TOOLS, SERVICE_ID, TOOL } from './identity.ts';
 import { miroToolTitles } from './tool-titles.ts';
 import { miroTools } from './tools.ts';
 
@@ -29,7 +29,7 @@ import { miroTools } from './tools.ts';
 export const miroCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const miroPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Miro',
   icon: MIRO_ICON,
   iconColor: MIRO_ICON_COLOR,
@@ -42,7 +42,7 @@ export const miroPlugin = definePlugin({
     'One account is one Miro team: you sign in at Miro, choose the team and allow this gateway, with nothing to create or paste. One resource is one board of that team; a mission touches only the boards it was given. Miro boards have no environment: adding content, updating what is drawn (which may delete), deleting, creating a board and sharing one are separate permissions instead.',
   manualRevocation:
     "In Miro, open your profile settings, then the apps you allowed, and remove 'Vaubaan Gateway'; its tokens stop working.",
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/miro.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/miro.md',
   tools: miroTools,
   toolTitles: miroToolTitles,
   excludedTools: EXCLUDED_TOOLS,
@@ -113,7 +113,7 @@ export {
   WITHHELD_ARGUMENTS,
   locatorArgumentOf,
   MIRO_OAUTH,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   UPSTREAM_TOOL,
 } from './identity.ts';

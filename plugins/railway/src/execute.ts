@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `railway` provider.
+ * Upstream calls of the `railway` service.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *        decrypted in the context, is used for one call, and never reaches
@@ -16,7 +16,7 @@
  *
  * Rules : `fetch` comes from the context (tests inject `mockFetch`) ;
  * 401 / 403 → `UpstreamAuthError` so the host can refresh and retry ; the
- * API bases are facts about the provider, not instance configuration.
+ * API bases are facts about the service, not instance configuration.
  *
  * A project-scoped call is resolved by the classifier's own `resolveTarget`
  * and `readVariableWrite` : the project, environment, service and deployment
@@ -62,7 +62,7 @@ import {
 import { CUSTOM_TOOL_NAMES } from './custom-tools.ts';
 import { explainMcpRefusal, railwayBearerOf } from './credential.ts';
 import { askRailwayGraphql, nodesOf, railwayGraphql, type GraphqlRequest } from './graphql.ts';
-import { PROVIDER_ID, RAILWAY_MCP_SERVER, TOOL } from './identity.ts';
+import { SERVICE_ID, RAILWAY_MCP_SERVER, TOOL } from './identity.ts';
 import { railwayTools, toUpstreamName } from './tools.ts';
 
 /** Projects fetched per GraphQL page during discovery. */
@@ -313,7 +313,7 @@ async function listProjects(
         );
       }
       out.push({
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: node.id,
         displayName: node.name,
         metadata: {

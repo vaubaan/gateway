@@ -1,7 +1,7 @@
 /**
  * The database a successful `upstash_redis__create_database` created, read
  * from the Management API's answer (ADR created-resources-join-the-mission).
- * Handbook : docs/handbook/providers/upstash-redis.md.
+ * Handbook : docs/handbook/services/upstash-redis.md.
  *
  * The plugin builds the answer itself : the JSON of `POST /v2/redis/database`,
  * its credentials stripped (`redactDatabases`). The answer is untrusted : the
@@ -14,9 +14,9 @@
 import { jsonObjectsOf, type McpToolResult, type Resource } from '@vaubaan/plugin-sdk';
 
 import { pathIdent } from './classify.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
-/** `ProviderPlugin.createdResources` : the database `create_database` made, or `[]`. */
+/** `ServicePlugin.createdResources` : the database `create_database` made, or `[]`. */
 export function createdUpstashRedisResources(
   tool: string,
   _args: Readonly<Record<string, unknown>>,
@@ -40,7 +40,7 @@ export function databaseResource(ref: string, d: Readonly<Record<string, unknown
   const text = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
   const name = text(d.database_name);
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref,
     displayName: name ?? ref,
     metadata: {

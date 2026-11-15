@@ -45,7 +45,7 @@ const DATABASE_ID = '96ad0856-03b1-4ee7-9666-e81abd0349e1';
 const REST_URL = 'https://us1-app-cache.upstash.io';
 
 const database: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: DATABASE_ID,
   env: 'staging',
   displayName: 'app-cache',

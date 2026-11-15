@@ -11,7 +11,7 @@ import { classifySsh } from '../../src/classify.ts';
 import { looksLikeSecretFileRead } from '../../src/command/secret-paths.ts';
 
 function host(ref: string, env?: string): Resource {
-  return { provider: 'ssh', ref, displayName: `deploy@${ref}:22`, ...(env ? { env } : {}) };
+  return { service: 'ssh', ref, displayName: `deploy@${ref}:22`, ...(env ? { env } : {}) };
 }
 
 const STAGING = host('staging-vps', 'staging');

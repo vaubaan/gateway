@@ -1,9 +1,9 @@
 /**
- * `@vaubaan/plugin-notion` — the Notion provider plugin.
+ * `@vaubaan/plugin-notion` — the Notion plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/notion.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/notion.md ; guide : plugins/README.md.
  *
  * The plugin imports `@vaubaan/plugin-sdk` only. The YAML catalog is loaded
  * here, once, when the module is first imported (at gateway boot).
@@ -18,14 +18,14 @@ import { discoverNotionResources } from './discovery.ts';
 import { executeNotion } from './execute.ts';
 import { notionExamples } from './examples.ts';
 import { NOTION_ICON, NOTION_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { notionToolTitles, notionTools } from './tools.ts';
 
 // A filesystem path next to this module (docs/handbook/plugin-sdk.md).
 export const notionCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const notionPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Notion',
   icon: NOTION_ICON,
   iconColor: NOTION_ICON_COLOR,
@@ -38,7 +38,7 @@ export const notionPlugin = definePlugin({
     'One account is one internal account of a Notion workspace, connected with its token. One resource is one top-level page or database shared with that account, with everything under it. Notion has no environments: moving a page to the trash and deleting a block are permissions of their own. Writes are sent silently, so Notion notifies nobody.',
   manualRevocation:
     "In Notion's Developer portal, open the account and refresh its token on the Configuration tab, or remove the account from the shared pages (••• menu, Accounts).",
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/notion.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/notion.md',
   tools: notionTools,
   toolTitles: notionToolTitles,
   examples: notionExamples,
@@ -66,5 +66,5 @@ export {
   MAX_SEARCH_VERIFY_REQUESTS,
 } from './execute.ts';
 export { notionId } from './ids.ts';
-export { API_TOKEN_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+export { API_TOKEN_FIELD, SERVICE_ID, TOOL } from './identity.ts';
 export { EXAMPLE_DB_ROOT, EXAMPLE_PAGE_ROOT, notionExamples } from './examples.ts';

@@ -1,9 +1,9 @@
 /**
- * The identifier grammars of the `supabase` provider — one per kind, shared
+ * The identifier grammars of the `supabase` service — one per kind, shared
  * by `classify.ts` and `execute.ts`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/supabase.md ; ADR
+ * Handbook : docs/handbook/services/supabase.md ; ADR
  *            plugin-identifiers-one-grammar-for-classify-and-execute.
  *
  * Every argument that lands in a URL path, a query string, a host, a header
@@ -37,7 +37,7 @@ export function projectRefIdent(value: unknown): string | null {
 }
 
 /**
- * An opaque identifier the provider issues or constrains (a user, SSO
+ * An opaque identifier the service issues or constrains (a user, SSO
  * provider or third-party-auth id — UUIDs —, an edge function slug, a closed
  * keyword such as a link type) : one path segment, no dot, no separator, no
  * escape, bounded. It lands in a slice **and** in a request path, so one

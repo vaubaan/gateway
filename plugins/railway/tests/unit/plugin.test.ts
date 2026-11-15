@@ -46,7 +46,7 @@ const ENV_STG = '00000000-0000-4000-8000-0000000000e1';
 const ENV_PRD = '00000000-0000-4000-8000-0000000000e2';
 
 const staging: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: PROJECT_STG,
   env: 'staging',
   displayName: 'api (staging)',
@@ -56,7 +56,7 @@ const staging: Resource = {
   },
 };
 const prod: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: PROJECT_PRD,
   env: 'prod',
   displayName: 'api (prod)',
@@ -67,7 +67,7 @@ const prod: Resource = {
 };
 /** Discovered, but the owner has not labelled it yet. */
 const unlabelled: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: PROJECT_STG,
   displayName: 'api',
   metadata: {
@@ -77,12 +77,12 @@ const unlabelled: Resource = {
 };
 /** A project resource whose environments discovery never stored. */
 const undiscovered: Resource = {
-  provider: 'railway',
+  service: 'railway',
   ref: PROJECT_STG,
   env: 'staging',
   displayName: 'api',
 };
-const foreign: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'other' };
+const foreign: Resource = { service: 'vercel', ref: 'prj_1', displayName: 'other' };
 
 const secret = (over: Partial<ApiKeySecret> = {}): ApiKeySecret => ({
   kind: 'api-key',
@@ -225,7 +225,7 @@ describe('classifyRailway', () => {
     ]);
   });
 
-  test('projectId defaults to the single Railway project, ignoring other providers', () => {
+  test('projectId defaults to the single Railway project, ignoring other services', () => {
     expect(slices('railway__list-services', {}, [foreign, staging])).toEqual([
       `railway.project[${PROJECT_STG}].environment[*].service[*].R`,
     ]);
@@ -705,7 +705,7 @@ describe('discoverRailwayResources', () => {
     const resources = await railwayPlugin.discoverResources(connCtx(fetch));
     expect(resources).toEqual([
       {
-        provider: 'railway',
+        service: 'railway',
         ref: PROJECT_STG,
         displayName: 'api',
         metadata: {
@@ -717,7 +717,7 @@ describe('discoverRailwayResources', () => {
         },
       },
       {
-        provider: 'railway',
+        service: 'railway',
         ref: PROJECT_PRD,
         displayName: 'web',
         metadata: { environments: [], services: [] },
@@ -733,7 +733,7 @@ describe('discoverRailwayResources', () => {
     expect(fetch.calls[0]!.headers.authorization).toBe('Bearer rlwy_at');
   });
 
-  test('stops after the paging cap even when the provider keeps answering hasNextPage', async () => {
+  test('stops after the paging cap even when the service keeps answering hasNextPage', async () => {
     const fetch = mockFetch([
       {
         url: RAILWAY_GRAPHQL_URL,

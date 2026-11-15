@@ -1,9 +1,9 @@
 /**
- * MCP tools of the `miro` provider — a rewrap of Miro's official MCP server
+ * MCP tools of the `miro` service — a rewrap of Miro's official MCP server
  * (https://mcp.miro.com/), plus `list_boards`, which the gateway answers
  * itself from the mission's boards.
  *
- * Handbook : docs/handbook/providers/miro.md, Procedures.
+ * Handbook : docs/handbook/services/miro.md, Procedures.
  * ADR      : docs/decisions/rewrap-official-mcps.md.
  *
  * `upstream-tools.json` is Miro's `tools/list`, captured verbatim on
@@ -42,7 +42,7 @@ import {
   LEFT_OUT_UPSTREAM_TOOLS,
   LOCATOR,
   MODELLED_LOCATING_ARGUMENTS,
-  PROVIDER_ID,
+  SERVICE_ID,
   REQUIRED_BY_THE_GATEWAY,
   TELEMETRY_ARGUMENTS,
   TOOL,
@@ -100,7 +100,7 @@ export function readUpstreamToolList(raw: unknown): UpstreamToolList {
     !Array.isArray(file.tools) ||
     !file.tools.every(isUpstreamTool)
   ) {
-    throw new Error(`${PROVIDER_ID}: upstream-tools.json is not a list of MCP tool declarations`);
+    throw new Error(`${SERVICE_ID}: upstream-tools.json is not a list of MCP tool declarations`);
   }
   return { source: file.source, capturedAt: file.captured_at, tools: file.tools };
 }
@@ -162,7 +162,7 @@ function gatewaySchema(tool: UpstreamTool, locator: Locator): McpToolDeclaration
   for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
     if (!offered(name)) continue;
     if (name in properties) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' declares '${name}' itself`);
+      throw new Error(`${SERVICE_ID}: upstream tool '${tool.name}' declares '${name}' itself`);
     }
     properties[name] =
       name === 'comment_id' ? { ...schema, pattern: MIRO_COMMENT_ID.source } : { ...schema };
@@ -173,7 +173,7 @@ function gatewaySchema(tool: UpstreamTool, locator: Locator): McpToolDeclaration
   ]) {
     if (!offered(name)) continue;
     if (!(name in properties)) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' no longer takes '${name}'`);
+      throw new Error(`${SERVICE_ID}: upstream tool '${tool.name}' no longer takes '${name}'`);
     }
     if (!required.includes(name)) required.push(name);
   }
@@ -192,19 +192,19 @@ export function declarationsOf(list: UpstreamToolList): {
   const byName = new Map(list.tools.map((tool) => [tool.name, tool] as const));
   for (const tool of list.tools) {
     if (LOCATOR[tool.name] === undefined && LEFT_OUT_UPSTREAM_TOOLS[tool.name] === undefined) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' is not modelled`);
+      throw new Error(`${SERVICE_ID}: upstream tool '${tool.name}' is not modelled`);
     }
     if (LOCATOR[tool.name] !== undefined) {
       const unknown = unmodelledLocators(tool);
       if (unknown.length > 0) {
         throw new Error(
-          `${PROVIDER_ID}: upstream tool '${tool.name}' takes ${unknown.join(', ')}, which may name another board: model it first`,
+          `${SERVICE_ID}: upstream tool '${tool.name}' takes ${unknown.join(', ')}, which may name another board: model it first`,
         );
       }
       const locatorArgument = locatorArgumentOf(tool.name);
       if (LOCATOR[tool.name] !== 'none' && !(locatorArgument in tool.inputSchema.properties)) {
         throw new Error(
-          `${PROVIDER_ID}: upstream tool '${tool.name}' has no '${locatorArgument}' argument: model its locator first`,
+          `${SERVICE_ID}: upstream tool '${tool.name}' has no '${locatorArgument}' argument: model its locator first`,
         );
       }
     }
@@ -217,7 +217,7 @@ export function declarationsOf(list: UpstreamToolList): {
     const tool = byName.get(upstreamName);
     const locator = LOCATOR[upstreamName];
     if (!tool || !locator) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${upstreamName}' is missing from the list`);
+      throw new Error(`${SERVICE_ID}: upstream tool '${upstreamName}' is missing from the list`);
     }
     offered.push({
       name,

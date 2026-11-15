@@ -4,7 +4,7 @@
  * header every request carries (immutable ids), plus what a request asks
  * for (a text body, UTC times).
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * A 401 is a rejected token (the host refreshes through the broker and
  * retries); Graph answers 403 for a missing permission or a blocked
@@ -21,7 +21,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { pathSegment } from './identifiers.ts';
-import { GRAPH_API_BASE, PREFER_IMMUTABLE_ID, PROVIDER_ID } from './identity.ts';
+import { GRAPH_API_BASE, PREFER_IMMUTABLE_ID, SERVICE_ID } from './identity.ts';
 
 export type Query = Readonly<Record<string, string | number | boolean | undefined>>;
 export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -36,7 +36,7 @@ export interface GraphRequest<T> {
 }
 
 function tokenOf(ctx: AccountContext): string {
-  return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
+  return expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2').accessToken;
 }
 
 function queryString(query: Query): string {

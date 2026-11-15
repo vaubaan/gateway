@@ -1,5 +1,5 @@
 /**
- * SSH transport of the `ssh` provider : one command, one connection, over
+ * SSH transport of the `ssh` service : one command, one connection, over
  * `ssh2`, with the host key verified against the pinned fingerprint.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential is used for one

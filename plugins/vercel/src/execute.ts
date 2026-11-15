@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `vercel` provider, and resource discovery.
+ * Upstream calls of the `vercel` service, and resource discovery.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned), §5.
@@ -14,7 +14,7 @@
  *
  * Rules :
  *   - `fetch` and the signal come from the context, never from the global ;
- *   - a provider failure is **thrown**, never returned : 401 / 403 from
+ *   - a service failure is **thrown**, never returned : 401 / 403 from
  *     either surface → `UpstreamAuthError` (the host marks the account
  *     `expired` on a 401), any other failed status → `UpstreamHttpError`, a
  *     JSON-RPC error frame, an answer that is not JSON or not of the
@@ -80,7 +80,7 @@ import {
   VERCEL_ENVS,
 } from './classify.ts';
 import { vercelAuth, type VercelAuth } from './credential.ts';
-import { PROVIDER_ID, TOOL, VERCEL_API_BASE, VERCEL_MCP_SERVER } from './identity.ts';
+import { SERVICE_ID, TOOL, VERCEL_API_BASE, VERCEL_MCP_SERVER } from './identity.ts';
 import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
 import { isCustomTool, toUpstreamName, toolAcceptsArgument, vercelToolByName } from './tools.ts';
@@ -188,12 +188,12 @@ export async function discoverVercelResources(ctx: AccountContext): Promise<read
   const unusable = projects.find((p) => pathIdent(p.id) === null);
   if (unusable) {
     throw new Error(
-      `${PROVIDER_ID}: project id ${JSON.stringify(unusable.id)} is not a path-safe identifier`,
+      `${SERVICE_ID}: project id ${JSON.stringify(unusable.id)} is not a path-safe identifier`,
     );
   }
 
   return projects.map((p) => ({
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: p.id,
     displayName: p.name,
     metadata: {
@@ -216,10 +216,10 @@ async function discoverOneProject(call: VercelCall, projectId: string): Promise<
   const answer = await rest(call, 'GET', `/v9/projects/${projectId}`, {}, isRecord);
   const team = pathIdent(answer.accountId);
   if (!isProject(answer) || answer.id !== projectId) {
-    throw new Error(`${PROVIDER_ID}: project ${projectId} did not answer as itself`);
+    throw new Error(`${SERVICE_ID}: project ${projectId} did not answer as itself`);
   }
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: answer.id,
     displayName: answer.name,
     metadata: {
@@ -364,7 +364,7 @@ function projectTeam(
   auth: Extract<VercelAuth, { mode: 'project' }>,
   resources: readonly Resource[],
 ): string {
-  const own = resources.find((r) => r.provider === PROVIDER_ID && r.ref === auth.projectId);
+  const own = resources.find((r) => r.service === SERVICE_ID && r.ref === auth.projectId);
   const team = pathIdent(own?.metadata?.team_id);
   if (team === null) {
     throw new ExecutorRefusal(
@@ -387,7 +387,7 @@ function projectTeam(
  *
  * A 403 here is about the deployment the caller named, not about the token :
  * it is a refusal, not an upstream failure. A 401, a 5xx or a network failure
- * of the lookup is the provider's and is thrown unchanged.
+ * of the lookup is the service's and is thrown unchanged.
  */
 async function verifiedDeploymentId(
   call: VercelCall,
@@ -407,7 +407,7 @@ async function verifiedDeploymentId(
     );
   } catch (e) {
     // 403 / 404 : the team of this account cannot see that deployment. Any
-    // other failure (401, 5xx, the network) is the provider's and is thrown as is.
+    // other failure (401, 5xx, the network) is the service's and is thrown as is.
     const hidden =
       (e instanceof UpstreamAuthError && e.upstreamStatus === HTTP_FORBIDDEN) ||
       (e instanceof UpstreamHttpError && e.status === HTTP_NOT_FOUND);

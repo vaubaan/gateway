@@ -24,7 +24,7 @@ import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 import { classifyResend } from '../../src/classify.ts';
 
 const prodDomain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'notifications.acme.com',
   displayName: 'notifications.acme.com',
   env: 'prod',
@@ -38,7 +38,7 @@ const prodDomain: Resource = {
 };
 
 const stagingDomain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'staging.acme.dev',
   displayName: 'staging.acme.dev',
   env: 'staging',
@@ -52,7 +52,7 @@ const stagingDomain: Resource = {
 };
 
 const newsletter: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'seg_x',
   displayName: 'Newsletter',
   env: 'prod',
@@ -498,8 +498,8 @@ describe('classifyResend — denials', () => {
     expect(classifyResend('resend__send_email', send, [])).toEqual(notASendingDomain);
   });
 
-  test('resources of another provider are ignored (resource picker)', () => {
-    const other: Resource = { ...prodDomain, provider: 'stripe' };
+  test('resources of another service are ignored (resource picker)', () => {
+    const other: Resource = { ...prodDomain, service: 'stripe' };
     expect(classifyResend('resend__send_email', send, [other])).toEqual(notASendingDomain);
     expect(classifyResend('resend__get_domain', { domain: prodDomain.ref }, [other])).toEqual({
       denied: "domain: 'notifications.acme.com' is not a sending domain of this mission",

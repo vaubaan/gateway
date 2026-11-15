@@ -2,7 +2,7 @@
  * Redaction of the project object returned by `vercel__get_project`,
  * `vercel__list_projects` and `vercel__update_project_settings`.
  *
- * Handbook : docs/handbook/providers/vercel.md (projects).
+ * Handbook : docs/handbook/services/vercel.md (projects).
  *
  * SEC 2026-10-15 (re-check H-1). Both tools are priced `vercel.read-account`
  * (`data: metadata`), yet Vercel's project object carries `env[]` with values

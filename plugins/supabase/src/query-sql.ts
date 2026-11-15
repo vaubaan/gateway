@@ -3,9 +3,9 @@
  * Supabase keeps for itself (`auth`, `vault`, `storage`…), or might it ?
  *
  * Spec : docs/spec/gateway-risk-model.md §7.2 #2.
- * Handbook : docs/handbook/providers/supabase.md, "Reading a query".
+ * Handbook : docs/handbook/services/supabase.md, "Reading a query".
  *
- * Pure : no IO. That the query cannot write is the provider's guarantee (the
+ * Pure : no IO. That the query cannot write is the service's guarantee (the
  * read-only endpoint) ; this file decides one thing only : whether the read
  * touches `supabase.read-managed-schemas` on top of `supabase.read-data`.
  * It decides **by what the SQL names**, never by what the database role may

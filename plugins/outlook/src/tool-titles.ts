@@ -1,6 +1,6 @@
 /**
  * What each `outlook` tool does, in a few words a person reads at a glance
- * (`ProviderPlugin.toolTitles`): the head of an approval request, before the
+ * (`ServicePlugin.toolTitles`): the head of an approval request, before the
  * mailbox the call resolves to. For people only: never part of `tools/list`.
  */
 

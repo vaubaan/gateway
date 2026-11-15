@@ -36,7 +36,7 @@ describe('railway createdResources', () => {
     );
     expect(created).toEqual([
       {
-        provider: 'railway',
+        service: 'railway',
         ref: ID,
         displayName: 'shop',
         metadata: { environments: [{ id: ENV, name: 'production' }], services: [] },
@@ -57,7 +57,7 @@ describe('railway createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'railway',
+        service: 'railway',
         ref: ID,
         displayName: 'shop',
         metadata: { environments: [{ id: ENV, name: 'staging' }], services: [] },

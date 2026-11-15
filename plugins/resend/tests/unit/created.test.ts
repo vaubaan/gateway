@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 import { createdResendResources } from '../../src/created.ts';
 import { resendPlugin } from '../../src/index.ts';
 
-/** What `executeResend` returns: the provider's JSON, pretty-printed. */
+/** What `executeResend` returns: the service's JSON, pretty-printed. */
 const answer = (payload: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
 });
@@ -28,7 +28,7 @@ describe('resend createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'resend',
+        service: 'resend',
         ref: 'mail.acme.com',
         displayName: 'Mail.Acme.com (not_started)',
         metadata: {
@@ -58,7 +58,7 @@ describe('resend createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'resend',
+        service: 'resend',
         ref: '78261eea-8f8b-4381-83c6-79fa7120f1cf',
         displayName: 'Beta users',
         metadata: { kind: 'segment', segment_id: '78261eea-8f8b-4381-83c6-79fa7120f1cf' },

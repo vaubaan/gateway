@@ -13,7 +13,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { parseSlice, type ProviderPlugin, type Resource, type RiskId } from '@vaubaan/plugin-sdk';
+import { parseSlice, type ServicePlugin, type Resource, type RiskId } from '@vaubaan/plugin-sdk';
 import {
   envResolverFor,
   evaluateCall,
@@ -25,20 +25,20 @@ import {
 import { stripeCatalog, stripePlugin } from '../../src/index.ts';
 
 /** Seen through the contract, as the host sees it (the optional hooks included). */
-const plugin: ProviderPlugin = stripePlugin;
+const plugin: ServicePlugin = stripePlugin;
 
 const TEST = 'acct_1/test';
 const LIVE = 'acct_1/live';
 
 const testRes: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: TEST,
   env: 'test',
   displayName: 'Acme (test)',
   metadata: { account_id: 'acct_1', mode: 'test' },
 };
 const liveRes: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: LIVE,
   env: 'live',
   displayName: 'Acme (live)',
@@ -284,7 +284,7 @@ describe('the mode of a call : resolved from the resource, refused when it canno
   });
 
   test('a resource with no resolvable mode is refused, whatever the mission accepts', () => {
-    const noMode: Resource = { provider: 'stripe', ref: 'acct_1', displayName: 'Acme' };
+    const noMode: Resource = { service: 'stripe', ref: 'acct_1', displayName: 'Acme' };
     for (const resource of [
       noMode,
       { ...noMode, env: 'live' },
@@ -315,7 +315,7 @@ describe('the mode of a call : resolved from the resource, refused when it canno
   test('the engine itself refuses a Stripe slice on a resource without environment', () => {
     // Defence in depth : even a slice the classifier no longer emits is refused,
     // because every Stripe risk is env-scoped on [test, live].
-    const unlabelled: Resource = { provider: 'stripe', ref: 'acct_1', displayName: 'Acme' };
+    const unlabelled: Resource = { service: 'stripe', ref: 'acct_1', displayName: 'Acme' };
     const baseIds = stripeCatalog.catalog.risks.map((r) => r.id);
     for (const raw of [
       'stripe.account[acct_1].mode[*].balance.R',

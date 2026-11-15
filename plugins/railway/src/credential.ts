@@ -1,5 +1,5 @@
 /**
- * Credential of the `railway` provider : a token pasted by hand (`api-key`
+ * Credential of the `railway` service : a token pasted by hand (`api-key`
  * kind), the one way of connecting.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADRs
@@ -45,7 +45,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { askRailwayGraphql, nodesOf } from './graphql.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
 export const RAILWAY_TOKEN_FIELD = 'api_token';
@@ -108,11 +108,9 @@ export const railwayCredential: ApiKeyCredentialSpec = {
 
 /** The bearer of a Railway account : the pasted token. */
 export function railwayBearerOf(credential: CredentialSecret): string {
-  const token = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[
-    RAILWAY_TOKEN_FIELD
-  ];
+  const token = expectCredentialKind(SERVICE_ID, credential, 'api-key').fields[RAILWAY_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error(`${PROVIDER_ID}: the stored token has no '${RAILWAY_TOKEN_FIELD}' field`);
+    throw new Error(`${SERVICE_ID}: the stored token has no '${RAILWAY_TOKEN_FIELD}' field`);
   }
   return token;
 }

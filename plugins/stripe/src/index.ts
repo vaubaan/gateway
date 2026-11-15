@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/stripe.md ; guide : plugins/stripe/README.md.
+ * Handbook : docs/handbook/services/stripe.md ; guide : plugins/stripe/README.md.
  *
  * Credential : `api-key` with two optional secret fields, the test-mode key
  * and the live-mode key (`credential.ts`). Each key present yields one resource
@@ -18,7 +18,7 @@ import { classifyStripe } from './classify.ts';
 import { stripeCredential } from './credential.ts';
 import { stripeDataModel } from './data-model.ts';
 import { discoverStripeResources, executeStripe } from './execute.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { STRIPE_ICON, STRIPE_ICON_COLOR } from './icon.ts';
 import { stripeToolTitles } from './tool-titles.ts';
 import { stripeTools } from './tools.ts';
@@ -29,7 +29,7 @@ import { stripeExamples } from './examples.ts';
 export const stripeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const stripePlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Stripe',
   icon: STRIPE_ICON,
   iconColor: STRIPE_ICON_COLOR,
@@ -42,7 +42,7 @@ export const stripePlugin = definePlugin({
     'One account is one Stripe account, given as a test key, a live key, or both; each mode is its own resource, labelled test or live by the plugin. Every permission is held per mode, so a mission can work freely in test mode and touch live billing only within its limits and after your yes.',
   manualRevocation:
     'Delete or roll the API key in the Stripe Dashboard, under Developers, API keys.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/stripe.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/stripe.md',
   tools: stripeTools,
   toolTitles: stripeToolTitles,
   examples: stripeExamples,
@@ -58,7 +58,7 @@ export default stripePlugin;
 
 export { classifyStripe, stripeDataModel, stripeTools };
 export { STRIPE_KEYS_PAGE, stripeCredential, verifyStripeKeys } from './credential.ts';
-export { PROVIDER_ID, STRIPE_API_BASE, TOOL, TOOL_PREFIX } from './identity.ts';
+export { SERVICE_ID, STRIPE_API_BASE, TOOL, TOOL_PREFIX } from './identity.ts';
 export {
   discoverStripeResources,
   executeStripe,

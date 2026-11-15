@@ -1,13 +1,13 @@
 # `@vaubaan/plugin-upstash-redis`
 
-Upstash Redis provider plugin for Vaubaan Gateway: databases through the
+Upstash Redis plugin for Vaubaan Gateway: databases through the
 Upstash Management API, key-value data through each database's REST
 endpoint. Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk)
 only.
 
 - Contract: ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
-- Modelling: handbook [`providers/upstash-redis`](../../docs/handbook/providers/upstash-redis.md)
+- Modelling: handbook [`services/upstash-redis`](../../docs/handbook/services/upstash-redis.md)
   (data model, tool → slice mapping, catalog, edge cases).
 
 ## Layout
@@ -15,7 +15,7 @@ only.
 | File                    | Role                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
-| `src/identity.ts`       | The provider id and the 21 tool names (`TOOL`), written once.                                                                                              |
+| `src/identity.ts`       | The service id and the 21 tool names (`TOOL`), written once.                                                                                               |
 | `src/risk-catalog.yaml` | 10 risks + fallback, four macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                             |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
@@ -105,7 +105,7 @@ made of per-database REST tokens was considered and rejected: it could
 neither discover its databases nor reach the management tools.
 
 What `execute` declines itself (a database outside the mission, a malformed
-argument, a pipeline-shaped `command`) is an `isError` result; a provider
+argument, a pipeline-shaped `command`) is an `isError` result; a service
 failure is thrown: a failed status (a command Redis refuses is the REST
 endpoint's HTTP 400 `{ error }`), and an answer that is not JSON or not the
 shape expected (`UpstreamProtocolError`), never passed to the agent as text.
@@ -138,7 +138,7 @@ offers it under "Anything else".
 
 `discoverResources` reads `GET /v2/redis/databases` (unpaged upstream,
 capped at 200 with a logger warning) and returns one resource per database:
-`{ provider: 'upstash-redis', ref: database_id, displayName: database_name,
+`{ service: 'upstash-redis', ref: database_id, displayName: database_name,
 metadata: { region, primary_region?, read_regions?, endpoint, state,
 database_type, tls } }`. No token is copied into the metadata. The owner
 labels `env`.

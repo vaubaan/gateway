@@ -2,7 +2,7 @@
  * Security suite of the Stripe classifier — `classifyStripe(tool, args, resources)`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
- * Handbook : docs/handbook/providers/stripe.md.
+ * Handbook : docs/handbook/services/stripe.md.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
@@ -20,7 +20,7 @@ import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 import { classifyStripe } from '../../src/classify.ts';
 
 const liveResource: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_live',
   displayName: 'acct_live',
   env: 'live',
@@ -28,7 +28,7 @@ const liveResource: Resource = {
 };
 
 const testResource: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_test',
   displayName: 'acct_test',
   env: 'test',
@@ -382,7 +382,7 @@ describe('classifyStripe — denials', () => {
   });
 
   test('non-stripe resources are ignored (resource picker)', () => {
-    const other: Resource = { ...liveResource, provider: 'gmail' };
+    const other: Resource = { ...liveResource, service: 'gmail' };
     const result = classifyStripe('stripe__get_balance', {}, [other]);
     expect(result).toEqual({
       denied: 'account: argument missing and the mission touches no Stripe resource',

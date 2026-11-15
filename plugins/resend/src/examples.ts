@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `resend` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `resend` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -10,10 +10,10 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const EXAMPLE_PROD_DOMAIN: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'notifications.acme.com',
   env: 'prod',
   displayName: 'notifications.acme.com',
@@ -27,7 +27,7 @@ export const EXAMPLE_PROD_DOMAIN: Resource = {
   },
 };
 export const EXAMPLE_STAGING_DOMAIN: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'staging.acme.dev',
   env: 'staging',
   displayName: 'staging.acme.dev',
@@ -40,14 +40,14 @@ export const EXAMPLE_STAGING_DOMAIN: Resource = {
   },
 };
 export const EXAMPLE_NEWSLETTER: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'seg_news',
   env: 'prod',
   displayName: 'Newsletter',
   metadata: { kind: 'segment', segment_id: 'seg_news' },
 };
 export const EXAMPLE_TEST_SEGMENT: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'seg_test',
   env: 'staging',
   displayName: 'QA list',

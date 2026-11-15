@@ -4,7 +4,7 @@
  * command profiler (`command/profile.ts`) to decide which side (`R` or `W`)
  * each simple command of an `ssh__exec` line falls on.
  *
- * Handbook : docs/handbook/providers/ssh.md, Invariants, "Reading the allow-list".
+ * Handbook : docs/handbook/services/ssh.md, Invariants, "Reading the allow-list".
  *
  * A rule sees the **argument vector** the shell would build (quotes already
  * removed by `shell-lex.ts`) and must accept every argument : a known option,

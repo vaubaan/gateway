@@ -1,8 +1,8 @@
 /**
- * MCP tools of the `vaubaan` provider: the seven acts of the retired management
+ * MCP tools of the `vaubaan` service: the seven acts of the retired management
  * door, with the names, arguments and answers it published, prefixed `vaubaan__`.
  *
- * Handbook : docs/handbook/providers/vaubaan.md.
+ * Handbook : docs/handbook/services/vaubaan.md.
  *
  * **The descriptions are read by a language model**, which composes a mission
  * from them with no other documentation. They state the rules of issuance where
@@ -20,7 +20,7 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-import { ACT, PROVIDER_ID, TOOL, type VaubaanActName } from './identity.ts';
+import { ACT, SERVICE_ID, TOOL, type VaubaanActName } from './identity.ts';
 import schemas from './tool-schemas.json' with { type: 'json' };
 
 /** What an agent reads first: the order of the calls and the rules, in one place. */
@@ -29,16 +29,16 @@ const ORDER_OF_CALLS =
 
 const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
   listMyAccounts: [
-    'Lists the provider accounts (accounts) the user may build a mission from: the ones they own and the ones shared with them, directly or through a group.',
-    'For each account: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label (their own, or the account’s `default_env` the owner chose for unlabelled resources), `env_qualified_risks` says which environment-qualified ids are usable (an id such as `provider[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), `macro_actions` are what a mission may tick there, each with what it writes at each trust level (`at_trust_level`: how many run freely, ask first, are left out) and the risks of it the user cannot get here (`unavailable`), and `everything_i_hold` counts the lines of the gateway’s own expansion: every risk the user holds there that the resources can reach.',
+    'Lists the service accounts (accounts) the user may build a mission from: the ones they own and the ones shared with them, directly or through a group.',
+    'For each account: `authority.risk_ids` is the exact list of RiskIds a mission may accept on it — nothing outside that list will ever pass —, `resources` are the refs a mission can be limited to, with their environment label (their own, or the account’s `default_env` the owner chose for unlabelled resources), `env_qualified_risks` says which environment-qualified ids are usable (an id such as `service[prod].x` needs a selected resource labelled `prod`; unlabelled resources refuse it), `macro_actions` are what a mission may tick there, each with what it writes at each trust level (`at_trust_level`: how many run freely, ask first, are left out) and the risks of it the user cannot get here (`unavailable`), and `everything_i_hold` counts the lines of the gateway’s own expansion: every risk the user holds there that the resources can reach.',
     'Call this first. Use `vaubaan__get_catalog` for the meaning of each RiskId and the risks of each macro-action.',
     ORDER_OF_CALLS,
     'A Vaubaan account is listed too, but a mission issued here never carries one: it is refused.',
   ].join(' '),
   getCatalog: [
-    'Returns the risk catalog of one provider as explicit RiskIds — label, reason, row and the reason of the row, environment, macro-action —, its `macro_actions` with every risk and its base budget, and `trust_levels`: per trust level, the gate each row gets (`null`: left out) and the factor on the base budget.',
+    'Returns the risk catalog of one service as explicit RiskIds — label, reason, row and the reason of the row, environment, macro-action —, its `macro_actions` with every risk and its base budget, and `trust_levels`: per trust level, the gate each row gets (`null`: left out) and the factor on the base budget.',
     'Each risk sits in a row (`row`): 1 harmless, 2 repairable but worth a look, 3 repairable at a price, 4 cannot be repaired. Careful runs row 1 freely, asks before rows 2 and 3 and leaves row 4 out; Trusting runs rows 1 and 2 freely, limits ×3; Autonomous asks only before row 4, limits ×10.',
-    'A policy accepts ids from this list only, written exactly as shown; an id qualified with an environment (`provider[staging].x`) is a different id from the same risk in another environment.',
+    'A policy accepts ids from this list only, written exactly as shown; an id qualified with an environment (`service[staging].x`) is a different id from the same risk in another environment.',
     'Pass `account_id` to have each id flagged `in_my_authority` for that account.',
     'With `account_id`, `everything_i_hold` is the built-in expansion written out for that account, entry by entry.',
     'Tick the macro-actions the task needs at the lowest trust level that lets it run, then remove what the task does not need. The `fallback` id (uncategorized writes) is only in `anything-else`: tick it only when the user asks — `everything-i-hold` includes it, because the user asked for everything they hold.',
@@ -51,7 +51,7 @@ const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
   ].join(' '),
   previewPolicy: [
     'Checks a mission draft, issuing nothing. Answers `ok`, the `issues` that block it, `uncovered` — the accepted risks outside the user’s authority, per account —, and `policy`: exactly what the mission could call, with the budget of each risk.',
-    'Rules: explicit RiskIds only, no wildcard, no pattern, no "everything" risk; one account per provider; per account `trust_levels` alone (they write the policy; `left_out` says what they leave out), or `everything_i_hold: true` alone — only when the user asks for a mission as wide as their authority there; show them the notice `everything-i-hold-expanded` before you issue —, or `policy` with a quota and a rate limit for every risk; an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
+    'Rules: explicit RiskIds only, no wildcard, no pattern, no "everything" risk; one account per service; per account `trust_levels` alone (they write the policy; `left_out` says what they leave out), or `everything_i_hold: true` alone — only when the user asks for a mission as wide as their authority there; show them the notice `everything-i-hold-expanded` before you issue —, or `policy` with a quota and a rate limit for every risk; an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
     "Resources: `{ scope: 'all' }` (default) — known now, a resource discovered later is not reached, except one the mission itself creates through the gateway; `{ scope: 'selected', resource_refs: [...] }`; `{ scope: 'account' }` — `all` with `future: true`: use it only when the task operates the whole account, and say so to the user. A set holds one environment: an account's selection is split per environment, a mixed set is refused (`resource-set-mixed-env`), an unlabelled one where risks depend on it (`resource-unlabelled`).",
     'Call it until `ok` is true, then pass the same draft to `vaubaan__issue_mission`. A risk listed in `uncovered` cannot be obtained here: remove it, or tell the user.',
   ].join(' '),
@@ -77,11 +77,11 @@ function schemaOf(act: VaubaanActName): McpToolDeclaration['inputSchema'] {
   const all = schemas as Readonly<Record<string, unknown>>;
   const schema = all[ACT[act]];
   if (typeof schema !== 'object' || schema === null || Array.isArray(schema)) {
-    throw new Error(`${PROVIDER_ID}: tool-schemas.json has no schema for '${ACT[act]}'`);
+    throw new Error(`${SERVICE_ID}: tool-schemas.json has no schema for '${ACT[act]}'`);
   }
   const record = schema as Record<string, unknown>;
   if (record.type !== 'object' || typeof record.properties !== 'object') {
-    throw new Error(`${PROVIDER_ID}: the schema of '${ACT[act]}' does not describe an object`);
+    throw new Error(`${SERVICE_ID}: the schema of '${ACT[act]}' does not describe an object`);
   }
   // The whole document is forwarded (`additionalProperties`, `$defs`…).
   return { ...record, type: 'object' };
@@ -93,7 +93,7 @@ export const vaubaanTools: readonly McpToolDeclaration[] = (
 
 /**
  * What each tool does, in a few words a person reads at a glance
- * (`ProviderPlugin.toolTitles`): the head of an approval request in the web
+ * (`ServicePlugin.toolTitles`): the head of an approval request in the web
  * interface. For people only: never part of `tools/list`.
  */
 export const vaubaanToolTitles: Readonly<Record<string, string>> = {

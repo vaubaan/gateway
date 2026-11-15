@@ -1,9 +1,9 @@
 /**
- * Classifier of the `miro` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `miro` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *            §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  *
  * Pure. The call is read once by `readMiroCall` (board resolved against the
  * mission, identifiers through their grammars, the closed surface) ; this
@@ -41,7 +41,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readMiroCall, type MiroCall } from './call.ts';
-import { PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
+import { SERVICE_ID, UPSTREAM_TOOL } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 // Every identifier passed its grammar in `readMiroCall`, and every grammar is
@@ -50,7 +50,7 @@ const ident = (value: string): SliceSegment => identSegment(value);
 const ANY: SliceSegment = { kind: 'ident', value: '*' };
 
 function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path, action };
+  return { service: SERVICE_ID, path, action };
 }
 
 /** The slices of a call that `readMiroCall` accepted. */
@@ -73,7 +73,7 @@ export function slicesOf(call: MiroCall): Slice[] {
     return [slice('R', [name('format-guide')])];
   }
 
-  if (call.board === null) throw new Error(`${PROVIDER_ID}: '${call.tool}' names no board`);
+  if (call.board === null) throw new Error(`${SERVICE_ID}: '${call.tool}' names no board`);
   const root: readonly SliceSegment[] = [name('board'), ident(call.board)];
   const item = call.item === null ? ANY : ident(call.item);
   const comment = call.comment === null ? ANY : ident(call.comment);
@@ -137,7 +137,7 @@ export function slicesOf(call: MiroCall): Slice[] {
       return [slice('W', [...root, name('boardcast')])];
 
     default:
-      throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);
+      throw new Error(`${SERVICE_ID}: '${call.tool}' has no slice mapping`);
   }
 }
 

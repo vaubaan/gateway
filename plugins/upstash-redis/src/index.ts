@@ -1,9 +1,9 @@
 /**
- * `@vaubaan/plugin-upstash-redis` — the Upstash Redis provider plugin.
+ * `@vaubaan/plugin-upstash-redis` — the Upstash Redis plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/upstash-redis.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/upstash-redis.md ; guide : plugins/README.md.
  *
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
@@ -51,7 +51,7 @@ import {
   UPSTASH_REST_HOST_SUFFIX,
 } from './execute.ts';
 import { UPSTASH_REDIS_ICON, UPSTASH_REDIS_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { upstashRedisToolTitles } from './tool-titles.ts';
 import { upstashRedisTools } from './tools.ts';
 import { upstashRedisExamples } from './examples.ts';
@@ -63,7 +63,7 @@ export const UPSTASH_REDIS_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
 
 export const upstashRedisPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Upstash Redis',
   icon: UPSTASH_REDIS_ICON,
   iconColor: UPSTASH_REDIS_ICON_COLOR,
@@ -75,7 +75,7 @@ export const upstashRedisPlugin = definePlugin({
     'One account is one Upstash account (email and management API key); one resource is one Redis database. Its owner labels each database with an environment; key reads and writes, deletions, FLUSH, arbitrary commands and database management are separate permissions held per label.',
   manualRevocation:
     'Delete the management API key in the Upstash console, under Account, Management API.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/upstash-redis.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/upstash-redis.md',
   tools: upstashRedisTools,
   toolTitles: upstashRedisToolTitles,
   examples: upstashRedisExamples,

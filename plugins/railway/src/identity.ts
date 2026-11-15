@@ -1,22 +1,22 @@
 /**
- * Identity of the `railway` provider — the one place its ids and Railway's
+ * Identity of the `railway` service — the one place its ids and Railway's
  * own names are written.
  *
- * Handbook : docs/handbook/providers/railway.md.
+ * Handbook : docs/handbook/services/railway.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns — is derived from this module.
  */
 
 import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'railway';
+/** The service id. */
+export const SERVICE_ID = 'railway';
 
 /** `railway__` : prepended to the upstream tool names. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * The MCP tool names of the plugin. Railway's upstream names are kebab-case

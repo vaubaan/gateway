@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-ssh`
 
-Bash over SSH as a Vaubaan Gateway provider plugin on the plugin SDK
+Bash over SSH as a Vaubaan Gateway plugin on the plugin SDK
 (`@vaubaan/plugin-sdk`). One tool, `ssh__exec`, runs a shell command line on a
 host the account reaches with its own ed25519 key pair and a **pinned host
 key**. Inspection commands on a read allow-list are low-risk; everything else
@@ -10,7 +10,7 @@ service control, sudo) carry their own risk so a trust level can gate them with
 classifier fails closed.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
-Modelling handbook: [`docs/handbook/providers/ssh.md`](../../docs/handbook/providers/ssh.md).
+Modelling handbook: [`docs/handbook/services/ssh.md`](../../docs/handbook/services/ssh.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Layout
@@ -23,7 +23,7 @@ Contributor guide: [`plugins/README.md`](../README.md).
 | `src/tools.ts`                | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                                                            |
 | `src/shell-lex.ts`            | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name; `splitCommandLine`, its text view. |
 | `src/policy.ts`               | The read allow-list on whole argument vectors (`matchRead`, `isReadAllowed`) and the option parser it shares with the wrappers.                                        |
-| `src/identity.ts`             | `PROVIDER_ID`, `TOOL_PREFIX`, `TOOL`: the provider id and tool names, written once.                                                                                    |
+| `src/identity.ts`             | `SERVICE_ID`, `TOOL_PREFIX`, `TOOL`: the service id and tool names, written once.                                                                                      |
 | `src/command/profile.ts`      | `profileCommandLine`: the classes of a whole line, one simple command at a time; the fail-closed rule.                                                                 |
 | `src/command/secret-paths.ts` | Credential-bearing path detection (`looksLikeSecretFileRead`), per path segment, globs included.                                                                       |
 | `src/command/wrappers.ts`     | Normalisation: keywords, assignments, wrappers unwrapped to the command that runs; `stripPrivilegePrefix`.                                                             |
@@ -97,7 +97,7 @@ key pair — runs `uname -n -s -r -m`, and returns the host as the account's
 single resource:
 
 ```ts
-{ provider: 'ssh', ref: 'vps-1.example.com', displayName: 'deploy@vps-1.example.com:22',
+{ service: 'ssh', ref: 'vps-1.example.com', displayName: 'deploy@vps-1.example.com:22',
   metadata: { user: 'deploy', port: 22, host_key_fingerprint: 'SHA256:…',
               hostname: 'vps-1', kernel: 'Linux 6.8.0-45-generic', machine: 'x86_64' } }
 ```

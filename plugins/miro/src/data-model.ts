@@ -1,8 +1,8 @@
 /**
- * Data model of the `miro` provider.
+ * Data model of the `miro` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  *
  * One plane, `board`. The board is the resource ; no entity carries an
  * environment (a Miro board has none). Items, frames, connectors, tags and
@@ -21,10 +21,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const miroDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'board',

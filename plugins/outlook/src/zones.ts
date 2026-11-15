@@ -2,7 +2,7 @@
  * Zones of the `outlook` classifier — Gmail's rules (`plugins/gmail/src/classify.ts`),
  * read from the mailbox resource's owner-edited metadata. Pure.
  *
- * Handbook : docs/handbook/providers/outlook.md ("Zones").
+ * Handbook : docs/handbook/services/outlook.md ("Zones").
  *
  *   from-zone  automated | internal | known-external | unknown   (who sent what is read)
  *   to-zone    self | internal | allowlist                       (who a draft is for)

@@ -1,8 +1,8 @@
 /**
- * Identifier grammars of the `notion` provider, shared by `classify` and
+ * Identifier grammars of the `notion` service, shared by `classify` and
  * `execute` (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  *
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
  * A value outside its grammar is refused, never repaired. Reading the two
  * spellings Notion documents for one id (with or without dashes, "you may
@@ -15,7 +15,7 @@
 
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 const DASHED = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const UNDASHED = /^[0-9a-fA-F]{32}$/;
@@ -79,7 +79,7 @@ export function resolveRoot(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ResolvedRoot | { readonly denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.root !== undefined) {
     const explicit = notionId(args.root);
     if (!explicit) return { denied: malformedId('root', args.root) };

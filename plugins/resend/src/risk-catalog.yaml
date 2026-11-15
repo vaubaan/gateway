@@ -1,4 +1,4 @@
-# Risk catalog of the `resend` provider.
+# Risk catalog of the `resend` service.
 #
 # Spec : docs/spec/resend.md §5 (modelling), docs/spec/gateway-risk-model.md §4
 #        + §4bis (scope caps), §4.6 (macro-actions).
@@ -41,7 +41,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 8 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: resend
+service: resend
 catalog_version: 8
 catalog_date: 2026-11-13
 

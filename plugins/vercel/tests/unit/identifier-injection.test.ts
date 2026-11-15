@@ -343,8 +343,8 @@ describe('vercel identifiers — values that only travel in a JSON body or a que
 });
 
 describe('vercel identifiers — a project ref that is not a path-safe identifier is never used', () => {
-  const odd: Resource = { provider: 'vercel', ref: 'a/b', displayName: 'odd' };
-  const dotted: Resource = { provider: 'vercel', ref: '..', displayName: 'dots' };
+  const odd: Resource = { service: 'vercel', ref: 'a/b', displayName: 'odd' };
+  const dotted: Resource = { service: 'vercel', ref: '..', displayName: 'dots' };
 
   test.each([odd, dotted])(
     'resource ref $ref : named or implied, the call is refused',

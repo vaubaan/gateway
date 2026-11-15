@@ -1,10 +1,10 @@
 /**
- * Lexer of the `ssh` provider : a POSIX shell line → simple commands made of
+ * Lexer of the `ssh` service : a POSIX shell line → simple commands made of
  * words and redirections, the way `sh` / `bash` tokenise it.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 (a classification error is a
  *            security hole).
- * Handbook : docs/handbook/providers/ssh.md, Invariants, "Fail-closed rule".
+ * Handbook : docs/handbook/services/ssh.md, Invariants, "Fail-closed rule".
  *
  * Pure. This is not a shell : it models only what it can model exactly —
  * single and double quotes, backslash escapes, line continuations, comments,

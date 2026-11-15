@@ -48,9 +48,9 @@ import {
   VERCEL_MCP_URL,
 } from '../../src/index.ts';
 
-const app: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'app' };
-const site: Resource = { provider: 'vercel', ref: 'prj_site', displayName: 'site' };
-const foreign: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
+const app: Resource = { service: 'vercel', ref: 'prj_abc', displayName: 'app' };
+const site: Resource = { service: 'vercel', ref: 'prj_site', displayName: 'site' };
+const foreign: Resource = { service: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
 const credential = {
   kind: 'api-key' as const,
@@ -503,7 +503,7 @@ describe('executeVercel with mockFetch', () => {
     ['vercel__upsert_env_var', { projectId: 'prj_abc', key: 'K', value: 'v', sneaky: 'x' }],
     ['vercel__update_project_settings', { projectId: 'prj_abc', rootDirectory: 'app', sneaky: 1 }],
     ['vercel__add_project_domain', { projectId: 'prj_abc', name: 'www.example.com', sneaky: {} }],
-    // `customEnvironmentId` is a field of the provider's API the tool does not declare.
+    // `customEnvironmentId` is a field of the service's API the tool does not declare.
     [
       'vercel__add_project_domain',
       { projectId: 'prj_abc', name: 'www.example.com', customEnvironmentId: 'env_1' },
@@ -536,7 +536,7 @@ describe('executeVercel with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 403 });
   });
 
-  test('a provider failure is thrown, with its status when it has one (never an isError result)', async () => {
+  test('a service failure is thrown, with its status when it has one (never an isError result)', async () => {
     const rpc = mockFetch([
       { url: VERCEL_MCP_URL, respond: (c) => sseError(c, -32602, 'invalid args') },
     ]);
@@ -902,7 +902,7 @@ describe('discoverVercelResources with mockFetch', () => {
     const resources = await vercelPlugin.discoverResources(ctx(fetch));
     expect(resources.map((r) => r.ref)).toEqual(['prj_a', 'prj_b', 'prj_c']);
     expect(resources[0]).toEqual({
-      provider: 'vercel',
+      service: 'vercel',
       ref: 'prj_a',
       displayName: 'a',
       metadata: {
@@ -996,7 +996,7 @@ describe('discoverVercelResources with mockFetch', () => {
     });
     expect(resources).toEqual([
       {
-        provider: 'vercel',
+        service: 'vercel',
         ref: 'prj_a',
         displayName: 'a',
         metadata: {

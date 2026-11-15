@@ -1,8 +1,8 @@
 /**
- * The calendar tools of the `outlook` provider on Microsoft Graph v1.0 —
+ * The calendar tools of the `outlook` service on Microsoft Graph v1.0 —
  * the Google Calendar plugin's tools over Graph.
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * An event is always reached under the calendar the call was classified on
  * (`/me/calendar/events/{id}` for `default`, `/me/calendars/{c}/events/{id}`

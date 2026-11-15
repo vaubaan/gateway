@@ -1,11 +1,11 @@
 /**
- * Upstream calls of the `outlook` provider — Microsoft Graph v1.0 — and
+ * Upstream calls of the `outlook` service — Microsoft Graph v1.0 — and
  * resource discovery.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and is never
  *            returned.
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  * ADR      : docs/decisions/outlook-through-the-oauth-broker-microsoft-provider.md.
  *
  * Rules:
@@ -42,13 +42,13 @@ import { readOutlookCall } from './call.ts';
 import { missingScopes, scopesNotGrantedMessage } from './credential.ts';
 import { graph } from './graph.ts';
 import { mailboxRefOf } from './identifiers.ts';
-import { CALENDAR_TOOLS, PROVIDER_ID } from './identity.ts';
+import { CALENDAR_TOOLS, SERVICE_ID } from './identity.ts';
 import { executeMail } from './mail.ts';
 
 /**
  * Mail domains that are not a company's: an account there does not make its
  * domain internal. Microsoft's consumer domains, and the common free mail
- * providers a personal Microsoft account may be registered with.
+ * services a personal Microsoft account may be registered with.
  */
 export const CONSUMER_DOMAINS: ReadonlySet<string> = new Set([
   'outlook.com',
@@ -108,7 +108,7 @@ function printable(text: string): string {
 
 /** Refuses, before any request, a token Microsoft issued with fewer permissions than asked. */
 function expectRequiredScopes(ctx: AccountContext): void {
-  const { scopes } = expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2');
+  const { scopes } = expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2');
   const missing = missingScopes(scopes);
   if (missing.length > 0) throw new CredentialRefusal(scopesNotGrantedMessage(missing), 403);
 }
@@ -169,7 +169,7 @@ export function mailboxResource(me: Me): Resource {
       ? printable(me.displayName.trim().slice(0, 120))
       : null;
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: mailboxRefOf(address.address),
     displayName: name === null ? address.address : `${name} <${address.address}>`,
     metadata: {

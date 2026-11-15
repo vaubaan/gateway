@@ -1,5 +1,5 @@
 /**
- * Classifier of the `resend` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `resend` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/resend.md §4, §7 ; docs/spec/gateway-risk-model.md §3, §7 ;
  *        docs/spec/vaubaan-gateway.md §10 ("a classification error is a security hole").
@@ -55,7 +55,7 @@
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   contactSelector,
   pathIdent,
@@ -67,13 +67,13 @@ import {
 } from './resources.ts';
 import { collectRecipients, parseAddress, worstZone, type EmailAddress } from './zones.ts';
 
-/** Resend accepts at most 100 emails per batch call ; a larger batch is refused here, before the provider. */
+/** Resend accepts at most 100 emails per batch call ; a larger batch is refused here, before the service. */
 export const BATCH_MAX_EMAILS = 100;
 
 type Args = Readonly<Record<string, unknown>>;
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 function name(value: string): SliceSegment {
   return { kind: 'name', value };

@@ -9,7 +9,7 @@ import { describe, expect, test } from 'vitest';
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
 import { classifyOutlook } from '../../src/classify.ts';
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { ACCOUNT, CALENDAR, DRAFT, EVENT, FOLDER, MAILBOX, MESSAGE, mailbox } from './fixtures.ts';
 
 const M = `outlook.mailbox[${MAILBOX}]`;
@@ -50,7 +50,7 @@ describe('the mailbox', () => {
     );
     expect(denied(TOOL.listFolders, { mailbox: 'a@b@c.example' })).toMatch(/exactly one address/);
     expect(denied(TOOL.listFolders, { mailbox: 7 })).toMatch(/expected a string/);
-    const google: Resource = { ...mailbox, provider: 'gmail' };
+    const google: Resource = { ...mailbox, service: 'gmail' };
     expect(denied(TOOL.listFolders, {}, [google])).toMatch(/no Outlook mailbox/);
   });
 
@@ -413,9 +413,9 @@ describe('refusals of the argument surface', () => {
     expect(denied(TOOL.createDraft, { subject: 's' })).toMatch(/body: required/);
   });
 
-  test('the provider id is the first segment of every slice', () => {
+  test('the service id is the first segment of every slice', () => {
     for (const s of slices(TOOL.sendMessage, { to: [ACCOUNT], subject: 's', body: 'b' })) {
-      expect(s.startsWith(`${PROVIDER_ID}.`)).toBe(true);
+      expect(s.startsWith(`${SERVICE_ID}.`)).toBe(true);
     }
   });
 });

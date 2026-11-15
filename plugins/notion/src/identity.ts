@@ -1,22 +1,22 @@
 /**
- * Identity of the `notion` provider — the one place its ids are written.
+ * Identity of the `notion` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
- * Everything else — the plugin id, the data-model provider, the tool names,
+ * Everything else — the plugin id, the data-model service, the tool names,
  * the resources `discoverResources` returns, the credential field — is
  * derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'notion';
+/** The service id. */
+export const SERVICE_ID = 'notion';
 
 /** Name of the secret field of the `api-key` credential : the internal account token. */
 export const API_TOKEN_FIELD = 'api_token';
 
-const prefix = toolPrefixFor(PROVIDER_ID);
+const prefix = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names, `notion__<verb>_<noun>`. */
 export const TOOL = {

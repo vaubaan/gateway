@@ -1,5 +1,5 @@
 /**
- * Data model of the `stripe` provider — the `billing` plane.
+ * Data model of the `stripe` service — the `billing` plane.
  *
  * Spec : docs/spec/gateway-risk-model.md §2.
  *
@@ -28,10 +28,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const stripeDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'billing',
@@ -182,7 +182,7 @@ export const stripeDataModel: DataModel = {
           cardinalities: ['bounded'],
           description:
             'A reversal of a charge (full or partial). Bounded per charge (a handful at ' +
-            'most). Cardinal cost-unbounded irreversible action of the provider — the ' +
+            'most). Cardinal cost-unbounded irreversible action of the service — the ' +
             'classifier emits a long containment path so a future cap on "refund per ' +
             'charge of amount ≥ X" stays expressible.',
         },

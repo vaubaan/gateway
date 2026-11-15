@@ -2,7 +2,7 @@
  * Tests — Railway classifier (`classifyRailway(tool, args, resources)`).
  *
  * Spec : docs/spec/gateway-risk-model.md §3 (slice DSL), §7 (plugin
- *        contract). Research : .vaubaan/research/providers/railway-ssh.md
+ *        contract). Research : .vaubaan/research/services/railway-ssh.md
  *        §1.3 (tool → slice mapping), §1.6 (edge cases).
  *
  * Coverage targets :
@@ -44,7 +44,7 @@ const DISCOVERED = {
 
 function stagingResource(): Resource {
   return {
-    provider: 'railway',
+    service: 'railway',
     ref: PROJECT,
     displayName: 'railway-staging',
     env: 'staging',
@@ -54,7 +54,7 @@ function stagingResource(): Resource {
 
 function prodResource(): Resource {
   return {
-    provider: 'railway',
+    service: 'railway',
     ref: PROJECT,
     displayName: 'railway-prod',
     env: 'prod',
@@ -75,7 +75,7 @@ describe('classifyRailway — account-level reads', () => {
   test('whoami → single account[*].R slice (env-less)', () => {
     const slices = ok(classifyRailway('railway__whoami', {}, []));
     expect(slices).toHaveLength(1);
-    expect(slices[0]).toMatchObject({ provider: 'railway', action: 'R' });
+    expect(slices[0]).toMatchObject({ service: 'railway', action: 'R' });
     // Path : name(account), wild-one
     expect(slices[0]!.path).toEqual([{ kind: 'name', value: 'account' }, { kind: 'wild-one' }]);
   });

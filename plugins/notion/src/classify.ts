@@ -1,8 +1,8 @@
 /**
- * Classifier of the `notion` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `notion` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
  * Pure : no IO, no credential, no clock. One reader, `readCall`, turns the
  * arguments into a typed call — every identifier through its grammar, every
@@ -45,7 +45,7 @@ import {
   resolveRoot,
   type ResolvedRoot,
 } from './ids.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import type { Json } from './json.ts';
 import { notionTools } from './tools.ts';
 
@@ -497,10 +497,10 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
 
 /** The slices of a call that was read. */
 export function slicesOf(call: NotionCall, resources: readonly Resource[]): Slice[] {
-  const s = (path: string) => parseSlice(`${PROVIDER_ID}.${path}`);
+  const s = (path: string) => parseSlice(`${SERVICE_ID}.${path}`);
   if (call.op === 'listRoots') {
     const roots = resources
-      .filter((r) => r.provider === PROVIDER_ID)
+      .filter((r) => r.service === SERVICE_ID)
       .map((r) => notionId(r.ref))
       .filter((ref): ref is string => ref !== null);
     return roots.map((ref) => s(`root[${ref}].R`));

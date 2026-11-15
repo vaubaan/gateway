@@ -77,9 +77,9 @@ describe('discoverResources', () => {
       },
     ]);
     expect(await run()).toEqual([
-      { provider: 'notion', ref: ROOT, displayName: 'Handbook', metadata: { kind: 'page' } },
-      { provider: 'notion', ref: OTHER_ROOT, displayName: 'Board', metadata: { kind: 'page' } },
-      { provider: 'notion', ref: DB, displayName: 'Tasks', metadata: { kind: 'database' } },
+      { service: 'notion', ref: ROOT, displayName: 'Handbook', metadata: { kind: 'page' } },
+      { service: 'notion', ref: OTHER_ROOT, displayName: 'Board', metadata: { kind: 'page' } },
+      { service: 'notion', ref: DB, displayName: 'Tasks', metadata: { kind: 'database' } },
     ]);
     expect(fetch.calls.map((c) => c.json)).toContainEqual({
       filter: { property: 'object', value: 'page' },
@@ -139,7 +139,7 @@ describe('discoverResources', () => {
     await expect(badCursorRun).rejects.toThrow(/next_cursor/);
   });
 
-  test('a provider failure while probing a parent is thrown', async () => {
+  test('a service failure while probing a parent is thrown', async () => {
     const { run } = discovery([
       searchFor('page', [page(CHILD, pageParent(FOREIGN))]),
       searchFor('data_source', []),

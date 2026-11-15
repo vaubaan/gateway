@@ -1,9 +1,9 @@
 /**
- * The identifier grammars of the `miro` provider : one function per kind,
+ * The identifier grammars of the `miro` service : one function per kind,
  * shared by `classify`, `execute` and discovery. Each returns the value or
  * `null` ; a value outside its grammar is refused, never repaired.
  *
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  */
 

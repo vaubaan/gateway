@@ -1,5 +1,5 @@
 /**
- * Credential of the `vercel` provider : an access token, and either the team
+ * Credential of the `vercel` service : an access token, and either the team
  * it acts for or the one project it is scoped to.
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 :
@@ -39,7 +39,7 @@ import {
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, VERCEL_API_BASE } from './identity.ts';
+import { SERVICE_ID, VERCEL_API_BASE } from './identity.ts';
 
 /** Where a person creates and deletes their access tokens. */
 export const VERCEL_TOKENS_URL = 'https://vercel.com/account/tokens';
@@ -129,7 +129,7 @@ export const vercelCredential: ApiKeyCredentialSpec = {
     },
     // A Vercel token carries no permission choice beyond its scope.
     permissions: [],
-    expiry: { kind: 'provider-reports' },
+    expiry: { kind: 'service-reports' },
     docsUrl: 'https://vercel.com/docs/accounts/access-tokens',
   },
   verify: verifyVercelToken,
@@ -148,11 +148,11 @@ export type VercelAuth =
  * there : `team_id` (every account made before 2026-11-11 too) or
  * `project_id`. Throws `CredentialKindMismatch` on the wrong kind and a plain
  * `Error` when the token is missing, when neither or both ids are there, or
- * when one is malformed — all host bugs, not provider errors, so none is an
+ * when one is malformed — all host bugs, not service errors, so none is an
  * `UpstreamAuthError`.
  */
 export function vercelAuth(secret: CredentialSecret): VercelAuth {
-  const apiKey = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
+  const apiKey = expectCredentialKind(SERVICE_ID, secret, 'api-key');
   const token = apiKey.fields[FIELD.token];
   const teamId = apiKey.fields[FIELD.teamId];
   const projectId = apiKey.fields[FIELD.projectId];

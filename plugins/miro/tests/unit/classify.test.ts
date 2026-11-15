@@ -1,5 +1,5 @@
 /**
- * The classifier of the `miro` provider : the slices of every tool, and
+ * The classifier of the `miro` service : the slices of every tool, and
  * every refusal `readMiroCall` makes before a slice is written.
  */
 import { describe, expect, test } from 'vitest';

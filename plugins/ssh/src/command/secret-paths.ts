@@ -3,7 +3,7 @@
  * command name — or possibly name — a file that holds a credential ?
  *
  * Spec     : docs/spec/gateway-risk-model.md §7.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure. Every word of a command and every redirection target is cut into
  * path candidates (on `=`, `:`, `,`, and an option glued to an absolute path)

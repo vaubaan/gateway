@@ -14,7 +14,7 @@ import { type Resource, serializeSlice } from '@vaubaan/plugin-sdk';
 import { classifyUpstashRedis } from '../../src/classify.ts';
 
 const database: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: 'db-abc-123',
   displayName: 'db-abc-123',
 };

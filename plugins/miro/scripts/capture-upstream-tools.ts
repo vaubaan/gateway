@@ -1,6 +1,6 @@
 /**
  * Captures the tool list of Miro's MCP server into `src/upstream-tools.json`,
- * verbatim — the refresh of the plugin's model (handbook providers/miro, Procedures).
+ * verbatim — the refresh of the plugin's model (handbook services/miro, Procedures).
  *
  *   npm run capture-upstream-tools --workspace @vaubaan/plugin-miro
  *

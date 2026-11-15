@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-stripe`
 
-Stripe billing operations for a SaaS operator, as a Vaubaan Gateway provider
+Stripe billing operations for a SaaS operator, as a Vaubaan Gateway
 plugin on the v5 SDK (`@vaubaan/plugin-sdk`). Catalog, customers,
 subscriptions, invoices, refunds, payouts and webhooks over the Stripe REST
 API v1 — with the **test and live modes as two separate resources**, so a
@@ -8,7 +8,7 @@ mission can touch the sandbox freely and the live account under budget and
 approval.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
-Modelling handbook: [`docs/handbook/providers/stripe.md`](../../docs/handbook/providers/stripe.md).
+Modelling handbook: [`docs/handbook/services/stripe.md`](../../docs/handbook/services/stripe.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -56,7 +56,7 @@ restricted key that may not read its account, is refused with what to paste.
 returns **one resource per mode**:
 
 ```ts
-{ provider: 'stripe', ref: 'acct_1A2B/live', env: 'live', displayName: 'Acme (live)',
+{ service: 'stripe', ref: 'acct_1A2B/live', env: 'live', displayName: 'Acme (live)',
   metadata: { account_id: 'acct_1A2B', mode: 'live' } }
 ```
 

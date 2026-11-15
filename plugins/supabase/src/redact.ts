@@ -1,7 +1,7 @@
 /**
  * Redaction of the secret values some Supabase Management API answers carry.
  *
- * Handbook : docs/handbook/providers/supabase.md, Invariants, "Answers
+ * Handbook : docs/handbook/services/supabase.md, Invariants, "Answers
  * that carry secrets".
  *
  * Two reads answer with the project's secrets in clear : `GET

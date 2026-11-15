@@ -1,9 +1,9 @@
 /**
- * MCP tools of the `supabase` provider — 44 tools over the Management API
+ * MCP tools of the `supabase` service — 44 tools over the Management API
  * and the per-project data plane (GoTrue admin, Storage).
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
- * Handbook : docs/handbook/providers/supabase.md.
+ * Handbook : docs/handbook/services/supabase.md.
  *
  * Naming : `supabase__<verb>_<noun>`, each name written once in
  * `identity.ts` (`TOOL`). Every tool takes the project ref
