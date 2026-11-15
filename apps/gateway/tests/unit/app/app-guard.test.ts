@@ -33,7 +33,9 @@ const ROUTES = surfaceFiles(APP_DIR, 'route.ts');
 const PAGE_GUARD = /await (currentUser|currentActor|requirePrincipal)\(\)/;
 /** The pages that render for the bootstrap operator too: they show nothing that belongs to a user. */
 const PAGES_FOR_ANY_SESSION: readonly string[] = [
-  // The record and the timeline: each reads what the session may read, nothing for the token.
+  // The overview, the record and the timeline: each reads what the session may read,
+  // nothing for the token.
+  'activity/page.tsx',
   'activity/record/page.tsx',
   'activity/timeline/page.tsx',
   // The reference documents the instance: it shows no account and no mission.
@@ -46,11 +48,10 @@ const PAGES_FOR_ANY_SESSION: readonly string[] = [
 
 /**
  * The pages that lead a session elsewhere and render nothing themselves, with
- * where they lead: `/activity` opens its first tab.
+ * where they lead. None today: `/activity` is the Overview, and leads to the
+ * Record only an address that carries the Record's filters.
  */
-const REDIRECTING_PAGES: Readonly<Record<string, string>> = {
-  'activity/page.tsx': '/activity/record',
-};
+const REDIRECTING_PAGES: Readonly<Record<string, string>> = {};
 
 /**
  * The handlers a route of the surface may delegate to. Each was read in

@@ -75,6 +75,14 @@ export interface CallAuditEntry {
    *  authorization. */
   readonly agent_label: string | null;
   readonly upstream_latency_ms: number | null;
+  /**
+   * Bytes the call sent to the service and received from it (`CallMeter`,
+   * `bytes.ts`). Set on a forwarded call only; absent or null on a refused
+   * one, on `response_bytes` of a call that failed, and on entries written
+   * before they were counted (migration 0038).
+   */
+  readonly request_bytes?: number | null;
+  readonly response_bytes?: number | null;
   /** Set when an allowed call failed upstream; the business effect did not
    *  happen (or is unknown). */
   readonly upstream_error: string | null;

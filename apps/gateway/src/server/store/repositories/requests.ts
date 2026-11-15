@@ -26,7 +26,9 @@ import {
 import { REQUEST_KINDS, REQUEST_STATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { policyLineKey, type PolicyLineKey } from '@vaubaan/shared';
 
-import { createSessionPrimitives, type RiskEventQuery } from './sessions.ts';
+import { createSessionPrimitives, type EventScope, type RiskEventQuery } from './sessions.ts';
+import { createVersionPrimitives } from './mission-versions.ts';
+import { missionScopePiece } from './audit.ts';
 
 /**
  * Approval-request arguments sealed ahead of a transaction. The request id is fixed
@@ -168,6 +170,12 @@ export interface RequestsRepo extends PermissionRequestsRepo {
   /** Open requests addressed to the creator of their mission (the inbox). */
   listOpenForCreator(userId: string): Promise<RequestRecord[]>;
   listForMission(missionId: string): Promise<RequestRecord[]>;
+  /**
+   * How many requests still wait for an answer (open and not past their expiry at
+   * `now`) per mission of a Timeline scope, for Activity's Overview. A mission with
+   * none has no entry.
+   */
+  countOpenInScope(scope: EventScope, now: Iso): Promise<Map<string, number>>;
   /**
    * Decrypts the held arguments for the creator's page. Null once erased, and null for
    * a request that is no longer open — decided, or past its expiry even when the
@@ -504,6 +512,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
   // Sessions, counters and events belong to the sessions repository: its primitives run
   // here, inside this repository's transactions.
   const sessions = createSessionPrimitives(ctx);
+  const versions = createVersionPrimitives(ctx);
   const extendMission = db.prepare<[string, string, string]>(
     `UPDATE missions SET expires_at = ?, updated_at = ?,
        status = CASE WHEN status = 'expired' THEN 'active' ELSE status END,
@@ -547,6 +556,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     request: RequestRecord,
     session: SessionRecord | null,
     now: Iso,
+    decidedByUserId: string,
   ): ClaimDecisionContext {
     const read = (periodStart: Iso): Map<PolicyLineKey, number> =>
       new Map(
@@ -576,6 +586,12 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       },
       setMissionExpiry(expiresAt) {
         extendMission.run(expiresAt, now, request.missionId);
+        // The end is configuration: the claim's answer leaves a version of the mission.
+        versions.recordSync(
+          request.missionId,
+          { cause: 'claim-granted', author: { kind: 'person', userId: decidedByUserId } },
+          now,
+        );
       },
       recordEvent(event) {
         return session ? sessions.recordEvent(session.id, event, now) : null;
@@ -670,6 +686,17 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     async listForMission(missionId) {
       return forMission.all(missionId).map((row) => toRecord(ctx, row));
     },
+    async countOpenInScope(scope, now) {
+      const scoped = missionScopePiece('mission_id', scope);
+      const rows = db
+        .prepare<string[], { mission_id: string; n: number }>(
+          `SELECT mission_id, COUNT(*) AS n FROM requests
+           WHERE state = 'open' AND expires_at > ? AND ${scoped.sql}
+           GROUP BY mission_id`,
+        )
+        .all(now, ...scoped.params);
+      return new Map(rows.map((r) => [r.mission_id, r.n]));
+    },
     async getArguments({ missionId, requestId: id }) {
       const row = requireRow(blobOf.get(missionId, id), 'request', id);
       // Held for the lifetime of the request (spec §3.5): an overdue request the
@@ -687,7 +714,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
         decideOpenSync(id, 'claim', decidedByUserId, now, (request, session) =>
-          apply(claimContext(request, session, now)),
+          apply(claimContext(request, session, now, decidedByUserId)),
         ),
       );
     },

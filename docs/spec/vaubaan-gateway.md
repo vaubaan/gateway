@@ -665,6 +665,19 @@ the (i) itself never leaves the page.
   its people and keys with what each did this period, its activity; stop, duplicate and replace key
   in its menu. **Edit mission** opens the creation screen prefilled (period fixed); its bar says what
   changed, and saving applies at once, back on the mission page that says it was saved.
+  **History**: the versions of its configuration, newest first — number, author (a person, a
+  mission through its Vaubaan account, or the gateway for a resource the mission created or one
+  that joined on its own), date, cause (created, edited, permission request accepted, resource
+  created, resources joined or left, end moved by an answered request, restored from version N)
+  and what moved; expanding a version shows what differs from the previous one. Every change of
+  the configuration (name, end, accounts, resource sets and their resources, permissions with
+  their limits and gate) writes one version; a write that moves nothing writes none. Keys,
+  teammates and what was used are not part of a version, and the section says so. **Restore this
+  version**, on a past version, for the creator: no confirmation (restoring again undoes it),
+  judged as an edit under the creator's authority now — a permission they no longer hold, an
+  account they lost and a resource that no longer exists are left out and said; an end already
+  past keeps the current one. It writes a new version ("restored from version N"), never
+  rewrites history, keeps the key, the session and the counters, and says "Restored".
   **Replace key**: the old key stops at once, no grace period; a machine key is replaced in one act.
   A teammate never sees a pending approval's arguments nor their fingerprint, and their home does
   not list the creator's requests.
@@ -699,7 +712,14 @@ the (i) itself never leaves the page.
   remote for the service. Every permission (`#risk-<id>`) and macro-action (`#macro-<id>`) has an
   anchor, and every permission shown elsewhere links there. The list of services shows each with
   its mark and its plugin's one-line description.
-- **Activity** — two tabs. **Record**: the audit, filtered by period, mission, account, tool,
+- **Activity** — three tabs. **Overview**, its home (`/activity`): one block per mission the reader
+  reads on the Timeline, over today, 7 or 30 days — calls allowed and refused, requests waiting,
+  bytes sent to the services and received from them (counted on every forwarded call, MCP and git;
+  older calls carry none); behind each block, the requests per account, the use of each action
+  against its limit in the mission's current period (the permission closest to its limit), and the
+  key holders with their share of the calls; above them, what stops working within 7 days — a
+  mission's end, an account's pasted key ending, an account its service refused — each linked to
+  where it is fixed. Every number opens the Record or the Timeline filtered on it. **Record**: the audit, filtered by period, mission, account, tool,
   decision, person, key holder, agent label and kind; each line has a detail at its own address;
   who reads what: §8. **Timeline**: the session events (calls, requests and their answers, resets,
   limits, gates, keys) of the missions I created or am a teammate of — of every mission for an
@@ -1056,6 +1076,12 @@ again); the key is revealed once with the setup kit.
 The task grew: the creator edits the prefilled screen and saves; the agent keeps its key and
 session, and its next call sees the edited mission.
 
+### 7.4 ter Restore a version
+
+An edit went wrong: the creator opens the mission's History, reads what each version changed,
+and restores the one that worked; it becomes the newest version, within what they may still give,
+and the agent's next call sees it, with the same key.
+
 ### 7.5 Execute
 
 The first call creates the session; every allowed call decrements the touched risks' counters and is
@@ -1120,7 +1146,9 @@ One entry per call, allowed or refused, and per administrative act.
   hash, slices executed, risks touched, snapshot of accepted risks (each distinct snapshot stored
   once, [audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md)),
   decision and refusal reason, approval consumed, remaining budget after the call for each risk it
-  touched, agent label, upstream latency, client origin. Risk field shapes:
+  touched, agent label, upstream latency, bytes sent to the service and received from it (a
+  forwarded call only: what the arguments or a git push's pack weighed, what the result or a fetch's
+  pack weighed; nothing for a refused call), client origin. Risk field shapes:
   [gateway-risk-model](./gateway-risk-model.md) §12.
 - **An administrative act**: timestamp, user, act, object, previous and new state when meaningful,
   and, when it came through the `vaubaan` plugin (§4.1 bis), the mission whose key made the call
@@ -1137,7 +1165,10 @@ One entry per call, allowed or refused, and per administrative act.
 - **Retention** is configured, 90 days by default; no cold archive. It also purges session history
   (timeline events, counters of periods ended longer ago) and never what the current period rests on
   (its counters, gates opened until it ends, credits given back by granted claims). A one-off
-  mission's counters stay as long as the mission.
+  mission's counters stay as long as the mission. The versions of a mission's configuration
+  (§4.2 "History") are not audit: retention never purges them; they stay as long as the mission
+  ([mission-versions-kept-with-the-mission](../decisions/mission-versions-kept-with-the-mission.md))
+  and are in every backup.
 
 ## 9. Community telemetry
 

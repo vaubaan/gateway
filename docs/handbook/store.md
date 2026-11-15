@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/restore/
   - apps/gateway/src/server/backup/
   - apps/gateway/src/server/crypto/backup-file.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-15
 ---
 
 # Store — handbook
@@ -46,6 +46,11 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   `notification_devices` (0030) and the URLs of `notification_addresses` (0031) included: a new
   sealed column joins that list, or `reseal`, the boot probe and the restore check never see it.
   `notification_mail` (0032) holds no secret: a row is a person who switched mail on.
+- `mission_versions` (0039) is immutable by trigger and deleted only with its mission row (the
+  delete trigger lets the `ON DELETE CASCADE` through, nothing else): the audit's retention never
+  reaches it, and `VACUUM INTO` carries it in every backup. It holds no secret (no sealed column),
+  so the restore check has nothing to open in it. One writer, `recordSync`
+  ([missions](missions.md), Invariants).
 - Audit tables are immutable by trigger; `purgeOlderThan` is the only path that opens the delete
   window. The audit writer throws: audit is not best-effort.
 

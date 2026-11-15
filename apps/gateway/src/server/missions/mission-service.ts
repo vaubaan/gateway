@@ -83,6 +83,7 @@ import type {
   MissionResourceSetRecord,
   MissionTokenRecord,
   RequestLine,
+  MissionVersionRecord,
   UserRecord,
 } from '../store/types';
 import {
@@ -118,12 +119,20 @@ import {
   draftOfSnapshot,
   hasChanges,
   judgeEdit,
+  type EditJudgement,
   revisionOf,
   type MissionChanges,
   type MissionSnapshot,
   type MissionSnapshotAccount,
 } from '../../lib/missions/mission-edit';
 import { checkPolicyLines, previewDraft } from '../../lib/missions/preview';
+import { judgeRestore, type RestoreDropped } from '../../lib/missions/versions';
+import {
+  historyViewOf,
+  type HistoryWords,
+  type MissionHistoryView,
+  type RestoreResult,
+} from './history';
 import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
@@ -135,7 +144,7 @@ const COPY_SUFFIX = ' (copy)';
 export interface MissionServiceDeps {
   readonly store: Pick<
     Store,
-    'missions' | 'accounts' | 'sessions' | 'users' | 'auditWriter' | 'requests'
+    'missions' | 'missionVersions' | 'accounts' | 'sessions' | 'users' | 'auditWriter' | 'requests'
   >;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
@@ -1651,6 +1660,22 @@ export class MissionService {
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
     }
+    return this.writeEdit(user, mission, snapshot, judgement, revision);
+  }
+
+  /**
+   * Writes a judged edit (an ordinary one, or a rollback's with `restoredFrom`): one
+   * store transaction, which leaves one version of the mission when something moved,
+   * then one `mission-changed` audit entry. An edit that moves nothing writes nothing.
+   */
+  private async writeEdit(
+    user: Subject,
+    mission: MissionRecord,
+    snapshot: MissionSnapshot,
+    judgement: EditJudgement,
+    revision: string,
+    restoredFrom?: number,
+  ): Promise<EditResult> {
     const { after, changes } = judgement;
     if (!hasChanges(changes)) return { ok: true, mission, changes, requests_closed: [] };
     if (revivesEndedMission(mission, after.expires_at, this.deps.clock.now())) {
@@ -1660,6 +1685,7 @@ export class MissionService {
 
     const written = await this.deps.store.missions.edit(mission.id, {
       actorUserId: user.id,
+      ...(restoredFrom !== undefined ? { restoredFrom } : {}),
       unchanged: (current) => revisionOfRecord(current) === revision,
       name: after.name,
       expiresAt: after.expires_at,
@@ -1692,10 +1718,15 @@ export class MissionService {
       act: 'mission-changed',
       object: { type: 'mission', id: mission.id },
       before: audit.before,
-      after: { ...audit.after, requests_closed: closed },
+      after: {
+        ...audit.after,
+        requests_closed: closed,
+        ...(restoredFrom !== undefined ? { restored_from: restoredFrom } : {}),
+      },
     });
-    this.deps.logger.info('mission edited', {
+    this.deps.logger.info(restoredFrom === undefined ? 'mission edited' : 'mission restored', {
       mission_id: mission.id,
+      ...(restoredFrom !== undefined ? { restored_from: restoredFrom } : {}),
       accounts_added: changes.accounts_added.length,
       accounts_removed: changes.accounts_removed.length,
       permissions_added: changes.permissions_added.length,
@@ -1704,6 +1735,148 @@ export class MissionService {
       requests_closed: closed.length,
     });
     return { ok: true, mission: written.mission, changes, requests_closed: closed };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // History and rollback (spec §4.2 "History")
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The versions of the mission's configuration, newest first, worded: to its creator
+   * and its current members (`access`); `null` ("not found") to anyone else.
+   * `restorable` says whether this reader may restore a past version now — the rule of
+   * an edit: the creator, on a mission neither revoked nor orphaned.
+   */
+  async history(user: Subject, missionId: string): Promise<MissionHistoryView | null> {
+    const access = await this.access(user, missionId);
+    if (!access) return null;
+    const records = await this.deps.store.missionVersions.list(missionId);
+    const words = await this.historyWords(records);
+    return historyViewOf(records, words, {
+      restorable: access.role === 'creator' && gateEditBlockedBy(access.mission) === null,
+    });
+  }
+
+  /**
+   * "Restore this version": the creator brings a past version of the configuration
+   * back, as an edit judged against the mission now (`judgeRestore`, `judgeEdit`):
+   * bounded by their authority today — an account, a resource or a permission they can
+   * no longer give is left out, and said in `dropped`; an end already past keeps the
+   * current one. Written as an edit, which leaves a NEW version (cause `rollback`,
+   * restored from `number`): history is never rewritten. Keys, teammates and counters
+   * are untouched. A version that is already the configuration writes nothing
+   * (`version: null`).
+   */
+  async restore(user: Subject, missionId: string, number: number): Promise<RestoreResult> {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return { ok: false, reason: 'not-found' };
+    const blocked = gateEditBlockedBy(mission);
+    if (blocked) return { ok: false, reason: 'inactive', state: blocked };
+    const version = await this.deps.store.missionVersions.get(missionId, number);
+    if (!version) return { ok: false, reason: 'not-found' };
+    const snapshot = await this.snapshotOf(mission);
+    const accounts = await this.issuanceContext(user);
+    const restored = judgeRestore(
+      { accounts, now: this.deps.clock.now() },
+      snapshot,
+      version.config,
+    );
+    const dropped = await this.droppedWords(restored.dropped, number);
+    if (!restored.judgement.ok) {
+      return { ok: false, reason: 'refused', issues: restored.judgement.issues, dropped };
+    }
+    const written = await this.writeEdit(
+      user,
+      mission,
+      snapshot,
+      restored.judgement,
+      revisionOfRecord(mission),
+      number,
+    );
+    if (!written.ok) return written.reason === 'refused' ? { ...written, dropped } : written;
+    if (!hasChanges(written.changes)) {
+      return { ok: true, mission: written.mission, version: null, restored_from: number, dropped };
+    }
+    const [latest] = await this.deps.store.missionVersions.list(missionId);
+    return {
+      ok: true,
+      mission: written.mission,
+      version: latest?.number ?? null,
+      restored_from: number,
+      dropped,
+    };
+  }
+
+  /** The names the history is worded with: people, missions, accounts, resources, risks. */
+  private async historyWords(records: readonly MissionVersionRecord[]): Promise<HistoryWords> {
+    const people = new Map<string, string>();
+    const missions = new Map<string, string>();
+    const accounts = new Map<string, { service: string; display_name: string }>();
+    const resources = new Map<string, string>();
+    for (const record of records) {
+      const author = record.author;
+      if (author.kind !== 'gateway' && author.userId && !people.has(author.userId)) {
+        const person = await this.deps.store.users.getById(author.userId);
+        people.set(author.userId, person?.email ?? 'a former user');
+      }
+      if (author.kind === 'mission' && !missions.has(author.missionId)) {
+        const issuer = await this.deps.store.missions.getById(author.missionId);
+        missions.set(author.missionId, issuer?.name ?? 'a mission');
+      }
+      for (const c of record.config.accounts) {
+        if (accounts.has(c.account_id)) continue;
+        const account = await this.deps.store.accounts.getById(c.account_id);
+        if (!account) continue;
+        accounts.set(c.account_id, {
+          service: account.service,
+          display_name: account.displayName,
+        });
+        for (const r of await this.deps.store.accounts.listResources(c.account_id)) {
+          resources.set(r.id, r.displayName);
+        }
+      }
+    }
+    return {
+      personOf: (userId) => people.get(userId) ?? 'a former user',
+      missionOf: (missionId) => missions.get(missionId) ?? 'a mission',
+      accountOf: (accountId) => accounts.get(accountId),
+      resourceName: (_accountId, resourceId) => resources.get(resourceId) ?? 'a former resource',
+      riskLabel: (riskId) => this.riskLabelOf(riskId),
+    };
+  }
+
+  /** A permission's label in its service's catalog; its id when the catalog no longer knows it. */
+  private riskLabelOf(riskId: RiskId): string {
+    const service = parseRiskId(riskId)?.service;
+    if (!service) return riskId;
+    return this.risksOf(service).find((r) => r.risk_id === riskId)?.label ?? riskId;
+  }
+
+  /** What a restore left out, in sentences. */
+  private async droppedWords(dropped: RestoreDropped, number: number): Promise<string[]> {
+    const lines: string[] = [];
+    const accountName = async (id: string) =>
+      (await this.deps.store.accounts.getById(id))?.displayName ?? 'an account removed since';
+    for (const id of dropped.accounts) {
+      lines.push(`${await accountName(id)} is left out: you no longer hold it, or it was revoked.`);
+    }
+    for (const r of dropped.resources) {
+      const resource = (await this.deps.store.accounts.listResources(r.account_id)).find(
+        (row) => row.id === r.resource_id,
+      );
+      lines.push(
+        `${resource?.displayName ?? 'A resource'} on ${await accountName(r.account_id)} is left out: it no longer exists.`,
+      );
+    }
+    for (const p of dropped.permissions) {
+      lines.push(
+        `${this.riskLabelOf(p.risk_id)} on ${await accountName(p.account_id)} is left out: you no longer hold it there.`,
+      );
+    }
+    if (dropped.expiry_kept) {
+      lines.push(`The end of version ${number} has passed: the current end is kept.`);
+    }
+    return lines;
   }
 
   /**
@@ -2111,6 +2284,19 @@ export class MissionService {
   /** The mission's state at this instant (the budget's single derivation). */
   stateOf(mission: MissionRecord): Promise<MissionState> {
     return this.budget.stateOf(budgetMissionOf(mission), this.deps.clock.now());
+  }
+
+  /**
+   * A stored mission as it stands now, for a reader the caller already scoped (the
+   * Overview of Activity reads the missions of the Timeline's scope): its derived status
+   * (`orphaned` while its authority is missing) and its state with the period's
+   * remaining budget. Reads only; no authority check of the reader here.
+   */
+  async standing(
+    stored: MissionRecord,
+  ): Promise<{ readonly mission: MissionRecord; readonly state: MissionState }> {
+    const { mission } = await this.deps.grounds.inspect(stored);
+    return { mission, state: await this.stateOf(mission) };
   }
 
   /** The active member token this user holds on the mission, if any. */

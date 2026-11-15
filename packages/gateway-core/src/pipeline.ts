@@ -60,6 +60,7 @@ import {
   type RiskId,
 } from '@vaubaan/shared';
 import type { AuditWriter, CallAuditEntry } from './audit.ts';
+import { jsonMeter, type CallMeter } from './bytes.ts';
 import {
   AuthError,
   isRefusal,
@@ -259,6 +260,12 @@ export interface CallRequest {
    * never interrupts a service call in flight.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Bytes the door received for this call beyond its arguments, sent on to the
+   * service (a git push's pack). Absent: the call carries its arguments only,
+   * and the meter counts them (`bytes.ts`).
+   */
+  readonly payload_bytes?: number;
 }
 
 /** The account and resource a call targets. */
@@ -553,6 +560,8 @@ export interface CallPipelineDeps {
   readonly budget: BudgetStage;
   readonly upstream: UpstreamStage;
   readonly audit: AuditWriter;
+  /** How a forwarded call's bytes are counted; `jsonMeter` (the MCP door) by default. */
+  readonly meter?: CallMeter;
   /** Clock, injectable for tests. */
   readonly now?: () => Date;
   /**
@@ -963,9 +972,13 @@ export class CallPipeline {
     try {
       result = await this.deps.upstream.execute(ctx, call, target);
     } catch (e) {
-      return this.failed(decided, t0, e);
+      return this.failed(call, decided, t0, e);
     }
-    const entry: CallAuditEntry = { ...decided, upstream_latency_ms: this.now().getTime() - t0 };
+    const entry: CallAuditEntry = {
+      ...decided,
+      upstream_latency_ms: this.now().getTime() - t0,
+      ...this.measure(call, { result }),
+    };
     await this.deps.audit.write(entry);
     return { kind: 'allowed', result, audit: entry };
   }
@@ -975,15 +988,33 @@ export class CallPipeline {
    * and records the bounded, host-built summary of the failure; the
    * service's text leaves on the outcome only.
    */
-  private async failed(decided: CallAuditEntry, t0: number, e: unknown): Promise<CallOutcome> {
+  private async failed(
+    call: CallRequest,
+    decided: CallAuditEntry,
+    t0: number,
+    e: unknown,
+  ): Promise<CallOutcome> {
     const failure = describeUpstreamFailure(e);
     const entry: CallAuditEntry = {
       ...decided,
       upstream_latency_ms: this.now().getTime() - t0,
+      ...this.measure(call, { failed: true }),
       upstream_error: failure.summary.slice(0, UPSTREAM_ERROR_SUMMARY_MAX_LENGTH),
     };
     await this.deps.audit.write(entry);
     return { kind: 'failed', error: failure.detail, refusal: failure.refusal, audit: entry };
+  }
+
+  /** The bytes of a forwarded call; a meter that throws counts nothing rather than fail the call. */
+  private measure(
+    call: CallRequest,
+    outcome: Parameters<CallMeter['measure']>[1],
+  ): Pick<CallAuditEntry, 'request_bytes' | 'response_bytes'> {
+    try {
+      return (this.deps.meter ?? jsonMeter).measure(call, outcome);
+    } catch {
+      return { request_bytes: null, response_bytes: null };
+    }
   }
 
   private async refused(base: CallAuditEntry, refusal: Refusal): Promise<CallOutcome> {

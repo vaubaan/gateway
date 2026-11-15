@@ -1,5 +1,5 @@
 ---
-title: Audit — Record, Timeline, mission session view, retention, administrative entries
+title: Audit — Overview, Record, Timeline, mission session view, retention, administrative entries
 tracks:
   - apps/gateway/src/server/audit/
   - apps/gateway/src/server/budget/retention.ts
@@ -9,17 +9,18 @@ tracks:
   - apps/gateway/src/app/(app)/missions/[id]/session/
   - apps/gateway/tests/integration/audit/admin-mutations.test.ts
   - packages/gateway-core/src/audit.ts
-last_reviewed: 2026-11-14
+last_reviewed: 2026-11-15
 ---
 
 # Audit — handbook
 
-How the record is read (Activity's Record and Timeline, the activity of one mission), purged, and kept complete for administrative acts. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 "Activity", §6, §8; entry shapes and the writer: [gateway-core](gateway-core.md); tables and append-only triggers: [store](store.md). This module only reads, and purges.
+How the record is read (Activity's Overview, Record and Timeline, the activity of one mission), purged, and kept complete for administrative acts. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 "Activity", §6, §8; entry shapes and the writer: [gateway-core](gateway-core.md); tables and append-only triggers: [store](store.md). This module only reads, and purges.
 
 ## Start here
 
 - [`query-service.ts`](../../apps/gateway/src/server/audit/query-service.ts) — `search`, `scopeOf`, `standingOn`, the views: the Record (`/activity/record`).
 - [`store/repositories/audit.ts`](../../apps/gateway/src/server/store/repositories/audit.ts) — `scopePredicate`, the one visibility predicate.
+- [`overview.ts`](../../apps/gateway/src/server/audit/overview.ts) — the Overview (`/activity`): per mission of the Timeline's scope, calls, waiting requests, bytes, accounts, key holders, use of the period, what expires soon; the page's links and use per action are `app/(app)/activity/overview-model.ts`.
 - [`timeline.ts`](../../apps/gateway/src/server/audit/timeline.ts) — the Timeline (`/activity/timeline`): session events of every readable mission, through `SessionsRepo.searchEvents`; its words are `missions/[id]/session/event-words.ts`.
 - [`paging.ts`](../../apps/gateway/src/server/audit/paging.ts) — the pages of both tabs: `?cursor=` (older), `?after=` (newer), `?at=` (first line's number).
 - [`session-view.ts`](../../apps/gateway/src/server/audit/session-view.ts) — the activity of one mission (`/missions/<id>/session`): what waits, who called, usage, periods, and its latest events for the mission page.
@@ -37,13 +38,18 @@ How the record is read (Activity's Record and Timeline, the activity of one miss
 - **A new object type does not compile until labelled**: `objectLabel` is a `switch` over `AdminObjectType` with no `default`. A share is labelled through the account its entry names (`account_id` in `before`/`after`): the store reads a share only with its account.
 - **A change reads in words from the keys it holds**, not per act (`changeLines`): an unknown key is printed under its own name, never dropped.
 - **The server holds no sentence** for the session timeline: typed `SessionEventView` fields only (`parseEventDetails`), worded by `eventWords`; a kind from a later version prints as stored.
+- **The Overview sums in SQL, once for every mission.** `AuditRepo.callTotals` is one `GROUP BY mission_id, account_id, token_kind, token_holder` over the call entries of the Timeline's scope since the span's start (`missionScopePiece`, the same `IN` subqueries as `searchEvents`), read from the covering partial index `audit_calls_overview` (0038); `totalsByMission` folds it per mission, account and holder. Missions (`listInScope`: running, or called in the span) and waiting requests (`countOpenInScope`) are one statement each. Per mission it reads only what the mission page reads: the record and `MissionService.standing` (derived status and the budget's `stateOf`). Checked with `EXPLAIN` on 100k entries: index-only for a person and for an operator, tens of milliseconds.
+- **Bytes are the meter's, on the entry** (`request_bytes`, `response_bytes`, migration 0038, [gateway-core](gateway-core.md)): only forwarded calls carry them; the Overview sums what is known (`COALESCE(SUM(…), 0)`) and older entries add nothing.
 - **Usage comes from counters, not the audit.** `consumed` / `remaining` read `session_counters`; a granted claim lowers a counter, so "counted" can go down.
+- **The History of a mission is not the audit.** `mission_versions` (spec §4.2 "History") is never swept: it stays as long as the mission ([missions](missions.md), [store](store.md)).
 - **The session history leaves with the audit.** One `retention_days` for both; per session, in one transaction, events of `PERIOD_STATE_EVENT_KINDS` written since the current period started and the current period's counters are kept, whatever their age.
 
 ## Traps
 
 - **Orphaned and lost are acts, not state.** Services write `mission-orphaned` / `mission-restored` around the acts that change an authority, through `appendUnlessLatest` (two concurrent acts write one entry). The execution door detects such changes on its own and writes no administrative entry, so a mission's two entries need not come in pairs.
 - **Token holders are never crossed.** The `holder` filter takes `member:<id>` / `named:<name>`; an email names a member (token names cannot contain `@`); a token named like a user id is not that member.
+- **An Overview figure links with `from` = the span's start** (`recordHref`), so the Record shows the same lines; "today" starts at midnight UTC. `/activity` with any query but `period` is an older Record address and redirects there, query kept.
+- **"Expires soon" (`EXPIRING_SOON_DAYS` = 7)** reads a mission's `expiresAt` and, for an account, `expired` or a pasted key's `credentialExpiresAt` (`accountCredentialKind` = `api-key`): an OAuth access token's expiry is refreshed by the gateway and never listed. The fix link is the account page for its owner, Edit mission for the creator; anyone else gets the mission.
 - **Timeline label and holder filters** read columns the sessions repository copies at insert (`agent_label`, `token_kind`, `token_holder`); the view still reads label and holder from the details. The indexes lead with `session_id`: across sessions (no mission filter) the Timeline sorts the scoped events, fine at a self-hosted volume under the retention; an `events (ts, id)` index is the fix if it is not.
 - **A waiting request on the Timeline** is linked (`/waiting/<id>`) for the mission's creator only; anyone else reads whose answer it waits for (`open_requests[].creator`).
 - **A resource edit and a discovery name the account as object**, so the account filter and owner visibility need no join; a request decision names the request, resolved to its mission at search.

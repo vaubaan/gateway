@@ -156,6 +156,14 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     );
   }),
+  // Version 1 is the configuration already: the rightful caller reaches the restore, which moves nothing.
+  'missions.handlers.restoreVersion': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.restoreVersion(
+      post(`/api/missions/${rig.mission.id}/versions/1/restore`, headers, {}),
+      rig.mission.id,
+      '1',
+    ),
+  ),
   'missions.handlers.previewEdit': json('user', 200, async (rig, headers) => {
     const view = await rig.root.missions.service.editView(rig.seeded.ada, rig.mission.id);
     return rig.root.missions.handlers.previewEdit(
