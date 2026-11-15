@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `gmail` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `gmail` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit (catalog coverage, identifier proof) and the site classifies when it
  * builds (ADR plugin-contract-and-credential-spec, amendment 2026-11-05). One
  * mailbox with its zones (internal domain, allowlisted partner, sensitive
@@ -8,7 +8,7 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const MAILBOX = 'me@myorg.com';
 export const THREAD = '18c2a9f0e1d2b3a4';
@@ -16,7 +16,7 @@ export const MESSAGE = '18c2a9f0e1d2b3a5';
 
 /** The mailbox the samples run on unless they name others. */
 export const EXAMPLE_MAILBOX: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: MAILBOX,
   displayName: MAILBOX,
   metadata: {
@@ -29,7 +29,7 @@ export const EXAMPLE_MAILBOX: Resource = {
 };
 /** A second mailbox : a call on two mailboxes names no single one. */
 export const EXAMPLE_OTHER_MAILBOX: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'support@myorg.com',
   displayName: 'support@myorg.com',
 };

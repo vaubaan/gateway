@@ -26,7 +26,7 @@ import { classifyGithub } from '../../src/classify.ts';
 const repoRef = 'sbw-vaubaan/gateway';
 
 const githubRepo: Resource = {
-  provider: 'github',
+  service: 'github',
   ref: repoRef,
   displayName: repoRef,
 };
@@ -474,7 +474,7 @@ describe('classifyGithub — retired tools (risk-model spec §7.2 #1)', () => {
   ])('%s returns denied', (tool, args) => {
     const r = classifyGithub(tool, args, resources);
     expect(expectDenied(r)).toBe(
-      'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.',
+      'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the service that hosts the service.',
     );
   });
 });
@@ -500,7 +500,7 @@ describe('classifyGithub — structural denials', () => {
 
   test('repo outside a mission of many repositories : the refusal gives their count, not their names', () => {
     const many: Resource[] = Array.from({ length: 6 }, (_, i) => ({
-      provider: 'github',
+      service: 'github',
       ref: `sbw-vaubaan/repo-${i}`,
       displayName: `sbw-vaubaan/repo-${i}`,
     }));
@@ -519,8 +519,8 @@ describe('classifyGithub — structural denials', () => {
   });
 
   test('repo-scoped tool in a mission without GitHub repository', () => {
-    const otherProvider: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'web' };
-    for (const missionResources of [[], [otherProvider]]) {
+    const otherService: Resource = { service: 'vercel', ref: 'prj_1', displayName: 'web' };
+    for (const missionResources of [[], [otherService]]) {
       const r = classifyGithub('github__list_branches', baseArgs, missionResources);
       expect(expectDenied(r)).toBe('no GitHub repository is selected in this mission.');
     }

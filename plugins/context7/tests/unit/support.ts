@@ -10,14 +10,14 @@ import {
   API_KEY_FIELD,
   CONTEXT7_MCP_URL,
   CONTEXT7_USAGE_URL,
-  PROVIDER_ID,
+  SERVICE_ID,
 } from '../../src/index.ts';
 
 /** A key of the documented shape ; never a real one. */
 export const KEY = 'ctx7sk-test0123456789abcdefghijklmnopqrstu';
 
 export const index: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'docs',
   displayName: 'Context7 library index',
 };

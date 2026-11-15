@@ -45,7 +45,7 @@ import {
 } from '../../src/examples.ts';
 import { fakeGmail, fakeSmtp } from './fake-imap.ts';
 
-const githubRepo: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
+const githubRepo: Resource = { service: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
 const secret = (fields: Record<string, string> = {}): ApiKeySecret => ({
   kind: 'api-key',
@@ -156,7 +156,7 @@ describe('gmail plugin — SDK kit', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('gmail classify — mailbox selection', () => {
-  test('exactly one gmail resource is required ; other providers are ignored', () => {
+  test('exactly one gmail resource is required ; other services are ignored', () => {
     expect(gmailPlugin.classify('gmail__list_labels', {}, [])).toEqual({
       denied: 'no gmail mailbox is a resource of this mission.',
     });
@@ -169,7 +169,7 @@ describe('gmail classify — mailbox selection', () => {
     expect(gmailPlugin.classify('gmail__list_labels', {}, [githubRepo, mailbox])).toEqual({
       slices: [
         {
-          provider: 'gmail',
+          service: 'gmail',
           action: 'R',
           path: [
             { kind: 'name', value: 'mailbox' },
@@ -196,7 +196,7 @@ describe('gmail classify — mailbox selection', () => {
       account_email: 'support@myorg.com',
     });
     const md = readMailboxMetadata({
-      provider: 'gmail',
+      service: 'gmail',
       ref: 'mailbox-1',
       displayName: 'x',
       metadata: { internal_domains: ['MyOrg.com', 42], account_email: 'Me@MyOrg.com' },
@@ -204,7 +204,7 @@ describe('gmail classify — mailbox selection', () => {
     expect(md.internal_domains).toEqual(['myorg.com']);
     expect(md.account_email).toBe('me@myorg.com');
     expect(
-      readMailboxMetadata({ provider: 'gmail', ref: 'mailbox-1', displayName: 'x' }),
+      readMailboxMetadata({ service: 'gmail', ref: 'mailbox-1', displayName: 'x' }),
     ).toMatchObject({ account_email: null });
   });
 
@@ -328,7 +328,7 @@ describe('gmail verify and discoverResources', () => {
     const plugin = createGmailPlugin({ transport: fakeGmail() });
     expect(await plugin.discoverResources(connCtx())).toEqual([
       {
-        provider: 'gmail',
+        service: 'gmail',
         ref: 'me@myorg.com',
         displayName: 'me@myorg.com',
         metadata: { account_email: 'me@myorg.com' },
@@ -353,7 +353,7 @@ describe('gmail verify and discoverResources', () => {
     expect(transport.calls).toEqual([]);
   });
 
-  test('a malformed stored field is a host bug, not a provider error', async () => {
+  test('a malformed stored field is a host bug, not a service error', async () => {
     const plugin = createGmailPlugin({ transport: fakeGmail() });
     const bad = connCtx({ credential: secret({ app_password: 'short' }) });
     const err = await plugin.discoverResources(bad).catch((e: unknown) => e);

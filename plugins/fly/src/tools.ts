@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `fly` provider.
+ * MCP tools of the `fly` service.
  *
  * Every tool that acts on an app takes `app`, the app name — one of the
  * mission's Fly apps ; absent, the mission's single app. The `properties` of

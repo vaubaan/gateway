@@ -1,8 +1,8 @@
 /**
- * Identifier and value grammars of the `asana` provider, shared by `classify`
+ * Identifier and value grammars of the `asana` service, shared by `classify`
  * and `execute` (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  *
- * Handbook : docs/handbook/providers/asana.md, "Identifiers".
+ * Handbook : docs/handbook/services/asana.md, "Identifiers".
  *
  * A value outside its grammar is refused, never trimmed, escaped or read as
  * absent. Every grammar is closed and bounded.

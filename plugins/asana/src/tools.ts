@@ -1,7 +1,7 @@
 /**
- * MCP tools of the `asana` provider : our own schemas on Asana's REST API.
+ * MCP tools of the `asana` service : our own schemas on Asana's REST API.
  *
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * Every tool but `list_projects` takes `project`, a project of the mission ;
  * every task tool takes `task_gid` too, because a task gid says nothing about

@@ -3,7 +3,7 @@
   "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Google Calendar, through Google's Calendar REST API v3 and an OAuth broker",
+  "description": "Vaubaan Gateway plugin for Google Calendar, through Google's Calendar REST API v3 and an OAuth broker",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

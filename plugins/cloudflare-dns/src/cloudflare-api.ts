@@ -22,7 +22,7 @@ import {
   type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
-import { API_TOKEN_FIELD, CLOUDFLARE_API_BASE, PROVIDER_ID } from './identity.ts';
+import { API_TOKEN_FIELD, CLOUDFLARE_API_BASE, SERVICE_ID } from './identity.ts';
 
 type Args = Readonly<Record<string, unknown>>;
 
@@ -55,10 +55,10 @@ export function envelopeOf<T>(isResult: Guard<T>): Guard<CloudflareEnvelope<T>> 
 
 /** The pasted API token of an account. */
 export function tokenOf(ctx: AccountContext): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const token = secret.fields[API_TOKEN_FIELD];
   // A host bug, not a refusal : the credential spec requires the field.
-  if (!token) throw new Error(`${PROVIDER_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
+  if (!token) throw new Error(`${SERVICE_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
   return token;
 }
 

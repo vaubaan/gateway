@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-github`
 
-GitHub provider plugin for Vaubaan Gateway, written against
+GitHub plugin for Vaubaan Gateway, written against
 [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One account is one
 **fine-grained personal access token**; one resource is one repository the
 token reaches (`owner/repo`); a mission picks repositories and macro-actions at
@@ -9,7 +9,7 @@ every token reads whatever its grant, are discovered hidden from new missions
 until the account's owner shows them (handbook, "Repositories outside the
 grant").
 
-Handbook: [`docs/handbook/providers/github.md`](../../docs/handbook/providers/github.md).
+Handbook: [`docs/handbook/services/github.md`](../../docs/handbook/services/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
 ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
@@ -21,7 +21,7 @@ ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contrac
 | File                      | Role                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                 |
-| `src/identity.ts`         | `PROVIDER_ID` and `TOOL`, every tool name: the one place they are written.                               |
+| `src/identity.ts`         | `SERVICE_ID` and `TOOL`, every tool name: the one place they are written.                                |
 | `src/risk-catalog.yaml`   | The risks, the fallback and the macro-actions. Loaded by the SDK at boot; the only catalog artefact.     |
 | `src/data-model.ts`       | Planes `repo` (branch → file / commit; tag, release, PR, issue, workflow → run → job) and `search`.      |
 | `src/tools.ts`            | 28 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                     |

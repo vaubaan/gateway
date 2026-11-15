@@ -1,7 +1,7 @@
-# Risk catalog of the `asana` provider.
+# Risk catalog of the `asana` service.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/asana.md.
+# Handbook : docs/handbook/services/asana.md.
 #
 # One resource per project ; no environment, so no entry is env-scoped.
 # Writes are layered where an act deserves its own decision : deleting a task
@@ -11,7 +11,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: asana
+service: asana
 catalog_version: 3
 catalog_date: 2026-11-13
 

@@ -1,26 +1,26 @@
 /**
- * Identity of the `github` provider — the one place its id and its tool
+ * Identity of the `github` service — the one place its id and its tool
  * names are written.
  *
- * Handbook : docs/handbook/providers/github.md ; guide : plugins/README.md, step 1.
+ * Handbook : docs/handbook/services/github.md ; guide : plugins/README.md, step 1.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns, the credential kind check — is derived from this module.
  */
 
-/** The provider id. */
-export const PROVIDER_ID = 'github';
+/** The service id. */
+export const SERVICE_ID = 'github';
 
 /**
- * `github__`, prepended to every tool name : what `toolPrefixFor(PROVIDER_ID)`
+ * `github__`, prepended to every tool name : what `toolPrefixFor(SERVICE_ID)`
  * writes (a test holds the two equal). Spelled as a template so that each
  * name of `TOOL` keeps its literal type : the tool is the discriminant of a
  * checked call (`call.ts`, `git-call.ts`), and a `string` would discriminate
  * nothing.
  */
-export const TOOL_PREFIX = `${PROVIDER_ID}__` as const;
+export const TOOL_PREFIX = `${SERVICE_ID}__` as const;
 
 /**
  * The tool names : the 28 MCP tools in the order `tools.ts` declares them,
@@ -68,7 +68,7 @@ export const TOOL = {
  */
 export const EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
   [`${TOOL_PREFIX}dispatch_workflow`]:
-    "Dispatching a workflow runs whatever it does with the repository's secrets; deployments go through the tools of the provider that hosts the service.",
+    "Dispatching a workflow runs whatever it does with the repository's secrets; deployments go through the tools of the service that hosts the service.",
   [`${TOOL_PREFIX}cancel_workflow_run`]:
     'Cancelling a run stops checks or a deployment a person started; nothing an agent needs to do its work.',
   [`${TOOL_PREFIX}rerun_workflow_run`]:

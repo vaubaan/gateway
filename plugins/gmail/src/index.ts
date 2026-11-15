@@ -1,5 +1,5 @@
 /**
- * `@vaubaan/plugin-gmail` — the Gmail provider plugin. It
+ * `@vaubaan/plugin-gmail` — the Gmail plugin. It
  * classifies the fourteen tools into the identity-zoned risks of its catalog
  * and executes them over IMAP, and the two sends over SMTP, signed in with
  * the mailbox's app password.
@@ -7,7 +7,7 @@
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/gmail-over-imap-with-an-app-password.md ;
  *            docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/gmail.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/gmail.md ; guide : plugins/README.md.
  *
  * The plugin imports `@vaubaan/plugin-sdk`, `imapflow`, `nodemailer` and
  * `html-to-text` only. `definePlugin`
@@ -21,7 +21,7 @@ import {
   catalogPathNextTo,
   definePlugin,
   loadCatalogFile,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 
 import {
@@ -60,7 +60,7 @@ import {
 } from './execute.ts';
 import { GMAIL_ICON, GMAIL_ICON_COLOR } from './icon.ts';
 import { gmailExamples } from './examples.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS, gmailClassifiedToolDeclarations, gmailTools } from './tools.ts';
 import { gmailToolTitles } from './tool-titles.ts';
 import {
@@ -86,10 +86,10 @@ export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const GMAIL_PLUGIN_VERSION = '2.0.0';
 
-export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPlugin {
+export function createGmailPlugin(options: GmailRuntimeOptions = {}): ServicePlugin {
   const runtime = createGmailRuntime(options);
   return definePlugin({
-    id: PROVIDER_ID,
+    id: SERVICE_ID,
     displayName: 'Gmail',
     icon: GMAIL_ICON,
     iconColor: GMAIL_ICON_COLOR,
@@ -100,7 +100,7 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     summary:
       'One account is one Gmail or Google Workspace mailbox, connected with an app password and reached over IMAP, and over SMTP to send; the mailbox is its single resource. Reads are priced by who the sender is, drafts and sends by who the recipients are. A draft to an address outside the internal domains and the allowlists is refused; a send there is its own risk, external and irreversible.',
     manualRevocation: `Delete the app password named "Vaubaan Gateway" at ${GMAIL_APP_PASSWORDS_URL}, in the Google Account of the mailbox.`,
-    docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/gmail.md',
+    docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/gmail.md',
     tools: gmailTools,
     toolTitles: gmailToolTitles,
     examples: gmailExamples,
@@ -113,7 +113,7 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
   });
 }
 
-export const gmailPlugin: ProviderPlugin = createGmailPlugin();
+export const gmailPlugin: ServicePlugin = createGmailPlugin();
 
 /** The credential spec of the shipped plugin, `verify` bound to the real transport. */
 export const gmailCredentialSpec = gmailPlugin.credential;
@@ -170,7 +170,7 @@ export {
 export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';
 export type { GmailAccount };
 export type { GmailRuntime, GmailRuntimeOptions } from './execute.ts';
-export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { EXAMPLE_MAILBOX, EXAMPLE_OTHER_MAILBOX, gmailExamples } from './examples.ts';
 export type { GmailTool } from './identity.ts';
 export type {

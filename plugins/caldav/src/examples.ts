@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `caldav` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `caldav` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -16,7 +16,7 @@ const HOME = 'https://cal.example.com/dav/calendars/ada/';
 /** A calendar resource as discovery returns it, zoned by its owner. */
 function exampleCalendar(ref: string): Resource {
   return {
-    provider: CALDAV_PLUGIN_ID,
+    service: CALDAV_PLUGIN_ID,
     ref,
     displayName: ref,
     metadata: {
@@ -31,9 +31,9 @@ function exampleCalendar(ref: string): Resource {
 
 export const EXAMPLE_WORK_CALENDAR = exampleCalendar('work');
 export const EXAMPLE_HOME_CALENDAR = exampleCalendar('home');
-/** A resource of another provider : a mission holding no calendar. */
+/** A resource of another service : a mission holding no calendar. */
 const FOREIGN_RESOURCE: Resource = {
-  provider: 'github',
+  service: 'github',
   ref: 'acme/app',
   displayName: 'acme/app',
 };

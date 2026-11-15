@@ -7,7 +7,7 @@ Google OAuth client and keeps no token; the instance keeps the refresh token
 and the current access token, and verifies the broker's attestation before
 it sends it anything. Calendar data never goes through the broker.
 
-Handbook: [`docs/handbook/providers/google-calendar.md`](../../docs/handbook/providers/google-calendar.md).
+Handbook: [`docs/handbook/services/google-calendar.md`](../../docs/handbook/services/google-calendar.md).
 ADRs: [`google-calendar-through-an-oauth-broker`](../../docs/decisions/google-calendar-through-an-oauth-broker.md),
 [`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
 Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).

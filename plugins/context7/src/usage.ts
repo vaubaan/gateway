@@ -1,7 +1,7 @@
 /**
- * The REST side of the `context7` provider : `GET https://context7.com/api/v2/usage`.
+ * The REST side of the `context7` service : `GET https://context7.com/api/v2/usage`.
  *
- * Handbook : docs/handbook/providers/context7.md.
+ * Handbook : docs/handbook/services/context7.md.
  *
  * The documentation tools go through the MCP server (`execute.ts`) ; the
  * REST API is used for three things around them only : checking a pasted
@@ -27,9 +27,9 @@ import {
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
-import { API_KEY_FIELD, CONTEXT7_USER_AGENT, PROVIDER_ID } from './identity.ts';
+import { API_KEY_FIELD, CONTEXT7_USER_AGENT, SERVICE_ID } from './identity.ts';
 
-/** Base of Context7's public REST API : a fact about the provider. */
+/** Base of Context7's public REST API : a fact about the service. */
 export const CONTEXT7_API_BASE = 'https://context7.com/api';
 export const CONTEXT7_USAGE_URL = `${CONTEXT7_API_BASE}/v2/usage`;
 
@@ -42,9 +42,9 @@ const USAGE_REQUEST = 'Context7 GET /v2/usage';
 
 /** The key of a Context7 account. Thrown when the stored credential has none. */
 export function context7KeyOf(credential: CredentialSecret): string {
-  const key = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[API_KEY_FIELD];
+  const key = expectCredentialKind(SERVICE_ID, credential, 'api-key').fields[API_KEY_FIELD];
   if (typeof key !== 'string' || key.length === 0) {
-    throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
+    throw new Error(`${SERVICE_ID}: the credential has no '${API_KEY_FIELD}' field`);
   }
   return key;
 }

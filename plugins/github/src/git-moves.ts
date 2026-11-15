@@ -12,7 +12,7 @@
  *                                                   objects are already at GitHub
  *                                                   (temporary ref), so the pack is empty.
  *
- * A provider failure on one ref reports that ref and goes on with the next;
+ * A service failure on one ref reports that ref and goes on with the next;
  * only a failure before any ref was tried fails the call.
  *
  * When GitHub refuses a move for a permission the token lacks ("Resource not

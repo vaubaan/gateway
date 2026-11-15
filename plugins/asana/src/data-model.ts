@@ -1,8 +1,8 @@
 /**
- * Data model of the `asana` provider.
+ * Data model of the `asana` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * One plane, `work` : the project (the resource a mission selects), its
  * sections, its tasks and the comments of a task, plus two verb leaves under the
@@ -13,10 +13,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const asanaDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'work',

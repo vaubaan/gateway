@@ -1,10 +1,10 @@
 /**
- * Verification, resource discovery and execution of the `caldav` provider.
+ * Verification, resource discovery and execution of the `caldav` service.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5) ;
  *            docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  * Everything goes through `ctx.fetch` (`dav.ts`), signed with the account's
  * app password, to the server the person typed or the calendar home's host
@@ -362,7 +362,7 @@ async function discoverCalendars(
   return found.slice(0, MAX_CALENDARS).map((f) => {
     const ref = count.get(firstRef(f.url)) === 1 ? firstRef(f.url) : digestRef(f.url);
     return {
-      provider: CALDAV_PLUGIN_ID,
+      service: CALDAV_PLUGIN_ID,
       ref,
       displayName: f.name.length > 0 ? f.name : ref,
       metadata: {
@@ -379,7 +379,7 @@ async function discoverCalendars(
 
 // ─── Tools ─────────────────────────────────────────────────────────────────
 
-/** The calendar object of an answer, or a thrown provider failure when it cannot be read. */
+/** The calendar object of an answer, or a thrown service failure when it cannot be read. */
 function readObject(response: DavResponse, what: string): IcsComponent {
   try {
     return parseIcs(response.text);

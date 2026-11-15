@@ -1,7 +1,7 @@
 /**
  * Execution of the `caldav` tools against the fake server : the requests
  * sent (method, URL, headers, body), the JSON returned, the refusals sent
- * before any write, and the provider failures thrown.
+ * before any write, and the service failures thrown.
  */
 import { beforeEach, describe, expect, test } from 'vitest';
 
@@ -225,7 +225,7 @@ describe('get_event', () => {
     expect(server.requests[0]!.url).toBe(`https://cal.example.com${WORK}abc%40google.com.ics`);
   });
 
-  test('a missing event is the provider 404, thrown', async () => {
+  test('a missing event is the service 404, thrown', async () => {
     await expect(run(TOOL.getEvent, { event_id: 'none.ics' })).rejects.toThrow(/HTTP 404/);
   });
 

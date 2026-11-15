@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for CalDAV calendars (iCloud, Fastmail, Nextcloud…) — list, read, create, change and delete events with an app password, under risks zoned by who the attendees are",
+  "description": "Vaubaan Gateway plugin for CalDAV calendars (iCloud, Fastmail, Nextcloud…) — list, read, create, change and delete events with an app password, under risks zoned by who the attendees are",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

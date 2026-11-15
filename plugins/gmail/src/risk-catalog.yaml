@@ -7,7 +7,7 @@
 # ADR      : docs/decisions/scope-caps-amplification-axis.md ;
 #            docs/decisions/scope-caps-amplification-axis.md ;
 #            docs/decisions/plugin-contract-and-credential-spec.md.
-# Handbook : docs/handbook/providers/gmail.md.
+# Handbook : docs/handbook/services/gmail.md.
 #
 # 20 named risks + 1 fallback = 21. Ids are never renamed or deleted
 # (deprecate instead). Gmail has no native environment : the `mailbox`
@@ -46,7 +46,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 10 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: gmail
+service: gmail
 catalog_version: 10
 catalog_date: 2026-11-13
 

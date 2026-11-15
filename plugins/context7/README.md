@@ -13,7 +13,7 @@ a pasted key, for discovery and to explain a failed call. The shape is
 Railway's ([ADR](../../docs/decisions/rewrap-official-mcps.md)).
 
 Handbook (the model and the reasons behind it):
-[`docs/handbook/providers/context7.md`](../../docs/handbook/providers/context7.md).
+[`docs/handbook/services/context7.md`](../../docs/handbook/services/context7.md).
 
 ## Data model
 

@@ -1,7 +1,7 @@
 /**
  * The executor of the `asana` plugin against `mockFetch` : the requests sent
  * (method, URL, headers, body), the membership proof before every task
- * tool, what is cut out of an answer, the thrown provider failures and the
+ * tool, what is cut out of an answer, the thrown service failures and the
  * refusals that send nothing.
  */
 import { describe, expect, test } from 'vitest';

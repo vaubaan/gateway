@@ -1,21 +1,21 @@
 /**
- * Identity of the `gmail` provider — the one place its ids are written.
+ * Identity of the `gmail` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the slices, the credential kind check,
+ * plugin id, the data-model service, the slices, the credential kind check,
  * the mailbox resource, the tool names — is derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'gmail';
+/** The service id. */
+export const SERVICE_ID = 'gmail';
 
 /** `gmail__` : the prefix of every tool name. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * The MCP tool names, in the order `tools/list` gives them : the synthetic

@@ -1,8 +1,8 @@
 /**
- * Data model of the `github` provider.
+ * Data model of the `github` service.
  *
  * Spec : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/github.md.
+ * Handbook : docs/handbook/services/github.md.
  *
  * One plane, `repo`, with two roots. `repo` : one `Resource` of an
  * account is one repository (`owner/name`) ; its `ref` is the first
@@ -35,10 +35,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const githubDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'repo',

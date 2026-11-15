@@ -60,7 +60,7 @@ describe('cloudflare-dns token — the guide', () => {
     expect(cloudflareDnsCredential.guide.screenshots?.['create-token.webp']?.licence).toBe(
       'CC-BY-4.0',
     );
-    expect(cloudflareDnsCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
+    expect(cloudflareDnsCredential.guide.expiry).toEqual({ kind: 'service-reports' });
   });
 
   test('the permission rows are the token builder’s, every tool served by one', () => {

@@ -1,5 +1,5 @@
 /**
- * Representative calls of every tool (`ProviderPlugin.examples`) : the samples
+ * Representative calls of every tool (`ServicePlugin.examples`) : the samples
  * the plugin's tests run through the kit (`assertCatalogCoverage(plugin)` reads
  * them) and the site classifies when it builds, so the public page shows the
  * slices the classifier really emits (ADR plugin-contract-and-credential-spec,
@@ -12,16 +12,16 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const EXAMPLE_STAGING: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'ws-stg',
   env: 'staging',
   displayName: 'Staging',
 };
 export const EXAMPLE_PROD: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'ws-prd',
   env: 'prod',
   displayName: 'Prod',

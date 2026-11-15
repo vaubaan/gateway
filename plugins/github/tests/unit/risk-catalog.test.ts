@@ -388,7 +388,7 @@ describe('github — the working branches, one list', () => {
   });
 
   test('a catalog without the branch-write pattern fails at boot', () => {
-    expect(() => workingBranchesOf({ provider: 'github', risks: [] })).toThrow(
+    expect(() => workingBranchesOf({ service: 'github', risks: [] })).toThrow(
       /feature-branch-write/,
     );
   });

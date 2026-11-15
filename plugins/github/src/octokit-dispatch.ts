@@ -1,5 +1,5 @@
 /**
- * Tool → REST call dispatcher of the `github` provider, over Octokit.
+ * Tool → REST call dispatcher of the `github` service, over Octokit.
  *
  * Each tool name in `tools.ts` maps to one Octokit call (or a short
  * sequence for `create_branch` and `push_files`, which the REST API has no

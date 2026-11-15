@@ -7,7 +7,7 @@ and the app logs `fly logs` reads. Usable for any Fly organization, gateway
 instances included.
 
 Handbook (the model and its reasons):
-[`docs/handbook/providers/fly.md`](../../docs/handbook/providers/fly.md).
+[`docs/handbook/services/fly.md`](../../docs/handbook/services/fly.md).
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
 
 ## Data model

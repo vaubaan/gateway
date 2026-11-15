@@ -1,5 +1,5 @@
 /**
- * Arguments of the `github` provider : the grammars of every identifier and
+ * Arguments of the `github` service : the grammars of every identifier and
  * the one reader, `readGithubCall`, that `classify` and `execute` share.
  *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
@@ -25,13 +25,13 @@
 
 import { isList, type Resource } from '@vaubaan/plugin-sdk';
 
-import { EXCLUDED_TOOLS, PROVIDER_ID, TOOL } from './identity.ts';
+import { EXCLUDED_TOOLS, SERVICE_ID, TOOL } from './identity.ts';
 
 /** Tools retired by the risk-model spec §7.2 #1. Refused explicitly, even if a client still names them. */
 const RETIRED_TOOLS: ReadonlySet<string> = new Set(Object.keys(EXCLUDED_TOOLS));
 
 const RETIRED_HINT =
-  'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.';
+  'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the service that hosts the service.';
 
 /** The branch `merge_pull_request` is classified on when the call declares no `base`. */
 export const DEFAULT_MERGE_BASE = 'main';
@@ -396,7 +396,7 @@ export interface Denied {
 export function githubRepoRefs(resources: readonly Resource[]): string[] {
   const out: string[] = [];
   for (const r of resources) {
-    if (r.provider === PROVIDER_ID) out.push(r.ref);
+    if (r.service === SERVICE_ID) out.push(r.ref);
   }
   return out;
 }

@@ -1,20 +1,20 @@
 /**
- * Identity of the `asana` provider — the one place its ids are written.
+ * Identity of the `asana` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
- * Everything else — the plugin id, the data-model provider, the tool names,
+ * Everything else — the plugin id, the data-model service, the tool names,
  * the resources `discoverResources` returns, the credential field — is
  * derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'asana';
+/** The service id. */
+export const SERVICE_ID = 'asana';
 
 /** The prefix of every tool name, `asana__`. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** Name of the secret field of the `api-key` credential : the personal access token. */
 export const PAT_FIELD = 'personal_access_token';

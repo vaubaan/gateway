@@ -1,8 +1,8 @@
 /**
- * Classifier of the `asana` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `asana` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * Pure : no IO, no credential, no clock. `readCall` (call.ts) reads the
  * arguments, `slicesOf` names what the call touches. Every slice names
@@ -14,9 +14,9 @@
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 
 import { readCall, type AsanaCall } from './call.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
-const s = (path: string): Slice => parseSlice(`${PROVIDER_ID}.${path}`);
+const s = (path: string): Slice => parseSlice(`${SERVICE_ID}.${path}`);
 
 /** Every slice the call touches. */
 export function slicesOf(call: AsanaCall): Slice[] {

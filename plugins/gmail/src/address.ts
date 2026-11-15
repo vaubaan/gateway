@@ -1,7 +1,7 @@
 /**
  * Strict e-mail address parsing for the `gmail` classifier.
  *
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * The zone of a read or of a draft is decided from addresses the agent
  * writes, so an address is **parsed, never searched for** : a value is one

@@ -3,7 +3,7 @@
  * the catalog's patterns are written on.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  *
  * One plane, `calendar`. The resource is one calendar of the account (ADR
  * google-calendar-through-an-oauth-broker). `guests` is a synthetic marker
@@ -16,10 +16,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const googleCalendarDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'calendar',

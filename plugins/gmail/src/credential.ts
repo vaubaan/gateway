@@ -1,5 +1,5 @@
 /**
- * Credential of the `gmail` provider — the mailbox's address and a Google
+ * Credential of the `gmail` service — the mailbox's address and a Google
  * **app password**, with which the plugin signs in over IMAP.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §5, §7.2.
@@ -20,7 +20,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { parseBareAddress } from './address.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /** Gmail's IMAP server : implicit TLS on 993 (Google, "IMAP, POP and SMTP"). */
 export const GMAIL_IMAP_HOST = 'imap.gmail.com';
@@ -119,10 +119,10 @@ export function normalizeAppPassword(value: unknown): string | null {
  * on another kind (an account connected by OAuth in an earlier build ; the
  * host refuses its calls before they get here) and a plain `Error` when a
  * field is missing or malformed : the host validated the form, so both mean
- * a host bug, not a provider answer.
+ * a host bug, not a service answer.
  */
 export function gmailAccount(secret: CredentialSecret): GmailAccount {
-  const key = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
+  const key = expectCredentialKind(SERVICE_ID, secret, 'api-key');
   const address = parseBareAddress(key.fields[GMAIL_FIELDS.email]);
   if (address === null) {
     throw new Error("gmail credential: field 'email' is missing or is not one e-mail address");

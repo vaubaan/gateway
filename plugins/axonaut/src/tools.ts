@@ -1,7 +1,7 @@
 /**
- * MCP tools of the `axonaut` provider.
+ * MCP tools of the `axonaut` service.
  *
- * Handbook : docs/handbook/providers/axonaut.md §2.
+ * Handbook : docs/handbook/services/axonaut.md §2.
  * Written from Axonaut's OpenAPI description of its API v2
  * (https://axonaut.com/api/v2/doc.json, read 2026-11-05): every argument maps
  * to a parameter or a body field that file declares, under the same name
@@ -532,7 +532,7 @@ export const axonautTools: readonly McpToolDeclaration[] = AXONAUT_TOOL_SPECS.ma
   },
 }));
 
-/** What each tool does, in a few words (`ProviderPlugin.toolTitles`). People only. */
+/** What each tool does, in a few words (`ServicePlugin.toolTitles`). People only. */
 export const axonautToolTitles: Readonly<Record<string, string>> = Object.fromEntries(
   AXONAUT_TOOL_SPECS.map((spec) => [spec.name, spec.title]),
 );

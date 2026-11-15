@@ -5,7 +5,7 @@
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
- * Handbook : docs/handbook/providers/google-calendar.md ; guide : plugins/google-calendar/README.md.
+ * Handbook : docs/handbook/services/google-calendar.md ; guide : plugins/google-calendar/README.md.
  *
  * Credential : `oauth2` whose client is the broker's (`broker: { provider:
  * 'google' }`). Discovery yields one resource per calendar of the account.
@@ -20,7 +20,7 @@ import { googleCalendarDataModel } from './data-model.ts';
 import { discoverGoogleCalendarResources, executeGoogleCalendar } from './execute.ts';
 import { GOOGLE_CALENDAR_ICON, GOOGLE_CALENDAR_ICON_COLOR } from './icon.ts';
 import { googleCalendarExamples } from './examples.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { googleCalendarToolTitles } from './tool-titles.ts';
 import { googleCalendarTools } from './tools.ts';
 
@@ -29,7 +29,7 @@ import { googleCalendarTools } from './tools.ts';
 export const googleCalendarCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const googleCalendarPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Google Calendar',
   icon: GOOGLE_CALENDAR_ICON,
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
@@ -42,8 +42,7 @@ export const googleCalendarPlugin = definePlugin({
     "One account is one Google account: you sign in at Google through the OAuth broker this gateway is enrolled with, with nothing to create or paste. One resource is one calendar of that account; a mission touches only the calendars it was given. Inviting people of the company and people outside it are separate permissions, decided by each calendar's internal domains, and so are letting Google email the guests of a change, and deleting.",
   manualRevocation:
     "In your Google account, open Security, then 'Third-party apps with account access', and remove the app this gateway signed you in with.",
-  docsUrl:
-    'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/google-calendar.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/google-calendar.md',
   tools: googleCalendarTools,
   toolTitles: googleCalendarToolTitles,
   examples: googleCalendarExamples,
@@ -102,7 +101,7 @@ export {
   BARE_TOOL,
   BROKER_PROVIDER,
   CALENDAR_API_BASE,
-  PROVIDER_ID,
+  SERVICE_ID,
   SCOPES,
   SEND_UPDATES,
   TOOL,

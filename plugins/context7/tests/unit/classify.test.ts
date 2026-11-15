@@ -11,7 +11,7 @@ import {
   MALFORMED_LIBRARY_ID,
   NOT_A_CONTEXT7_INDEX,
   NO_CONTEXT7_INDEX,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
   classifyContext7,
@@ -47,17 +47,17 @@ const QUERY = 'middleware matcher';
 describe('classifyContext7 — the two tools', () => {
   test('resolve-library-id reads every library of the index, whatever libraryName says', () => {
     expect(slices(TOOL.resolveLibraryId, { libraryName: 'Next.js', query: QUERY })).toEqual([
-      `${PROVIDER_ID}.index[docs].library[*].R`,
+      `${SERVICE_ID}.index[docs].library[*].R`,
     ]);
     // A product name that looks like an id is still free text, never put in a slice.
     expect(slices(TOOL.resolveLibraryId, { libraryName: '/vercel/next.js', query: QUERY })).toEqual(
-      [`${PROVIDER_ID}.index[docs].library[*].R`],
+      [`${SERVICE_ID}.index[docs].library[*].R`],
     );
   });
 
   test('query-docs reads the library it names', () => {
     expect(slices(TOOL.queryDocs, { libraryId: '/vercel/next.js', query: QUERY })).toEqual([
-      `${PROVIDER_ID}.index[docs].library[/vercel/next.js].R`,
+      `${SERVICE_ID}.index[docs].library[/vercel/next.js].R`,
     ]);
     expect(
       slices(TOOL.queryDocs, {
@@ -65,16 +65,16 @@ describe('classifyContext7 — the two tools', () => {
         query: QUERY,
         language: 'Go',
       }),
-    ).toEqual([`${PROVIDER_ID}.index[docs].library[/vercel/next.js/v14.3.0].R`]);
+    ).toEqual([`${SERVICE_ID}.index[docs].library[/vercel/next.js/v14.3.0].R`]);
   });
 
   test('a library id the slice grammar cannot carry is classified as any library', () => {
     // `@` of a version form is not a slice character : `[*]`, the value sent unchanged.
     expect(slices(TOOL.queryDocs, { libraryId: '/vercel/next.js@v14.3.0', query: QUERY })).toEqual([
-      `${PROVIDER_ID}.index[docs].library[*].R`,
+      `${SERVICE_ID}.index[docs].library[*].R`,
     ]);
     expect(slices(TOOL.queryDocs, { libraryId: '/org/c++', query: QUERY })).toEqual([
-      `${PROVIDER_ID}.index[docs].library[*].R`,
+      `${SERVICE_ID}.index[docs].library[*].R`,
     ]);
   });
 
@@ -86,7 +86,7 @@ describe('classifyContext7 — the two tools', () => {
       if ('denied' in outcome) throw new Error(outcome.denied);
       for (const slice of outcome.slices) {
         expect(risksTouchedBy(slice, context7Catalog.indexed)).toEqual([
-          `${PROVIDER_ID}.query-docs`,
+          `${SERVICE_ID}.query-docs`,
         ]);
       }
     }
@@ -101,7 +101,7 @@ describe('classifyContext7 — refusals', () => {
   });
 
   test('a mission without a Context7 resource, or with a foreign one', () => {
-    const foreign: Resource = { provider: 'railway', ref: 'docs', displayName: 'Foreign' };
+    const foreign: Resource = { service: 'railway', ref: 'docs', displayName: 'Foreign' };
     expect(denial(TOOL.queryDocs, { libraryId: '/vercel/next.js', query: QUERY }, [])).toBe(
       NO_CONTEXT7_INDEX,
     );
@@ -111,7 +111,7 @@ describe('classifyContext7 — refusals', () => {
   });
 
   test('a resource that is not the index, or several resources', () => {
-    const odd: Resource = { provider: PROVIDER_ID, ref: 'other', displayName: 'Odd' };
+    const odd: Resource = { service: SERVICE_ID, ref: 'other', displayName: 'Odd' };
     expect(denial(TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }, [odd])).toBe(
       NOT_A_CONTEXT7_INDEX,
     );

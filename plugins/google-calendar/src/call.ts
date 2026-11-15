@@ -2,7 +2,7 @@
  * The one reader of a `google-calendar` call, for `classify` and `execute`
  * alike.
  *
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md ;
  *            docs/decisions/google-calendar-through-an-oauth-broker.md.
  *
@@ -30,7 +30,7 @@ import {
   NO_NOTIFICATION,
   NOTIFICATION_ARGUMENT,
   PRIMARY_KEYWORD,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
 } from './identity.ts';
@@ -80,7 +80,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The mission's Google calendars, in mission order. */
 export function calendarsOf(resources: readonly Resource[]): Resource[] {
-  return resources.filter((r) => r.provider === PROVIDER_ID);
+  return resources.filter((r) => r.service === SERVICE_ID);
 }
 
 /** The primary calendar of the mission, if it holds it (`metadata.primary`). */

@@ -12,12 +12,12 @@ export const PAT = 'github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz';
 export const tokenCredential = { kind: 'api-key', fields: { token: PAT }, metadata: {} } as const;
 
 export const appRepo: Resource = {
-  provider: 'github',
+  service: 'github',
   ref: 'acme/app',
   displayName: 'acme/app',
 };
 export const libRepo: Resource = {
-  provider: 'github',
+  service: 'github',
   ref: 'acme/lib',
   displayName: 'acme/lib',
 };

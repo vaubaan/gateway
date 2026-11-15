@@ -3,7 +3,7 @@
  * (`(tool, args, resources) → slices`).
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
@@ -19,7 +19,7 @@ import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 import { classifyFromAddress, classifyGmail, readMailboxMetadata } from '../../src/classify.ts';
 
 const mailbox: Resource = {
-  provider: 'gmail',
+  service: 'gmail',
   ref: 'me@myorg.com',
   displayName: 'me@myorg.com',
   env: null,
@@ -298,7 +298,7 @@ describe('classifyGmail — create_draft refuses an external recipient', () => {
   });
 
   test('a mailbox without zoning metadata refuses every draft but one to itself', () => {
-    const bare: Resource = { provider: 'gmail', ref: 'me@myorg.com', displayName: 'me@myorg.com' };
+    const bare: Resource = { service: 'gmail', ref: 'me@myorg.com', displayName: 'me@myorg.com' };
     expect(denial('gmail__create_draft', { to: ['colleague@myorg.com'] }, bare)).toMatch(refused);
     expect(classify('gmail__create_draft', { to: ['me@myorg.com'] }, bare)).toContain(
       toZone('self'),
@@ -482,7 +482,7 @@ describe('classifyGmail — automated senders (exact local part of a full addres
 describe('classifyGmail — mailbox without metadata defaults safely', () => {
   test('classification falls back to from-zone[unknown] when no metadata is set', () => {
     const noMd: Resource = {
-      provider: 'gmail',
+      service: 'gmail',
       ref: 'me@myorg.com',
       displayName: 'me@myorg.com',
       env: null,

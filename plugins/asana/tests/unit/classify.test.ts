@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, toolPrefixFor, type Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { classifyAsana } from '../../src/index.ts';
 import {
   BARE_PROJECT,
@@ -40,12 +40,12 @@ const denied = (
   return 'denied' in out ? out.denied : null;
 };
 
-const P = `${PROVIDER_ID}.project[${PROJECT}]`;
+const P = `${SERVICE_ID}.project[${PROJECT}]`;
 
 describe('classifyAsana — slices', () => {
   test('list_projects names every project of the mission, in one bounded slice', () => {
     expect(slices(TOOL.listProjects, {}, [project, otherProject])).toEqual([
-      `${PROVIDER_ID}.project[${PROJECT},${OTHER_PROJECT}].R`,
+      `${SERVICE_ID}.project[${PROJECT},${OTHER_PROJECT}].R`,
     ]);
     expect(slices(TOOL.listProjects, {})).toEqual([`${P}.R`]);
   });
@@ -112,15 +112,15 @@ describe('classifyAsana — slices', () => {
 
 describe('classifyAsana — refusals', () => {
   test('an unknown tool', () => {
-    const unknown = `${toolPrefixFor(PROVIDER_ID)}delete_project`;
+    const unknown = `${toolPrefixFor(SERVICE_ID)}delete_project`;
     expect(denied(unknown, { project: PROJECT })).toBe(`unknown tool '${unknown}'`);
   });
 
-  test('a project outside the mission, of another provider, missing or ambiguous', () => {
+  test('a project outside the mission, of another service, missing or ambiguous', () => {
     expect(denied(TOOL.getProject, { project: OTHER_PROJECT })).toBe(
       `project '${OTHER_PROJECT}' is not selected in this mission`,
     );
-    const foreign: Resource = { provider: 'other', ref: OTHER_PROJECT, displayName: 'x' };
+    const foreign: Resource = { service: 'other', ref: OTHER_PROJECT, displayName: 'x' };
     expect(denied(TOOL.getProject, { project: OTHER_PROJECT }, [project, foreign])).toMatch(
       /not selected in this mission/,
     );
@@ -155,7 +155,7 @@ describe('classifyAsana — refusals', () => {
   });
 
   test('a mission resource whose ref is not a gid is unusable', () => {
-    const odd: Resource = { provider: PROVIDER_ID, ref: 'not-a-gid', displayName: 'x' };
+    const odd: Resource = { service: SERVICE_ID, ref: 'not-a-gid', displayName: 'x' };
     expect(denied(TOOL.getProject, {}, [odd])).toBe(
       'project: the mission resource is not an Asana gid',
     );

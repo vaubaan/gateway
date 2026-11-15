@@ -1,6 +1,6 @@
 /**
  * What each `google-calendar` tool does, in a few words a person reads at a
- * glance (`ProviderPlugin.toolTitles`): the head of an approval request,
+ * glance (`ServicePlugin.toolTitles`): the head of an approval request,
  * before the calendar the call resolves to. For people only: never part of
  * `tools/list`.
  */

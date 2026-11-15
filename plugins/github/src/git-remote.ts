@@ -1,10 +1,10 @@
 /**
- * The GitHub git remote : the provider side of `https://<instance>/git/github/<owner>/<repo>.git`.
+ * The GitHub git remote : the service side of `https://<instance>/git/github/<owner>/<repo>.git`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote", §2.4 ;
  *        docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/gateway-as-git-remote.md.
- * Handbook : docs/handbook/git-remote.md, docs/handbook/providers/github.md.
+ * Handbook : docs/handbook/git-remote.md, docs/handbook/services/github.md.
  *
  * What the host asks of this plugin (`GitRemoteCapability`), module by module :
  *

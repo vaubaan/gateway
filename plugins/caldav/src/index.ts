@@ -6,7 +6,7 @@
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5).
- * Handbook : docs/handbook/providers/caldav.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/caldav.md ; guide : plugins/README.md.
  *
  * Google is not reachable through it (Google refuses Basic authentication) :
  * Google Calendar is the `google-calendar` plugin. `createCaldavPlugin({ now,
@@ -17,7 +17,7 @@ import {
   catalogPathNextTo,
   definePlugin,
   loadCatalogFile,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 
 import { classifyCaldav } from './classify.ts';
@@ -33,7 +33,7 @@ import { caldavTools } from './tools.ts';
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const caldavCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): ProviderPlugin {
+export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): ServicePlugin {
   const runtime = createCaldavRuntime(options);
   return definePlugin({
     id: CALDAV_PLUGIN_ID,
@@ -47,8 +47,8 @@ export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): Provider
     summary:
       'One account is one CalDAV account (a server URL, a username and an app password); each calendar that stores events is a resource. Reads are priced by the length of the time range; writes by whether they create, change or delete an event, and by who the server may notify: attendees inside the company domains, on the allowlist, or outside. Google Calendar is a separate service.',
     manualRevocation:
-      'Delete the app password named "Vaubaan Gateway" at the calendar provider: iCloud at account.apple.com (Sign-In and Security, App-Specific Passwords), Fastmail under Settings, Privacy & Security, Nextcloud under Personal settings, Security.',
-    docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/caldav.md',
+      'Delete the app password named "Vaubaan Gateway" at the calendar service: iCloud at account.apple.com (Sign-In and Security, App-Specific Passwords), Fastmail under Settings, Privacy & Security, Nextcloud under Personal settings, Security.',
+    docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/caldav.md',
     tools: caldavTools,
     toolTitles: caldavToolTitles,
     examples: caldavExamples,
@@ -61,7 +61,7 @@ export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): Provider
   });
 }
 
-export const caldavPlugin: ProviderPlugin = createCaldavPlugin();
+export const caldavPlugin: ServicePlugin = createCaldavPlugin();
 
 export default caldavPlugin;
 

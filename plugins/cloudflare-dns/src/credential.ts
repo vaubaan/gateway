@@ -1,5 +1,5 @@
 /**
- * Credential of the `cloudflare-dns` provider : a user API token pasted by
+ * Credential of the `cloudflare-dns` service : a user API token pasted by
  * hand (`api-key`), the one way of connecting.
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 :
@@ -111,7 +111,7 @@ export const cloudflareDnsCredential: ApiKeyCredentialSpec = {
       why: 'This gateway gives a mission its zones one by one and only the permissions it names; a token that lacks a zone or a permission means a new token.',
     },
     permissions: CLOUDFLARE_TOKEN_PERMISSIONS,
-    expiry: { kind: 'provider-reports' },
+    expiry: { kind: 'service-reports' },
     docsUrl: 'https://developers.cloudflare.com/fundamentals/api/get-started/create-token/',
     // The Create Token form, from Cloudflare's own documentation (CC BY 4.0, the licence of
     // cloudflare/cloudflare-docs): the hard screen, where the policy is built.

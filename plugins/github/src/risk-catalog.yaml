@@ -1,7 +1,7 @@
-# Risk catalog of the `github` provider.
+# Risk catalog of the `github` service.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/github.md.
+# Handbook : docs/handbook/services/github.md.
 #
 # 17 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
 # `matches` is one slice pattern or a list ; the risk is touched when at
@@ -9,7 +9,7 @@
 # Bracket lists mix exact names and globs (`[main,master,release-*]`).
 #
 # Loaded by `@vaubaan/plugin-sdk` at boot ; the loader refuses unknown keys,
-# malformed ids, patterns of another provider, a missing fallback, a
+# malformed ids, patterns of another service, a missing fallback, a
 # `presets` key, a live risk in no macro-action, a macro-action entry that is
 # not a risk of this catalog.
 #
@@ -32,7 +32,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 14 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: github
+service: github
 catalog_version: 14
 catalog_date: 2026-11-13
 

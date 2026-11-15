@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/cloudflare-dns.md ; guide : plugins/cloudflare-dns/README.md.
+ * Handbook : docs/handbook/services/cloudflare-dns.md ; guide : plugins/cloudflare-dns/README.md.
  *
  * Credential : `api-key` with one secret field, a Cloudflare API token over
  * all zones (`credential.ts`). Discovery yields one resource per zone
@@ -19,7 +19,7 @@ import { cloudflareDnsDataModel } from './data-model.ts';
 import { discoverCloudflareDnsResources, executeCloudflareDns } from './execute.ts';
 import { cloudflareDnsExamples } from './examples.ts';
 import { CLOUDFLARE_DNS_ICON, CLOUDFLARE_DNS_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { cloudflareDnsToolTitles } from './tool-titles.ts';
 import { cloudflareDnsTools } from './tools.ts';
 
@@ -28,7 +28,7 @@ import { cloudflareDnsTools } from './tools.ts';
 export const cloudflareDnsCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const cloudflareDnsPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Cloudflare DNS',
   icon: CLOUDFLARE_DNS_ICON,
   iconColor: CLOUDFLARE_DNS_ICON_COLOR,
@@ -41,7 +41,7 @@ export const cloudflareDnsPlugin = definePlugin({
     'One account is one Cloudflare API token; one resource is one DNS zone (a domain). A mission touches only the zones it was given. DNS has no environment: ordinary records, apex / MX / NS changes, deletions, imports and zone settings are separate permissions instead.',
   manualRevocation:
     'Delete the API token in the Cloudflare dashboard, under My Profile, API Tokens.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/cloudflare-dns.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/cloudflare-dns.md',
   tools: cloudflareDnsTools,
   toolTitles: cloudflareDnsToolTitles,
   examples: cloudflareDnsExamples,
@@ -63,13 +63,7 @@ export {
   cloudflareDnsCredential,
   verifyCloudflareToken,
 } from './credential.ts';
-export {
-  API_TOKEN_FIELD,
-  CLOUDFLARE_API_BASE,
-  PROVIDER_ID,
-  TOOL,
-  TOOL_PREFIX,
-} from './identity.ts';
+export { API_TOKEN_FIELD, CLOUDFLARE_API_BASE, SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export {
   MAX_DISCOVERED_ZONES,
   discoverCloudflareDnsResources,

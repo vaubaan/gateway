@@ -9,7 +9,7 @@ export const HOME = `${ORIGIN}/dav/calendars/ada/`;
 /** A calendar resource as discovery returns it, zoned by its owner. */
 export function calendarResource(ref: string, href = `${HOME}${ref}/`): Resource {
   return {
-    provider: 'caldav',
+    service: 'caldav',
     ref,
     displayName: ref,
     metadata: {
@@ -25,7 +25,7 @@ export function calendarResource(ref: string, href = `${HOME}${ref}/`): Resource
 export const work = calendarResource('work');
 export const home = calendarResource('home');
 export const githubRepo: Resource = {
-  provider: 'github',
+  service: 'github',
   ref: 'acme/app',
   displayName: 'acme/app',
 };

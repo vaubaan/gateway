@@ -1,5 +1,5 @@
 /**
- * Data model of the `template` provider.
+ * Data model of the `template` service.
  *
  * Spec : docs/spec/gateway-risk-model.md §2.
  *
@@ -17,14 +17,14 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const templateDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'workspace',
-      description: 'A workspace of the provider and the widgets it holds.',
+      description: 'A workspace of the service and the widgets it holds.',
       entities: [
         {
           name: 'workspace',

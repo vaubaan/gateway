@@ -1,8 +1,8 @@
 /**
- * Tools of the `gmail` provider.
+ * Tools of the `gmail` service.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * The fourteen tools are exposed and execute over IMAP, and the two that
  * send over SMTP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) —

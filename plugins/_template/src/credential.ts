@@ -1,12 +1,12 @@
 /**
- * The credential of the `template` provider : an API key pasted by hand
+ * The credential of the `template` service : an API key pasted by hand
  * (`api-key`), the one way of connecting.
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 : the
  *       person grants wide at the service, each mission narrows ; the guide
  *       and the check at paste are part of the plugin contract).
  *
- * Write it from the provider's documentation, read through Context7 (name
+ * Write it from the service's documentation, read through Context7 (name
  * the pages and the date here) : the exact page where the key is made, the
  * permission names as that page shows them, how the key expires, and the
  * "who am I" endpoint `verify` asks. `definePlugin` refuses an `api-key` way
@@ -28,9 +28,9 @@ import { API_KEY_FIELD, TOOL } from './identity.ts';
 export const TEMPLATE_KEYS_PAGE = 'https://example.com/settings/api-keys';
 
 /**
- * The permissions of a key, as the provider's page names them, each with the
+ * The permissions of a key, as the service's page names them, each with the
  * tools it serves. Every tool is served by one (`definePlugin` checks), and
- * the connect page lists them with the tool titles. A provider whose keys
+ * the connect page lists them with the tool titles. A service whose keys
  * carry no permission choice lists none, and `reach` says what a key opens.
  */
 export const TEMPLATE_KEY_PERMISSIONS: readonly TokenPermission[] = [
@@ -40,7 +40,7 @@ export const TEMPLATE_KEY_PERMISSIONS: readonly TokenPermission[] = [
 
 export const templateCredential: ApiKeyCredentialSpec = {
   kind: 'api-key',
-  // What the person creates, in the provider's words, lower case.
+  // What the person creates, in the service's words, lower case.
   label: 'API key',
   createUrl: TEMPLATE_KEYS_PAGE,
   fields: [
@@ -51,7 +51,7 @@ export const templateCredential: ApiKeyCredentialSpec = {
       required: true,
       placeholder: 'Template API key',
       // Checked by the host before any call : a value that cannot be a key
-      // of this provider is refused at the form.
+      // of this service is refused at the form.
       pattern: '^[A-Za-z0-9_-]{8,}$',
       help: 'A key over every workspace, never your password.',
     },
@@ -84,8 +84,8 @@ export const templateCredential: ApiKeyCredentialSpec = {
       why: 'This gateway gives a mission only the workspaces and permissions it names; a key that lacks one means a new key.',
     },
     permissions: TEMPLATE_KEY_PERMISSIONS,
-    // `provider-reports` when `verify` reads the expiry from the provider,
-    // `person-types` when the person picks it there and the provider never
+    // `service-reports` when `verify` reads the expiry from the service,
+    // `person-types` when the person picks it there and the service never
     // says it back, `none` (with how to end the key) when keys do not expire.
     expiry: { kind: 'person-types', recommendedDays: 90 },
     docsUrl: 'https://example.com/docs/api-keys',

@@ -1,21 +1,21 @@
 /**
- * Identity of the `axonaut` provider — the one place its ids are written.
+ * Identity of the `axonaut` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/axonaut.md.
+ * Handbook : docs/handbook/services/axonaut.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resource discovery
+ * plugin id, the data-model service, the tool names, the resource discovery
  * returns, the credential field — is derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'axonaut';
+/** The service id. */
+export const SERVICE_ID = 'axonaut';
 
 /** `axonaut__` : prepended to every tool name. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** Name of the secret field of the `api-key` credential. */
 export const API_KEY_FIELD = 'api_key';

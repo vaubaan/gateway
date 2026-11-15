@@ -1,21 +1,21 @@
 /**
- * Identity of the `google-calendar` provider — the one place its ids and
+ * Identity of the `google-calendar` service — the one place its ids and
  * Google's own names are written.
  *
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. The tool prefix is the
  * SDK's rule (`toolPrefixFor`): `google_calendar__`.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-export const PROVIDER_ID = 'google-calendar';
+export const SERVICE_ID = 'google-calendar';
 
 /** `google_calendar__` : prepended to the bare tool names. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * Google's public Calendar REST API v3 ("API reference", developers.google.com,

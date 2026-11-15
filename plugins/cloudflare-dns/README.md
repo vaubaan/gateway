@@ -1,13 +1,13 @@
 # `@vaubaan/plugin-cloudflare-dns`
 
-Cloudflare DNS as a Vaubaan Gateway provider plugin on the v5 SDK
+Cloudflare DNS as a Vaubaan Gateway plugin on the v5 SDK
 (`@vaubaan/plugin-sdk`). Zones, records, BIND import / export, zone
 settings, DNSSEC and cache purge over the Cloudflare REST API v4 — with
 **one resource per zone**, so a mission touches exactly the domains it was
 given, and with apex / MX / NS changes and deletions as risks of their own.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
-Modelling handbook: [`docs/handbook/providers/cloudflare-dns.md`](../../docs/handbook/providers/cloudflare-dns.md).
+Modelling handbook: [`docs/handbook/services/cloudflare-dns.md`](../../docs/handbook/services/cloudflare-dns.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -50,7 +50,7 @@ token that is not active or lists no zone is refused with what to change.
 zones, no account filter) and returns **one resource per zone**:
 
 ```ts
-{ provider: 'cloudflare-dns', ref: '023e105f4ecef8ad9ca31a8372d0c353', displayName: 'example.com',
+{ service: 'cloudflare-dns', ref: '023e105f4ecef8ad9ca31a8372d0c353', displayName: 'example.com',
   metadata: { zone_name: 'example.com', account_id: '01a7362d577a6c3019a474fd6f485823',
               account_name: 'Example Corp', status: 'active' } }
 ```

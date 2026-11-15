@@ -1,6 +1,6 @@
 /**
- * What each tool of the `caldav` provider does, in a few words a person reads
- * at a glance (`ProviderPlugin.toolTitles`) : the head of an approval request
+ * What each tool of the `caldav` service does, in a few words a person reads
+ * at a glance (`ServicePlugin.toolTitles`) : the head of an approval request
  * in the web interface. For people only : never part of `tools/list`.
  */
 

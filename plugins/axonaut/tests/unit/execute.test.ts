@@ -10,7 +10,7 @@ import { UpstreamProtocolError, toolPrefixFor } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { API_KEY_HEADER, AXONAUT_API_BASE } from '../../src/execute.ts';
-import { API_KEY_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { API_KEY_FIELD, SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { axonautPlugin } from '../../src/index.ts';
 import { ACCOUNT, KEY, account, ctx, otherAccount } from './fixtures.ts';
 
@@ -291,7 +291,7 @@ describe('writes are built field by field', () => {
 });
 
 describe('failures and declines', () => {
-  test('a provider failure is thrown: 401 UpstreamAuthError, another status UpstreamHttpError', async () => {
+  test('a service failure is thrown: 401 UpstreamAuthError, another status UpstreamHttpError', async () => {
     const rejected = mockFetch([{ url: /\/tasks$/, status: 401, body: { error: 'Unauthorized' } }]);
     await expect(run(rejected, TOOL.listTasks, {})).rejects.toMatchObject({
       name: 'UpstreamAuthError',
@@ -319,9 +319,9 @@ describe('failures and declines', () => {
     expect(await refusalText(run(fetch, TOOL.updateTicket, { ticket_id: '19' }))).toMatch(
       /^nothing to update/,
     );
-    const unknown = `${toolPrefixFor(PROVIDER_ID)}send_event`;
+    const unknown = `${toolPrefixFor(SERVICE_ID)}send_event`;
     expect(await refusalText(run(fetch, unknown, { event_id: '1' }))).toBe(
-      `unknown ${PROVIDER_ID} tool '${unknown}'`,
+      `unknown ${SERVICE_ID} tool '${unknown}'`,
     );
     const ambiguous = axonautPlugin.execute(
       ctx(fetch, [account, otherAccount]),
@@ -351,7 +351,7 @@ describe('discoverResources', () => {
     const resources = await axonautPlugin.discoverResources(ctx(fetch));
     expect(resources).toEqual([
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: ACCOUNT,
         displayName: 'Acme SAS',
         metadata: { account_id: ACCOUNT, company_name: 'Acme SAS', user_email: 'claire@acme.fr' },
@@ -382,7 +382,7 @@ describe('discoverResources', () => {
     );
     const list = mockFetch([{ method: 'GET', url: `${API}/me`, body: [ME] }]);
     await expect(axonautPlugin.discoverResources(ctx(list))).rejects.toThrow(
-      new UpstreamProtocolError(`${PROVIDER_ID} GET /me: unexpected answer`),
+      new UpstreamProtocolError(`${SERVICE_ID} GET /me: unexpected answer`),
     );
   });
 });

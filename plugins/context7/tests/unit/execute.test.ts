@@ -17,7 +17,7 @@ import {
   CONTEXT7_USAGE_URL,
   MALFORMED_LIBRARY_ID,
   NO_CONTEXT7_INDEX,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
   classifyContext7,
@@ -199,7 +199,7 @@ describe('executeContext7 — what it declines, before any request', () => {
   });
 });
 
-describe('executeContext7 — provider failures are thrown', () => {
+describe('executeContext7 — service failures are thrown', () => {
   test('HTTP 401 / 403 from the MCP server → UpstreamAuthError ; another status → UpstreamHttpError', async () => {
     for (const status of [401, 403]) {
       const fetch = mockFetch([{ url: CONTEXT7_MCP_URL, status, body: { error: 'no' } }]);
@@ -459,7 +459,7 @@ describe('discoverResources and verify — GET /v2/usage', () => {
       ]);
       expect(await context7Plugin.discoverResources(account(fetch))).toEqual([
         {
-          provider: PROVIDER_ID,
+          service: SERVICE_ID,
           ref: 'docs',
           displayName: 'Context7 library index',
           metadata: { plan },

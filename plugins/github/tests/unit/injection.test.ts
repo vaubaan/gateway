@@ -370,7 +370,7 @@ async function run(
 ): Promise<{ fetch: MockFetch; failed: boolean }> {
   const fetch = openFetch();
   try {
-    // Declined by the executor (an `isError` result) or failed at the provider (a throw).
+    // Declined by the executor (an `isError` result) or failed at the service (a throw).
     const result = await githubPlugin.execute(executeCtx(fetch), tool, args);
     return { fetch, failed: result.isError === true };
   } catch {
@@ -462,7 +462,7 @@ describe('identifier positions — what a legitimate value still reaches', () =>
     ['the `.github` repository', 'acme/.github'],
     ['an enterprise-managed owner', 'acme_corp/app-2'],
   ])('%s is a repository like another', async (_label, ref) => {
-    const resources = [{ provider: 'github', ref, displayName: ref }];
+    const resources = [{ service: 'github', ref, displayName: ref }];
     const slash = ref.indexOf('/');
     const args = { owner: ref.slice(0, slash), repo: ref.slice(slash + 1) };
     expect(classifyGithub('github__list_branches', args, resources)).toHaveProperty('slices');
@@ -614,7 +614,7 @@ describe('identifier positions — more refusals, by classify and by execute ali
   );
 
   test('an owner and a repository that only join to a mission ref are refused', async () => {
-    const odd = [{ provider: 'github', ref: 'acme/team/app', displayName: 'odd' }];
+    const odd = [{ service: 'github', ref: 'acme/team/app', displayName: 'odd' }];
     for (const args of [
       { owner: 'acme/team', repo: 'app' },
       { owner: 'acme', repo: 'team/app' },

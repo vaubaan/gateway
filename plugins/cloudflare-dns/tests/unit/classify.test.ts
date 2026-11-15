@@ -24,7 +24,7 @@ import { cloudflareDnsDataModel } from '../../src/data-model.ts';
 import { cloudflareDnsTools } from '../../src/tools.ts';
 
 const zone: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: 'z1',
   displayName: 'example.com',
   metadata: { account_id: 'acct_cf123', zone_name: 'example.com' },
@@ -195,7 +195,7 @@ describe('classifyCloudflareDns — account propagation from the zone resource',
 
   test('resource without account_id falls back to account[*] (safe wildcard)', () => {
     const noAccount: Resource = {
-      provider: 'cloudflare-dns',
+      service: 'cloudflare-dns',
       ref: 'z1',
       displayName: 'example.com',
     };
@@ -336,8 +336,8 @@ describe('classifyCloudflareDns — denials', () => {
     expect(result).toEqual({ denied: 'the mission touches no Cloudflare DNS zone' });
   });
 
-  test('resources of other providers are ignored', () => {
-    const other: Resource = { ...zone, provider: 'stripe' };
+  test('resources of other services are ignored', () => {
+    const other: Resource = { ...zone, service: 'stripe' };
     const result = classifyCloudflareDns('cloudflare_dns__list_zones', {}, [other]);
     expect(result).toEqual({ denied: 'the mission touches no Cloudflare DNS zone' });
   });

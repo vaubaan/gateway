@@ -1,5 +1,5 @@
 /**
- * Credential of the `github` provider : a fine-grained personal access token
+ * Credential of the `github` service : a fine-grained personal access token
  * pasted by hand (`api-key` kind), the one way of connecting GitHub.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADR
@@ -34,7 +34,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_API_BASE, githubApiHeaders } from './api.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
@@ -97,7 +97,7 @@ export const githubCredential: ApiKeyCredentialSpec = {
       grant: 'Only select repositories: the ones the missions will use',
       why: 'Each mission narrows further, to the repositories and permissions it names; a repository the token lacks means a new token.',
     },
-    expiry: { kind: 'provider-reports' },
+    expiry: { kind: 'service-reports' },
     docsUrl:
       'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens',
   },
@@ -106,7 +106,7 @@ export const githubCredential: ApiKeyCredentialSpec = {
 
 /** The pasted token of a token account. */
 export function githubTokenOf(ctx: AccountContext): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const token = secret.fields[GITHUB_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
     throw new Error(`github: the stored token has no '${GITHUB_TOKEN_FIELD}' field`);

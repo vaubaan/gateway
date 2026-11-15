@@ -1,25 +1,25 @@
 /**
- * Identity of the `template` provider — the one place its ids are written.
+ * Identity of the `template` service — the one place its ids are written.
  *
- * A copy of this template changes `PROVIDER_ID` here, `provider:` and the ids
- * in `risk-catalog.yaml` (the loader refuses a catalog of another provider,
- * and `definePlugin` a catalog whose provider differs from the plugin id),
+ * A copy of this template changes `SERVICE_ID` here, `service:` and the ids
+ * in `risk-catalog.yaml` (the loader refuses a catalog of another service,
+ * and `definePlugin` a catalog whose service differs from the plugin id),
  * and the package name in `package.json`.
- * Everything else — the plugin id, the data-model provider, the tool names,
+ * Everything else — the plugin id, the data-model service, the tool names,
  * the resources `discoverResources` returns, the credential field — is
  * derived from this module, so a classifier can never emit slices under one
- * provider while the executor filters resources under another.
+ * service while the executor filters resources under another.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id : a lowercase slug (`cloudflare-dns`). */
-export const PROVIDER_ID = 'template';
+/** The service id : a lowercase slug (`cloudflare-dns`). */
+export const SERVICE_ID = 'template';
 
 /** Name of the secret field of the `api-key` credential, declared in `index.ts` and read in `execute.ts`. */
 export const API_KEY_FIELD = 'api_key';
 
-const prefix = toolPrefixFor(PROVIDER_ID);
+const prefix = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names, `<prefix><verb>_<noun>`. Declared in `tools.ts`, dispatched in `classify.ts` and `execute.ts`. */
 export const TOOL = {

@@ -1,8 +1,8 @@
 /**
- * The credential of the `asana` provider : a personal access token, pasted
+ * The credential of the `asana` service : a personal access token, pasted
  * by hand (`api-key`).
  *
- * Handbook : docs/handbook/providers/asana.md ; ADRs
+ * Handbook : docs/handbook/services/asana.md ; ADRs
  *            one-place-to-authorize-services-token-first (token first),
  *            plugin-contract-and-credential-spec (label, guide, verify).
  *

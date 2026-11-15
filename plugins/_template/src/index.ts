@@ -1,12 +1,12 @@
 /**
- * `@vaubaan/plugin-template` — the scaffold every provider plugin starts from.
+ * `@vaubaan/plugin-template` — the scaffold every plugin starts from.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Guide : plugins/README.md ; docs/handbook/plugin-sdk.md.
  *
  * A plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
- * definition at import time : id grammar, tool prefixes, catalog provider,
+ * definition at import time : id grammar, tool prefixes, catalog service,
  * macro-actions, data-model integrity, credential spec. The YAML catalog is loaded
  * here, once, when the module is first imported (that is, at gateway boot).
  */
@@ -19,7 +19,7 @@ import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
 import { templateExamples } from './examples.ts';
 import { _TEMPLATE_ICON, _TEMPLATE_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { templateTools, templateToolTitles } from './tools.ts';
 
 // `catalogPathNextTo` builds a filesystem path from `import.meta.url` ; never
@@ -29,8 +29,8 @@ import { templateTools, templateToolTitles } from './tools.ts';
 export const templateCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const templatePlugin = definePlugin({
-  id: PROVIDER_ID,
-  displayName: 'Template provider',
+  id: SERVICE_ID,
+  displayName: 'Template service',
   icon: _TEMPLATE_ICON,
   iconColor: _TEMPLATE_ICON_COLOR,
   // What one resource is called in the interface ("3 workspaces"); optional.
@@ -38,17 +38,17 @@ export const templatePlugin = definePlugin({
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.2.0',
   description: 'Scaffold plugin. Copy it to start a real one.',
-  // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
+  // The paragraph of the service reference (`/services/<id>`), in plain words: what one
   // account is, what one resource is, where the environment of a call comes from.
   summary:
     'One account is one API key of the template service; one resource is one workspace. The owner of the account labels each workspace with an environment (staging, prod), and writes are held per label.',
   manualRevocation: "Delete the API key in the service's dashboard.",
-  // Add `docsUrl` once the provider handbook exists (docs/handbook/providers/<id>.md).
+  // Add `docsUrl` once the service handbook exists (docs/handbook/services/<id>.md).
   tools: templateTools,
   // What each tool does, in a few words : the head of an approval request in the web
   // interface ("Delete a widget · <workspace>"). Optional ; a tool without one is shown by its name.
   toolTitles: templateToolTitles,
-  // Tools of the provider this plugin deliberately does not expose, one sentence each,
+  // Tools of the service this plugin deliberately does not expose, one sentence each,
   // shown on its public page; never a declared tool, and `classify` refuses the name.
   // Optional : declare it when the risk model leaves a tool out (risk model §7.2).
   // excludedTools: { <a tool name written in identity.ts>: '<why, in one sentence>' },
@@ -57,17 +57,17 @@ export const templatePlugin = definePlugin({
   examples: templateExamples,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
-  // How an account of this provider is obtained : the one way, the
-  // simplest the provider offers — a key a person makes by hand whenever the
-  // provider has one. The host runs the flow from this declaration (here : a
+  // How an account of this service is obtained : the one way, the
+  // simplest the service offers — a key a person makes by hand whenever the
+  // service has one. The host runs the flow from this declaration (here : a
   // form with one secret field) ; the plugin writes no route and never reads
-  // the environment. The other kinds — `oauth2` (only where the provider has
+  // the environment. The other kinds — `oauth2` (only where the service has
   // no token a person can make), `ssh-key` — are in plugins/README.md, step 5.
   // An `api-key` way carries its guide and its check at paste (`credential.ts`).
   credential: templateCredential,
   classify: classifyTemplate,
   // The environment of a `template` call is the owner's label on the
-  // workspace resource, so no `envOf` hook is needed. A provider whose data
+  // workspace resource, so no `envOf` hook is needed. A service whose data
   // model names the environment in the slice (`vercel.project[p].env[prod]…`)
   // declares `envOf: envFromSliceSegment('env')` here instead.
   execute: executeTemplate,
@@ -87,5 +87,5 @@ export {
   verifyTemplateKey,
 } from './credential.ts';
 export { TEMPLATE_API_BASE, discoverTemplateResources, executeTemplate } from './execute.ts';
-export { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+export { API_KEY_FIELD, SERVICE_ID, TOOL } from './identity.ts';
 export { EXAMPLE_PROD, EXAMPLE_STAGING, templateExamples } from './examples.ts';

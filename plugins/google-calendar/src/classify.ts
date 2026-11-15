@@ -1,9 +1,9 @@
 /**
- * Classifier of the `google-calendar` provider: `(tool, args, resources) → slices`.
+ * Classifier of the `google-calendar` service: `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *            §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  *
  * Pure. The call is read once by `readCalendarCall`; this file places what
  * it read on the data model. Every slice of a call that names a calendar is
@@ -33,14 +33,14 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readCalendarCall, type CalendarCall } from './call.ts';
-import { BARE_TOOL, PROVIDER_ID } from './identity.ts';
+import { BARE_TOOL, SERVICE_ID } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 const ident = (value: string): SliceSegment => identSegment(value);
 const ANY: SliceSegment = { kind: 'ident', value: '*' };
 
 function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path, action };
+  return { service: SERVICE_ID, path, action };
 }
 
 /** The slices of a call that `readCalendarCall` accepted. */
@@ -54,7 +54,7 @@ export function slicesOf(call: CalendarCall): Slice[] {
   }
   if (call.bare === BARE_TOOL.suggestTime) return [slice('R', [name('free-busy')])];
 
-  if (call.calendar === null) throw new Error(`${PROVIDER_ID}: '${call.tool}' names no calendar`);
+  if (call.calendar === null) throw new Error(`${SERVICE_ID}: '${call.tool}' names no calendar`);
   const root: readonly SliceSegment[] = [name('calendar'), ident(call.calendar)];
   const event = call.event === null ? ANY : ident(call.event);
   const guests = call.guests.map((zone) => slice('W', [...root, name('guests'), ident(zone)]));
@@ -76,7 +76,7 @@ export function slicesOf(call: CalendarCall): Slice[] {
     case BARE_TOOL.respondToEvent:
       return [slice('W', [...root, name('event'), event, name('response')])];
     default:
-      throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);
+      throw new Error(`${SERVICE_ID}: '${call.tool}' has no slice mapping`);
   }
 }
 

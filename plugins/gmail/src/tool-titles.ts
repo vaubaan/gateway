@@ -1,6 +1,6 @@
 /**
- * What each tool of the `gmail` provider does, in a few words a person reads
- * at a glance (`ProviderPlugin.toolTitles`) : the head of an approval request
+ * What each tool of the `gmail` service does, in a few words a person reads
+ * at a glance (`ServicePlugin.toolTitles`) : the head of an approval request
  * in the web interface. A verb and its object, sentence case, no final
  * period. For people only : never part of `tools/list`, and the host decides
  * nothing from it.

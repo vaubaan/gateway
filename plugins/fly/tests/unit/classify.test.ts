@@ -146,7 +146,7 @@ describe('app resolution', () => {
     expect(denial(TOOL.getApp, {}, [])).toBe(
       'app: argument missing and the mission has no Fly app',
     );
-    const foreign: Resource = { ...acme, provider: 'railway' };
+    const foreign: Resource = { ...acme, service: 'railway' };
     expect(denial(TOOL.getApp, { app: 'acme-gw' }, [foreign])).toBe(
       "app 'acme-gw' is not an app of this mission",
     );

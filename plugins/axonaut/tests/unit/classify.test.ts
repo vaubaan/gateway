@@ -11,11 +11,11 @@ import { parseSlice, serializeSlice, toolPrefixFor, type Resource } from '@vauba
 import { risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyAxonaut } from '../../src/classify.ts';
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { axonautCatalog } from '../../src/index.ts';
 import { ACCOUNT, account, otherAccount } from './fixtures.ts';
 
-const A = `${PROVIDER_ID}.account[${ACCOUNT}]`;
+const A = `${SERVICE_ID}.account[${ACCOUNT}]`;
 
 function slices(
   tool: string,
@@ -161,14 +161,14 @@ describe('writes', () => {
 describe('the account', () => {
   test('a named account must be one of the mission resources; absent, the single one', () => {
     expect(slices(TOOL.getTask, { account: '777', task_id: '1' }, [account, otherAccount])).toEqual(
-      [`${PROVIDER_ID}.account[777].task[1].R`],
+      [`${SERVICE_ID}.account[777].task[1].R`],
     );
     expect(slices(TOOL.getTask, { task_id: '1' })).toEqual([`${A}.task[1].R`]);
     expect(denied(TOOL.getTask, { account: '777', task_id: '1' })).toBe(
       "account '777' is not selected in this mission",
     );
-    // A resource of another provider carrying the same ref does not count.
-    const foreign: Resource = { provider: 'other', ref: '777', displayName: 'Foreign' };
+    // A resource of another service carrying the same ref does not count.
+    const foreign: Resource = { service: 'other', ref: '777', displayName: 'Foreign' };
     expect(denied(TOOL.getTask, { account: '777', task_id: '1' }, [account, foreign])).toBe(
       "account '777' is not selected in this mission",
     );
@@ -182,7 +182,7 @@ describe('the account', () => {
     for (const hostile of ['..', '%2e%2e', '4242/..', '04242', '-1', '', 4.2, null, true]) {
       expect(denied(TOOL.listTasks, { account: hostile })).toBe('account: malformed Axonaut id');
     }
-    const dotted: Resource = { provider: PROVIDER_ID, ref: '..', displayName: 'Dots' };
+    const dotted: Resource = { service: SERVICE_ID, ref: '..', displayName: 'Dots' };
     expect(denied(TOOL.listTasks, {}, [dotted])).toBe(
       'account: the mission resource is not an Axonaut account id',
     );
@@ -197,8 +197,8 @@ describe('the account', () => {
 
 describe('refusals', () => {
   test('an unknown tool', () => {
-    const unknown = `${toolPrefixFor(PROVIDER_ID)}send_event`;
-    expect(denied(unknown, { company_id: '1' })).toBe(`unknown ${PROVIDER_ID} tool '${unknown}'`);
+    const unknown = `${toolPrefixFor(SERVICE_ID)}send_event`;
+    expect(denied(unknown, { company_id: '1' })).toBe(`unknown ${SERVICE_ID} tool '${unknown}'`);
   });
 
   test('a missing or malformed identifier, never escaped', () => {

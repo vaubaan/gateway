@@ -82,7 +82,7 @@ describe('moves', () => {
     expect(only?.error).toContain('failed to update ref');
   });
 
-  test('a provider failure on the second ref reports each ref on its own', async () => {
+  test('a service failure on the second ref reports each ref on its own', async () => {
     const fetch = mockFetch([
       {
         method: 'POST',
@@ -113,7 +113,7 @@ describe('moves', () => {
     expect(updates[1]?.error).toContain('GitHub did not apply this update');
   });
 
-  test('a provider failure before any ref moved fails the call', async () => {
+  test('a service failure before any ref moved fails the call', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: `${API}/git/refs`, status: 503, body: { message: 'down' } },
     ]);

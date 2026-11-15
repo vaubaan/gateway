@@ -1,6 +1,6 @@
 /**
- * What each tool of the `cloudflare-dns` provider does, in a few words a person reads at
- * a glance (`ProviderPlugin.toolTitles`) : the head of an approval request in
+ * What each tool of the `cloudflare-dns` service does, in a few words a person reads at
+ * a glance (`ServicePlugin.toolTitles`) : the head of an approval request in
  * the web interface, before the resource the call resolves to. A verb and its
  * object, sentence case, no final period. For people only : never part of
  * `tools/list`, and the host decides nothing from it.

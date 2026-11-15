@@ -3,7 +3,7 @@
  * which the JSON schema of `tools/list`, the classifier and the executor are
  * all derived.
  *
- * Handbook : docs/handbook/providers/axonaut.md ("Identifiers").
+ * Handbook : docs/handbook/services/axonaut.md ("Identifiers").
  *
  * `readArguments` is the one reader of a call: `readCall` (`call.ts`) runs it
  * for `classify` and for `execute` alike, and the request is built from what

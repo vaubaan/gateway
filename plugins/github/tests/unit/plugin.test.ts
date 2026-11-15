@@ -18,7 +18,7 @@ import {
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
   classifyGithub,
@@ -42,8 +42,8 @@ describe('github plugin — structural kit', () => {
   });
 
   test('28 tools declared, all prefixed ; the names are those of identity.ts', () => {
-    expect(TOOL_PREFIX).toBe(toolPrefixFor(PROVIDER_ID));
-    expect(githubPlugin.id).toBe(PROVIDER_ID);
+    expect(TOOL_PREFIX).toBe(toolPrefixFor(SERVICE_ID));
+    expect(githubPlugin.id).toBe(SERVICE_ID);
     expect(githubPlugin.tools).toHaveLength(28);
     for (const t of githubPlugin.tools) expect(t.name.startsWith(TOOL_PREFIX)).toBe(true);
     // The 28 MCP tools, then the git remote's two.

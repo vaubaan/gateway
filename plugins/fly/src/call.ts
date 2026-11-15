@@ -27,7 +27,7 @@ import {
   slug,
   volumeName,
 } from './identifiers.ts';
-import { ORG_SLUG_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+import { ORG_SLUG_FIELD, SERVICE_ID, TOOL } from './identity.ts';
 import { flyTools } from './tools.ts';
 
 export interface Denial {
@@ -124,7 +124,7 @@ const deny = (denied: string): Denial => ({ denied });
 
 /** The mission's Fly apps. */
 function ownApps(resources: readonly Resource[]): Resource[] {
-  return resources.filter((r) => r.provider === PROVIDER_ID);
+  return resources.filter((r) => r.service === SERVICE_ID);
 }
 
 /**

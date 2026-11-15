@@ -1,9 +1,9 @@
 /**
- * MCP tools of the `google-calendar` provider — the plugin's own, each
+ * MCP tools of the `google-calendar` service — the plugin's own, each
  * implemented on Google's Calendar REST API v3 (`execute.ts`).
  *
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  *
  * Every tool but `list_calendars` and `suggest_time` takes `calendarId`, a
  * calendar of the mission (its ref or its id), the primary one when omitted.

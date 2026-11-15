@@ -1,8 +1,8 @@
 /**
- * Upstream calls of the `fly` provider : the Machines API, and the logs
+ * Upstream calls of the `fly` service : the Machines API, and the logs
  * endpoint `fly logs` uses.
  *
- * Handbook : docs/handbook/providers/fly.md.
+ * Handbook : docs/handbook/services/fly.md.
  *
  * The request is built from what `readFlyCall` returned, never from `args`.
  * Beyond routing, the executor holds these guards ; each declines with an
@@ -39,7 +39,7 @@ import {
 import { META, isDenial, readFlyCall, type FlyCall } from './call.ts';
 import { appName, configImageRefusal, imageRefusal, pathIdent } from './identifiers.ts';
 import { IMAGE_PREFIX_SEPARATOR } from './identifiers.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   FLY_API_BASE,
   FLY_LOGS_BASE,
@@ -466,9 +466,7 @@ async function exec(ctx: ExecuteContext, call: FlyCall, machine: string): Promis
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function listMissionApps(ctx: ExecuteContext): Promise<unknown> {
-  const mission = new Set(
-    ctx.resources.filter((r) => r.provider === PROVIDER_ID).map((r) => r.ref),
-  );
+  const mission = new Set(ctx.resources.filter((r) => r.service === SERVICE_ID).map((r) => r.ref));
   const apps = await allApps(ctx);
   return { apps: apps.filter((app) => mission.has(app.name)) };
 }
@@ -562,19 +560,17 @@ async function allApps(ctx: AccountContext): Promise<AppDto[]> {
 export async function discoverFlyResources(ctx: AccountContext): Promise<readonly Resource[]> {
   const org = orgSlugOf(ctx.credential);
   const prefixes = imagePrefixesOfCredential(ctx.credential);
-  if (!prefixes)
-    throw new Error(`${PROVIDER_ID}: the allowed images of this account are malformed`);
+  if (!prefixes) throw new Error(`${SERVICE_ID}: the allowed images of this account are malformed`);
   const apps = await allApps(ctx);
   const unusable = apps.find((app) => appName(app.name) === null);
-  if (unusable)
-    throw new Error(`${PROVIDER_ID}: app name '${unusable.name}' is not a Fly app name`);
+  if (unusable) throw new Error(`${SERVICE_ID}: app name '${unusable.name}' is not a Fly app name`);
   const foreign = apps.find(
     (app) => app.organization?.slug !== undefined && app.organization.slug !== org,
   );
   if (foreign)
-    throw new Error(`${PROVIDER_ID}: app '${foreign.name}' is not in the organization '${org}'`);
+    throw new Error(`${SERVICE_ID}: app '${foreign.name}' is not in the organization '${org}'`);
   return apps.map((app) => ({
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: app.name,
     displayName: app.name,
     metadata: {

@@ -1,7 +1,7 @@
-# Risk catalog of the `axonaut` provider.
+# Risk catalog of the `axonaut` service.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/axonaut.md §3.
+# Handbook : docs/handbook/services/axonaut.md §3.
 #
 # Every slice is rooted at `axonaut.account[<id>]`, the one resource of an
 # account. Axonaut's API is flat, so every entity is a direct child of the
@@ -15,7 +15,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: axonaut
+service: axonaut
 catalog_version: 3
 catalog_date: 2026-11-13
 

@@ -1,11 +1,11 @@
 /**
- * Upstream calls of the `context7` provider.
+ * Upstream calls of the `context7` service.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and never
  *            reaches the executor's result.
  * ADR      : docs/decisions/rewrap-official-mcps.md (the shape).
- * Handbook : docs/handbook/providers/context7.md.
+ * Handbook : docs/handbook/services/context7.md.
  *
  * Two upstreams :
  *   - the official Context7 MCP server, https://mcp.context7.com/mcp
@@ -54,7 +54,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readCall, resolveIndex } from './classify.ts';
-import { CONTEXT7_MCP_SERVER, INDEX_REF, PROVIDER_ID } from './identity.ts';
+import { CONTEXT7_MCP_SERVER, INDEX_REF, SERVICE_ID } from './identity.ts';
 import { context7KeyOf, isQuotaSpent, readPlan, requestUsage } from './usage.ts';
 
 const HTTP_TOO_MANY_REQUESTS = 429;
@@ -95,7 +95,7 @@ export async function executeContext7(
 export async function discoverContext7Resources(ctx: AccountContext): Promise<readonly Resource[]> {
   const plan = await readPlan(ctx);
   return [
-    { provider: PROVIDER_ID, ref: INDEX_REF, displayName: INDEX_DISPLAY_NAME, metadata: { plan } },
+    { service: SERVICE_ID, ref: INDEX_REF, displayName: INDEX_DISPLAY_NAME, metadata: { plan } },
   ];
 }
 

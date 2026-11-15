@@ -17,7 +17,7 @@ import {
   USER,
   WORKSPACE,
 } from '../../src/examples.ts';
-import { PAT_FIELD, PROVIDER_ID } from '../../src/identity.ts';
+import { PAT_FIELD, SERVICE_ID } from '../../src/identity.ts';
 
 // The ids and projects the plugin's `examples` run on (`src/examples.ts`).
 export { OTHER_PROJECT, PARENT_SAMPLE, PROJECT, SECTION, TASK, USER, WORKSPACE };
@@ -35,7 +35,7 @@ export const FOREIGN_TASK = '1400000000000009';
 export const project: Resource = EXAMPLE_PROJECT;
 export const otherProject: Resource = EXAMPLE_OTHER_PROJECT;
 export const bareProject: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: BARE_PROJECT,
   displayName: 'Acme / Old',
 };

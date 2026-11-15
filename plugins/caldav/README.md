@@ -10,7 +10,7 @@ events, under risks zoned by who the attendees are.
 `google-calendar` plugin.
 
 Handbook (the model and its reasons):
-[`docs/handbook/providers/caldav.md`](../../docs/handbook/providers/caldav.md).
+[`docs/handbook/services/caldav.md`](../../docs/handbook/services/caldav.md).
 ADR: [google-calendar-through-an-oauth-broker](../../docs/decisions/google-calendar-through-an-oauth-broker.md) D5.
 
 ## Data model
@@ -27,7 +27,7 @@ read over more than 31 days.
 | ------------ | -------------------------------------------------------------------------------------------- |
 | Server URL   | `https://caldav.icloud.com`, `https://caldav.fastmail.com`, `https://<cloud>/remote.php/dav` |
 | Username     | the account's sign-in name, often its e-mail address                                         |
-| App password | made for this gateway at the provider; stored encrypted                                      |
+| App password | made for this gateway at the service; stored encrypted                                       |
 
 Each calendar that stores events is a resource. Its zoning lists —
 `internal_domains`, `allowlist_domains`, `allowlist_addresses` — are filled
@@ -81,5 +81,5 @@ npx vitest run plugins/caldav
 ```
 
 An in-memory CalDAV server (`tests/unit/fake-caldav.ts`) stands in for the
-provider, in memory and once behind a loopback HTTP socket
+service, in memory and once behind a loopback HTTP socket
 (`protocol.test.ts`). No test calls a real server.

@@ -1,6 +1,6 @@
 /**
  * `executeFly`, `discoverFlyResources` and the token check, against
- * `mockFetch` : the requests sent, the provider failures thrown, and every
+ * `mockFetch` : the requests sent, the service failures thrown, and every
  * guard of the executor declining before the request it protects.
  */
 import { describe, expect, test } from 'vitest';
@@ -140,7 +140,7 @@ describe('requests', () => {
     expect(fetch.calls).toHaveLength(0);
   });
 
-  test('a provider failure is thrown : 401 / 403 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
+  test('a service failure is thrown : 401 / 403 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
     await expect(
       run([{ url: `${API}/apps/acme-gw`, status: 401 }], TOOL.getApp, {}).result,
     ).rejects.toMatchObject({
@@ -566,7 +566,7 @@ describe('discoverResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'fly',
+        service: 'fly',
         ref: 'acme-gw',
         displayName: 'acme-gw',
         metadata: {
@@ -577,7 +577,7 @@ describe('discoverResources', () => {
         },
       },
       {
-        provider: 'fly',
+        service: 'fly',
         ref: 'beta-gw',
         displayName: 'beta-gw',
         metadata: {

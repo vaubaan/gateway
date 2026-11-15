@@ -1,7 +1,7 @@
 /**
  * Events : what a tool returns, what a tool writes.
  *
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  *   - **Read** (`eventView`) : one calendar object → JSON fields, the master
  *     event of a recurring series (the `VEVENT` without `RECURRENCE-ID`) and

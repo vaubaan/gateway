@@ -18,10 +18,10 @@
 
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /**
- * An identifier of the provider : exactly one path segment, no dot, no
+ * An identifier of the service : exactly one path segment, no dot, no
  * separator, no escape. Cloudflare zone, record and account ids are 32 hex
  * characters. It is the grammar of every identifier of this plugin, whether
  * it is interpolated into a URL path (zone id, record id) or only embedded
@@ -117,7 +117,7 @@ export function resolveZoneResource(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ResolvedZone {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   const explicit = args.zone_id;
   if (explicit !== undefined && explicit !== null && explicit !== '') {
     const zoneId = pathIdent(explicit);
@@ -147,7 +147,7 @@ export function resolveZoneResource(
  * differ. Anything the grammars do not read — `@`, a bare `*`, an empty
  * name, whitespace, a control or non-ASCII character (punycode is not
  * normalised here, so the two could never be compared), a separator, an
- * escape, an unknown zone name — is critical : the provider may read as the
+ * escape, an unknown zone name — is critical : the service may read as the
  * apex a name this function cannot compare with it.
  */
 export function isCriticalRecord(type: string, name: string, zoneName: string | null): boolean {

@@ -8,7 +8,7 @@ import { describe, expect, test } from 'vitest';
 import type { Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { asanaPlugin, classifyAsana } from '../../src/index.ts';
 import { PROJECT, SECTION, TASK, ctx, project, world } from './fixtures.ts';
 
@@ -70,7 +70,7 @@ describe('asana identifiers — what classify refuses, execute does not send', (
 
   test('a resource ref outside the grammar is refused on both sides, even when it is in the mission', async () => {
     for (const ref of ['..', '%2e%2e', 'a/../b', '../']) {
-      const odd: Resource = { provider: PROVIDER_ID, ref, displayName: 'odd' };
+      const odd: Resource = { service: SERVICE_ID, ref, displayName: 'odd' };
       expect('denied' in classifyAsana(TOOL.getProject, { project: ref }, [odd])).toBe(true);
       expect('denied' in classifyAsana(TOOL.getProject, {}, [odd])).toBe(true);
       const fetch = mockFetch([]);

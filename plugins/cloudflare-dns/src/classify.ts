@@ -1,5 +1,5 @@
 /**
- * Classifier of the `cloudflare-dns` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `cloudflare-dns` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *        §10 ("a classification error is a security hole").
@@ -44,7 +44,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   accountIdOf,
   pathIdent,
@@ -71,7 +71,7 @@ export function undeclaredArgument(
 }
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -100,7 +100,7 @@ function accountSegment(resource: Resource): SliceSegment {
 }
 
 function unknownTool(tool: string): string {
-  return `unknown ${PROVIDER_ID} tool '${tool}'.`;
+  return `unknown ${SERVICE_ID} tool '${tool}'.`;
 }
 
 export function classifyCloudflareDns(
@@ -111,7 +111,7 @@ export function classifyCloudflareDns(
   if (!KNOWN_TOOLS.has(tool)) return { denied: unknownTool(tool) };
 
   if (tool === TOOL.listZones) {
-    const own = resources.filter((r) => r.provider === PROVIDER_ID);
+    const own = resources.filter((r) => r.service === SERVICE_ID);
     if (own.length === 0) return { denied: 'the mission touches no Cloudflare DNS zone' };
     const undeclared = undeclaredArgument(tool, args);
     if (undeclared !== null) return { denied: undeclared };

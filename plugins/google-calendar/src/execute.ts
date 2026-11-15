@@ -1,11 +1,11 @@
 /**
- * Upstream calls of the `google-calendar` provider — Google's Calendar REST
+ * Upstream calls of the `google-calendar` service — Google's Calendar REST
  * API v3 — and resource discovery.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and is never
  *            returned.
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
  *
  * Rules:
@@ -48,7 +48,7 @@ import { instantOf, readCalendarCall, type CalendarCall } from './call.ts';
 import { missingScopes, scopesNotGrantedMessage } from './credential.ts';
 import { freeSlots, type Span } from './free-slots.ts';
 import { calendarIdOf, calendarRefOf, parseAddress, pathSegment } from './identifiers.ts';
-import { BARE_TOOL, CALENDAR_API_BASE, PRIMARY_KEYWORD, PROVIDER_ID } from './identity.ts';
+import { BARE_TOOL, CALENDAR_API_BASE, PRIMARY_KEYWORD, SERVICE_ID } from './identity.ts';
 
 /** Discovery keeps at most this many calendars. */
 export const MAX_DISCOVERED_CALENDARS = 250;
@@ -90,12 +90,12 @@ type Forward = Extract<CalendarCall, { kind: 'forward' }>;
 type Query = Readonly<Record<string, string | number | boolean | undefined>>;
 
 function tokenOf(ctx: AccountContext): string {
-  return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
+  return expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2').accessToken;
 }
 
 /** Refuses, before any request, a token Google issued with fewer scopes than asked. */
 function expectRequiredScopes(ctx: AccountContext): void {
-  const { scopes } = expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2');
+  const { scopes } = expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2');
   const missing = missingScopes(scopes);
   if (missing.length > 0) throw new CredentialRefusal(scopesNotGrantedMessage(missing), 403);
 }
@@ -446,7 +446,7 @@ function busyOf(entry: unknown): Span[] | null {
 /** The account's own calendar for free/busy: its address when discovery recorded it. */
 function selfOf(resources: readonly Resource[]): string {
   for (const r of resources) {
-    if (r.provider === PROVIDER_ID && typeof r.metadata?.account_email === 'string') {
+    if (r.service === SERVICE_ID && typeof r.metadata?.account_email === 'string') {
       return r.metadata.account_email;
     }
   }
@@ -620,7 +620,7 @@ export function resourcesOf(calendars: readonly FoundCalendar[]): Resource[] {
     const ref = calendarRefOf(calendar.id);
     if (ref === null) continue;
     resources.push({
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref,
       displayName: calendar.name,
       metadata: {

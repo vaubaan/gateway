@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `template` provider.
+ * Upstream calls of the `template` service.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *        decrypted in the context, is used for one call, and is never
@@ -16,14 +16,14 @@
  *     records it as `upstream_error` in the audit.
  *   - `refusalResult` is returned only for what this executor declines
  *     itself (an unknown tool, a workspace outside the mission) : nothing
- *     failed at the provider.
- *   - the provider's public API base is a constant of the plugin : it is a
- *     fact about the provider, not configuration of the instance.
+ *     failed at the service.
+ *   - the service's public API base is a constant of the plugin : it is a
+ *     fact about the service, not configuration of the instance.
  *   - the workspace is resolved by the classifier's own `resolveWorkspace`
  *     and every identifier that reaches the request path goes through the
  *     classifier's own `pathIdent` : the call runs on the workspace and the
  *     widget the slice named, or not at all.
- *   - what the provider answers is untrusted : read through a type guard
+ *   - what the service answers is untrusted : read through a type guard
  *     (`httpJson`'s third argument) before it becomes a `Resource` ; an
  *     answer passed to the agent as it is takes `anyJson`.
  */
@@ -44,9 +44,9 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { MALFORMED_WIDGET_ID, pathIdent, resolveWorkspace } from './classify.ts';
-import { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+import { API_KEY_FIELD, SERVICE_ID, TOOL } from './identity.ts';
 
-/** Public API of the provider. Replace with the real base URL in a copy of this template. */
+/** Public API of the service. Replace with the real base URL in a copy of this template. */
 export const TEMPLATE_API_BASE = 'https://api.example.com/v1';
 
 interface WorkspaceDto {
@@ -102,10 +102,10 @@ export async function discoverTemplateResources(ctx: AccountContext): Promise<re
   const unusable = workspaces.find((w) => pathIdent(w.id) === null);
   if (unusable) {
     throw new UpstreamProtocolError(
-      `${PROVIDER_ID}: workspace id '${unusable.id}' is not a path-safe identifier`,
+      `${SERVICE_ID}: workspace id '${unusable.id}' is not a path-safe identifier`,
     );
   }
-  return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w.name }));
+  return workspaces.map((w) => ({ service: SERVICE_ID, ref: w.id, displayName: w.name }));
 }
 
 function isWorkspaceDtoList(x: unknown): x is readonly WorkspaceDto[] {
@@ -117,7 +117,7 @@ function isWorkspaceDto(x: unknown): x is WorkspaceDto {
 }
 
 /**
- * One call to the provider with the account's key, its answer read
+ * One call to the service with the account's key, its answer read
  * through `guard` ; a failure is thrown, typed (`httpJson`).
  */
 export async function request<T>(
@@ -127,9 +127,9 @@ export async function request<T>(
   guard: Guard<T>,
   body?: unknown,
 ): Promise<T> {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const apiKey = secret.fields[API_KEY_FIELD];
-  if (!apiKey) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
+  if (!apiKey) throw new Error(`${SERVICE_ID}: the credential has no '${API_KEY_FIELD}' field`);
   return httpJson(
     ctx,
     {
@@ -137,7 +137,7 @@ export async function request<T>(
       method,
       headers: { authorization: `Bearer ${apiKey}` },
       ...(body !== undefined ? { body } : {}),
-      what: `${PROVIDER_ID} ${method} ${path}`,
+      what: `${SERVICE_ID} ${method} ${path}`,
     },
     guard,
   );
