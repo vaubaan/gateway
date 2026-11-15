@@ -1,7 +1,7 @@
 /**
  * The proof that a task or a section is in the project the call names.
  *
- * Handbook : docs/handbook/providers/asana.md, "Edge cases".
+ * Handbook : docs/handbook/services/asana.md, "Edge cases".
  *
  * Classification is pure and a gid says nothing about its project, so the
  * classifier names the project the caller claims and the executor checks the
@@ -53,7 +53,7 @@ export function projectGidsOf(task: Json): Set<string> {
 /**
  * Proves `task` is in `project` and returns the task's own record, read with
  * `fields` added to the walk's fields. Throws `ExecutorRefusal` otherwise ;
- * a provider failure is thrown as it is.
+ * a service failure is thrown as it is.
  */
 export async function proveTaskInProject(
   ctx: AccountContext,

@@ -6,7 +6,7 @@ payments received on them, projects, tasks, support tickets and the product cata
 account.
 
 Handbook (the model and the reasons behind it):
-[`docs/handbook/providers/axonaut.md`](../../docs/handbook/providers/axonaut.md). Written from
+[`docs/handbook/services/axonaut.md`](../../docs/handbook/services/axonaut.md). Written from
 Axonaut's OpenAPI description of its API v2 (`https://axonaut.com/api/v2/doc.json`, read
 2026-11-05), its only documentation.
 
@@ -14,7 +14,7 @@ Axonaut's OpenAPI description of its API v2 (`https://axonaut.com/api/v2/doc.jso
 
 | File                    | What is in it                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/identity.ts`       | `PROVIDER_ID`, `TOOL_PREFIX`, the tool names (`TOOL`), the credential field.                                                |
+| `src/identity.ts`       | `SERVICE_ID`, `TOOL_PREFIX`, the tool names (`TOOL`), the credential field.                                                 |
 | `src/data-model.ts`     | One plane, `erp`, rooted at the account.                                                                                    |
 | `src/risk-catalog.yaml` | 13 named risks, the fallback, 4 macro-actions.                                                                              |
 | `src/fields.ts`         | The kinds of argument, the id grammar `axonautId`, and `readArguments`, the one reader of a call's arguments.               |

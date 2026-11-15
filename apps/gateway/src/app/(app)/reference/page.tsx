@@ -1,5 +1,5 @@
 /**
- * `/reference` — the services this gateway can reach (spec §4.2 "Providers"),
+ * `/reference` — the services this gateway can reach (spec §4.2 "Services"),
  * one quiet line each: what it is, how an account of it is connected, and how
  * large its catalog is. The list is the plugin registry's; nothing is
  * enumerated here. Each line names the plugin's version and, when the operator
@@ -11,8 +11,8 @@ import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import { Hint, Mono, Row, Rows, Section, ServiceMark } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { REFERENCE_WORDS } from '@/lib/vocabulary';
-import { providerPath } from '@/lib/providers/links';
-import { providerCards } from '@/lib/providers/reference';
+import { servicePath } from '@/lib/services/links';
+import { serviceCards } from '@/lib/services/reference';
 
 import { catalogSize, pinnedPlugins, PinnedTag, ReferenceFrame } from './frame';
 import styles from './reference.module.css';
@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ReferencePage() {
   const { root } = await requirePrincipal();
-  const cards = providerCards(root.registry);
+  const cards = serviceCards(root.registry);
   const pinned = pinnedPlugins(root.plugins);
   // Community validation status per plugin (spec §9); `null` when telemetry is off.
   const validation = new Map(
@@ -37,7 +37,7 @@ export default async function ReferencePage() {
           {cards.map((card) => (
             <Row
               key={card.id}
-              testId={`provider-${card.id}`}
+              testId={`service-${card.id}`}
               lead={<ServiceMark name={card.name} icon={card.icon} />}
               title={
                 <>
@@ -50,11 +50,11 @@ export default async function ReferencePage() {
                   </span>
                 </>
               }
-              href={providerPath(card.id)}
+              href={servicePath(card.id)}
               description={
                 <>
                   {card.description ?? 'This service ships no description.'} ·{' '}
-                  <span data-testid="provider-version">
+                  <span data-testid="service-version">
                     plugin <Mono>{card.version}</Mono>
                   </span>
                 </>

@@ -19,7 +19,7 @@ import {
   PAGE,
   ROOT,
 } from '../../src/examples.ts';
-import { API_TOKEN_FIELD, PROVIDER_ID } from '../../src/identity.ts';
+import { API_TOKEN_FIELD, SERVICE_ID } from '../../src/identity.ts';
 
 const id = (digit: string) =>
   `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
@@ -36,7 +36,7 @@ export const TOKEN = 'ntn_test_token_0123456789';
 export const pageRoot: Resource = EXAMPLE_PAGE_ROOT;
 export const dbRoot: Resource = EXAMPLE_DB_ROOT;
 export const otherRoot: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: OTHER_ROOT,
   displayName: 'Board',
   metadata: { kind: 'page' },

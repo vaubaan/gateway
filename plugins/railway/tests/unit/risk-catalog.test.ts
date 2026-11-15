@@ -1,7 +1,7 @@
 /**
  * Tests — Railway risk catalog (shape and runtime matching of the loaded YAML).
  *
- * Catalog : plugins/railway/src/risk-catalog.yaml (loaded by the SDK) ; handbook : docs/handbook/providers/railway.md.
+ * Catalog : plugins/railway/src/risk-catalog.yaml (loaded by the SDK) ; handbook : docs/handbook/services/railway.md.
  *
  * Verifies the catalog :
  *   - declares the 9 expected risks + 1 fallback (handbook).
@@ -27,7 +27,7 @@ const catalog = railwayPlugin.catalog;
 
 function readAccountSlice(): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [{ kind: 'name', value: 'account' }, { kind: 'wild-one' }],
     action: 'R',
   };
@@ -35,7 +35,7 @@ function readAccountSlice(): Slice {
 
 function createProjectSlice(): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [
       { kind: 'name', value: 'account' },
       { kind: 'wild-one' },
@@ -47,7 +47,7 @@ function createProjectSlice(): Slice {
 
 function agentSessionSlice(): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [
       { kind: 'name', value: 'account' },
       { kind: 'wild-one' },
@@ -59,7 +59,7 @@ function agentSessionSlice(): Slice {
 
 function deploymentWriteSlice(env: string): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [
       { kind: 'name', value: 'project' },
       { kind: 'ident', value: 'p-xyz' },
@@ -75,7 +75,7 @@ function deploymentWriteSlice(env: string): Slice {
 
 function varReadSlice(env: string): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [
       { kind: 'name', value: 'project' },
       { kind: 'ident', value: 'p-xyz' },
@@ -90,7 +90,7 @@ function varReadSlice(env: string): Slice {
 
 function logsReadSlice(): Slice {
   return {
-    provider: 'railway',
+    service: 'railway',
     path: [
       { kind: 'name', value: 'project' },
       { kind: 'ident', value: 'p-xyz' },
@@ -109,8 +109,8 @@ function logsReadSlice(): Slice {
 // ─── Shape ─────────────────────────────────────────────────────────────────
 
 describe('railway risk catalog — shape', () => {
-  test('provider is railway', () => {
-    expect(catalog.provider).toBe('railway');
+  test('service is railway', () => {
+    expect(catalog.service).toBe('railway');
   });
 
   test('declares the 9 risks + 1 fallback of the handbook', () => {
@@ -235,7 +235,7 @@ describe('railway risk catalog — variable writes as classified', () => {
   const ENV_ID = 'env-1';
   const resources = [
     {
-      provider: 'railway',
+      service: 'railway',
       ref: PROJECT,
       displayName: 'api',
       env: 'staging',

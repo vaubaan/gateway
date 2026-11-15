@@ -24,7 +24,7 @@ description = "Test-only RSA key of the github plugin"
 targetRules = ["private-key"]
 paths = [
   '''^plugins/github/tests/unit/fixtures\.ts$''',
-  '''^packages/providers/github/tests/unit/adapter\.test\.ts$''', # v4, deleted
+  '''^packages/providers/github/tests/unit/adapter\.test\.ts$''', # v4, deleted; a historical path, never renamed
 ]
 
 # Fake values written into tests and demo data before the `0123456789`

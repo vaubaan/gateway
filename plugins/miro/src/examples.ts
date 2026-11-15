@@ -1,13 +1,13 @@
 /**
- * Representative calls of every tool of the `miro` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `miro` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit (catalog coverage, identifier proof) and the site classifies when it
  * builds (ADR plugin-contract-and-credential-spec, amendment 2026-11-05). Ids
  * follow the shapes of Miro's documentation.
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** Miro's documented example board id, and its ref. */
 export const BOARD_ID = 'uXjVOD6LSME=';
@@ -19,13 +19,13 @@ export const COMMENT = '3458764517517819777';
 
 /** The board the samples run on unless they name others. */
 export const EXAMPLE_BOARD: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: BOARD,
   displayName: 'Workshop',
   metadata: { url: BOARD_URL },
 };
 export const EXAMPLE_OTHER_BOARD: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: OTHER_BOARD,
   displayName: 'Retro',
 };

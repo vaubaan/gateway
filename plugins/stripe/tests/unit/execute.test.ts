@@ -25,7 +25,7 @@ import { stripePlugin } from '../../src/index.ts';
 const TOKEN = 'sk_test_abc123';
 
 const testResource: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_1/test',
   env: 'test',
   displayName: 'Acme (test)',

@@ -1,8 +1,8 @@
 /**
  * How a v4 secret becomes the form of a v5 plugin (see
  * docs/handbook/import-from-v4.md). This is a translation table, not a
- * provider list: a provider is importable only when it is ALSO in the
- * registry of the instance (the single provider list), and every other v4
+ * service list: a service is importable only when it is ALSO in the
+ * registry of the instance (the single service list), and every other v4
  * account is reported as "to connect by hand".
  *
  * Kept out on purpose, whatever the bundle holds: the GitHub App
@@ -14,26 +14,26 @@
  */
 import type { V4Account, V4SshHost, V4StripeAccount } from './bundle';
 
-/** v4 providers whose `provider_admins.access_token` is a key a v5 form takes as is. */
-export const PASTED_KEY_PROVIDERS = ['cloudflare-dns', 'vercel'] as const;
-export type PastedKeyProvider = (typeof PASTED_KEY_PROVIDERS)[number];
+/** v4 services whose `service_admins.access_token` is a key a v5 form takes as is. */
+export const PASTED_KEY_SERVICES = ['cloudflare-dns', 'vercel'] as const;
+export type PastedKeyService = (typeof PASTED_KEY_SERVICES)[number];
 
-export const STRIPE_PROVIDER = 'stripe';
-export const SSH_PROVIDER = 'ssh';
+export const STRIPE_SERVICE = 'stripe';
+export const SSH_SERVICE = 'ssh';
 
 /**
  * Services whose resource refs are case-insensitive at the service (GitHub
  * `owner/repo`): a v4 ref matches a discovered one ignoring case. Every other
  * ref (Vercel and Supabase ids, Cloudflare zone ids) must match exactly.
  */
-export const CASE_INSENSITIVE_REF_PROVIDERS = ['github'] as const;
+export const CASE_INSENSITIVE_REF_SERVICES = ['github'] as const;
 
-export function isCaseInsensitiveRefProvider(provider: string): boolean {
-  return (CASE_INSENSITIVE_REF_PROVIDERS as readonly string[]).includes(provider);
+export function isCaseInsensitiveRefService(service: string): boolean {
+  return (CASE_INSENSITIVE_REF_SERVICES as readonly string[]).includes(service);
 }
 
-export function isPastedKeyProvider(provider: string): provider is PastedKeyProvider {
-  return (PASTED_KEY_PROVIDERS as readonly string[]).includes(provider);
+export function isPastedKeyService(service: string): service is PastedKeyService {
+  return (PASTED_KEY_SERVICES as readonly string[]).includes(service);
 }
 
 /**
@@ -46,13 +46,13 @@ export function pastedKeyFields(
 ):
   | { readonly ok: true; readonly fields: Record<string, string> }
   | { readonly ok: false; readonly reason: string } {
-  if (!isPastedKeyProvider(account.provider)) {
+  if (!isPastedKeyService(account.service)) {
     return { ok: false, reason: 'its secret is not imported' };
   }
   if (account.access_token === null) {
     return { ok: false, reason: 'the bundle carries no key for it' };
   }
-  switch (account.provider) {
+  switch (account.service) {
     case 'cloudflare-dns':
       return { ok: true, fields: { api_token: account.access_token } };
     case 'vercel':

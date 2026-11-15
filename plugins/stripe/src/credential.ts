@@ -1,5 +1,5 @@
 /**
- * Credential of the `stripe` provider : the secret key of the test mode, of
+ * Credential of the `stripe` service : the secret key of the test mode, of
  * the live mode, or both, pasted by hand (`api-key`).
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 :

@@ -11,7 +11,7 @@ someone connects (RFC 7591). On a Miro Enterprise plan, an administrator
 first enables Miro's MCP server for the organisation.
 
 The model and the reasons behind it are in the handbook
-[`docs/handbook/providers/miro.md`](../../docs/handbook/providers/miro.md);
+[`docs/handbook/services/miro.md`](../../docs/handbook/services/miro.md);
 the decision in the ADR
 [`oauth-client-registered-by-the-gateway`](../../docs/decisions/oauth-client-registered-by-the-gateway.md).
 
@@ -19,7 +19,7 @@ the decision in the ADR
 
 | File                                | What is in it                                                                              |
 | ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/identity.ts`                   | `PROVIDER_ID`, Miro's URLs, `MIRO_MCP_SERVER`, OAuth endpoints, upstream names, `TOOL`     |
+| `src/identity.ts`                   | `SERVICE_ID`, Miro's URLs, `MIRO_MCP_SERVER`, OAuth endpoints, upstream names, `TOOL`      |
 | `src/identifiers.ts`                | The grammars: board ref, board URL, item id, comment id; `boardUrlOf`                      |
 | `src/upstream-tools.json`           | Miro's `tools/list`, captured verbatim on 2026-10-23 (51 tools)                            |
 | `src/tools.ts`                      | The 28 tools: Miro's, with `board` / `item_id` for `miro_url`, plus `list_boards`          |

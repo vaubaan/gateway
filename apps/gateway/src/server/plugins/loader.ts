@@ -19,7 +19,13 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { createRegistry, PluginRegistryError, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import {
+  createRegistry,
+  fromLegacyPlugin,
+  isLegacyPlugin,
+  PluginRegistryError,
+  type ServicePlugin,
+} from '@vaubaan/plugin-sdk';
 import { satisfies, valid, validRange } from 'semver';
 
 import { ConfigError, envNamesFor, type ConfigIssue } from '../config';
@@ -42,7 +48,7 @@ export interface PinnedPlugin {
   readonly path: string;
   /** The SDK range it declares. */
   readonly sdkRange: string;
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
 }
 
 export interface PinReadOptions {
@@ -179,7 +185,7 @@ async function readManifest(path: string): Promise<PinManifest> {
 function registrationIssues(candidate: unknown): string[] {
   if (!isRecord(candidate)) return ['the entry has no default export that is a plugin'];
   try {
-    createRegistry([candidate as unknown as ProviderPlugin]);
+    createRegistry([candidate as unknown as ServicePlugin]);
     return [];
   } catch (err) {
     if (err instanceof PluginRegistryError) return [...err.issues];
@@ -218,12 +224,18 @@ async function readPin(path: string, options: PinReadOptions): Promise<PinnedPlu
     // `definePlugin` throws here, at import, for a plugin it refuses.
     refuse(path, `the plugin failed to load: ${errorText(err)}`);
   }
-  const plugin = isRecord(loaded) ? loaded['default'] : undefined;
+  const exported = isRecord(loaded) ? loaded['default'] : undefined;
+  // A pin built against an SDK before 0.9.4 says provider where this host says service
+  // (ADR one-word-per-thing-account-service-plugin): put in this SDK's words, both ways.
+  const plugin =
+    isRecord(exported) && isLegacyPlugin(exported)
+      ? fromLegacyPlugin(exported as unknown as ServicePlugin)
+      : exported;
   const issues = registrationIssues(plugin);
   if (issues.length > 0) {
     throw new ConfigError(issues.map((issue) => issueAt(path, `refused: ${issue}`)));
   }
-  const accepted = plugin as ProviderPlugin;
+  const accepted = plugin as ServicePlugin;
   // A `host` account runs on the gateway's own services, which only the image
   // binds (ADR platform-management-is-a-plugin-on-the-execution-door): never a pin.
   if (accepted.credential.kind === 'host') {

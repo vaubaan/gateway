@@ -3,7 +3,7 @@
   "version": "2.0.5",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for bash over SSH — pinned host key, read whitelist, writes priced by command class",
+  "description": "Vaubaan Gateway plugin for bash over SSH — pinned host key, read whitelist, writes priced by command class",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

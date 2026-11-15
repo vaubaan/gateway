@@ -62,7 +62,7 @@ export async function openBudgetFixture(
   ).id;
   const accountId = (
     await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: creatorId },
       displayName: 'gh',
       credential: null,

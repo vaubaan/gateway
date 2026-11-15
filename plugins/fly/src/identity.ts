@@ -1,14 +1,14 @@
 /**
- * Identity of the `fly` provider — the one place its ids are written.
+ * Identity of the `fly` service — the one place its ids are written.
  *
- * Everything else (data-model provider, tool names, resources, credential
+ * Everything else (data-model service, tool names, resources, credential
  * fields) is derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'fly';
+/** The service id. */
+export const SERVICE_ID = 'fly';
 
 /** Secret field of the `api-key` credential : a token printed by `fly tokens create org`. */
 export const API_TOKEN_FIELD = 'api_token';
@@ -25,7 +25,7 @@ export const IMAGE_PREFIXES_FIELD = 'image_prefixes';
 /** The images an account may deploy when its owner names none. */
 export const DEFAULT_IMAGE_PREFIXES: readonly string[] = ['ghcr.io/vaubaan/gateway'];
 
-const prefix = toolPrefixFor(PROVIDER_ID);
+const prefix = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names, `fly__<verb>_<noun>`. */
 export const TOOL = {

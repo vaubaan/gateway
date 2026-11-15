@@ -2,7 +2,7 @@
  * Commands that cannot be seen through, for the `ssh` command profiler.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure. A command that runs code or another command the classifier does not
  * parse (`bash -c`, `eval`, `python -c`, `awk`, `find -exec`, `ssh`,

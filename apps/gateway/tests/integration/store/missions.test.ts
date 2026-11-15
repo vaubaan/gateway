@@ -52,7 +52,7 @@ describe('missions repository', () => {
     ).id;
     account = (
       await store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: creator },
         displayName: 'gh',
         credential: null,
@@ -65,7 +65,7 @@ describe('missions repository', () => {
     resourceA = resources[0]?.id ?? '';
     otherAccount = (
       await store.accounts.create({
-        provider: 'supabase',
+        service: 'supabase',
         owner: { kind: 'user', id: creator },
         displayName: 'sb',
         credential: null,

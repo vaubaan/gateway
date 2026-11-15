@@ -2,7 +2,7 @@
  * CalDAV data model — the `calendar` plane.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  * One account is one CalDAV account (a server, a username, an app
  * password). Its principal has one calendar home holding the calendars ; each
@@ -23,7 +23,7 @@ import type { DataModel } from '@vaubaan/plugin-sdk';
 import { CALDAV_PLUGIN_ID } from './identity.ts';
 
 export const caldavDataModel: DataModel = {
-  provider: CALDAV_PLUGIN_ID,
+  service: CALDAV_PLUGIN_ID,
   planes: [
     {
       slug: 'calendar',

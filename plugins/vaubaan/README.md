@@ -13,7 +13,7 @@ a pin declaring a `host` account is refused at boot
 ([ADR](../../docs/decisions/platform-management-is-a-plugin-on-the-execution-door.md)).
 
 Handbook (the model, the self rule, the refusals and the reasons behind them):
-[`docs/handbook/providers/vaubaan.md`](../../docs/handbook/providers/vaubaan.md).
+[`docs/handbook/services/vaubaan.md`](../../docs/handbook/services/vaubaan.md).
 
 ## Tools
 
@@ -36,7 +36,7 @@ prefixed `vaubaan__`:
 
 ```
 accounts   account[<id>]           an account the person may build a mission from
-catalogs   catalog[<provider>]     the risk catalog of a service
+catalogs   catalog[<service>]     the risk catalog of a service
 missions   mission[<id>]           a mission of the person
              ├─ issue              verb leaf: a new mission issued
              ├─ token              verb leaf: its key replaced

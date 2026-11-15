@@ -275,7 +275,7 @@ export class SessionService {
    * `rate-limited` — whatever its approvals? Nothing is counted. A limit
    * refusal is recorded exactly as `recordCall` records it (the refused event,
    * the claim request); any other outcome writes nothing and answers `null`.
-   * The git door asks it before a push's pack leaves for the provider: a push
+   * The git door asks it before a push's pack leaves for the service: a push
    * its limits refuse costs no upload. The authoritative decision stays
    * `recordCall`'s.
    */

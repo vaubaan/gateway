@@ -11,7 +11,7 @@ import { decideCall } from '../../src/testing/index.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 const space = (env?: string): Resource => ({
-  provider: 'acme',
+  service: 'acme',
   ref: 'sp-1',
   displayName: 'Space',
   ...(env === undefined ? {} : { env }),

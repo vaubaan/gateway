@@ -1,22 +1,22 @@
 /**
- * Identity of the `upstash-redis` provider — the one place its ids are written.
+ * Identity of the `upstash-redis` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/upstash-redis.md.
+ * Handbook : docs/handbook/services/upstash-redis.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the slices, the credential kind check,
+ * plugin id, the data-model service, the slices, the credential kind check,
  * the tool names, the resources discovery returns — is derived from this
  * module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'upstash-redis';
+/** The service id. */
+export const SERVICE_ID = 'upstash-redis';
 
 /** `upstash_redis__` : the prefix of every tool name (the dash is not a tool-name character). */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names : 6 management tools (Management API), then 15 data tools (REST endpoint). */
 export const TOOL = {

@@ -17,7 +17,7 @@ import { classifySsh } from '../../src/classify.ts';
 
 const HOST = 'staging-vps';
 const MISSION: readonly Resource[] = [
-  { provider: 'ssh', ref: HOST, env: 'staging', displayName: `deploy@${HOST}:22` },
+  { service: 'ssh', ref: HOST, env: 'staging', displayName: `deploy@${HOST}:22` },
 ];
 
 const R = '.R';

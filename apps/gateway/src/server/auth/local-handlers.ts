@@ -5,11 +5,11 @@
  * redirect whose query carries a closed code — never a sentence that says
  * whether an address exists:
  *
- *   POST /auth/local/<provider>         email + password → a session, the second
+ *   POST /auth/local/<sign-in provider>         email + password → a session, the second
  *                                       factor's step, or the enrolment's step
- *   POST /auth/local/<provider>/code    the code of the authenticator app, or a
+ *   POST /auth/local/<sign-in provider>/code    the code of the authenticator app, or a
  *                                       recovery code → the session
- *   POST /auth/local/<provider>/enrol   the first code of a new authenticator →
+ *   POST /auth/local/<sign-in provider>/enrol   the first code of a new authenticator →
  *                                       the session; the recovery codes shown once
  *   POST /api/sign-in-account/create            an invitation link's token + a password
  *   POST /api/sign-in-account/reset             a reset link's token + a password
@@ -22,7 +22,7 @@
  *   POST /settings/security/second-factor/remove    after a fresh sign-in
  *   POST /settings/security/password                the current password and a new one
  *
- * The sign-in itself is the one every provider gets: `admit()` (the address must
+ * The sign-in itself is the one every sign-in provider gets: `admit()` (the address must
  * still be invited, or an administrator), then `completeLogin()` (the
  * `users` row, the deactivation check), then a session. Between the password
  * and the session a `PendingLocalStep` holds the second factor's turn, bound to
@@ -113,7 +113,7 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
   /** The web-session store, for the one-time notices (the recovery codes shown once). */
   readonly sessionStore: SessionStore;
   readonly authenticator: Authenticator;
-  readonly providers: Pick<SignInProvidersService, 'resolve' | 'views' | 'state'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'resolve' | 'views' | 'state'>;
   readonly signInAccounts: SignInAccountsService;
   readonly login: LoginDeps;
   readonly store: Pick<Store, 'invitations' | 'users'>;
@@ -127,11 +127,11 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
 }
 
 export interface LocalAuthHandlers {
-  passwordLogin(request: Request, providerId: string): Promise<Response>;
-  /** The code of the second factor's step, of any provider (`providerId`: the route's, if any). */
-  secondFactorLogin(request: Request, providerId?: string): Promise<Response>;
-  /** The first code of the enrolment's step, of any provider. */
-  enrolAtSignIn(request: Request, providerId?: string): Promise<Response>;
+  passwordLogin(request: Request, signInProviderId: string): Promise<Response>;
+  /** The code of the second factor's step, of any sign-in provider (`providerId`: the route's, if any). */
+  secondFactorLogin(request: Request, signInProviderId?: string): Promise<Response>;
+  /** The first code of the enrolment's step, of any sign-in provider. */
+  enrolAtSignIn(request: Request, signInProviderId?: string): Promise<Response>;
   createSignInAccount(request: Request): Promise<Response>;
   resetPassword(request: Request): Promise<Response>;
   forgotPassword(request: Request): Promise<Response>;
@@ -141,13 +141,13 @@ export interface LocalAuthHandlers {
   changePassword(request: Request): Promise<Response>;
 }
 
-/** The identity a sign-in account signs in as: the provider's issuer, the account id. */
+/** The identity a sign-in account signs in as: the sign-in provider's issuer, the account id. */
 export function localIdentity(
-  provider: LocalSignInProvider,
+  signInProvider: LocalSignInProvider,
   signInAccount: SignInAccountRecord,
 ): IdentityClaims {
   return {
-    issuer: provider.issuer.href,
+    issuer: signInProvider.issuer.href,
     subject: signInAccount.id,
     email: signInAccount.email,
     // The address was proven by the link that created the account, or typed by the
@@ -167,10 +167,10 @@ export function signInAccountIdOf(
   return issuer === local.issuer.href.replace(/\/+$/, '') ? principal.user.subject : null;
 }
 
-/** What every provider's sign-in ends with (`proceed`): admission, the user, the second factor. */
+/** What every sign-in provider's sign-in ends with (`proceed`): admission, the user, the second factor. */
 export type FinishSignIn = (
   request: Request,
-  provider: SignInProvider,
+  signInProvider: SignInProvider,
   identity: IdentityClaims,
   returnTo: string,
 ) => Promise<Response>;
@@ -209,16 +209,16 @@ export function createLocalAuthHandlers(
     return redirect(`${page}?${params.toString()}`);
   }
 
-  /** The one local provider of the instance, or `null`. */
-  async function localProvider(id?: string): Promise<LocalSignInProvider | null> {
+  /** The one local sign-in provider of the instance, or `null`. */
+  async function localSignInProvider(id?: string): Promise<LocalSignInProvider | null> {
     if (id !== undefined) {
-      const effective = await deps.providers.resolve(id);
-      return effective?.provider.kind === 'local' ? effective.provider : null;
+      const effective = await deps.signInProviders.resolve(id);
+      return effective?.signInProvider.kind === 'local' ? effective.signInProvider : null;
     }
-    const view = (await deps.providers.views()).find((p) => p.kind === 'local');
+    const view = (await deps.signInProviders.views()).find((p) => p.kind === 'local');
     if (!view) return null;
-    const effective = await deps.providers.resolve(view.id);
-    return effective?.provider.kind === 'local' ? effective.provider : null;
+    const effective = await deps.signInProviders.resolve(view.id);
+    return effective?.signInProvider.kind === 'local' ? effective.signInProvider : null;
   }
 
   async function throttled(request: Request, scope: 'password' | 'forgot'): Promise<boolean> {
@@ -233,19 +233,23 @@ export function createLocalAuthHandlers(
   /** A session for the person, replacing the one the browser had; the pending cookie cleared. */
   async function openSession(
     request: Request,
-    step: Pick<PendingLocalStep, 'userId' | 'providerId' | 'login'>,
+    step: Pick<PendingLocalStep, 'userId' | 'signInProviderId' | 'login'>,
   ): Promise<{ readonly sessionId: string; readonly setCookie: string }> {
     await deps.sessions.destroy(request.headers);
     const session = await deps.sessions.create({
       kind: 'user',
       userId: step.userId,
-      login: { email: step.login.email, groups: [...step.login.groups], provider: step.providerId },
+      login: {
+        email: step.login.email,
+        groups: [...step.login.groups],
+        signInProvider: step.signInProviderId,
+      },
     });
     return { sessionId: session.id, setCookie: session.setCookie };
   }
 
   /**
-   * What every provider's sign-in ends with, once the provider vouched for the
+   * What every sign-in provider's sign-in ends with, once the sign-in provider vouched for the
    * identity (the password of a sign-in account, the callback of OpenID Connect or
    * GitHub): admission, the `users` row, then the second factor's step — the code when
    * the person has a factor, its enrolment when they have none — or, when the
@@ -254,21 +258,21 @@ export function createLocalAuthHandlers(
    */
   async function proceed(
     request: Request,
-    provider: SignInProvider,
+    signInProvider: SignInProvider,
     identity: IdentityClaims,
     returnTo: string,
   ): Promise<Response> {
-    const admission = await admit(identity, provider, {
+    const admission = await admit(identity, signInProvider, {
       isInvited: async (email) => (await deps.store.invitations.get(email)) !== null,
-      isAdministrator: () => deps.administrators.admits(identity, provider.id),
+      isAdministrator: () => deps.administrators.admits(identity, signInProvider.id),
     });
     const outcome = await completeLogin(deps.login, identity, {
-      providerId: provider.id,
+      signInProviderId: signInProvider.id,
       administrators: deps.administrators,
     });
-    logger.info('sign-in admitted', { provider: provider.id, admission });
+    logger.info('sign-in admitted', { sign_in_provider: signInProvider.id, admission });
     const base = {
-      providerId: provider.id,
+      signInProviderId: signInProvider.id,
       userId: outcome.user.id,
       login: { email: identity.email, groups: identity.groups },
       returnTo,
@@ -277,7 +281,7 @@ export function createLocalAuthHandlers(
       const step = await deps.sessions.createLocalStep({ ...base, step: 'second-factor' });
       return redirect(SECOND_FACTOR_PAGE, { 'Set-Cookie': step.setCookie });
     }
-    const { waiver } = await deps.providers.state(provider.id);
+    const { waiver } = await deps.signInProviders.state(signInProvider.id);
     if (!waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr })) {
       const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, identity.email);
       const step = await deps.sessions.createLocalStep({
@@ -286,7 +290,7 @@ export function createLocalAuthHandlers(
         totpSecret: enrolment.secret,
       });
       logger.info('sign-in continues with the enrolment of a second factor', {
-        provider: provider.id,
+        sign_in_provider: signInProvider.id,
       });
       return redirect(ENROL_PAGE, { 'Set-Cookie': step.setCookie });
     }
@@ -312,15 +316,15 @@ export function createLocalAuthHandlers(
     return loginError('idp-error', headers);
   }
 
-  /** The step of the request when it is the expected one for this provider; else `null`. */
+  /** The step of the request when it is the expected one for this sign-in provider; else `null`. */
   async function takeStep(
     request: Request,
-    providerId: string | undefined,
+    signInProviderId: string | undefined,
     expected: PendingLocalStep['step'],
   ): Promise<PendingLocalStep | null> {
     const step = await deps.sessions.takeLocalStep(request.headers);
     if (!step || step.step !== expected) return null;
-    if (providerId !== undefined && step.providerId !== providerId) return null;
+    if (signInProviderId !== undefined && step.signInProviderId !== signInProviderId) return null;
     return step;
   }
 
@@ -339,12 +343,12 @@ export function createLocalAuthHandlers(
   /** A reset link for the account, mailed; a failure is logged, nobody waits for it. */
   async function sendResetLink(
     mailer: LinkMailer,
-    providerId: string,
+    signInProviderId: string,
     email: string,
   ): Promise<void> {
     const issued = await deps.signInAccounts.createLink({
       kind: 'reset',
-      providerId,
+      signInProviderId,
       email,
       createdBy: 'self',
     });
@@ -390,14 +394,14 @@ export function createLocalAuthHandlers(
   > {
     const guard = await guardMutation(request, deps, 'user');
     if (!guard.ok) return { ok: false, response: refusalResponse(guard, OPERATOR_REFUSALS) };
-    const local = await localProvider();
+    const local = await localSignInProvider();
     const signInAccountId = local ? signInAccountIdOf(guard.principal, local) : null;
     if (!signInAccountId) {
       const notice: Notice = {
         tone: 'danger',
         title: 'Not a sign-in account',
         lines: [
-          'You signed in through a provider that keeps your password and second factor; change them there.',
+          'You signed in through a sign-in provider that keeps your password and second factor; change them there.',
         ],
       };
       return {
@@ -410,16 +414,16 @@ export function createLocalAuthHandlers(
 
   return {
     proceed,
-    async passwordLogin(request, providerId) {
+    async passwordLogin(request, signInProviderId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
-      const provider = await localProvider(providerId);
-      if (!provider) return loginError('provider-unknown');
+      const signInProvider = await localSignInProvider(signInProviderId);
+      if (!signInProvider) return loginError('sign-in-provider-unknown');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const returnTo = safeReturnTo(rawField(form, RETURN_TO_PARAM), deps.publicUrl, '/');
       const check = await deps.signInAccounts.checkPassword(
-        provider.id,
+        signInProvider.id,
         rawField(form, 'email'),
         rawField(form, 'password'),
       );
@@ -430,8 +434,8 @@ export function createLocalAuthHandlers(
       try {
         return await proceed(
           request,
-          provider,
-          localIdentity(provider, check.signInAccount),
+          signInProvider,
+          localIdentity(signInProvider, check.signInAccount),
           returnTo,
         );
       } catch (err) {
@@ -439,10 +443,10 @@ export function createLocalAuthHandlers(
       }
     },
 
-    async secondFactorLogin(request, providerId) {
+    async secondFactorLogin(request, signInProviderId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
-      const step = await takeStep(request, providerId, 'second-factor');
+      const step = await takeStep(request, signInProviderId, 'second-factor');
       if (!step) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
@@ -462,7 +466,7 @@ export function createLocalAuthHandlers(
       if (!(await stillActive(step))) return loginError('account-deactivated');
       if (check.by === 'recovery-code') {
         logger.info('sign-in by recovery code', {
-          provider: step.providerId,
+          sign_in_provider: step.signInProviderId,
           left: check.recoveryCodesLeft,
         });
       }
@@ -473,10 +477,10 @@ export function createLocalAuthHandlers(
       ]);
     },
 
-    async enrolAtSignIn(request, providerId) {
+    async enrolAtSignIn(request, signInProviderId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
-      const step = await takeStep(request, providerId, 'enrol');
+      const step = await takeStep(request, signInProviderId, 'enrol');
       if (!step?.totpSecret) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
@@ -536,10 +540,15 @@ export function createLocalAuthHandlers(
         }
         throw err;
       }
-      const provider = await localProvider(signInAccount.provider);
-      if (!provider) return loginError('provider-unknown');
+      const signInProvider = await localSignInProvider(signInAccount.signInProvider);
+      if (!signInProvider) return loginError('sign-in-provider-unknown');
       try {
-        return await proceed(request, provider, localIdentity(provider, signInAccount), '/');
+        return await proceed(
+          request,
+          signInProvider,
+          localIdentity(signInProvider, signInAccount),
+          '/',
+        );
       } catch (err) {
         return failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
       }
@@ -573,17 +582,17 @@ export function createLocalAuthHandlers(
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const email = rawField(form, 'email');
-      const provider = await localProvider();
+      const signInProvider = await localSignInProvider();
       // One answer whatever the address, whether the instance sends mail or not: the
       // page said beforehand what to expect. A link is made only for an existing account
       // and only when a mail can carry it; nothing is ever shown here. The answer waits
       // for the same work either way, the lookup of the address: the link and its mail
       // are made after it (security audit 2026-10-31, L6), so their time tells nothing.
       const mailer = deps.mailer;
-      if (provider && mailer) {
-        const signInAccount = await deps.signInAccounts.signInAccountOf(provider.id, email);
+      if (signInProvider && mailer) {
+        const signInAccount = await deps.signInAccounts.signInAccountOf(signInProvider.id, email);
         if (signInAccount)
-          afterAnswer(() => sendResetLink(mailer, provider.id, signInAccount.email));
+          afterAnswer(() => sendResetLink(mailer, signInProvider.id, signInAccount.email));
       }
       return redirect(`${FORGOT_PASSWORD_PAGE}?${FORGOT_SENT_PARAM}=1`);
     },
@@ -595,7 +604,7 @@ export function createLocalAuthHandlers(
       const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, who.user.email);
       const step = await deps.sessions.createLocalStep({
         step: 'enrol',
-        providerId: who.providerId ?? '',
+        signInProviderId: who.signInProviderId ?? '',
         userId: who.user.id,
         login: { email: who.user.email, groups: [] },
         returnTo: SECURITY_PAGE,
@@ -682,7 +691,7 @@ export function createLocalAuthHandlers(
       if (!who.ok) return who.response;
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const local = await localProvider();
+      const local = await localSignInProvider();
       const current = rawField(form, 'current_password');
       const password = rawField(form, 'password');
       if (password !== rawField(form, 'password_again')) {

@@ -1,7 +1,7 @@
 # `@vaubaan/plugin-resend`
 
 Outbound email through [Resend](https://resend.com) as a Vaubaan Gateway
-provider plugin on the v5 SDK (`@vaubaan/plugin-sdk`). Transactional sends
+plugin on the v5 SDK (`@vaubaan/plugin-sdk`). Transactional sends
 classified by **who the email goes to**, segments and contacts, broadcast
 campaigns and sending domains — with **one resource per sending domain and
 one per segment**, so a mission can send from the staging domain freely and
@@ -11,8 +11,8 @@ approval.
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md);
 what the executor declines:
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
-Modelling handbook: [`docs/handbook/providers/resend.md`](../../docs/handbook/providers/resend.md).
-Provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
+Modelling handbook: [`docs/handbook/services/resend.md`](../../docs/handbook/services/resend.md).
+Service spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -56,10 +56,10 @@ a Full access key is named by its domains.
 page, at most 500 per kind) and returns:
 
 ```ts
-{ provider: 'resend', ref: 'notifications.acme.com', displayName: 'notifications.acme.com',
+{ service: 'resend', ref: 'notifications.acme.com', displayName: 'notifications.acme.com',
   metadata: { kind: 'domain', domain_id: 'd91c…', status: 'verified', region: 'eu-west-1',
               internal_domains: [], allowlist_domains: [], allowlist_addresses: [] } }
-{ provider: 'resend', ref: '7826…', displayName: 'Newsletter',
+{ service: 'resend', ref: '7826…', displayName: 'Newsletter',
   metadata: { kind: 'segment', segment_id: '7826…' } }
 ```
 

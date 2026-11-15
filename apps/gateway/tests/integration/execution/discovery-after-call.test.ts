@@ -23,7 +23,7 @@ import {
 const CREATE = 'depot.uncategorized-write';
 const READ = 'depot.read';
 
-const space = (ref: string): Resource => ({ provider: DEPOT, ref, displayName: ref });
+const space = (ref: string): Resource => ({ service: DEPOT, ref, displayName: ref });
 const SEEDED: readonly Resource[] = DEFAULT_SPACES.map((s) => ({
   ...space(s.ref),
   ...(s.env ? { env: s.env } : {}),

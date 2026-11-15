@@ -10,7 +10,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 
 /** `plugins/<name>` folders that hold a plugin: a `package.json`, a name not starting with `_`. */
 export function discoverPluginDirs(repoRoot: string): string[] {
@@ -40,9 +40,9 @@ function entryModuleOf(pkg: PackageJson, dir: string): string {
   return entry;
 }
 
-function isPlugin(value: unknown): value is ProviderPlugin {
+function isPlugin(value: unknown): value is ServicePlugin {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<ProviderPlugin>;
+  const candidate = value as Partial<ServicePlugin>;
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.version === 'string' &&
@@ -52,7 +52,7 @@ function isPlugin(value: unknown): value is ProviderPlugin {
 }
 
 /** Imports the plugin of a folder through its package entry and returns its declaration. */
-export async function importPlugin(repoRoot: string, dir: string): Promise<ProviderPlugin> {
+export async function importPlugin(repoRoot: string, dir: string): Promise<ServicePlugin> {
   const pkgPath = join(repoRoot, dir, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as PackageJson;
   const entry = entryModuleOf(pkg, dir);

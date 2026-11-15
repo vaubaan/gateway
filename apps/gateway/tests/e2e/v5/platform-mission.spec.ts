@@ -56,11 +56,11 @@ test('connect Vaubaan in one click, create the platform mission, and its key rea
     expect(tools).toContain('vaubaan__issue_mission');
     const listed = await agent.call('vaubaan__list_my_accounts', {});
     expect(listed.outcome).toBe('allowed');
-    if (listed.outcome === 'allowed') expect(listed.text).toContain('"provider": "vaubaan"');
+    if (listed.outcome === 'allowed') expect(listed.text).toContain('"service": "vaubaan"');
     // At Careful, issuing asks the person first.
     const asked = await agent.call('vaubaan__issue_mission', {
       name: 'Nothing yet',
-      accounts: [{ provider: 'github', trust_levels: { read: 'careful' } }],
+      accounts: [{ service: 'github', trust_levels: { read: 'careful' } }],
       period: { kind: 'one-off' },
       expires_at: null,
     });

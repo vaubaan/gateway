@@ -11,14 +11,14 @@
  *   - what a call creates joins the set the call was judged against;
  *   - the audit names the sets each call was charged on, and the counters agree with it.
  *
- * The fixture provider `twin` has a `copy` tool that names two resources in one call,
+ * The fixture service `twin` has a `copy` tool that names two resources in one call,
  * which the shared `depot` fixture has not.
  */
 import {
   createRegistry,
   definePlugin,
   jsonObjectsOf,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
@@ -51,7 +51,7 @@ const VECTOR = {
 } as const;
 
 /** Spaces `alpha`, `beta`, `gamma`; `copy` reads one and writes another; `fork` creates one. */
-function twinPlugin(): ProviderPlugin {
+function twinPlugin(): ServicePlugin {
   const tool = (name: string, description: string) => ({
     name: `${TWIN}__${name}`,
     description,
@@ -64,7 +64,7 @@ function twinPlugin(): ProviderPlugin {
     id: TWIN,
     displayName: 'Twin',
     version: '0.0.1',
-    description: 'Fixture provider of the resource sets tests.',
+    description: 'Fixture service of the resource sets tests.',
     tools: [
       tool('read', 'Read an item of a space.'),
       tool('copy', 'Copy an item from one space to another.'),
@@ -73,7 +73,7 @@ function twinPlugin(): ProviderPlugin {
     ],
     resourceCreatingTools: [`${TWIN}__fork`],
     dataModel: {
-      provider: TWIN,
+      service: TWIN,
       planes: [
         {
           slug: 'space',
@@ -102,7 +102,7 @@ function twinPlugin(): ProviderPlugin {
       ],
     },
     catalog: {
-      provider: TWIN,
+      service: TWIN,
       risks: [
         {
           id: READ,
@@ -154,7 +154,7 @@ function twinPlugin(): ProviderPlugin {
     },
     credential: apiKeyCredentialFixture([{ name: 'token', label: 'Token', secret: true }]),
     classify(name, args, resources) {
-      const refs = new Set(resources.filter((r) => r.provider === TWIN).map((r) => r.ref));
+      const refs = new Set(resources.filter((r) => r.service === TWIN).map((r) => r.ref));
       const known = (value: unknown): value is string =>
         typeof value === 'string' && refs.has(value);
       switch (name) {
@@ -193,7 +193,7 @@ function twinPlugin(): ProviderPlugin {
       return jsonObjectsOf(result).flatMap((answer) => {
         const created = answer.created as { ref?: unknown } | undefined;
         return typeof created?.ref === 'string'
-          ? [{ provider: TWIN, ref: created.ref, displayName: created.ref }]
+          ? [{ service: TWIN, ref: created.ref, displayName: created.ref }]
           : [];
       });
     },
@@ -215,7 +215,7 @@ describe('resource sets through the execution door', () => {
     });
     const { root, ada } = instance;
     twin = await root.store.accounts.create({
-      provider: TWIN,
+      service: TWIN,
       owner: { kind: 'user', id: ada.id },
       displayName: 'Twin main',
       credential: serializeSecret(depotSecret()),

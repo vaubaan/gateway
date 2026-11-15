@@ -1,9 +1,9 @@
 /**
- * Classifier of the `gmail` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `gmail` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * Pure : no IO, no credential, no `Date`. Gmail zones by **identity**, not by
  * containment : the risk of a read depends on the sender's domain, the risk
@@ -54,7 +54,7 @@ import {
 
 import { collectRecipients, parseBareAddress, type EmailAddress } from './address.ts';
 import { parseQ, type QParsed } from './q-parser.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 
 // ─── Zone names ────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ function toZoneOf(recipient: EmailAddress, md: GmailMailboxMetadata): ToZone {
 // ─── Slice helpers ─────────────────────────────────────────────────────────
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 const ident = (value: string): SliceSegment => ({ kind: 'ident', value });
@@ -442,7 +442,7 @@ function sensitiveLabelsReadBySearch(parsed: QParsed, md: GmailMailboxMetadata):
  * later decision).
  */
 export function selectMailbox(resources: readonly Resource[]): Resource | { denied: string } {
-  const mailboxes = resources.filter((r) => r.provider === PROVIDER_ID);
+  const mailboxes = resources.filter((r) => r.service === SERVICE_ID);
   if (mailboxes.length === 0) return { denied: 'no gmail mailbox is a resource of this mission.' };
   if (mailboxes.length > 1) {
     return { denied: 'ambiguous gmail target: this mission has several mailboxes.' };

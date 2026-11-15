@@ -379,12 +379,12 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(ines.getByRole('main')).not.toContainText('by hand');
   // …which also says the credential is erased: the page does not say it a second time.
   await expect(ines.getByTestId('account-disconnected')).toHaveCount(0);
-  await snap(ines, 'account-revoked-provider-grant');
+  await snap(ines, 'account-revoked-service-grant');
   // …and, on every later visit, by the page itself.
   await ines.goto(`/accounts/${accountId}`);
   await expect(ines.getByText('Account disconnected', { exact: true })).toHaveCount(0);
   await expect(ines.getByTestId('account-disconnected')).toBeVisible();
-  await expect(ines.getByTestId('provider-grant')).toContainText(/Delete the token at GitHub/);
+  await expect(ines.getByTestId('service-grant')).toContainText(/Delete the token at GitHub/);
   await expect(byHand).toHaveCount(1);
   // A disconnected account takes no owner act any more.
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toHaveCount(0);

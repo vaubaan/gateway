@@ -1,7 +1,7 @@
 /**
  * `/admin/identity-provider/new?kind=oidc|google|entra|github|local` — add a
- * sign-in provider. The address to register at the provider is shown first,
- * since the provider asks for it before it hands over a client id and secret.
+ * sign-in provider. The address to register at the sign-in provider is shown first,
+ * since the sign-in provider asks for it before it hands over a client id and secret.
  * Google and Entra ID are presets of OpenID Connect (`sign-in-presets.ts`): the
  * issuer or the tenant, the claim names and the admission rule filled in, and
  * the registration steps spelled out; what is saved is an `oidc` provider. A
@@ -22,7 +22,7 @@ import { Callout, CodeBlock, Hint, PageHeader, Section, Segmented } from '@/comp
 import { requireOperator } from '@/lib/auth/session';
 import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { DEFAULT_CLAIM_MAPPING, IDP_PAGE, NEW_SIGN_IN_PROVIDER_PAGE } from '@/server/auth';
-import { DEFAULT_LOCAL_PROVIDER_ID } from '@/server/config';
+import { DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID } from '@/server/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,12 +50,12 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
   const local = kind === 'local';
   const definition = preset ? SIGN_IN_PRESETS[preset] : null;
   const problems = ([] as string[]).concat(params.problem ?? []);
-  const taken = new Set((await root.auth.providers.views()).map((p) => p.id));
+  const taken = new Set((await root.auth.signInProviders.views()).map((p) => p.id));
   const suggested =
     github && !taken.has('github')
       ? 'github'
-      : local && !taken.has(DEFAULT_LOCAL_PROVIDER_ID)
-        ? DEFAULT_LOCAL_PROVIDER_ID
+      : local && !taken.has(DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID)
+        ? DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID
         : definition && !taken.has(definition.suggestedId)
           ? definition.suggestedId
           : '';
@@ -90,7 +90,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
       />
       <Section first>
         <Segmented
-          label="Kind of provider"
+          label="Kind of sign-in provider"
           value={choice}
           options={[
             { value: 'google', label: 'Google', href: `${NEW_SIGN_IN_PROVIDER_PAGE}?kind=google` },
@@ -150,7 +150,7 @@ export default async function NewSignInProviderPage({ searchParams }: Props) {
               <p className={styles.prose}>
                 {github
                   ? 'At GitHub, under Settings → Developer settings → OAuth Apps (of your organisation or your own account), register a new OAuth App with the callback address below, generate a client secret, and paste both here.'
-                  : 'At your provider, register a web application with the redirect address below and the scopes openid, profile and email; paste its client id and secret here. For GitHub, choose the GitHub kind above: it speaks OAuth, not OpenID Connect.'}
+                  : 'At your sign-in provider, register a web application with the redirect address below and the scopes openid, profile and email; paste its client id and secret here. For GitHub, choose the GitHub kind above: it speaks OAuth, not OpenID Connect.'}
               </p>
             )}
             <SignInProviderForm

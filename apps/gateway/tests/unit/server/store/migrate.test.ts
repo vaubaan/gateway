@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the thirty-six migrations 0001 to 0036 in the default directory', () => {
+  it('ships the thirty-seven migrations 0001 to 0037 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -145,6 +145,7 @@ describe('migration runner', () => {
       [34, 'resource_hidden_edited'],
       [35, 'platform_management_plugin'],
       [36, 'one_word_per_thing'],
+      [37, 'provider_is_service'],
     ]);
   });
 });
@@ -353,7 +354,7 @@ describe('migration 0029: a mission connection is partitioned into resource sets
     run(line, 'github.code-read', 10, 'auto');
     run(line, 'github.merge-protected', 2, 'approval');
     run(line, 'supabase[staging].row-write', 3, 'auto');
-    // A line of a provider the mission holds no account of: no call could reach it.
+    // A line of a service the mission holds no account of: no call could reach it.
     run(line, 'fly.app-read', 1, 'auto');
     run("INSERT INTO sessions (id, mission_id, created_at) VALUES ('s', 'm', ?)", AT);
     const counter = `INSERT INTO session_counters (session_id, risk_id, period_start, consumed)

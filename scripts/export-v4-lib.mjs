@@ -15,12 +15,12 @@ export const BUNDLE_FORMAT = 'vaubaan-v4-export';
 export const BUNDLE_VERSION = 1;
 
 /**
- * v4 providers whose stored token is exported, decrypted. Every other v4
+ * v4 services whose stored token is exported, decrypted. Every other v4
  * secret (GitHub App installation, Railway and Supabase OAuth grants) is never
- * read: the SQL selects no ciphertext for them. Mirrors PASTED_KEY_PROVIDERS of
- * the importer, which refuses a secret for any other provider.
+ * read: the SQL selects no ciphertext for them. Mirrors PASTED_KEY_SERVICES of
+ * the importer, which refuses a secret for any other service.
  */
-export const PASTED_KEY_PROVIDERS = Object.freeze(['cloudflare-dns', 'vercel']);
+export const PASTED_KEY_SERVICES = Object.freeze(['cloudflare-dns', 'vercel']);
 
 /** Keys the exporter reads from the repository's `.env`. */
 export const ENV_KEYS = Object.freeze([
@@ -162,7 +162,7 @@ export function requireEnv(env) {
 }
 
 /**
- * The v4 decryption (packages/web/src/lib/crypto/provider-secrets.ts on the
+ * The v4 decryption (packages/web/src/lib/crypto/service-secrets.ts on the
  * v4-final tag): XChaCha20-Poly1305 (IETF), a per-organization key derived
  * from the master key with `crypto_kdf_derive_from_key` (context `vaubaan_`,
  * subkey index = the first 31 bits of SHA-256(org id)), associated data = the
@@ -211,26 +211,26 @@ function bytesOf(base64) {
 /**
  * The one read of the v4 database: a single statement in a read-only session
  * that returns one JSON document. `:'org'` and `:'hosts'` are psql variables
- * (quoted by psql as literals); only the tokens of PASTED_KEY_PROVIDERS are
+ * (quoted by psql as literals); only the tokens of PASTED_KEY_SERVICES are
  * selected as ciphertext.
  */
 export function exportSql() {
-  const pasted = PASTED_KEY_PROVIDERS.map((p) => `'${p}'`).join(', ');
+  const pasted = PASTED_KEY_SERVICES.map((p) => `'${p}'`).join(', ');
   return `set default_transaction_read_only = on;
 with org as (select id, slug, name from organizations where slug = :'org'),
      prj as (select p.id, p.slug, p.name from projects p join org on p.organization_id = org.id)
 select json_build_object(
   'organization', (select row_to_json(org) from org),
   'projects', (select coalesce(json_agg(prj order by prj.slug), '[]'::json) from prj),
-  'accounts', (select coalesce(json_agg(a order by a.provider), '[]'::json) from (
-      select pa.id, pa.provider, pa.status, pa.team_id, pa.installation_id,
-             case when pa.provider in (${pasted})
+  'accounts', (select coalesce(json_agg(a order by a.service), '[]'::json) from (
+      select pa.id, pa.service, pa.status, pa.team_id, pa.installation_id,
+             case when pa.service in (${pasted})
                   then encode(pa.access_token_encrypted, 'base64') end as access_token_sealed
-      from provider_admins pa join org on pa.organization_id = org.id) a),
+      from service_admins pa join org on pa.organization_id = org.id) a),
   'bindings', (select coalesce(json_agg(b), '[]'::json) from (
-      select pb.project_id, pb.provider, pb.resource_ref, pb.display_name, pb.environment
-      from provider_bindings pb join prj on pb.project_id = prj.id
-      where pb.provider <> 'bash') b),
+      select pb.project_id, pb.service, pb.resource_ref, pb.display_name, pb.environment
+      from service_bindings pb join prj on pb.project_id = prj.id
+      where pb.service <> 'bash') b),
   'stripe', (select coalesce(json_agg(s), '[]'::json) from (
       select sb.project_id, sb.account_id,
              encode(sb.test_key_encrypted, 'base64') as test_key_sealed,
@@ -265,9 +265,9 @@ select json_build_object(
  * @typedef {{ decrypt(orgId: string, sealed: Uint8Array): string }} Decryptor
  * @typedef {{ org: string, sshHosts: string[], sshHostKeys: Map<string, string> }} BundleOptions
  * @typedef {{ id: string, slug: string, name: string }} RawNamed
- * @typedef {{ id: string, provider: string, status: string, team_id: string | null,
+ * @typedef {{ id: string, service: string, status: string, team_id: string | null,
  *   installation_id: string | null, access_token_sealed: string | null }} RawAccount
- * @typedef {{ project_id: string, provider: string, resource_ref: string,
+ * @typedef {{ project_id: string, service: string, resource_ref: string,
  *   display_name: string | null, environment: string | null }} RawBinding
  * @typedef {{ project_id: string, account_id: string, test_key_sealed: string | null,
  *   live_key_sealed: string | null }} RawStripe
@@ -362,12 +362,12 @@ export function buildBundle(raw, decryptor, options, now) {
 
   const accounts = raw.accounts.map((a) => ({
     id: a.id,
-    provider: a.provider,
+    service: a.service,
     status: a.status,
     team_id: a.team_id ?? null,
     installation_id: a.installation_id ?? null,
     access_token:
-      PASTED_KEY_PROVIDERS.includes(a.provider) && a.access_token_sealed
+      PASTED_KEY_SERVICES.includes(a.service) && a.access_token_sealed
         ? decryptor.decrypt(org.id, bytesOf(a.access_token_sealed))
         : null,
   }));
@@ -389,7 +389,7 @@ export function buildBundle(raw, decryptor, options, now) {
     accounts,
     bindings: raw.bindings.map((b) => ({
       project_id: b.project_id,
-      provider: b.provider,
+      service: b.service,
       resource_ref: b.resource_ref,
       display_name: b.display_name ?? null,
       environment: b.environment ?? null,
@@ -478,7 +478,7 @@ function privateKeyOf(row, decryptor) {
  * @param {ReturnType<typeof buildBundle>} bundle
  */
 export function summaryOf(bundle) {
-  const tokens = bundle.accounts.filter((a) => a.access_token !== null).map((a) => a.provider);
+  const tokens = bundle.accounts.filter((a) => a.access_token !== null).map((a) => a.service);
   return [
     `export-v4: organization '${bundle.organization.slug}': ${bundle.projects.length} project(s), ` +
       `${bundle.missions.length} working token(s), ${bundle.bindings.length} binding row(s)`,
@@ -486,7 +486,7 @@ export function summaryOf(bundle) {
     `export-v4: accounts left to connect by hand: ${
       bundle.accounts
         .filter((a) => a.access_token === null)
-        .map((a) => a.provider)
+        .map((a) => a.service)
         .join(', ') || 'none'
     }`,
   ].join('\n');

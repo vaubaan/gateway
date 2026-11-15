@@ -23,7 +23,7 @@ last_reviewed: 2026-11-14
 
 ## Scope
 
-- Vitest, headless, one process: the real composition root on a `:memory:` store with the shipped plugins, a simulated IdP and mocked providers. No browser, no database server, no real provider (spec [vaubaan-gateway](../spec/vaubaan-gateway.md#10-tests) §10 "Out of scope").
+- Vitest, headless, one process: the real composition root on a `:memory:` store with the shipped plugins, a simulated IdP and mocked services. No browser, no database server, no real service (spec [vaubaan-gateway](../spec/vaubaan-gateway.md#10-tests) §10 "Out of scope").
 - Unit, integration and structural suites all run here (`npm run test`, part of `npm run ci`); what spec §10 requires is found by the `describe`/`it` titles, not by a map in this file.
 - Browser journeys, the container and the manual acceptance run are in [e2e-tests.md](./e2e-tests.md). UI rendering is static markup only here; looks are judged on `/design`.
 
@@ -42,9 +42,9 @@ last_reviewed: 2026-11-14
 - Unit tests of a plugin live in `plugins/<id>/tests/unit/`; gateway integration tests in `apps/gateway/tests/integration/<subsystem>/`; tests that read the repository's own files (docs, Dockerfiles, catalogs, source) in `apps/gateway/tests/unit/structural/`.
 - No module state survives a file: each test builds its own root on its own `:memory:` store, so the `shared` project's order never matters.
 - A file that replaces a module (`vi.mock`) lives under `ISOLATED_TESTS`, otherwise the mock applies or not by the order files ran in; `structural/module-mocks-isolated.test.ts` refuses a `vi.mock` anywhere else (invariant `module-mocks-isolated` of `manifest.ts`).
-- No test reaches a provider or the network; any fetch the fake does not know rejects. Sockets are opened on loopback only: `plugins/ssh/tests/unit/host-key-pinning.test.ts` (an in-process ssh server), the fake broker, and `apps/oauth-broker/tests/` (its two listeners, a fake provider, a fake Confidential Space TEE server on a Unix socket in a temporary directory).
+- No test reaches a service or the network; any fetch the fake does not know rejects. Sockets are opened on loopback only: `plugins/ssh/tests/unit/host-key-pinning.test.ts` (an in-process ssh server), the fake broker, and `apps/oauth-broker/tests/` (its two listeners, a fake OAuth provider, a fake Confidential Space TEE server on a Unix socket in a temporary directory).
 - Every plugin directory carries an identifier suite running hostile literals through classifier and executor (`assertIdentifiersRefused` of the testing kit), enforced structurally.
-- Demo mode stays out of the application: its IdP, fake providers and seed live in `apps/gateway/tests/demo/` only; `demo-safety.test.ts` checks that no route, no file under `src/` and nothing in the standalone build names `/__demo`, and that `assertDemoAllowed` refuses a production configuration. Tests of `tests/integration/demo/` that spawn the demo need a build.
+- Demo mode stays out of the application: its IdP, fake services and seed live in `apps/gateway/tests/demo/` only; `demo-safety.test.ts` checks that no route, no file under `src/` and nothing in the standalone build names `/__demo`, and that `assertDemoAllowed` refuses a production configuration. Tests of `tests/integration/demo/` that spawn the demo need a build.
 - Structural invariants are indexed in `apps/gateway/tests/unit/structural/manifest.ts` (id, statement, source, proofs: file + test titles). `index.test.ts` fails when an invariant has no proof, a proof file or title is gone or would not run (`it.skip`, a comment), a test file of the folder belongs to no invariant, a spec §10 "Structural" bullet has no invariant or the reverse, or [threat-model](../handbook/threat-model.md) cites a missing invariant or file. A new structural test is added to the manifest in the same change.
 - Tests that read docs parse exact shapes: the configuration keys table, the refusal table of the `vaubaan` plugin's handbook, spec §10 bullets, threat-model `[inv: id]` markers, the base-image refresh procedure. Restructure those docs with their tests running.
 

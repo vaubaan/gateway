@@ -1,7 +1,7 @@
 /**
  * Credential broker — the one place an account's stored credential becomes
  * the decrypted `CredentialSecret` a plugin receives, and the one place it is
- * refreshed (spec §2.3 "expired: the provider rejected the credential and
+ * refreshed (spec §2.3 "expired: the service rejected the credential and
  * refresh failed"; §2.4).
  *
  * Callers (resource discovery here, the execution door) use it as
@@ -19,7 +19,7 @@
  * amended): the host performs the standard `refresh_token` grant from the spec
  * with the OAuth client the gateway registered at the service
  * (`OAuth2Clients`), rotates the refresh token and
- * seals the result. A registered client the provider rejects (`invalid_client`)
+ * seals the result. A registered client the service rejects (`invalid_client`)
  * is forgotten, so the reconnect registers a new one. A plugin's own `refresh()` is called instead only when it
  * declares one (non-standard flow). The OAuth client secret never reaches a
  * plugin.
@@ -31,7 +31,7 @@
  * credential beside the secret (`BrokerGrant`) and never reaches the plugin;
  * the broker keeps none. A broker that is down, not attested or refuses the
  * call is a `OAuthBrokerUnavailableError`, which leaves the account as it
- * is; only `invalid_grant` (the provider refused the refresh token) turns it
+ * is; only `invalid_grant` (the service refused the refresh token) turns it
  * `expired`.
  */
 import { isUnavailableAccountStatus } from '@vaubaan/gateway-core';
@@ -42,21 +42,21 @@ import {
   type CredentialSecret,
   type OAuth2Secret,
   type PluginRegistry,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
 import type { AccountsRepo } from '../store';
 import type { Clock } from '../store/clock';
-import type { AccountRecord, ProviderGrantOutcome } from '../store/types';
+import type { AccountRecord, ServiceGrantOutcome } from '../store/types';
 import { parseStoredCredential, serializeSecret, type BrokerGrant } from './credential-codec';
 import {
   AccountUnavailableError,
   errorMessage,
   OAuthBrokerUnavailableError,
-  ProviderUnreachableError,
+  ServiceUnreachableError,
 } from './errors';
-import { providerFailureReason } from './failure-reason';
+import { serviceFailureReason } from './failure-reason';
 import {
   OAuth2TokenError,
   refreshGrant,
@@ -76,7 +76,7 @@ const HTTP_UNAUTHORIZED = 401;
 
 export interface ResolvedCredential {
   readonly account: AccountRecord;
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   /** Decrypted, in memory only; the caller drops it after the upstream call. */
   readonly credential: CredentialSecret;
   /**
@@ -101,7 +101,7 @@ export interface CredentialBrokerDeps {
 }
 
 /**
- * Can the gateway withdraw the provider-side grant of an account to this
+ * Can the gateway withdraw the service-side grant of an account to this
  * plugin made with this kind of credential (the primary kind when omitted)?
  * The one rule, for the broker and for the page that says beforehand what a
  * revocation will do: the plugin's own `revoke` hook, or the declarative
@@ -109,7 +109,7 @@ export interface CredentialBrokerDeps {
  * the plugin now declares (a kind that left the contract) withdraws nothing.
  */
 export function canWithdraw(
-  plugin: Pick<ProviderPlugin, 'revoke' | 'credential'>,
+  plugin: Pick<ServicePlugin, 'revoke' | 'credential'>,
   kind: string = plugin.credential.kind,
 ): boolean {
   if (kind !== plugin.credential.kind) return false;
@@ -120,17 +120,17 @@ export function canWithdraw(
 }
 
 /** The plugin's `refresh` override serves its primary way of connecting only. */
-function ownRefreshApplies(plugin: ProviderPlugin, credential: CredentialSecret): boolean {
+function ownRefreshApplies(plugin: ServicePlugin, credential: CredentialSecret): boolean {
   return plugin.refresh !== undefined && credential.kind === plugin.credential.kind;
 }
 
 /**
- * How long a withdrawal may take: the provider's revocation request, or —
+ * How long a withdrawal may take: the service's revocation request, or —
  * through an attested OAuth broker — an attestation and the call
  * (`ATTESTED_CALL_BUDGET_MS`), so that a broker that must be attested first
  * is not cut short and recorded `failed` while it is still answering.
  */
-function revocationDelayMs(plugin: ProviderPlugin): number {
+function revocationDelayMs(plugin: ServicePlugin): number {
   const spec = plugin.credential;
   const brokered = spec.kind === 'oauth2' && isBrokeredSpec(spec) && !plugin.revoke;
   return brokered ? ATTESTED_CALL_BUDGET_MS : REVOCATION_REQUEST_TIMEOUT_MS;
@@ -154,7 +154,7 @@ const REVOCATION_GRACE_MS = 1_000;
 
 class RevocationTimeout extends Error {
   constructor() {
-    super('the provider-side revocation did not complete in time');
+    super('the service-side revocation did not complete in time');
     this.name = 'RevocationTimeout';
   }
 }
@@ -185,11 +185,11 @@ export class CredentialBroker {
   }
 
   /**
-   * Forces a refresh — what a caller does after the provider answered 401/403.
+   * Forces a refresh — what a caller does after the service answered 401/403.
    * A credential that cannot be refreshed (api key, ssh key, oauth2 without a
    * refresh token) or whose refresh is rejected turns the account
-   * `expired` and throws `UpstreamAuthError`. A provider that is merely
-   * unreachable throws `ProviderUnreachableError` and changes nothing.
+   * `expired` and throws `UpstreamAuthError`. A service that is merely
+   * unreachable throws `ServiceUnreachableError` and changes nothing.
    */
   refresh(accountId: string): Promise<ResolvedCredential> {
     const inFlight = this.refreshing.get(accountId);
@@ -204,7 +204,7 @@ export class CredentialBroker {
   /**
    * The stored credential of an account that is about to be revoked, exactly
    * as it is: no refresh, and whatever the status (an `expired` account
-   * still holds the refresh token the provider's revocation endpoint wants).
+   * still holds the refresh token the service's revocation endpoint wants).
    * `null` when there is nothing to present: no such account, a plugin that
    * is no longer registered, no stored credential, or one that cannot be read.
    * Never throws: the local revocation must not depend on it.
@@ -213,14 +213,14 @@ export class CredentialBroker {
     try {
       const account = await this.deps.accounts.getById(accountId);
       if (!account) return null;
-      const registered = this.deps.registry.get(account.provider);
+      const registered = this.deps.registry.get(account.service);
       if (!registered) return null;
       const sealed = await this.deps.accounts.getCredential(accountId);
       if (sealed === null) return null;
       const { secret, brokerGrant } = parseStoredCredential(sealed);
       return { account, plugin: registered.plugin, credential: secret, brokerGrant };
     } catch (err) {
-      this.deps.logger.warn('credential not readable for the provider-side revocation', {
+      this.deps.logger.warn('credential not readable for the service-side revocation', {
         account_id: accountId,
         error_class: err instanceof Error ? err.name : typeof err,
       });
@@ -229,30 +229,30 @@ export class CredentialBroker {
   }
 
   /**
-   * Asks the provider to withdraw the grant of an account that was just
+   * Asks the service to withdraw the grant of an account that was just
    * revoked here (spec §2.3), with the credential `forRevocation` read before
    * the store erased it. Never throws and never takes longer than
    * `REVOCATION_REQUEST_TIMEOUT_MS` — `ATTESTED_CALL_BUDGET_MS` through an
    * OAuth broker (an attestation, then the call): the answer is one of three
    * facts.
    *
-   *   `revoked`  the provider confirmed (the plugin's `revoke` resolved, or
+   *   `revoked`  the service confirmed (the plugin's `revoke` resolved, or
    *              the endpoint of `credential.revocation` answered 2xx);
    *   `manual`   nothing to ask: the plugin declares no way to withdraw, or
    *              the stored credential holds no token the endpoint accepts;
    *   `failed`   there is a way and it did not confirm: refused, unreachable,
    *              too slow, or the credential could not be read.
    */
-  async withdrawAtProvider(
-    account: Pick<AccountRecord, 'id' | 'provider'>,
+  async withdrawAtService(
+    account: Pick<AccountRecord, 'id' | 'service'>,
     held: ResolvedCredential | null,
-  ): Promise<ProviderGrantOutcome> {
-    const plugin = held?.plugin ?? this.deps.registry.get(account.provider)?.plugin;
+  ): Promise<ServiceGrantOutcome> {
+    const plugin = held?.plugin ?? this.deps.registry.get(account.service)?.plugin;
     const kind = held?.credential.kind ?? plugin?.credential.kind;
     if (!plugin || !kind || !canWithdraw(plugin, kind)) return 'manual';
-    const log = { account_id: account.id, provider: plugin.id };
+    const log = { account_id: account.id, service: plugin.id };
     if (held === null) {
-      this.deps.logger.warn('provider grant not withdrawn: no readable credential', log);
+      this.deps.logger.warn('service grant not withdrawn: no readable credential', log);
       return 'failed';
     }
     try {
@@ -261,21 +261,21 @@ export class CredentialBroker {
         revocationDelayMs(plugin),
       );
       if (outcome.outcome === 'revoked') {
-        this.deps.logger.info('provider grant withdrawn', log);
+        this.deps.logger.info('service grant withdrawn', log);
         return 'revoked';
       }
       if (outcome.outcome === 'no-token') {
-        this.deps.logger.info('provider grant not withdrawn: no token the provider accepts', log);
+        this.deps.logger.info('service grant not withdrawn: no token the service accepts', log);
         return 'manual';
       }
-      this.deps.logger.warn('provider grant not withdrawn', {
+      this.deps.logger.warn('service grant not withdrawn', {
         ...log,
         upstream_status: outcome.status,
         detail: outcome.detail,
       });
       return 'failed';
     } catch (err) {
-      this.deps.logger.warn('provider grant not withdrawn', {
+      this.deps.logger.warn('service grant not withdrawn', {
         ...log,
         error_class: err instanceof Error ? err.name : typeof err,
       });
@@ -285,7 +285,7 @@ export class CredentialBroker {
 
   /** The plugin's own `revoke`, else the declared OAuth revocation request. */
   private async withdraw(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     held: ResolvedCredential,
   ): Promise<RevocationAttempt> {
     if (plugin.revoke && held.credential.kind === plugin.credential.kind) {
@@ -306,7 +306,7 @@ export class CredentialBroker {
 
   /** `POST /revoke` with the refresh token, through the broker the account was made with. */
   private async withdrawAtBroker(
-    provider: string,
+    brokerProvider: string,
     grant: BrokerGrant | null,
   ): Promise<RevocationAttempt> {
     if (grant === null) return { outcome: 'no-token' };
@@ -319,7 +319,7 @@ export class CredentialBroker {
       };
     }
     try {
-      await broker.revoke(provider, grant.refreshToken);
+      await broker.revoke(brokerProvider, grant.refreshToken);
       return { outcome: 'revoked' };
     } catch (err) {
       if (!(err instanceof OAuthBrokerError)) throw err;
@@ -347,7 +347,7 @@ export class CredentialBroker {
     if (isUnavailableAccountStatus(account.status)) {
       throw new AccountUnavailableError(accountId, account.status);
     }
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     if (!registered) throw new AccountUnavailableError(accountId, 'missing');
     const sealed = await this.deps.accounts.getCredential(accountId);
     if (sealed === null) throw new AccountUnavailableError(accountId, account.status);
@@ -385,31 +385,31 @@ export class CredentialBroker {
     try {
       next = await this.obtain(current);
     } catch (err) {
-      // Only a rejection by the provider ends the account; an unreachable provider,
+      // Only a rejection by the service ends the account; an unreachable service,
       // a missing app configuration or a bug leaves its status alone for the next attempt.
       if (!isUpstreamAuthError(err)) {
-        if (err instanceof ProviderUnreachableError) {
+        if (err instanceof ServiceUnreachableError) {
           if (err instanceof OAuthBrokerUnavailableError) {
             this.deps.logger.warn('credential not refreshed: the OAuth broker failed', {
               account_id: accountId,
-              provider: plugin.id,
+              service: plugin.id,
               broker: err.broker,
               failure: err.message,
             });
           }
           throw err;
         }
-        throw new ProviderUnreachableError(
-          `${plugin.displayName}: the credential could not be refreshed (${providerFailureReason(err)})`,
+        throw new ServiceUnreachableError(
+          `${plugin.displayName}: the credential could not be refreshed (${serviceFailureReason(err)})`,
         );
       }
       const status = err.upstreamStatus;
       const expired = await this.deps.accounts.markExpired(accountId);
       this.deps.logger.warn('credential refresh rejected', {
         account_id: accountId,
-        provider: plugin.id,
+        service: plugin.id,
         marked_expired: expired,
-        failure: providerFailureReason(err),
+        failure: serviceFailureReason(err),
       });
       // Only the call that made the transition tells the owners: once, after the write.
       if (expired) this.deps.notifications?.accountNeedsReconnecting(accountId);
@@ -425,27 +425,27 @@ export class CredentialBroker {
       expiresAt,
     );
     if (!written) {
-      // Revoked (or expired by another path) while the provider was answering.
+      // Revoked (or expired by another path) while the service was answering.
       const now = await this.deps.accounts.getById(accountId);
       throw new AccountUnavailableError(accountId, now?.status ?? 'missing');
     }
     this.deps.logger.info('credential refreshed', {
       account_id: accountId,
-      provider: plugin.id,
+      service: plugin.id,
       expires_at: expiresAt,
     });
     return this.load(accountId);
   }
 
   private obtainFromBroker(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     credential: OAuth2Secret,
     grant: BrokerGrant | null,
   ): Promise<OAuth2Secret> {
     return refreshAtBroker(this.deps.brokers, plugin, credential, grant);
   }
 
-  /** A fresh secret, or `UpstreamAuthError` (rejected) / `ProviderUnreachableError` (transient). */
+  /** A fresh secret, or `UpstreamAuthError` (rejected) / `ServiceUnreachableError` (transient). */
   private async obtain(current: ResolvedCredential): Promise<CredentialSecret> {
     const { plugin, credential } = current;
     if (plugin.refresh && ownRefreshApplies(plugin, credential)) {
@@ -468,7 +468,7 @@ export class CredentialBroker {
       credential.kind !== 'oauth2'
     ) {
       throw new UpstreamAuthError(
-        `a '${credential.kind}' credential cannot be refreshed; reconnect the provider`,
+        `a '${credential.kind}' credential cannot be refreshed; reconnect the service`,
         HTTP_UNAUTHORIZED,
       );
     }
@@ -476,7 +476,7 @@ export class CredentialBroker {
     try {
       client = await this.deps.clients.forTokenRequest(plugin, spec);
     } catch (err) {
-      // The registered client was forgotten after the provider rejected it: the grant
+      // The registered client was forgotten after the service rejected it: the grant
       // of this account belonged to it and can never be refreshed again.
       if (err instanceof OAuth2ClientMissing) {
         throw new UpstreamAuthError(
@@ -496,7 +496,7 @@ export class CredentialBroker {
         if (err.oauthError === 'invalid_client') {
           await this.deps.clients.rejected(plugin, spec, client.clientId);
         }
-        if (!err.rejected) throw new ProviderUnreachableError(err.message);
+        if (!err.rejected) throw new ServiceUnreachableError(err.message);
         throw new UpstreamAuthError(err.message, err.status || HTTP_UNAUTHORIZED);
       }
       throw err;
@@ -507,7 +507,7 @@ export class CredentialBroker {
 /** The refresh of a brokered account, for `CredentialBroker.obtain`. */
 async function refreshAtBroker(
   brokers: Pick<OAuthBrokers, 'byName'>,
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   credential: OAuth2Secret,
   grant: BrokerGrant | null,
 ): Promise<OAuth2Secret> {
@@ -540,7 +540,7 @@ async function refreshAtBroker(
     };
   } catch (err) {
     if (!(err instanceof OAuthBrokerError)) throw err;
-    // Only the provider's refusal of the refresh token (invalid_grant) ends the account.
+    // Only the service's refusal of the refresh token (invalid_grant) ends the account.
     if (err.grantGone) throw new UpstreamAuthError(err.message, err.status || HTTP_UNAUTHORIZED);
     throw new OAuthBrokerUnavailableError(grant.broker, err.message);
   }

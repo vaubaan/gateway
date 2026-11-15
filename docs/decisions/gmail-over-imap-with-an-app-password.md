@@ -33,7 +33,7 @@ either `clientRegistration` or `broker`
   zone, in no preset; a refused send opens neither an IMAP nor an SMTP connection.
 - Gmail files the sent copy in Sent itself; the plugin never appends one. Folders are found by
   SPECIAL-USE, never by localized name. Tools, limits and traps: handbook
-  [providers/gmail](../handbook/providers/gmail.md).
+  [services/gmail](../handbook/services/gmail.md).
 
 ## Rejected alternatives
 

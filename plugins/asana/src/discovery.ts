@@ -1,8 +1,8 @@
 /**
- * Resource discovery of the `asana` provider : one resource per project the
+ * Resource discovery of the `asana` service : one resource per project the
  * account can see, in every workspace it belongs to.
  *
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * `GET /users/me` gives the workspaces, then
  * `GET /workspaces/{gid}/projects?archived=false` is read page by page
@@ -23,7 +23,7 @@ import {
 
 import { getObject, isDataList, nextOffsetOf, request, type Json } from './api.ts';
 import { asanaGid, offsetToken } from './ids.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /** Most projects one account exposes, all workspaces together. */
 export const MAX_PROJECTS = 500;
@@ -56,7 +56,7 @@ function projectResource(project: unknown, workspace: Workspace): Resource | nul
   const team =
     isRecord(project.team) && typeof project.team.name === 'string' ? project.team.name : null;
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: gid,
     displayName: `${team ?? workspace.name} / ${name}`,
     metadata: {
@@ -88,7 +88,7 @@ export async function discoverAsanaResources(ctx: AccountContext): Promise<reado
       }
       if (found.length > MAX_PROJECTS) {
         throw new Error(
-          `${PROVIDER_ID}: this account sees more than ${MAX_PROJECTS} projects; connect an account that sees fewer`,
+          `${SERVICE_ID}: this account sees more than ${MAX_PROJECTS} projects; connect an account that sees fewer`,
         );
       }
       const next = nextOffsetOf(page);

@@ -2,7 +2,7 @@
  * Strict e-mail address parsing for the `outlook` classifier — the rules of
  * `plugins/gmail/src/address.ts` (plugins do not import each other).
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * The zone of a read, a draft or a send is decided from addresses, so an
  * address is **parsed, never searched for**: a value is one whole address or

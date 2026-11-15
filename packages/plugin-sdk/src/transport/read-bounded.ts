@@ -1,5 +1,5 @@
 /**
- * Read a provider's answer without trusting its size : a declared
+ * Read a service's answer without trusting its size : a declared
  * `content-length` above the bound is refused before a byte is read, and a
  * body without one (chunked, or lying) is cut as soon as it passes the bound.
  * Either way the body is cancelled, so the connection is released.
@@ -9,7 +9,7 @@ import { UpstreamAnswerTooLarge } from './errors.ts';
 
 /**
  * The bound of `httpJson` and the MCP client when the plugin names none :
- * 10 MB, well above a page of any shipped provider's API, well below what
+ * 10 MB, well above a page of any shipped service's API, well below what
  * would hurt the gateway's memory.
  */
 export const DEFAULT_MAX_ANSWER_BYTES = 10_000_000;

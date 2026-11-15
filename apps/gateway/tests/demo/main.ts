@@ -1,6 +1,6 @@
 /**
  * `npm run demo` — the whole web interface in a normal browser, without an
- * OIDC client or a provider app to register (handbook demo-mode).
+ * OIDC client or a service app to register (handbook demo-mode).
  *
  *   DEMO_PORT=<port>      listen on another port (default 3210)
  *   DEMO_KEEP=1           keep the SQLite file and the log on exit
@@ -32,7 +32,7 @@ const say = (line: string): void => void process.stdout.write(`${line}\n`);
  * The last line of defence of "no data leaves this machine": whatever in this
  * process reaches for the global `fetch` towards another host is refused, and
  * says so. The instance's own outbound calls never get here — they are routed
- * to the simulated providers and the demo IdP by the composition root.
+ * to the simulated services and the demo IdP by the composition root.
  */
 function refuseNonLoopbackFetch(): void {
   const original = globalThis.fetch;

@@ -145,7 +145,7 @@ describe('vaubaan plugin — hard deny, on the object graph of the real root', (
 
   it('the catalog port is data: ids, labels and macro-actions of every shipped plugin, and no plugin', () => {
     const catalog = vaubaanCatalogOf(root.registry);
-    expect([...catalog.providers()]).toEqual([...root.registry.ids]);
+    expect([...catalog.services()]).toEqual([...root.registry.ids]);
     const reached = reachableFrom(catalog.get('github'));
     for (const id of root.registry.ids) {
       expect(reached.has(root.registry.require(id).plugin), id).toBe(false);

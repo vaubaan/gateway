@@ -8,7 +8,7 @@ import {
 import { currentAuthority } from '../auth';
 import { findActiveUserByEmail } from '../authority';
 import { GROUP_NAME_MAX_LENGTH } from './service';
-import { saveTestOidcProvider } from '../../../tests/support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../../tests/support/auth/testing';
 
 const ADMIN_GROUP = 'gateway-admins';
 
@@ -65,8 +65,8 @@ describe('GroupService — local groups kept by the operator', () => {
 
     it('never makes an operator of a member of a local group, whatever its name', async () => {
       const { store } = rig.root;
-      // The provider whose group the rule names.
-      await saveTestOidcProvider(store.config, {
+      // The sign-in provider whose group the rule names.
+      await saveTestOidcSignInProvider(store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
@@ -81,7 +81,7 @@ describe('GroupService — local groups kept by the operator', () => {
       });
       // The same name claimed by the IdP is what the rule means.
       store.db
-        .prepare("UPDATE groups SET source = 'idp', provider = 'idp' WHERE id = ?")
+        .prepare("UPDATE groups SET source = 'idp', sign_in_provider = 'idp' WHERE id = ?")
         .run(local.id);
       expect((await currentAuthority(store, rig.bob, rule)).isOperator).toBe(true);
     });

@@ -1,9 +1,9 @@
 /**
- * Classifier of the `upstash-redis` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `upstash-redis` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/upstash-redis.md.
+ * Handbook : docs/handbook/services/upstash-redis.md.
  *
  * Pure : no IO, no credential, no `Date`. A dedicated tool maps to exactly
  * one slice ; an unknown tool, a database the mission does not hold, or an
@@ -56,7 +56,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { ACCOUNT_TOOL_NAMES, DATA_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 /**
@@ -591,7 +591,7 @@ const KEY_SPACE_READS: ReadonlySet<string> = new Set([TOOL.keys, TOOL.scan, TOOL
 const DATA_WRITES: ReadonlySet<string> = new Set([TOOL.set, TOOL.hset, TOOL.lpush, TOOL.sadd]);
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -643,7 +643,7 @@ export function resolveDatabase(
   resources: readonly Resource[],
   required: boolean,
 ): { ref: string | null } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   const raw = databaseArg(args);
   if (raw !== undefined) {
     const explicit = pathIdent(raw);

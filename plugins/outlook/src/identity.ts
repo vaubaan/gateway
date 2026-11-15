@@ -1,21 +1,21 @@
 /**
- * Identity of the `outlook` provider — the one place its ids and Microsoft
+ * Identity of the `outlook` service — the one place its ids and Microsoft
  * Graph's own names are written.
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  * ADR      : docs/decisions/outlook-through-the-oauth-broker-microsoft-provider.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. The tool prefix is the
  * SDK's rule (`toolPrefixFor`): `outlook__`.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-export const PROVIDER_ID = 'outlook';
+export const SERVICE_ID = 'outlook';
 
 /** `outlook__` : prepended to the bare tool names. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * Microsoft Graph v1.0 ("Use the Microsoft Graph API", read 2026-11-05):
@@ -107,7 +107,7 @@ export const TOOL = {
 
 /**
  * Tools of Outlook the plugin deliberately leaves out (handbook
- * providers/outlook.md, "Tools deliberately left out"), each with the sentence
+ * services/outlook.md, "Tools deliberately left out"), each with the sentence
  * its public page shows: declared nowhere, so `classify` refuses each as an
  * unknown tool, and the plugin's `excludedTools`.
  */

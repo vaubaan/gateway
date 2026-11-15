@@ -29,7 +29,7 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
   request when it is ready, push a review round's fixes together.
 - **Label `e2e`** a change to pages, components, styles, e2e tests or any plugin (the mission form
   is drawn from catalogs), or run `npm run test:e2e:v5` locally.
-- Provider facts in handbooks, catalogs and plugins come from Context7 through the gateway's
+- Service facts in handbooks, catalogs and plugins come from Context7 through the gateway's
   `context7` plugin, citing the pages it returned; a missing topic names the URLs fetched instead
   and is marked `_fallback: Context7 missing — check by hand at the next refresh_`.
 
@@ -66,8 +66,8 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 
 ## Env variants
 
-- Local: `npm run dev`, or `npm run demo` (simulated providers). e2e: the built app, `:memory:`
-  store, simulated identity provider, mocked providers. No test reaches a real provider.
+- Local: `npm run dev`, or `npm run demo` (simulated services). e2e: the built app, `:memory:`
+  store, simulated identity provider, mocked services. No test reaches a real service.
 - Deployed instances run the released image on their operators' hosts
   ([`deploy/README.md`](../../deploy/README.md)). The commit they report comes from
   `apps/gateway/build-commit.txt` (`export-subst`, filled by `git archive`), never a build argument
@@ -99,12 +99,12 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 Semver. **Breaking** = an installation that worked stops working, or works differently, without its
 owner doing anything:
 
-| Surface                 | Breaking (major)                                                                                 | Not breaking (minor)                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| **Configuration keys**  | a key removed or renamed; optional made required; a default or format changing an existing setup | a new optional key; a new accepted value   |
-| **Refusal codes**       | a code removed, renamed or given another meaning; a cause answered with another code             | a new code for a new cause                 |
-| **Plugin SDK contract** | an export changed so a plugin that compiled and loaded no longer does                            | a new optional member; a new helper        |
-| **Catalog ids**         | a provider id, tool name or macro-action id removed or renamed (a risk id never is)              | a new provider, tool, risk or macro-action |
+| Surface                 | Breaking (major)                                                                                 | Not breaking (minor)                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| **Configuration keys**  | a key removed or renamed; optional made required; a default or format changing an existing setup | a new optional key; a new accepted value  |
+| **Refusal codes**       | a code removed, renamed or given another meaning; a cause answered with another code             | a new code for a new cause                |
+| **Plugin SDK contract** | an export changed so a plugin that compiled and loaded no longer does                            | a new optional member; a new helper       |
+| **Catalog ids**         | a service id, tool name or macro-action id removed or renamed (a risk id never is)               | a new service, tool, risk or macro-action |
 
 - Also covered: both MCP doors and the OAuth endpoints, `/healthz`, the image's promises (uid 10001,
   `/data`, the port, exit code 78); a release that cannot migrate the store itself. Not covered:

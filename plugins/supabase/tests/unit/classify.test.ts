@@ -26,7 +26,7 @@ const STAGING_REF = 'tlqgxnezmthbpzhdwxgi';
 const PROD_REF = 'prodxxxxxxxxxxxxxxxx';
 
 function mkResource(ref: string, env: string): Resource {
-  return { provider: 'supabase', ref, env, displayName: ref };
+  return { service: 'supabase', ref, env, displayName: ref };
 }
 
 const staging = mkResource(STAGING_REF, 'staging');

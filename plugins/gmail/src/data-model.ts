@@ -2,7 +2,7 @@
  * Gmail data-model — declarative entity graph of the `mailbox` plane.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * Gmail exposes a single plane (`mailbox`) — there is no parallel split into
  * inbox / sent / drafts ; those are *labels* in Gmail's own model, not
@@ -23,16 +23,16 @@
  *   - the mermaid diagram rendered into the handbook (spec §2),
  *   - the catalog's `matches` patterns (each pattern must refer to entity
  *     slugs declared here — lint at CI),
- *   - the lint that every MCP tool exposed by this provider classifies
+ *   - the lint that every MCP tool exposed by this service classifies
  *     into at least one slice rooted at a declared entity.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const gmailDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'mailbox',

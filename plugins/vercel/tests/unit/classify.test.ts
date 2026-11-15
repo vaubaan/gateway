@@ -8,7 +8,7 @@
  *   - the custom REST tools surface (domains, project-settings, env-var CRUD),
  *   - what is refused : a projectId the mission does not hold, an unreadable
  *     `target`, the thread-addressed toolbar tools,
- *   - arguments the provider never sees do not select the risk
+ *   - arguments the service never sees do not select the risk
  *     (`deploy_to_vercel` is always on prod).
  *
  * Wherever possible, tests assert the *serialised* form via `serializeSlice`
@@ -19,7 +19,7 @@ import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
 import { classifyVercel } from '../../src/classify.ts';
 
-const resource: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
+const resource: Resource = { service: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
 
 function classify(tool: string, args: Record<string, unknown> = {}) {
   const result = classifyVercel(tool, args, [resource]);
@@ -308,7 +308,7 @@ describe('classifyVercel — one spelling per argument, the one of the schema', 
     expect(
       classifyVercel('vercel__get_project', { project_id: 'prj_abc' }, [
         resource,
-        { provider: 'vercel', ref: 'prj_site', displayName: 'site' },
+        { service: 'vercel', ref: 'prj_site', displayName: 'site' },
       ]),
     ).toEqual({
       denied: 'projectId: argument missing and the mission touches 2 Vercel projects — name one',

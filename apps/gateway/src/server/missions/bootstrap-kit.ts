@@ -12,11 +12,11 @@
  *      risks, budget, what to do on each structured refusal and when the
  *      token itself stops working, and a short "missions prepared by an agent" section — what the
  *      `vaubaan__*` tools do, and that they never lift a refusal;
- *   4. when the mission holds repositories of a provider the instance is a
+ *   4. when the mission holds repositories of a service the instance is a
  *      git remote of (spec §4.1 ter): git's configuration — a credential
  *      helper that reads the variable (never `store` or `cache`, never the
- *      key in a URL) and, per provider, the recommended `insteadOf` rewrite
- *      of its URLs to `<instance>/git/<provider>/` — and the remote of each
+ *      key in a URL) and, per service, the recommended `insteadOf` rewrite
+ *      of its URLs to `<instance>/git/<service>/` — and the remote of each
  *      repository;
  *   +  `curl … tools/list`.
  *
@@ -54,7 +54,7 @@ export interface KitResource {
 }
 
 export interface KitAccount {
-  readonly provider_label: string;
+  readonly service_label: string;
   readonly display_name: string;
   /** What the mission reaches now. */
   readonly resources: readonly KitResource[];
@@ -92,15 +92,15 @@ export interface BootstrapKitInput {
   readonly policy: readonly KitPolicyLine[];
   /** The secret right after issuance or rotation; the prefix on a revisited page. */
   readonly token: { readonly secret: string } | { readonly prefix: string };
-  /** The git remotes, one per provider whose repositories the mission holds; absent or empty: none. */
+  /** The git remotes, one per service whose repositories the mission holds; absent or empty: none. */
   readonly git?: readonly KitGitRemote[] | null;
 }
 
-/** The git remote of one provider. */
+/** The git remote of one service. */
 export interface KitGitRemote {
-  /** `<public_url>/git/<provider>/`. */
+  /** `<public_url>/git/<service>/`. */
   readonly base: string;
-  /** The provider's own git URL prefix the kit rewrites to `base` (from the plugin), or none. */
+  /** The service's own git URL prefix the kit rewrites to `base` (from the plugin), or none. */
   readonly insteadOf: string | null;
   /** The resource refs it serves for this mission (`acme/app`). */
   readonly repositories: readonly string[];
@@ -300,16 +300,16 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
   const accounts = input.accounts.flatMap((c) => {
     if (c.resource_sets && c.resource_sets.length > 1) {
       return [
-        `- ${c.provider_label} "${c.display_name}" — in resource sets:`,
+        `- ${c.service_label} "${c.display_name}" — in resource sets:`,
         ...setLines(c.resource_sets),
       ];
     }
-    if (c.future) return `- ${c.provider_label} "${c.display_name}" — ${withFuture(c.resources)}`;
+    if (c.future) return `- ${c.service_label} "${c.display_name}" — ${withFuture(c.resources)}`;
     const resources =
       c.resources.length === 0
         ? 'no resource (tools of the account itself only)'
         : c.resources.map(resourceLine).join(', ');
-    return `- ${c.provider_label} "${c.display_name}" — ${resources}`;
+    return `- ${c.service_label} "${c.display_name}" — ${resources}`;
   });
   const refusals = REFUSAL_CODES.map((code) => `- \`${code}\` — ${REFUSAL_GUIDANCE[code]}`);
   const stopped = AUTH_FAILURE_REASONS.map(

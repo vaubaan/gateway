@@ -1,10 +1,10 @@
 /**
- * Upstream calls of the `miro` provider, and resource discovery.
+ * Upstream calls of the `miro` service, and resource discovery.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and is never
  *            returned.
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  *
  * Rules :
  *   - the call is read by `readMiroCall`, the classifier's own reader : the
@@ -41,7 +41,7 @@ import {
   BOARD_LOCATOR,
   MIRO_BOARD_URL_BASE,
   MIRO_MCP_SERVER,
-  PROVIDER_ID,
+  SERVICE_ID,
   UPSTREAM_TOOL,
 } from './identity.ts';
 import { UPSTREAM_TOOL_LIST, type UpstreamTool } from './tools.ts';
@@ -60,7 +60,7 @@ export const MCP_SERVER_REFUSED =
 
 /** The OAuth access token of the account. */
 function tokenOf(ctx: AccountContext): string {
-  return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
+  return expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2').accessToken;
 }
 
 export async function executeMiro(
@@ -231,7 +231,7 @@ export function boardsIn(result: McpToolResult): Resource[] {
     const ref = boardRefOf(board.id);
     if (ref === null) continue;
     resources.push({
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref,
       displayName: board.name ?? board.id,
       metadata: { url: `${MIRO_BOARD_URL_BASE}${board.id}/` },
@@ -322,7 +322,7 @@ async function reportDrift(ctx: AccountContext, token: string): Promise<void> {
     const drift = toolDrift(await mcpRequest(ctx, MIRO_MCP_SERVER, token, 'tools/list', {}));
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {
       ctx.logger?.warn(
-        "Miro's MCP tools differ from the plugin's model; capture them again (handbook providers/miro, Procedures)",
+        "Miro's MCP tools differ from the plugin's model; capture them again (handbook services/miro, Procedures)",
         {
           locator: BOARD_LOCATOR,
           gone: drift.gone,

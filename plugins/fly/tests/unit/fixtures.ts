@@ -11,7 +11,7 @@ import {
   API_TOKEN_FIELD,
   IMAGE_PREFIXES_FIELD,
   ORG_SLUG_FIELD,
-  PROVIDER_ID,
+  SERVICE_ID,
 } from '../../src/identity.ts';
 
 export const ORG = 'vaubaan';
@@ -22,7 +22,7 @@ export const TOKEN = 'FlyV1 fm2_abcdefghijklmnopqrstuvwxyz0123456789';
 
 export function app(name: string, env: 'prod' | 'staging', id: string): Resource {
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: name,
     env,
     displayName: name,

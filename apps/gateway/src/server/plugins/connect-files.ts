@@ -37,8 +37,8 @@ export const BUNDLED_PLUGINS_DIR = resolve(
 );
 
 /** The path a screenshot is served at, for the connect page and the Reference. */
-export function connectFileUrl(providerId: string, file: string): string {
-  return `/reference/${encodeURIComponent(providerId)}/connect/${encodeURIComponent(file)}`;
+export function connectFileUrl(serviceId: string, file: string): string {
+  return `/reference/${encodeURIComponent(serviceId)}/connect/${encodeURIComponent(file)}`;
 }
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
@@ -59,25 +59,25 @@ export interface ConnectFileSources {
 }
 
 /**
- * The bytes and type of a screenshot the registered plugin `providerId` declares, or
+ * The bytes and type of a screenshot the registered plugin `serviceId` declares, or
  * `null`: an unknown or disabled plugin, a name outside the pattern, a file its guide
  * does not declare, or one missing on disk.
  */
 export async function readConnectFile(
   sources: ConnectFileSources,
-  providerId: string,
+  serviceId: string,
   file: string,
 ): Promise<ConnectFile | null> {
   const match = GUIDE_SCREENSHOT_FILE_PATTERN.exec(file);
   if (!match) return null;
-  const registered = sources.registry.get(providerId);
+  const registered = sources.registry.get(serviceId);
   if (!registered) return null;
   const spec = registered.plugin.credential;
   const declared = spec.kind === 'api-key' ? spec.guide.screenshots : undefined;
   if (!declared || !Object.hasOwn(declared, file)) return null;
-  const entry = sources.inventory.find((e) => e.id === providerId && e.enabled);
+  const entry = sources.inventory.find((e) => e.id === serviceId && e.enabled);
   if (!entry) return null;
-  const folder = entry.path ?? join(sources.bundledDir ?? BUNDLED_PLUGINS_DIR, providerId);
+  const folder = entry.path ?? join(sources.bundledDir ?? BUNDLED_PLUGINS_DIR, serviceId);
   try {
     // turbopackIgnore: a computed path the bundler would otherwise trace as the whole
     // project; the files reach the image through `outputFileTracingIncludes`.

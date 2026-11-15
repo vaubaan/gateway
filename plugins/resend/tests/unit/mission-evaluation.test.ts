@@ -13,17 +13,17 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ProviderPlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
 import { envResolverFor, evaluateCall, policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
 import { resendCatalog, resendPlugin } from '../../src/index.ts';
 
 const { catalog, indexed } = resendCatalog;
 /** The contract the gateway sees : `envOf` is optional there, and this plugin declares none. */
-const plugin: ProviderPlugin = resendPlugin;
+const plugin: ServicePlugin = resendPlugin;
 
 const domain = (ref: string, env?: string): Resource => ({
-  provider: 'resend',
+  service: 'resend',
   ref,
   displayName: ref,
   ...(env === undefined ? {} : { env }),
@@ -36,7 +36,7 @@ const domain = (ref: string, env?: string): Resource => ({
   },
 });
 const segment = (ref: string, env: string): Resource => ({
-  provider: 'resend',
+  service: 'resend',
   ref,
   displayName: ref,
   env,

@@ -1,13 +1,13 @@
 /**
- * Credential of the `caldav` provider — a server URL, a username and an
+ * Credential of the `caldav` service — a server URL, a username and an
  * **app password**, sent with HTTP Basic authentication on every request.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §0 "Account", §5, §7.2.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5).
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  * An app password carries no scope : it opens the whole account over CalDAV
- * (and, at most providers, CardDAV), so the guide lists no permission and
+ * (and, at most services, CardDAV), so the guide lists no permission and
  * says so ; what an agent may do is decided by the missions. The host shows
  * the guide, collects the three fields, calls `verify` (`execute.ts` : the
  * principal found with an authenticated `PROPFIND`) before anything is
@@ -31,7 +31,7 @@ import { CALDAV_FIELDS, CALDAV_PLUGIN_ID } from './identity.ts';
 
 /** Where the handbook explains each server (app password, URL). */
 export const CALDAV_HANDBOOK_URL =
-  'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/caldav.md';
+  'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/caldav.md';
 
 /** Where the handbook says, server by server, where an app password is made. */
 export const CALDAV_APP_PASSWORDS_URL = `${CALDAV_HANDBOOK_URL}#outside-the-repo`;
@@ -98,7 +98,7 @@ const USERNAME_PATTERN = '^[^:\\s][^:]{0,253}$';
 export const caldavCredentialFields: Omit<ApiKeyCredentialSpec, 'verify'> = {
   kind: 'api-key',
   label: 'app password',
-  // No single provider page : the handbook's section names it for each server.
+  // No single service page : the handbook's section names it for each server.
   createUrl: CALDAV_APP_PASSWORDS_URL,
   fields: [
     {

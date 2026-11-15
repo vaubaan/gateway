@@ -235,7 +235,7 @@ describe('refused, before any write and before any result leaves', () => {
   });
 });
 
-describe("the provider's failures are thrown, not refused", () => {
+describe("the service's failures are thrown, not refused", () => {
   test('the target itself not found (404) : the answer to the agent, thrown', async () => {
     const fetch = mockFetch([hidden('pages', CHILD)]);
     await expect(execute(ctx(fetch), TOOL.getPage, { page_id: CHILD })).rejects.toMatchObject({

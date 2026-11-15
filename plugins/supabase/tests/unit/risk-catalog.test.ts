@@ -30,7 +30,7 @@ const INDEXED = supabaseCatalog.indexed;
 
 const STAGING_REF = 'tlqgxnezmthbpzhdwxgi';
 const staging: Resource = {
-  provider: 'supabase',
+  service: 'supabase',
   ref: STAGING_REF,
   env: 'staging',
   displayName: 'Staging',
@@ -50,8 +50,8 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 // ────────────────────────────────────────────────────────────────────────
 
 describe('risk-catalog.yaml — loaded shape', () => {
-  test('declares provider `supabase`, a version and a date', () => {
-    expect(CATALOG.provider).toBe('supabase');
+  test('declares service `supabase`, a version and a date', () => {
+    expect(CATALOG.service).toBe('supabase');
     expect(CATALOG.catalog_version).toBe(9);
     expect(CATALOG.catalog_date).toBe('2026-11-13');
   });
@@ -85,7 +85,7 @@ describe('risk-catalog.yaml — loaded shape', () => {
     for (const { entry, patterns } of INDEXED.entries) {
       expect(patterns.length).toBe(patternsOf(entry).length);
       for (const pattern of patterns) {
-        expect(pattern.provider).toBe('supabase');
+        expect(pattern.service).toBe('supabase');
         expect(['R', 'W']).toContain(pattern.action);
       }
     }
@@ -405,7 +405,7 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       for (const p of patternsOf(e)) {
         const a = parseSlice(p);
         const reparsed = parseSlice(serializeSlice(a));
-        expect(reparsed.provider).toBe(a.provider);
+        expect(reparsed.service).toBe(a.service);
         expect(reparsed.action).toBe(a.action);
         expect(reparsed.path.length).toBe(a.path.length);
       }

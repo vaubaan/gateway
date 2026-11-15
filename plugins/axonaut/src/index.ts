@@ -4,7 +4,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/axonaut.md ; guide : plugins/axonaut/README.md.
+ * Handbook : docs/handbook/services/axonaut.md ; guide : plugins/axonaut/README.md.
  *
  * Credential : `api-key`, the key of one Axonaut user (`credential.ts`). One
  * resource per account: the Axonaut account the key opens. No environment:
@@ -19,7 +19,7 @@ import { axonautDataModel } from './data-model.ts';
 import { discoverAxonautResources, executeAxonaut } from './execute.ts';
 import { axonautExamples } from './examples.ts';
 import { AXONAUT_ICON, AXONAUT_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { axonautToolTitles, axonautTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
@@ -27,7 +27,7 @@ import { axonautToolTitles, axonautTools } from './tools.ts';
 export const axonautCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const axonautPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Axonaut',
   icon: AXONAUT_ICON,
   iconColor: AXONAUT_ICON_COLOR,
@@ -39,7 +39,7 @@ export const axonautPlugin = definePlugin({
   summary:
     'One account is the API key of one Axonaut user; its one resource is the Axonaut company account that key opens. Axonaut has no test mode, so no environment applies: the permissions say what a mission may read, change, invoice or delete there, and creating an invoice, which cannot be deleted, asks you first.',
   manualRevocation: 'Regenerate the API key in Axonaut, under Settings (Paramètres), API.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/axonaut.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/axonaut.md',
   tools: axonautTools,
   toolTitles: axonautToolTitles,
   examples: axonautExamples,
@@ -69,5 +69,5 @@ export {
   readMe,
 } from './execute.ts';
 export { AXONAUT_ID, axonautId } from './fields.ts';
-export { API_KEY_FIELD, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { API_KEY_FIELD, SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { EXAMPLE_ACCOUNT, EXAMPLE_OTHER_ACCOUNT, axonautExamples } from './examples.ts';

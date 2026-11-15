@@ -20,7 +20,7 @@ const noIssue = (message: string): never => {
 describe('readSelfResources', () => {
   it('an instance on Fly counts its own app, from FLY_APP_NAME', () => {
     expect(readSelfResources([], { [FLY_APP_ENV]: 'acme-gateway' }, noIssue)).toEqual([
-      { provider: 'fly', ref: 'acme-gateway', source: 'fly' },
+      { service: 'fly', ref: 'acme-gateway', source: 'fly' },
     ]);
   });
 
@@ -28,16 +28,16 @@ describe('readSelfResources', () => {
     expect(
       readSelfResources([], { [RAILWAY_PROJECT_ENV]: 'p-1', [FLY_APP_ENV]: ' gw ' }, noIssue),
     ).toEqual([
-      { provider: 'railway', ref: 'p-1', source: 'railway' },
-      { provider: 'fly', ref: 'gw', source: 'fly' },
+      { service: 'railway', ref: 'p-1', source: 'railway' },
+      { service: 'fly', ref: 'gw', source: 'fly' },
     ]);
   });
 
   it('a configured entry naming the platform app is not added twice', () => {
     const selves = readSelfResources(['fly:gw', 'fly:ops-tools'], { [FLY_APP_ENV]: 'gw' }, noIssue);
     expect(selves).toEqual([
-      { provider: 'fly', ref: 'gw', source: 'fly' },
-      { provider: 'fly', ref: 'ops-tools', source: 'config' },
+      { service: 'fly', ref: 'gw', source: 'fly' },
+      { service: 'fly', ref: 'ops-tools', source: 'config' },
     ]);
     expect(isSelfResource(selves, 'fly', 'ops-tools')).toBe(true);
     expect(isSelfResource(selves, 'fly', 'acme-gw')).toBe(false);

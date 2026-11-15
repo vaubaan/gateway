@@ -1093,7 +1093,7 @@ function ConnectBlock({
             </p>
           ))}
           <dl className="facts">
-            <dt>Provider</dt>
+            <dt>OAuth provider</dt>
             <dd>
               <Mono>{c.brokerProvider ?? ''}</Mono>
             </dd>

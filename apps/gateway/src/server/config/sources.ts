@@ -346,7 +346,7 @@ const KEY_TABLE = [
     min: 1,
   },
   // The deadline of one plugin call on the execution door (`execution/upstream-stage.ts`):
-  // a provider that never answers releases the request, the credential and the slot.
+  // a service that never answers releases the request, the credential and the slot.
   {
     path: 'execution.call_timeout_seconds',
     env: 'VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS',
@@ -648,8 +648,8 @@ function leavesUnder(tree: RawTree, top: string): string[] {
 }
 
 /** `VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`: a hyphen of the provider id becomes an underscore. */
-export function signInEnvName(providerId: string, suffix: string): string {
-  return namedBlockEnvName(SIGN_IN_BLOCK, providerId, suffix);
+export function signInEnvName(signInProviderId: string, suffix: string): string {
+  return namedBlockEnvName(SIGN_IN_BLOCK, signInProviderId, suffix);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -793,11 +793,11 @@ export function parseNamedBlockEnvName(
 /** `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ providerId: 'acme-entra', spec: client_id }`. */
 export function parseSignInEnvName(
   name: string,
-): { providerId: string; spec: (typeof SIGN_IN_FIELDS)[number] } | null {
+): { signInProviderId: string; spec: (typeof SIGN_IN_FIELDS)[number] } | null {
   const parsed = parseNamedBlockEnvName(SIGN_IN_BLOCK, name);
   if (!parsed) return null;
   const spec = SIGN_IN_FIELDS.find((f) => f.field === parsed.spec.field);
-  return spec ? { providerId: parsed.name, spec } : null;
+  return spec ? { signInProviderId: parsed.name, spec } : null;
 }
 
 /* ------------------------------------------------------------------------ */

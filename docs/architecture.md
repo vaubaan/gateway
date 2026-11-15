@@ -17,7 +17,7 @@ and "ask me first" ([README, Words](../README.md#words)).
       │                                                           │
       ▼                                                           ▼
  EXECUTION DOOR                                             WEB INTERFACE
- POST /mcp, /mcp/catalog, /git/<provider>/…                 pages under apps/gateway/src/app
+ POST /mcp, /mcp/catalog, /git/<service>/…                 pages under apps/gateway/src/app
       │                                                     answers requests, edits missions
       ▼                                                           │
  CALL PIPELINE (packages/gateway-core)                            │
@@ -25,7 +25,7 @@ and "ask me first" ([README, Words](../README.md#words)).
   2 plugin.classify(call)  ──►  slices                            │
   3 policy engine: slices ──► risks ⊆ accepted?                   │
   4 budget: quota, rate limit, gate                               │
-  5 plugin.execute(call, credential)  ──►  provider API           │
+  5 plugin.execute(call, credential)  ──►  service API           │
     (the `vaubaan` plugin: the host's own mission service)        │
   6 audit entry, allowed or refused                               │
       │                                                           │
@@ -66,13 +66,13 @@ them, each by its explicit identifier: no wildcard is ever stored. Handbook:
 
 ## The plugins
 
-One folder per provider under `plugins/`, written against `@vaubaan/plugin-sdk`. A plugin
-describes the provider's data model, ships its risk catalog (`risk-catalog.yaml`), classifies each
+One folder per service under `plugins/`, written against `@vaubaan/plugin-sdk`. A plugin
+describes the service's data model, ships its risk catalog (`risk-catalog.yaml`), classifies each
 call into slices, declares how a credential is obtained, discovers resources, and executes the call
 with the credential the gateway hands it. A plugin classifies; it never decides. The registry in
-`apps/gateway/src/server/compose/shipped-plugins.ts` is the only list of providers. Guide:
+`apps/gateway/src/server/compose/shipped-plugins.ts` is the only list of services. Guide:
 [`plugins/README.md`](../plugins/README.md); handbooks: [plugin-sdk](handbook/plugin-sdk.md),
-[providers](handbook/providers/README.md).
+[services](handbook/services/README.md).
 
 ## The gateway's own management tools
 
@@ -80,9 +80,9 @@ An agent that prepares missions for other agents does it like any other work: th
 the person's **Vaubaan account**, a service of its own (`plugins/vaubaan`), whose `vaubaan__*` tools
 read what that person may put in a mission, preview a policy and issue, rotate or revoke missions
 under the person's name. The call passes the same door, budget and audit; the plugin's `execute` is
-bound by the host to the mission service, never through the SDK. It executes no other provider's
+bound by the host to the mission service, never through the SDK. It executes no other service's
 tool and answers no request: approvals and claims are answered in the browser only, and a mission
-never rotates or revokes itself. Handbook: [providers/vaubaan](handbook/providers/vaubaan.md).
+never rotates or revokes itself. Handbook: [services/vaubaan](handbook/services/vaubaan.md).
 
 ## The store
 

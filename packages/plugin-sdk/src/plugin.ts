@@ -1,7 +1,7 @@
 /**
- * The plugin contract — `ProviderPlugin`.
+ * The plugin contract — `ServicePlugin`.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5 ("Provider plugins — two
+ * Spec : docs/spec/vaubaan-gateway.md §5 ("Plugins — two
  *        responsibilities : classify and execute ; they also declare how to
  *        obtain and refresh a credential, how to discover resources") ;
  *        docs/spec/gateway-risk-model.md §4.6 (macro-actions), §7.
@@ -57,11 +57,11 @@ export interface PluginLogger {
 }
 
 /**
- * What a plugin receives whenever it talks to its provider on behalf of an
+ * What a plugin receives whenever it talks to its service on behalf of an
  * account : the decrypted credential (in memory only) and the IO
  * primitives. The plugin never
  * reads `process.env`, never opens its own `fetch` : both are injected so
- * tests run with `mockFetch` and never reach a real provider.
+ * tests run with `mockFetch` and never reach a real service.
  */
 export interface AccountContext {
   readonly credential: CredentialSecret;
@@ -88,7 +88,7 @@ export type ClassifyConnection = ClassifyAccount;
  * every call (a GitHub installation token minted from the App key). The
  * plugin chooses the key inside its account (`installation-token:<repo>`)
  * and the lifetime ; the host namespaces the entries per account, drops
- * them as soon as the provider rejects a call or the account stops being
+ * them as soon as the service rejects a call or the account stops being
  * `active`, and never persists them. Absent : derive on every call.
  *
  * Only what `execute` itself needs goes in : a credential that is the
@@ -109,8 +109,8 @@ export interface ExecuteContext extends AccountContext {
   /** Account-scoped cache for derived upstream credentials ; see `UpstreamCredentialCache`. */
   readonly credentialCache?: UpstreamCredentialCache;
   /**
-   * Hands the caller one part of the result as soon as the provider
-   * delivered it, for a tool whose provider answers progressively. Optional
+   * Hands the caller one part of the result as soon as the service
+   * delivered it, for a tool whose service answers progressively. Optional
    * for both sides : a plugin that never calls it is unaffected, and a host
    * that does not provide it gets the complete result alone. `execute` still
    * returns the whole `McpToolResult` ; see `streaming.ts` for the rules
@@ -119,14 +119,14 @@ export interface ExecuteContext extends AccountContext {
   readonly emitPart?: ToolResultPartSink;
 }
 
-/** The singular and plural of what one resource of a provider is called (`ProviderPlugin.resourceNoun`). */
+/** The singular and plural of what one resource of a service is called (`ServicePlugin.resourceNoun`). */
 export interface ResourceNoun {
   readonly one: string;
   readonly other: string;
 }
 
-export interface ProviderPlugin {
-  /** Provider id : lowercase slug (`github`, `cloudflare-dns`). Prefixes every tool name. */
+export interface ServicePlugin {
+  /** Service id : lowercase slug (`github`, `cloudflare-dns`). Prefixes every tool name. */
   readonly id: string;
   /** Label shown in the UI (`GitHub`, `Cloudflare DNS`). */
   readonly displayName: string;
@@ -152,18 +152,18 @@ export interface ProviderPlugin {
   readonly iconColor?: string;
   /** Semver of the plugin. Reported by telemetry ; bump on every published change. */
   readonly version: string;
-  /** One-line description for the providers page. */
+  /** One-line description for the services page. */
   readonly description?: string;
   /**
-   * A short paragraph in plain words for the provider reference of the web
-   * interface (`/providers/<id>`) : what one account is, what one
+   * A short paragraph in plain words for the service reference of the web
+   * interface (`/services/<id>`) : what one account is, what one
    * resource is, and where the environment of a call comes from. Two to
    * four sentences, no markup. Optional in the contract ; every plugin
    * shipped with the gateway fills it (structural test).
    */
   readonly summary?: string;
   /**
-   * What one resource of this provider is called in the interface, singular
+   * What one resource of this service is called in the interface, singular
    * and plural (`{ one: 'board', other: 'boards' }`) : the noun of what
    * `discoverResources` returns, so a page reads "3 boards" rather than
    * "3 resources". Lowercase, a word or two ; the interface capitalises it
@@ -198,7 +198,7 @@ export interface ProviderPlugin {
   readonly docsUrl?: string;
   /**
    * Tools whose effect cannot be bound to one resource (a free-text request to
-   * the provider's own agent, say), each with one sentence saying why. The host
+   * the service's own agent, say), each with one sentence saying why. The host
    * makes them unavailable on an account that can reach a resource hosting
    * the gateway itself (`self_resources`): no mission resource check could keep
    * such a tool away from it (SEC 2026-10-15 re-check M-1). Keys are tool names
@@ -207,7 +207,7 @@ export interface ProviderPlugin {
   readonly unboundTools?: Readonly<Record<string, string>>;
 
   /**
-   * Tools of the provider the plugin deliberately does not expose, each with
+   * Tools of the service the plugin deliberately does not expose, each with
    * one sentence saying why (GitHub's workflow dispatch: it runs whatever the
    * workflow does, with the repository's secrets). Shown on the plugin's
    * public page next to "Anything else" (ADR plugin-contract-and-credential-spec,
@@ -244,26 +244,26 @@ export interface ProviderPlugin {
   readonly resourceCreatingTools?: readonly string[];
 
   /**
-   * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :
+   * The instance as this service's git remote (spec vaubaan-gateway §4.1 ter) :
    * `git clone` / `git push` against
-   * `https://<instance>/git/<provider id>/<repository>.git` with the mission key
+   * `https://<instance>/git/<service id>/<repository>.git` with the mission key
    * as the password, decided and audited like a tool call. Absent for a
-   * provider whose agents have no git to speak. Any number of plugins may
-   * declare it : the path names the provider (ADR
+   * service whose agents have no git to speak. Any number of plugins may
+   * declare it : the path names the service (ADR
    * protocol-doors-belong-to-the-host).
    */
   readonly gitRemote?: GitRemoteCapability;
 
   /** The MCP tools the plugin exposes, named `<prefix>__<local>`. May be empty for a classifier-only plugin. */
   readonly tools: readonly McpToolDeclaration[];
-  /** Declarative graph of the provider's entities (risk-model spec §2). */
+  /** Declarative graph of the service's entities (risk-model spec §2). */
   readonly dataModel: DataModel;
   /** The risk catalog, loaded from `risk-catalog.yaml` at boot, macro-actions included. */
   readonly catalog: RiskCatalog;
   /**
-   * How an account to this provider is obtained, stored and refreshed :
-   * the one way of connecting, the simplest the provider offers — a token a
-   * person makes by hand whenever the provider has one, OAuth only where it
+   * How an account to this service is obtained, stored and refreshed :
+   * the one way of connecting, the simplest the service offers — a token a
+   * person makes by hand whenever the service has one, OAuth only where it
    * has none (ADR one-place-to-authorize-services-token-first).
    */
   readonly credential: CredentialSpec;
@@ -285,8 +285,8 @@ export interface ProviderPlugin {
   ): ClassifyOutcome;
 
   /**
-   * Execute an allowed call against the provider. Throws
-   * `UpstreamAuthError` when the provider rejects the credential (the host
+   * Execute an allowed call against the service. Throws
+   * `UpstreamAuthError` when the service rejects the credential (the host
    * then tries `refresh`, and marks the account `expired` if that fails).
    */
   execute(
@@ -325,14 +325,14 @@ export interface ProviderPlugin {
   ): readonly Resource[];
 
   /**
-   * Derive the environment a slice falls under when the provider carries
+   * Derive the environment a slice falls under when the service carries
    * it in the call itself rather than on the resource : the `env[<label>]`
    * segment for Vercel, the only shipped plugin that declares the hook
    * (spec vaubaan-gateway §0 "Resource"). Pure. Return `undefined` when the slice carries no
    * environment of its own ; the host then falls back to the owner's label
    * on the matching resource (`envResolverFor` in `@vaubaan/policy-engine`).
    * Return `NO_SINGLE_ENV` when the slice names its environment but not
-   * exactly one (a wildcard, a list, a value outside the provider's closed
+   * exactly one (a wildcard, a list, a value outside the service's closed
    * set) : the host then resolves no environment at all and refuses every
    * env-scoped risk the slice touches — the label never stands in for a
    * slice that reaches several environments.
@@ -344,10 +344,10 @@ export interface ProviderPlugin {
 
   /**
    * Override of the credential refresh for a non-standard flow (a re-minted
-   * installation token, a provider whose refresh is not the RFC 6749
+   * installation token, a service whose refresh is not the RFC 6749
    * `refresh_token` grant). The host refreshes a standard `oauth2`
    * credential itself from the spec — `tokenUrl`, `clientAuthMethod`,
-   * `resourceIndicator` — so a plugin whose provider follows the standard
+   * `resourceIndicator` — so a plugin whose service follows the standard
    * declares `refreshable: true` and nothing else. When present, the host
    * calls it instead of the generic refresh ; it returns a new
    * `CredentialSecret` and must not mutate its input.
@@ -355,12 +355,12 @@ export interface ProviderPlugin {
   refresh?(ctx: AccountContext): Promise<CredentialSecret>;
 
   /**
-   * Withdraw at the provider the grant this account holds, when the owner
-   * revokes the account (spec vaubaan-gateway §2.3). For a provider whose
+   * Withdraw at the service the grant this account holds, when the owner
+   * revokes the account (spec vaubaan-gateway §2.3). For a service whose
    * revocation is not one of the declarative `OAuth2CredentialSpec.revocation`
    * shapes. The host calls it once, with the credential it is about to erase,
    * after the account is revoked locally : the local revocation never
-   * depends on it. Resolve when the provider confirmed ; throw otherwise
+   * depends on it. Resolve when the service confirmed ; throw otherwise
    * (the host then tells the person to remove the grant by hand). When
    * present it takes precedence over `credential.revocation`. No agent
    * argument ever reaches it.
@@ -368,12 +368,18 @@ export interface ProviderPlugin {
   revoke?(ctx: AccountContext): Promise<void>;
 
   /**
-   * One or two plain sentences telling a person where, at the provider, they
+   * One or two plain sentences telling a person where, at the service, they
    * remove the grant themselves : shown when the gateway cannot withdraw it
    * (no `revoke`, no `credential.revocation`) or tried and was not answered.
-   * Names the place in the provider's interface ; no markup. Optional in the
+   * Names the place in the service's interface ; no markup. Optional in the
    * contract ; every plugin shipped with the gateway fills it (structural
    * test).
    */
   readonly manualRevocation?: string;
 }
+
+/**
+ * @deprecated Renamed `ServicePlugin` (ADR one-word-per-thing-account-service-plugin, R2);
+ * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
+ */
+export type ProviderPlugin = ServicePlugin;

@@ -31,7 +31,7 @@ import {
 
 import { MALFORMED_WIDGET_ID } from '../../src/classify.ts';
 import { TEMPLATE_API_BASE } from '../../src/execute.ts';
-import { API_KEY_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { API_KEY_FIELD, SERVICE_ID, TOOL } from '../../src/identity.ts';
 import defaultExport, {
   classifyTemplate,
   templateCatalog,
@@ -39,12 +39,12 @@ import defaultExport, {
 } from '../../src/index.ts';
 
 const staging: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'ws-stg',
   env: 'staging',
   displayName: 'Staging',
 };
-const prod: Resource = { provider: PROVIDER_ID, ref: 'ws-prd', env: 'prod', displayName: 'Prod' };
+const prod: Resource = { service: SERVICE_ID, ref: 'ws-prd', env: 'prod', displayName: 'Prod' };
 
 describe('template plugin — structural kit', () => {
   test('well-formed, no wildcard', () => {
@@ -98,15 +98,15 @@ describe('template plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(templateCatalog.catalog.provider).toBe(PROVIDER_ID);
-    expect(templatePlugin.id).toBe(PROVIDER_ID);
+    expect(templateCatalog.catalog.service).toBe(SERVICE_ID);
+    expect(templatePlugin.id).toBe(SERVICE_ID);
     expect(templateCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(templatePlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);
     expect(templatePlugin.credential).toMatchObject({
@@ -140,7 +140,7 @@ describe('template plugin — structural kit', () => {
       'template[staging].widget-write': 'auto',
       'template[prod].widget-write': 'approval',
     });
-    expect(Object.keys(gates)).not.toContain(`${PROVIDER_ID}.uncategorized-write`);
+    expect(Object.keys(gates)).not.toContain(`${SERVICE_ID}.uncategorized-write`);
   });
 });
 
@@ -157,7 +157,7 @@ describe('classifyTemplate', () => {
 
   test('list → read slice on the named workspace, one of the mission resources', () => {
     expect(slices(TOOL.listWidgets, { workspace: 'ws-prd' }, [staging, prod])).toEqual([
-      `${PROVIDER_ID}.workspace[ws-prd].widget[*].R`,
+      `${SERVICE_ID}.workspace[ws-prd].widget[*].R`,
     ]);
   });
 
@@ -170,8 +170,8 @@ describe('classifyTemplate', () => {
     expect(
       classifyTemplate(TOOL.updateWidget, { workspace: 'ws-prd', widget_id: 'w1' }, [staging]),
     ).toEqual({ denied: "workspace 'ws-prd' is not selected in this mission" });
-    // A resource of another provider carrying the same ref does not count.
-    const foreign: Resource = { provider: 'other', ref: 'ws-prd', displayName: 'Foreign' };
+    // A resource of another service carrying the same ref does not count.
+    const foreign: Resource = { service: 'other', ref: 'ws-prd', displayName: 'Foreign' };
     expect(classifyTemplate(TOOL.listWidgets, { workspace: 'ws-prd' }, [staging, foreign])).toEqual(
       { denied: "workspace 'ws-prd' is not selected in this mission" },
     );
@@ -179,29 +179,29 @@ describe('classifyTemplate', () => {
 
   test('update → write slice on the exact widget', () => {
     expect(slices(TOOL.updateWidget, { workspace: 'ws-stg', widget_id: 'w7', name: 'n' })).toEqual([
-      `${PROVIDER_ID}.workspace[ws-stg].widget[w7].W`,
+      `${SERVICE_ID}.workspace[ws-stg].widget[w7].W`,
     ]);
   });
 
   test('delete → the verb leaf, which touches the delete risk and the write risk', () => {
     const [slice] = slices(TOOL.deleteWidget, { workspace: 'ws-stg', widget_id: 'w7' });
-    expect(slice).toBe(`${PROVIDER_ID}.workspace[ws-stg].widget[w7].delete.W`);
+    expect(slice).toBe(`${SERVICE_ID}.workspace[ws-stg].widget[w7].delete.W`);
     // A slice may touch several risks ; the mission must accept each of them.
     const touched = risksTouchedBy(parseSlice(slice!), templateCatalog.indexed);
     expect([...touched].sort()).toEqual([
-      `${PROVIDER_ID}.widget-delete`,
-      `${PROVIDER_ID}.widget-write`,
+      `${SERVICE_ID}.widget-delete`,
+      `${SERVICE_ID}.widget-write`,
     ]);
     // An ordinary write does not touch the delete risk.
     const [write] = slices(TOOL.updateWidget, { workspace: 'ws-stg', widget_id: 'w7', name: 'n' });
     expect(risksTouchedBy(parseSlice(write!), templateCatalog.indexed)).toEqual([
-      `${PROVIDER_ID}.widget-write`,
+      `${SERVICE_ID}.widget-write`,
     ]);
   });
 
   test('workspace defaults to the single mission resource', () => {
     expect(slices(TOOL.getWidget, { widget_id: 'w1' })).toEqual([
-      `${PROVIDER_ID}.workspace[ws-stg].widget[w1].R`,
+      `${SERVICE_ID}.workspace[ws-stg].widget[w1].R`,
     ]);
   });
 
@@ -220,7 +220,7 @@ describe('classifyTemplate', () => {
     expect(classifyTemplate(TOOL.getWidget, { workspace: 'ws-stg' }, [staging])).toEqual({
       denied: MALFORMED_WIDGET_ID,
     });
-    const unknown = `${toolPrefixFor(PROVIDER_ID)}delete_all`;
+    const unknown = `${toolPrefixFor(SERVICE_ID)}delete_all`;
     expect(classifyTemplate(unknown, { workspace: 'ws-stg' }, [staging])).toEqual({
       denied: `unknown tool '${unknown}'`,
     });
@@ -241,7 +241,7 @@ describe('classifyTemplate', () => {
         ),
       ).toEqual({ denied: MALFORMED_WIDGET_ID });
     }
-    const dotted: Resource = { provider: PROVIDER_ID, ref: '..', displayName: 'Dots' };
+    const dotted: Resource = { service: SERVICE_ID, ref: '..', displayName: 'Dots' };
     expect(classifyTemplate(TOOL.listWidgets, { workspace: '..' }, [dotted])).toEqual({
       denied: 'workspace: malformed ref',
     });
@@ -268,7 +268,7 @@ describe('executeTemplate with mockFetch', () => {
     resources,
   });
 
-  test('sends the bearer, returns the provider payload as text', async () => {
+  test('sends the bearer, returns the service payload as text', async () => {
     const fetch = mockFetch([
       {
         method: 'GET',
@@ -308,7 +308,7 @@ describe('executeTemplate with mockFetch', () => {
     ]);
   });
 
-  test('a provider failure is thrown : 401 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
+  test('a service failure is thrown : 401 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
     const fetch = mockFetch([{ url: /widgets$/, status: 401, body: { error: 'nope' } }]);
     await expect(
       templatePlugin.execute(ctx(fetch), TOOL.listWidgets, { workspace: 'ws-stg' }),
@@ -327,7 +327,7 @@ describe('executeTemplate with mockFetch', () => {
       { url: `${TEMPLATE_API_BASE}/workspaces`, body: [{ id: 'ws-1', name: 'One' }] },
     ]);
     expect(await templatePlugin.discoverResources(ctx(fetch))).toEqual([
-      { provider: PROVIDER_ID, ref: 'ws-1', displayName: 'One' },
+      { service: SERVICE_ID, ref: 'ws-1', displayName: 'One' },
     ]);
   });
 
@@ -335,7 +335,7 @@ describe('executeTemplate with mockFetch', () => {
     const fetch = mockFetch([
       { url: `${TEMPLATE_API_BASE}/workspaces`, body: { data: [{ id: 'ws-1' }] } },
     ]);
-    // A provider failure (`UpstreamProtocolError`, HTTP 502 for the host), never a plain `Error`.
+    // A service failure (`UpstreamProtocolError`, HTTP 502 for the host), never a plain `Error`.
     await expect(templatePlugin.discoverResources(ctx(fetch))).rejects.toThrow(
       new UpstreamProtocolError('template GET /workspaces: unexpected answer'),
     );
@@ -343,7 +343,7 @@ describe('executeTemplate with mockFetch', () => {
 
   test('execute resolves the workspace like classify : outside the mission, nothing is sent', async () => {
     const fetch = mockFetch([]);
-    // Declined by the executor : an `isError` result, never a throw (a throw is a provider failure).
+    // Declined by the executor : an `isError` result, never a throw (a throw is a service failure).
     const foreign = await templatePlugin.execute(ctx(fetch), TOOL.listWidgets, {
       workspace: 'ws-prd',
     });
@@ -379,7 +379,7 @@ describe('executeTemplate with mockFetch', () => {
     expect(unnamed.isError).toBe(true);
     const unknown = await templatePlugin.execute(
       ctx(fetch),
-      `${toolPrefixFor(PROVIDER_ID)}delete_all`,
+      `${toolPrefixFor(SERVICE_ID)}delete_all`,
       { workspace: 'ws-stg' },
     );
     expect(unknown.isError).toBe(true);

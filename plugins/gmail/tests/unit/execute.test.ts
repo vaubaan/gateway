@@ -27,7 +27,7 @@ import { ALL, DRAFTS, FOLDERS, fakeGmail, message, type FakeGmail } from './fake
 
 const MAILBOX = 'me@myorg.com';
 const mailbox: Resource = {
-  provider: 'gmail',
+  service: 'gmail',
   ref: MAILBOX,
   displayName: MAILBOX,
   metadata: { internal_domains: ['myorg.com'], account_email: MAILBOX, sensitive_labels: ['HR'] },

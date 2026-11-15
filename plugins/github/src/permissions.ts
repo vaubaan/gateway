@@ -5,7 +5,7 @@
  * that every tool is served by at least one of them. Kept in alphabetical
  * order, the order of GitHub's token page, so the guide reads down it.
  *
- * Handbook : docs/handbook/providers/github.md.
+ * Handbook : docs/handbook/services/github.md.
  */
 
 import type { TokenPermission } from '@vaubaan/plugin-sdk';

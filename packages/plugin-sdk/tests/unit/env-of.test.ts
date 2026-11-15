@@ -33,7 +33,7 @@ describe('envFromSliceSegment', () => {
 
   test('composed by the host, a slice spanning several environments resolves to none', () => {
     // The resource is labelled `staging`; the slice reaches every environment of it.
-    const labelled = [{ provider: 'vercel', ref: 'prj_1', env: 'staging', displayName: 'app' }];
+    const labelled = [{ service: 'vercel', ref: 'prj_1', env: 'staging', displayName: 'app' }];
     const resolver = envResolverFor(labelled, envOf);
     expect(resolver.resolveEnv(parseSlice('vercel.project[prj_1].env[*].env-var[K].W'))).toBeNull();
     expect(

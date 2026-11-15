@@ -3,8 +3,8 @@
  * (`Request → Response`, never `next`). The Next route handlers under
  * `src/app/**` are one-line adapters over these.
  *
- *   POST /accounts/connect/<provider>             start a flow / submit a form
- *   GET  /connections/callback/<provider>            the provider's redirect back
+ *   POST /accounts/connect/<service>             start a flow / submit a form
+ *   GET  /connections/callback/<service>            the service's redirect back
  *   POST /accounts/<id>/discover                  refresh discovery
  *   POST /accounts/<id>/revoke                    revoke (terminal)
  *   POST /accounts/<id>/transfer                  transfer ownership to a group of the owner
@@ -12,7 +12,7 @@
  *   POST /accounts/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /accounts/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
- *   GET  /reference/<provider>/connect/<file>        a screenshot of the connect guide
+ *   GET  /reference/<service>/connect/<file>        a screenshot of the connect guide
  *                                                    (signed-in users; read-only)
  *   POST /api/missions/<id>/resources/check          JSON `{ account_id }`: "check now"
  *                                                    on a mission card — discovery of that
@@ -20,7 +20,7 @@
  *                                                    joined or left the mission
  *
  * Every mutation requires a web session and passes the origin check (spec
- * §6). The callback is a top-level GET from the provider: it carries no
+ * §6). The callback is a top-level GET from the service: it carries no
  * `Origin`, its protection is the single-use `state` bound to the user who
  * started the flow. Outcomes reach the next page as an opaque one-time notice
  * id, never as text in the URL.
@@ -45,7 +45,7 @@ import type { ConnectFile } from '../plugins';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
-import { providerGrantReport } from './provider-grant';
+import { serviceGrantReport } from './service-grant';
 import {
   ACCOUNTS_PATH,
   type Actor,
@@ -56,8 +56,8 @@ import {
 
 export const NEW_ACCOUNT_PATH = `${ACCOUNTS_PATH}/new`;
 /** The connect page of a service: where a person connects it. */
-export function connectPagePath(providerId: string): string {
-  return `${NEW_ACCOUNT_PATH}/${encodeURIComponent(providerId)}`;
+export function connectPagePath(serviceId: string): string {
+  return `${NEW_ACCOUNT_PATH}/${encodeURIComponent(serviceId)}`;
 }
 /**
  * Where the accounts that have no owner left are listed: the last region
@@ -92,12 +92,12 @@ export interface AccountHandlerDeps {
   readonly notices: NoticeStore;
   readonly logger: Logger;
   /** A screenshot of a plugin's connect guide, or `null` (`readConnectFile` of `../plugins`). */
-  readonly connectFile: (providerId: string, file: string) => Promise<ConnectFile | null>;
+  readonly connectFile: (serviceId: string, file: string) => Promise<ConnectFile | null>;
 }
 
 export interface AccountHandlers {
-  connect(request: Request, providerId: string): Promise<Response>;
-  callback(request: Request, providerId: string): Promise<Response>;
+  connect(request: Request, serviceId: string): Promise<Response>;
+  callback(request: Request, serviceId: string): Promise<Response>;
   discover(request: Request, accountId: string): Promise<Response>;
   revoke(request: Request, accountId: string): Promise<Response>;
   transfer(request: Request, accountId: string): Promise<Response>;
@@ -111,11 +111,11 @@ export interface AccountHandlers {
    */
   checkMissionResources(request: Request, missionId: string): Promise<Response>;
   /**
-   * `GET /reference/:provider/connect/:file` — a screenshot the plugin's connect guide
+   * `GET /reference/:service/connect/:file` — a screenshot the plugin's connect guide
    * declares, for a signed-in user (the connect page's reader); 401 without a session,
    * 403 for the bootstrap operator, 404 for anything not declared.
    */
-  connectFile(request: Request, providerId: string, file: string): Promise<Response>;
+  connectFile(request: Request, serviceId: string, file: string): Promise<Response>;
 }
 
 const INVALID_CHECK = {
@@ -227,7 +227,7 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       }
     },
 
-    async connect(request, providerId) {
+    async connect(request, serviceId) {
       const who = await userOf(request);
       if ('response' in who) return who.response;
       const form = await readForm(request);
@@ -235,7 +235,7 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       const reconnectId = stringField(form, 'account_id') || null;
       const typed = prefixedFields(form, FIELD_PREFIX);
       try {
-        const result = await deps.accounts.start(who.actor, providerId, {
+        const result = await deps.accounts.start(who.actor, serviceId, {
           displayName: stringField(form, 'name'),
           returnTo: stringField(form, 'return_to') || null,
           reconnectId,
@@ -249,30 +249,30 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
           connectedNotice(result),
         );
       } catch (err) {
-        const unknownProvider = err instanceof ConnectError && err.code === 'provider-unknown';
+        const unknownService = err instanceof ConnectError && err.code === 'service-unknown';
         // Back to the same form: the account being reconnected and the page to
         // return to afterwards stay in its address.
         const query = new URLSearchParams();
         if (reconnectId) query.set('account', reconnectId);
         const returnTo = stringField(form, 'return_to');
         if (returnTo) query.set('return_to', returnTo);
-        const back = unknownProvider
+        const back = unknownService
           ? NEW_ACCOUNT_PATH
-          : `${NEW_ACCOUNT_PATH}/${encodeURIComponent(providerId)}${
+          : `${NEW_ACCOUNT_PATH}/${encodeURIComponent(serviceId)}${
               query.size > 0 ? `?${query.toString()}` : ''
             }`;
         // The form comes back as it was typed, the field in error marked: the
         // name and the non-secret values only — a key is never kept.
-        const provider = unknownProvider ? null : await deps.accounts.provider(providerId);
+        const service = unknownService ? null : await deps.accounts.service(serviceId);
         const notice = failureNotice(err, 'Not connected');
         return redirectWithNotice(
           who.principal,
           back,
-          provider
+          service
             ? {
                 ...notice,
                 form: echoOfForm(
-                  provider,
+                  service,
                   typed,
                   stringField(form, 'name'),
                   stringField(form, ALTERNATIVE_FIELD) || null,
@@ -283,10 +283,10 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       }
     },
 
-    async connectFile(request, providerId, file) {
+    async connectFile(request, serviceId, file) {
       const guard = await guardSession(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
-      const found = await deps.connectFile(providerId, file);
+      const found = await deps.connectFile(serviceId, file);
       if (!found) return new Response(null, { status: 404 });
       return new Response(new Uint8Array(found.body), {
         headers: {
@@ -297,14 +297,14 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       });
     },
 
-    async callback(request, providerId) {
+    async callback(request, serviceId) {
       const guard = await guardSession(request, deps, 'user');
       if (!guard.ok) return redirect(LOGIN_PAGE);
       const { principal } = guard;
       try {
         const result = await deps.accounts.complete(
           actorOf(principal),
-          providerId,
+          serviceId,
           new URL(request.url).searchParams,
         );
         return await redirectWithNotice(
@@ -341,8 +341,8 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       if ('response' in who) return who.response;
       try {
         const revoked = await deps.accounts.revoke(who.actor, accountId);
-        const at = deps.accounts.providerGrantOf(revoked);
-        const grant = providerGrantReport(at.providerLabel, revoked.providerGrant, at.grant.byHand);
+        const at = deps.accounts.serviceGrantOf(revoked);
+        const grant = serviceGrantReport(at.serviceLabel, revoked.serviceGrant, at.grant.byHand);
         return await redirectWithNotice(who.principal, accountPath(revoked.id), {
           // The act succeeded either way; the tone says whether something is left to do.
           tone: grant.actionNeeded ? 'warning' : 'success',

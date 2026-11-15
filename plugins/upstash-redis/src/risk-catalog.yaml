@@ -1,10 +1,10 @@
-# Risk catalog of the `upstash-redis` provider — one plane, two API layers.
+# Risk catalog of the `upstash-redis` service — one plane, two API layers.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/upstash-redis.md.
+# Handbook : docs/handbook/services/upstash-redis.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; the loader refuses
-# unknown keys, malformed ids, patterns of another provider, a missing
+# unknown keys, malformed ids, patterns of another service, a missing
 # fallback, a `presets` key, a live risk in no macro-action, a macro-action
 # entry that is not a risk of this catalog, a non-numeric base budget.
 #
@@ -46,7 +46,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 10 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: upstash-redis
+service: upstash-redis
 catalog_version: 10
 catalog_date: 2026-11-13
 

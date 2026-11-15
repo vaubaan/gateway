@@ -23,7 +23,7 @@ import { cloudflareDnsCatalog, cloudflareDnsPlugin, cloudflareDnsTools } from '.
 const { catalog, indexed: idx } = cloudflareDnsCatalog;
 
 const zone: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: 'zone_x',
   displayName: 'example.com',
   metadata: { account_id: 'abc123account', zone_name: 'example.com' },
@@ -31,7 +31,7 @@ const zone: Resource = {
 
 describe('cloudflare-dns risk-catalog — shape', () => {
   test('11 named risks + 1 fallback, version 6', () => {
-    expect(catalog.provider).toBe('cloudflare-dns');
+    expect(catalog.service).toBe('cloudflare-dns');
     expect(catalog.risks).toHaveLength(12);
     expect(catalog.catalog_version).toBe(7);
     expect(catalog.risks.filter((r) => r.fallback === true).map((r) => r.id)).toEqual([
@@ -69,7 +69,7 @@ describe('cloudflare-dns risk-catalog — shape', () => {
 
 describe('cloudflare-dns risk-catalog — prepareCatalog', () => {
   test('indexes every risk', () => {
-    expect(idx.provider).toBe('cloudflare-dns');
+    expect(idx.service).toBe('cloudflare-dns');
     expect(idx.entries.length).toBe(catalog.risks.length);
     expect(prepareCatalog(catalog).entries.length).toBe(catalog.risks.length);
   });

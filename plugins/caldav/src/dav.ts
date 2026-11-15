@@ -3,7 +3,7 @@
  * multistatus answers it reads, and where the app password may be sent.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 (the executor), §5.
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  *   - **Where** : the server URL the person typed is the anchor. A request
  *     goes to the same scheme, port and host, or to the one host of the
@@ -160,7 +160,7 @@ export interface DavResponse {
   readonly text: string;
 }
 
-/** An answer larger than its bound : a provider failure, thrown. */
+/** An answer larger than its bound : a service failure, thrown. */
 export class DavTooLarge extends Error {
   constructor(maxBytes: number) {
     super(`caldav: the server answered more than ${maxBytes} bytes.`);
@@ -300,7 +300,7 @@ export interface DavEntry {
   readonly props: ReadonlyMap<string, Element>;
 }
 
-/** The answer is not a multistatus the plugin can read : a provider failure, thrown. */
+/** The answer is not a multistatus the plugin can read : a service failure, thrown. */
 export class DavParseError extends Error {
   constructor(message: string) {
     super(`caldav: ${message}`);

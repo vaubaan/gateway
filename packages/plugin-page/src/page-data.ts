@@ -139,8 +139,8 @@ export const CARDINALITY_MARKS: Readonly<Record<DataModelCardinality, string>> =
 };
 
 /**
- * How a cardinality reads (risk model §2.1): the gateway's provider reference
- * says the same (`CARDINALITY_WORDS`, `apps/gateway/src/lib/providers/reference.ts`,
+ * How a cardinality reads (risk model §2.1): the gateway's service reference
+ * says the same (`CARDINALITY_WORDS`, `apps/gateway/src/lib/services/reference.ts`,
  * which the site may not import; `sources-agree.test.ts` compares them).
  */
 export const CARDINALITY_WORDS: Readonly<Record<DataModelCardinality, string>> = {
@@ -150,7 +150,7 @@ export const CARDINALITY_WORDS: Readonly<Record<DataModelCardinality, string>> =
 };
 
 /**
- * The rule of the environment (risk model §6), as the gateway's provider
+ * The rule of the environment (risk model §6), as the gateway's service
  * reference says it (`ENVIRONMENT_EXPLANATIONS`; compared by `sources-agree.test.ts`).
  */
 export const ENVIRONMENT_RULES: Readonly<Record<EnvironmentSource, string>> = {
@@ -709,7 +709,7 @@ export function expiryText(
   escape: (value: string) => string = (value) => value,
 ): string {
   switch (expiry.kind) {
-    case 'provider-reports':
+    case 'service-reports':
       return 'the service tells the gateway the date, and the account page warns before it.';
     case 'person-types':
       return `about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
@@ -806,8 +806,8 @@ export const BROKER_ADMIN_TITLE = 'Before anyone connects';
 /** What an administrator does once, before anyone connects a brokered service. */
 export function brokerAdminSentences(c: CredentialInfo, service: string): string[] {
   return [
-    `The instance must be enrolled with an OAuth broker serving the provider \`${c.brokerProvider ?? ''}\`; an administrator sets it up once, for everyone on the instance. Until then ${service} reads "not configured" on the connect screen.`,
-    'Two ways to get one: enrol with a broker someone else operates, or run the published broker image with your own client at the provider.',
+    `The instance must be enrolled with an OAuth broker serving the service \`${c.brokerProvider ?? ''}\`; an administrator sets it up once, for everyone on the instance. Until then ${service} reads "not configured" on the connect screen.`,
+    'Two ways to get one: enrol with a broker someone else operates, or run the published broker image with your own client at the service.',
     "The gateway's pages tell whether the broker is attested.",
   ];
 }

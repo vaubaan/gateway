@@ -37,16 +37,17 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
   const { root, principal } = session;
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const providers = await root.auth.providers.views();
-  const local = providers.find((p) => p.kind === 'local') ?? null;
+  const signInProviders = await root.auth.signInProviders.views();
+  const local = signInProviders.find((p) => p.kind === 'local') ?? null;
   const accountId = local ? signInAccountIdOf(principal, local) : null;
   const account = accountId ? await root.auth.signInAccounts.signInAccountById(accountId) : null;
   const hasFactor = await root.auth.secondFactors.has(principal.user.id);
   const codesLeft = hasFactor
     ? await root.auth.secondFactors.recoveryCodesLeft(principal.user.id)
     : 0;
-  const providerName =
-    providers.find((p) => p.id === principal.providerId)?.name ?? 'your sign-in provider';
+  const signInProviderName =
+    signInProviders.find((p) => p.id === principal.signInProviderId)?.name ??
+    'your sign-in provider';
   const enrolling = params[ENROL_PARAM] !== undefined;
   const step = enrolling ? await root.auth.sessions.peekLocalStep(await headers()) : null;
   const enrolment =
@@ -73,7 +74,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
         lede={
           account
             ? 'Your password and your second factor, for the account this gateway keeps for you.'
-            : `Your second factor on this gateway. Your password stays with ${providerName}.`
+            : `Your second factor on this gateway. Your password stays with ${signInProviderName}.`
         }
       />
       <NoticeBanner notice={notice} />
@@ -87,7 +88,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
       <>
         <Section
           title="Second factor"
-          note="A code from an authenticator app at each sign-in, asked by this gateway whatever provider you sign in through."
+          note="A code from an authenticator app at each sign-in, asked by this gateway whatever sign-in provider you sign in through."
           first
           testId="second-factor"
         >
@@ -123,7 +124,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
               {hasFactor && !administrator && (
                 <Row
                   title="Remove the second factor"
-                  description="Within ten minutes of signing in. Your next sign-in asks for one again, unless your provider's own stands in for it."
+                  description="Within ten minutes of signing in. Your next sign-in asks for one again, unless your sign-in provider's own stands in for it."
                   end={
                     <ConfirmSubmit
                       action={`${SECURITY_PAGE}/second-factor/remove`}

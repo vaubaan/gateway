@@ -1,9 +1,9 @@
 /**
- * Classifier of the `github` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `github` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/github.md.
+ * Handbook : docs/handbook/services/github.md.
  *
  * Pure : no IO, no credential, no `Date`. A call returns one OR MORE slices
  * (multi-slice tools : `merge_pull_request`, `create_pull_request`,
@@ -54,7 +54,7 @@ import {
 
 import { githubRepoRefs, isWorkflowPath, readGithubCall, type GithubCall } from './call.ts';
 import { isGitTool, readGitCall, type GitCall, type GitTargetUpdate } from './git-call.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export { isWorkflowPath } from './call.ts';
 
@@ -95,7 +95,7 @@ export function classifyGithub(
  * as a second reading, from the files themselves.
  */
 export function gitSlicesOf(call: GitCall): Slice[] {
-  const repo = `${PROVIDER_ID}.repo[${call.target.ref}]`;
+  const repo = `${SERVICE_ID}.repo[${call.target.ref}]`;
   if (call.tool === TOOL.gitFetch) {
     return [build(`${repo}.branch.R`), build(`${repo}.tag.R`)];
   }
@@ -124,9 +124,9 @@ export function slicesOf(call: GithubCall): Slice[] {
   switch (call.tool) {
     // ── The search plane : GitHub's global search, beyond the repositories ──
     case TOOL.searchCode:
-      return [build(`${PROVIDER_ID}.search.code.R`)];
+      return [build(`${SERVICE_ID}.search.code.R`)];
     case TOOL.searchIssues:
-      return [build(`${PROVIDER_ID}.search.issues.R`)];
+      return [build(`${SERVICE_ID}.search.issues.R`)];
 
     default:
       return repoSlices(call);
@@ -134,7 +134,7 @@ export function slicesOf(call: GithubCall): Slice[] {
 }
 
 function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
-  const repo = `${PROVIDER_ID}.repo[${call.target.ref}]`;
+  const repo = `${SERVICE_ID}.repo[${call.target.ref}]`;
   switch (call.tool) {
     // ── Reads — code / branch / commit / file / tag ────────────────────────
     case TOOL.listBranches:
@@ -279,7 +279,7 @@ function dedup(slices: readonly Slice[]): Slice[] {
   const seen = new Set<string>();
   const out: Slice[] = [];
   for (const s of slices) {
-    const key = JSON.stringify({ p: s.provider, a: s.action, path: s.path });
+    const key = JSON.stringify({ p: s.service, a: s.action, path: s.path });
     if (!seen.has(key)) {
       seen.add(key);
       out.push(s);

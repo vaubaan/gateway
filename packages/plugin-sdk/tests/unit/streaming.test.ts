@@ -44,10 +44,10 @@ describe('streamToolResult', () => {
 
   it('hands each part to the sink, in order, before reading the next one', async () => {
     const order: string[] = [];
-    async function* provider(): AsyncGenerator<McpToolContent> {
-      order.push('provider: 1');
+    async function* service(): AsyncGenerator<McpToolContent> {
+      order.push('service: 1');
       yield text('1');
-      order.push('provider: 2');
+      order.push('service: 2');
       yield text('2');
     }
     const result = await streamToolResult(
@@ -57,27 +57,27 @@ describe('streamToolResult', () => {
           order.push(`sink: ${part.type === 'text' ? part.text : part.type}`);
         },
       },
-      provider(),
+      service(),
     );
-    expect(order).toEqual(['provider: 1', 'sink: 1', 'provider: 2', 'sink: 2']);
+    expect(order).toEqual(['service: 1', 'sink: 1', 'service: 2', 'sink: 2']);
     expect(result).toEqual({ content: [text('12')] });
   });
 
-  it('propagates a failure of the provider after the parts already sent', async () => {
+  it('propagates a failure of the service after the parts already sent', async () => {
     const sent: McpToolContent[] = [];
-    async function* provider(): AsyncGenerator<McpToolContent> {
+    async function* service(): AsyncGenerator<McpToolContent> {
       yield text('kept');
       throw new Error('connection reset');
     }
     await expect(
-      streamToolResult({ emitPart: async (part) => void sent.push(part) }, provider()),
+      streamToolResult({ emitPart: async (part) => void sent.push(part) }, service()),
     ).rejects.toThrow('connection reset');
     expect(sent).toEqual([text('kept')]);
   });
 
-  it('ends the iteration when the sink rejects, so the provider is released', async () => {
+  it('ends the iteration when the sink rejects, so the service is released', async () => {
     let released = false;
-    async function* provider(): AsyncGenerator<McpToolContent> {
+    async function* service(): AsyncGenerator<McpToolContent> {
       try {
         yield text('1');
         yield text('2');
@@ -92,7 +92,7 @@ describe('streamToolResult', () => {
             throw new Error('the caller is gone');
           },
         },
-        provider(),
+        service(),
       ),
     ).rejects.toThrow('the caller is gone');
     expect(released).toBe(true);

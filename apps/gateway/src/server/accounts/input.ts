@@ -64,7 +64,7 @@ export function readCredentialFields(
 /**
  * The fields of a connect form: the spec's, and its alternatives when the
  * key comes in several shapes (`CredentialAlternative`, Vercel: a team or one
- * project). `ConnectableProvider` and an `api-key` spec are both one.
+ * project). `ConnectableService` and an `api-key` spec are both one.
  */
 export interface FormFields {
   readonly fields: readonly CredentialField[];
@@ -205,7 +205,7 @@ export function parseEnvLabel(
 /**
  * Metadata keys the owner may edit on a resource: the ones whose discovered
  * value is a list of strings (Resend's `internal_domains`,
- * `allowlist_domains`, `allowlist_addresses`). Scalars are provider facts
+ * `allowlist_domains`, `allowlist_addresses`). Scalars are service facts
  * (ids, status, region) and stay read-only.
  */
 export function editableMetadataKeys(metadata: Readonly<Record<string, unknown>> | null): string[] {
@@ -235,19 +235,19 @@ export function parseListValue(
 
 /**
  * What a plugin returned as resources (`discoverResources`, `createdResources`), as the
- * store keeps them: a resource of another provider or without a ref is left out (and
+ * store keeps them: a resource of another service or without a ref is left out (and
  * counted), a name is cleaned, a label the plugin sets must be a valid environment label
  * (otherwise the resource is kept unlabelled and the owner decides). One rule for the
  * discovery merge and for a created resource.
  */
 export function usableResourcesOf(
-  providerId: string,
+  serviceId: string,
   resources: readonly Resource[],
 ): { readonly usable: DiscoveredResource[]; readonly unusable: number } {
   const usable: DiscoveredResource[] = [];
   let unusable = 0;
   for (const r of resources) {
-    if (r.provider !== providerId || typeof r.ref !== 'string' || r.ref.length === 0) {
+    if (r.service !== serviceId || typeof r.ref !== 'string' || r.ref.length === 0) {
       unusable += 1;
       continue;
     }

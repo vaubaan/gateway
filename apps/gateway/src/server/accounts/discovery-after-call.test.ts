@@ -5,7 +5,7 @@
  * tests/integration/execution/discovery-after-call.test.ts.
  */
 import type { MissionContext } from '@vaubaan/gateway-core';
-import type { PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { PluginRegistry, ServicePlugin } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { silentLogger, type Logger } from '../logging';
@@ -18,13 +18,11 @@ const READ = 'yard__read_shed';
 const plugin = {
   id: 'yard',
   resourceCreatingTools: [CREATE],
-} as unknown as ProviderPlugin;
+} as unknown as ServicePlugin;
 
-const registry: Pick<PluginRegistry, 'providerForTool'> = {
-  providerForTool: (tool) =>
-    tool.startsWith('yard__')
-      ? ({ plugin } as ReturnType<PluginRegistry['providerForTool']>)
-      : null,
+const registry: Pick<PluginRegistry, 'serviceForTool'> = {
+  serviceForTool: (tool) =>
+    tool.startsWith('yard__') ? ({ plugin } as ReturnType<PluginRegistry['serviceForTool']>) : null,
 };
 
 function context(holder: 'member' | 'named' = 'member'): MissionContext {
@@ -38,7 +36,7 @@ function context(holder: 'member' | 'named' = 'member'): MissionContext {
           ? { kind: 'member', user_id: 'usr_member', display: 'm@example.com' }
           : { kind: 'named', name: 'ci' },
     },
-    accounts: [{ id: 'con_1', provider: 'yard' }],
+    accounts: [{ id: 'con_1', service: 'yard' }],
   } as unknown as MissionContext;
 }
 

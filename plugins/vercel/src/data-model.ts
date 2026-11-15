@@ -1,8 +1,8 @@
 /**
- * Data model of the `vercel` provider.
+ * Data model of the `vercel` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/vercel.md.
+ * Handbook : docs/handbook/services/vercel.md.
  *
  * Vercel exposes a single plane, `runtime`. Every entity lives under a
  * `team` (itself under the `account` the credential belongs to) and almost
@@ -28,10 +28,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const vercelDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'runtime',

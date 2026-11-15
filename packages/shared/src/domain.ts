@@ -49,7 +49,7 @@ export type Principal =
 // Accounts, resources, shares
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** How an account authenticates to its provider. Declared by the plugin.
+/** How an account authenticates to its service. Declared by the plugin.
  *  The constant is the source ; the type derives from it so a new kind cannot
  *  be added to one without the other. */
 export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'ssh-key', 'host'] as const;
@@ -70,7 +70,7 @@ export interface Credential {
   readonly ciphertext: Uint8Array;
   /** Which master-key version encrypted `ciphertext` (rotation). */
   readonly key_version: number;
-  /** When the provider will reject the credential ; `null` when it does not expire. */
+  /** When the service will reject the credential ; `null` when it does not expire. */
   readonly expires_at: Iso8601 | null;
   /** Non-secret facts a plugin needs at call time (`team_id`, `installation_id`, account name). */
   readonly metadata: Readonly<Record<string, string>>;
@@ -80,7 +80,7 @@ export type AccountStatus = 'active' | 'expired' | 'revoked' | 'unowned';
 
 export interface Account {
   readonly id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly display_name: string;
   readonly owner: Principal;
   readonly status: AccountStatus;
@@ -94,16 +94,16 @@ export interface Account {
  * One thing reachable through an account : a repository, a database
  * project, a hosting project. Discovered by the plugin when the account is connected,
  * labelled with an environment by the owner. Replaces the v4
- * `ProviderBinding`.
+ * `ServiceBinding`.
  */
 export interface Resource {
-  readonly provider: string;
+  readonly service: string;
   /** The identifier the agent cites in its arguments and the gateway checks (`owner/repo`, `prj_xxx`). */
   readonly ref: string;
   /** Environment label set by the owner (`prod`, `staging`) ; absent or null when not labelled. */
   readonly env?: string | null;
   readonly displayName: string;
-  /** Provider-specific, non-secret facts the classifier may need (Gmail allowlists, etc.). */
+  /** Service-specific, non-secret facts the classifier may need (Gmail allowlists, etc.). */
   readonly metadata?: Readonly<Record<string, unknown>>;
   /**
    * A discovery's hint: the credential reaches the resource but most likely cannot act on
@@ -380,7 +380,7 @@ export interface Approval {
 
 /**
  * What the gateway decided for a call (spec §8 : "one entry per call,
- * allowed or refused"). An allowed call whose provider then failed stays
+ * allowed or refused"). An allowed call whose service then failed stays
  * `allowed` with `upstream_error` set ; a structural rejection without a
  * code is `refused` with a null `refusal_code`.
  */

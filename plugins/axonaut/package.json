@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Axonaut — CRM, quotes, invoices, payments, projects and tickets of one Axonaut account",
+  "description": "Vaubaan Gateway plugin for Axonaut — CRM, quotes, invoices, payments, projects and tickets of one Axonaut account",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

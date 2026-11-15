@@ -361,7 +361,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'users.handlers.addAdministratorGroup': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.addAdministratorGroup(
-      post('/admin/users/administrators/group', headers, { provider: 'none', group: 'g' }),
+      post('/admin/users/administrators/group', headers, { sign_in_provider: 'none', group: 'g' }),
     ),
   ),
   'users.handlers.removeAdministratorDesignation': form('operator', 303, (rig, headers) =>
@@ -569,7 +569,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
     rig.root.auth.handlers.recoverName(
       post('/api/recover/name', headers, {
         kind: 'email',
-        provider: 'idp',
+        signInProvider: 'idp',
         email: 'x@example.org',
       }),
     ),
@@ -613,7 +613,7 @@ const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginStart': 'GET; starts a sign-in, the pending login is bound to a cookie',
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
   'accounts.handlers.callback':
-    'GET from the provider; protected by the single-use state bound to the user (guardSession)',
+    'GET from the sign-in provider; protected by the single-use state bound to the user (guardSession)',
   'accounts.handlers.connectFile':
     'GET; a screenshot of a connect guide, read from the plugin folder (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
@@ -716,8 +716,8 @@ describe('the mutation guard covers every mutating handler', () => {
     const root = await buildTestRoot({
       env: { VAUBAAN_ADMIN_EMAILS: OPERATOR_EMAIL },
       deps: {
-        providerFetch: async () => {
-          throw new Error('no provider is reachable from a test');
+        serviceFetch: async () => {
+          throw new Error('no sign-in provider is reachable from a test');
         },
       },
     });

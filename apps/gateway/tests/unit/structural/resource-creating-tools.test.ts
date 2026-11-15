@@ -7,7 +7,7 @@
  *
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`). The
  * expected table is kept here on purpose: adding or dropping a creating tool
- * changes what the gateway does after a call (a discovery at the provider),
+ * changes what the gateway does after a call (a discovery at the service),
  * so it is a reviewed change of this file, not a side effect. `definePlugin`
  * already refuses a name that is not a tool of the plugin; this pins which
  * plugins declare what.

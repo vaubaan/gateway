@@ -24,7 +24,7 @@ import {
 import { citedRefs, createResourceStage, toolUnavailableOn } from './resource-stage';
 import { depotPlugin } from '../../../tests/support/execution/testing';
 import { TokenVerifier } from './token-verifier';
-import { callableProviders, callableTools } from './tools';
+import { callableServices, callableTools } from './tools';
 
 describe('agent label', () => {
   it('reads the header, and prefers the per-call _meta.agent', () => {
@@ -177,20 +177,20 @@ describe('tool discovery', () => {
   const labs = fixturePlugin({ id: 'labs', credential: API_KEY_SPEC });
   const registry = createRegistry([depot, other, labs]);
 
-  const context = (providers: readonly string[], risks: readonly string[]): MissionContext =>
+  const context = (services: readonly string[], risks: readonly string[]): MissionContext =>
     ({
       mission: { id: 'm' },
-      accounts: providers.map((provider) => ({ id: `c-${provider}`, provider })),
+      accounts: services.map((service) => ({ id: `c-${service}`, service })),
       resources: [],
       policy: risks.map((risk_id) => ({ risk_id })),
     }) as unknown as MissionContext;
 
-  it('needs both an account and an accepted risk of the provider', () => {
+  it('needs both an account and an accepted risk of the service', () => {
     expect(callableTools(context(['depot'], ['depot.read']), registry)).toHaveLength(5);
     expect(callableTools(context(['depot'], ['other.read-things']), registry)).toEqual([]);
     expect(callableTools(context([], ['depot.read']), registry)).toEqual([]);
     expect([
-      ...callableProviders(
+      ...callableServices(
         context(['depot', 'other'], ['depot[staging].write', 'other.read-things']),
       ),
     ]).toEqual(['depot', 'other']);
@@ -217,7 +217,7 @@ describe('an account connected a way the plugin no longer offers', () => {
       accounts: [
         {
           id: 'c-dual',
-          provider: 'dual',
+          service: 'dual',
           display_name: 'Dual bot',
           ...(credential_kind ? { credential_kind } : {}),
         },

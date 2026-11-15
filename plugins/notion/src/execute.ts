@@ -1,7 +1,7 @@
 /**
  * Execution of the `notion` tools.
  *
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
  * Order, for every tool :
  *   1. the undeclared-argument rule and `readCall`, the classifier's own
@@ -21,7 +21,7 @@
  *      block children. Update a block, delete a block and create a comment
  *      document no such field.
  *
- * Declines are `ExecutorRefusal` under `declining` ; provider failures are
+ * Declines are `ExecutorRefusal` under `declining` ; service failures are
  * thrown (`api.ts`), an answer of an unexpected shape included
  * (`UpstreamProtocolError`).
  */
@@ -44,7 +44,7 @@ import { request } from './api.ts';
 import { readCall, undeclaredArgument, type NotionCall } from './classify.ts';
 import { CONTAINER_BLOCK_TYPES, type References } from './content.ts';
 import { cursor, notionId } from './ids.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { isResultList, type Json, type ResultList } from './json.ts';
 
 /** Extra requests a search may spend proving its results under the root. */
@@ -113,7 +113,7 @@ export function executeNotion(
 
 function rootsOf(resources: readonly Resource[]) {
   return resources
-    .filter((r) => r.provider === PROVIDER_ID)
+    .filter((r) => r.service === SERVICE_ID)
     .map((r) => ({
       id: notionId(r.ref),
       title: r.displayName,

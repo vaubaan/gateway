@@ -53,7 +53,7 @@ const RECORD_ID = '372e67954025e0ba6aaa6d586b9e0b59';
 const ACCOUNT_ID = '01a7362d577a6c3019a474fd6f485823';
 
 const zone: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: ZONE_ID,
   displayName: 'example.com',
   metadata: { account_id: ACCOUNT_ID, zone_name: 'example.com' },

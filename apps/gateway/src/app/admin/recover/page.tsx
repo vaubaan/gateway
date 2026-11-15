@@ -40,7 +40,7 @@ export default async function RecoverPage({ searchParams }: Props) {
       .join('; '),
   });
   const open = !outcome && (await root.auth.recovery.isOpen(headers));
-  const providers = open ? await root.auth.providers.views() : [];
+  const signInProviders = open ? await root.auth.signInProviders.views() : [];
   const users = open ? (await root.store.users.list()).filter((u) => u.status === 'active') : [];
 
   return (
@@ -102,9 +102,9 @@ export default async function RecoverPage({ searchParams }: Props) {
             <Field label="Or an address, through a sign-in provider" htmlFor="recover-email">
               <Input id="recover-email" name="email" type="email" required />
             </Field>
-            <Field label="Provider" htmlFor="recover-email-provider">
-              <Select id="recover-email-provider" name="provider" required>
-                {providers.map((p) => (
+            <Field label="Sign-in provider" htmlFor="recover-email-sign-in-provider">
+              <Select id="recover-email-sign-in-provider" name="sign_in_provider" required>
+                {signInProviders.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -116,14 +116,14 @@ export default async function RecoverPage({ searchParams }: Props) {
           <form method="post" action="/api/recover/name" className={styles.field}>
             <input type="hidden" name="kind" value="group" />
             <Field
-              label="Or a group of a provider (GitHub: a team, org/team)"
+              label="Or a group of a sign-in provider (GitHub: a team, org/team)"
               htmlFor="recover-group"
             >
               <Input id="recover-group" name="group" required />
             </Field>
-            <Field label="Provider" htmlFor="recover-group-provider">
-              <Select id="recover-group-provider" name="provider" required>
-                {providers
+            <Field label="Sign-in provider" htmlFor="recover-group-sign-in-provider">
+              <Select id="recover-group-sign-in-provider" name="sign_in_provider" required>
+                {signInProviders
                   .filter((p) => p.kind !== 'local')
                   .map((p) => (
                     <option key={p.id} value={p.id}>

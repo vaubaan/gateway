@@ -25,10 +25,10 @@ import {
   GITHUB_DOT_COM,
   GITHUB_IS_NOT_OIDC,
   isGithubDotComHost,
-  DEFAULT_LOCAL_PROVIDER_NAME,
+  DEFAULT_LOCAL_SIGN_IN_PROVIDER_NAME,
   isSignInKind,
   isSignInProviderId,
-  localProviderOf,
+  localSignInProviderOf,
   issuerKey,
   normalizeEmailDomains,
   SIGN_IN_KINDS,
@@ -447,7 +447,7 @@ function validate(
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const restore = readRestore(r);
   const encryption = readEncryption(r, masterKey, restore.from !== null);
-  refuseSingleProviderKeys(r, raw, env);
+  refuseSingleSignInProviderKeys(r, raw, env);
   const signIn = readSignIn(r);
   const signInProviders = checkSignInProviders(r, signIn);
   const admin = readAdmin(r, signInProviders);
@@ -698,7 +698,7 @@ function readLimits(r: Reader): LimitsConfig {
   };
 }
 
-/** The shape of a plugin id (`isProviderId` of the SDK's vocabulary: a lowercase slug). */
+/** The shape of a plugin id (`isServiceId` of the SDK's vocabulary: a lowercase slug). */
 const PLUGIN_ID_SHAPE = /^[a-z][a-z0-9-]*$/;
 
 /**
@@ -1100,14 +1100,14 @@ function normalizeBase64(text: string): string {
  * The same provider is `sign_in.idp.*`, whose callback is `<public_url>/auth/callback/idp`
  * (gateway audit 2026-10-31, F7; CHANGELOG upgrade note).
  */
-function refuseSingleProviderKeys(r: Reader, raw: RawTree, env: EnvSource): void {
+function refuseSingleSignInProviderKeys(r: Reader, raw: RawTree, env: EnvSource): void {
   const variables = Object.keys(env)
     .filter((name) => name.startsWith(RETIRED_IDP_ENV_PREFIX) && env[name] !== undefined)
     .sort();
   if (raw[RETIRED_IDP_KEY] === undefined && variables.length === 0) return;
   r.issues.add(
     RETIRED_IDP_KEY,
-    'the single-provider keys are retired: write the same provider as sign_in.idp.* (kind oidc, issuer, client_id, client_secret, claims, allowed_email_domains, invitation_only; VAUBAAN_SIGN_IN_IDP_KIND=oidc, VAUBAAN_SIGN_IN_IDP_ISSUER, …) and register <public_url>/auth/callback/idp at the identity provider',
+    'the single-provider keys are retired: write the same sign-in provider as sign_in.idp.* (kind oidc, issuer, client_id, client_secret, claims, allowed_email_domains, invitation_only; VAUBAAN_SIGN_IN_IDP_KIND=oidc, VAUBAAN_SIGN_IN_IDP_ISSUER, …) and register <public_url>/auth/callback/idp at the identity provider',
     variables,
   );
 }
@@ -1134,8 +1134,8 @@ function readSignIn(r: Reader): SignInProvider[] {
       r.issues.add(base, `expected a mapping of sign-in provider fields, got ${typeName(value)}`);
       continue;
     }
-    const provider = readSignInProvider(r, id, base);
-    if (provider) out.push(provider);
+    const signInProvider = readSignInProvider(r, id, base);
+    if (signInProvider) out.push(signInProvider);
   }
   return out;
 }
@@ -1164,16 +1164,16 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
       if (r.has(`${base}.${field}`)) {
         r.issues.add(
           `${base}.${field}`,
-          `a local provider keeps the accounts itself: it has no ${field.replace(/_/g, ' ')} (it admits invited addresses and the admin rule's only)`,
+          `a local sign-in provider keeps the accounts itself: it has no ${field.replace(/_/g, ' ')} (it admits invited addresses and the admin rule's only)`,
           envNamesFor(`${base}.${field}`),
         );
       }
     }
     const name =
-      r.string(`${base}.name`, { fallback: DEFAULT_LOCAL_PROVIDER_NAME }) ??
-      DEFAULT_LOCAL_PROVIDER_NAME;
+      r.string(`${base}.name`, { fallback: DEFAULT_LOCAL_SIGN_IN_PROVIDER_NAME }) ??
+      DEFAULT_LOCAL_SIGN_IN_PROVIDER_NAME;
     if (r.issues.items.length > before) return null;
-    return localProviderOf(id, name);
+    return localSignInProviderOf(id, name);
   }
   const clientId = r.string(`${base}.client_id`, { required: true });
   const clientSecret = r.string(`${base}.client_secret`, { required: true });
@@ -1183,14 +1183,14 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
     if (r.has(`${base}.require_verified_email`)) {
       r.issues.add(
         `${base}.require_verified_email`,
-        'a GitHub provider admits the primary verified address only: the option does not apply',
+        'GitHub sign-in admits the primary verified address only: the option does not apply',
         envNamesFor(`${base}.require_verified_email`),
       );
     }
     if (r.has(`${base}.claims`)) {
       r.issues.add(
         `${base}.claims`,
-        'a GitHub provider has no claim mapping: the subject is the numeric user id and the email the primary verified address',
+        'GitHub sign-in has no claim mapping: the subject is the numeric user id and the email the primary verified address',
       );
     }
     const issuer = r.url(`${base}.issuer`, { fallback: GITHUB_DOT_COM, https: true });
@@ -1262,22 +1262,22 @@ function checkSignInProviders(r: Reader, signIn: readonly SignInProvider[]): Sig
   if (locals.length > 1) {
     r.issues.add(
       `sign_in.${locals[1]?.id ?? ''}.kind`,
-      `providers '${locals.map((p) => p.id).join("', '")}' are all sign-in accounts: one local provider per instance`,
+      `sign-in providers '${locals.map((p) => p.id).join("', '")}' are all sign-in accounts: one local sign-in provider per instance`,
     );
   }
-  for (const provider of all) {
-    const path = `sign_in.${provider.id}`;
-    const key = issuerKey(provider.issuer);
+  for (const signInProvider of all) {
+    const path = `sign_in.${signInProvider.id}`;
+    const key = issuerKey(signInProvider.issuer);
     const other = issuers.get(key);
-    if (other !== undefined && other !== provider.id) {
+    if (other !== undefined && other !== signInProvider.id) {
       r.issues.add(
         `${path}.issuer`,
-        `providers '${other}' and '${provider.id}' have the same issuer ${key}: a user is (issuer, subject), so they would be one population with two admission rules`,
+        `sign-in providers '${other}' and '${signInProvider.id}' have the same issuer ${key}: a user is (issuer, subject), so they would be one population with two admission rules`,
         envNamesFor(`${path}.issuer`),
       );
     }
-    issuers.set(key, provider.id);
-    const problem = admissionProblem(provider);
+    issuers.set(key, signInProvider.id);
+    const problem = admissionProblem(signInProvider);
     if (problem) {
       r.issues.add(`${path}.allowed_email_domains`, problem, [
         ...envNamesFor(`${path}.allowed_email_domains`),

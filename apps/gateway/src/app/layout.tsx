@@ -10,7 +10,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Vaubaan Gateway',
   description:
-    'Self-hosted MCP gateway: agents call provider tools with a mission token; every call is checked against the accepted risks and budget of the mission, executed with a credential that stays on the instance, and audited.',
+    'Self-hosted MCP gateway: agents call service tools with a mission token; every call is checked against the accepted risks and budget of the mission, executed with a credential that stays on the instance, and audited.',
   // Added to the Home Screen of an iPhone or iPad, the interface opens as an app: the
   // only way Safari lets it receive notifications (handbook notifications).
   appleWebApp: { capable: true, statusBarStyle: 'default' },

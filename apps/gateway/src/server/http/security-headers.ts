@@ -27,7 +27,7 @@
  *
  * No `form-action`: Chrome applies it to the redirects that follow a form post,
  * and a sign-in and the connect flow of an account are form posts that end at
- * another origin (the provider), chosen at run time.
+ * another origin (the service), chosen at run time.
  */
 
 /** One year, this host only: sibling hosts are not the gateway's to bind. */

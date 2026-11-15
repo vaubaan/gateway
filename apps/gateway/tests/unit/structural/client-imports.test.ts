@@ -6,7 +6,7 @@
  * store, the root or the network. So a `'use client'` file imports values from
  * `@/lib/`, `@/components/` and the packages' browser-safe subpaths, and from
  * `@/server/` types only (erased at build). And the pure rules under `src/lib/`
- * (`authority`, `missions`, `providers`, `shares`) import no value from
+ * (`authority`, `missions`, `services`, `shares`) import no value from
  * `src/server/`: one careless import there would carry the store into the bundle.
  * (`lib/auth`, `lib/accounts`, `lib/instance.ts` are server-side page helpers.)
  */
@@ -73,7 +73,7 @@ describe('the browser bundle', () => {
   });
 
   it('the pure rules of src/lib import no value from src/server', () => {
-    const pure = ['authority', 'missions', 'providers', 'shares'].map((dir) =>
+    const pure = ['authority', 'missions', 'services', 'shares'].map((dir) =>
       join(SRC, 'lib', dir),
     );
     const offending = FILES.filter((file) => pure.some((dir) => file.startsWith(dir))).flatMap(

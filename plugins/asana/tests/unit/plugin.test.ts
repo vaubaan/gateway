@@ -25,7 +25,7 @@ import {
   risksTouchedBy,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { PAT_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { PAT_FIELD, SERVICE_ID, TOOL } from '../../src/identity.ts';
 import defaultExport, { asanaCatalog, asanaPlugin, classifyAsana } from '../../src/index.ts';
 import { PROJECT, TASK, TOKEN, project, world } from './fixtures.ts';
 import { SAMPLES } from './samples.ts';
@@ -69,14 +69,14 @@ describe('asana plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(asanaCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(asanaCatalog.catalog.service).toBe(SERVICE_ID);
     expect(asanaCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and each has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and each has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(asanaPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);
     expect(Object.keys(asanaPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());
@@ -170,7 +170,7 @@ describe('asana catalog — layering and macro-actions', () => {
     const actions = asanaCatalog.catalog.macro_actions;
     expect(actions.map((a) => a.id)).toEqual(['read', 'work', 'clean-up']);
     const ids = actions.flatMap((a) => a.entries.map((e) => e.risk_id));
-    expect(ids).not.toContain(`${PROVIDER_ID}.uncategorized-write`);
+    expect(ids).not.toContain(`${SERVICE_ID}.uncategorized-write`);
   });
 
   test('at Careful, reading comments, rewriting and deleting tasks ask first', () => {

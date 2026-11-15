@@ -33,7 +33,7 @@ import type {
   RiskId,
 } from '@vaubaan/shared';
 
-import type { ProviderPlugin } from '../plugin.ts';
+import type { ServicePlugin } from '../plugin.ts';
 
 /** The trust level of each ticked macro-action, by macro-action id (`anything-else` for the fallback). */
 export type MacroActionTrustLevelChoice = Readonly<Record<string, TrustLevel>>;
@@ -52,7 +52,7 @@ export interface MacroActionPolicyOptions {
  * cannot tick a typo and assert on nothing.
  */
 export function policyFromMacroActions(
-  plugin: Pick<ProviderPlugin, 'catalog'>,
+  plugin: Pick<ServicePlugin, 'catalog'>,
   trustLevels: MacroActionTrustLevelChoice,
   options: MacroActionPolicyOptions = {},
 ): MissionPolicyEntry[] {
@@ -64,7 +64,7 @@ export function policyFromMacroActions(
     const action = actions.get(actionId);
     if (!action) {
       throw new Error(
-        `policyFromMacroActions: '${actionId}' is not a macro-action of the '${catalog.provider}' catalog`,
+        `policyFromMacroActions: '${actionId}' is not a macro-action of the '${catalog.service}' catalog`,
       );
     }
     const candidates = action.entries.flatMap((entry) => {

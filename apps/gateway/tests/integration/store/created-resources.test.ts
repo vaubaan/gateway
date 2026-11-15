@@ -3,7 +3,7 @@
  * created-resources-join-the-mission; migration 0024):
  *
  *   - `AccountsRepo.upsertDiscoveredResources` inserts a created ref or clears its
- *     stale flag, keeps owner edits, merges provider facts, touches no other row;
+ *     stale flag, keeps owner edits, merges service facts, touches no other row;
  *   - `syncDiscoveredResources` does not mark stale a row first seen less than
  *     `FRESH_RESOURCE_STALE_GRACE_MS` ago;
  *   - `MissionsRepo.addResources` adds to an explicit selection with its source, turns
@@ -47,11 +47,11 @@ describe('created resources in the store', () => {
     creator = (
       await store.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'c', email: 'c@x' })
     ).id;
-    const create = (provider: string) =>
+    const create = (service: string) =>
       store.accounts.create({
-        provider,
+        service,
         owner: { kind: 'user', id: creator },
-        displayName: provider,
+        displayName: service,
         credential: null,
       });
     account = (await create('github')).id;
@@ -87,7 +87,7 @@ describe('created resources in the store', () => {
       expect(after.filter((r) => r.ref !== 'acme/new')).toEqual(before);
     });
 
-    it('a known ref: stale flag cleared, provider facts merged, owner edits kept', async () => {
+    it('a known ref: stale flag cleared, service facts merged, owner edits kept', async () => {
       const a = (await row('acme/a'))!;
       await store.accounts.setResourceDisplayName(a.id, 'Owner name');
       await store.accounts.setResourceEnv(a.id, 'prod');

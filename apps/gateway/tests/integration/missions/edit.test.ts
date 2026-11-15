@@ -273,7 +273,7 @@ describe('editing a mission after issuance', () => {
     ]);
     expect(await audits()).toEqual([]);
 
-    // acme/app goes stale at the provider: a creation would refuse it, a lowered limit is not.
+    // acme/app goes stale at the service: a creation would refuse it, a lowered limit is not.
     agePastStaleGrace(rig.root.store, rig.seeded.github.account.id); // past the grace of a fresh row
     await rig.root.store.accounts.syncDiscoveredResources(rig.seeded.github.account.id, [
       { ref: 'acme/web', displayName: 'acme/web', env: null },

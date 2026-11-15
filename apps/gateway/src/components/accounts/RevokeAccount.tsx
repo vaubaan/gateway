@@ -14,14 +14,14 @@ export function RevokeAccount({
   action,
   name,
   running,
-  atProvider,
+  atService,
 }: {
   action: string;
   name: string;
   /** How many running missions use the account: they lose it for good. */
   running: number;
   /** What disconnecting does to the access granted at the service, in one or two sentences. */
-  atProvider: string;
+  atService: string;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,7 +51,7 @@ export function RevokeAccount({
               create new missions on it.
               <br />
               <br />
-              {atProvider}
+              {atService}
             </>
           }
           phrase={name}

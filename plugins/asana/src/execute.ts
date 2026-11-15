@@ -1,7 +1,7 @@
 /**
  * Execution of the `asana` tools.
  *
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * Order, for every tool :
  *   1. `readCall`, the classifier's own reader : the requests are built from
@@ -16,7 +16,7 @@
  * What a task answer says about other projects is cut out : a task may live
  * in several projects, and the names of the others (or of their sections)
  * are not the mission's to read. Declines are `ExecutorRefusal` under
- * `declining` ; provider failures are thrown (`api.ts`).
+ * `declining` ; service failures are thrown (`api.ts`).
  */
 
 import {

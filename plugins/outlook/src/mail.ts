@@ -1,7 +1,7 @@
 /**
- * The mail tools of the `outlook` provider on Microsoft Graph v1.0.
+ * The mail tools of the `outlook` service on Microsoft Graph v1.0.
  *
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * Every request is built from what `readOutlookCall` returned, field by
  * field. What a write answers is reduced to ids and recipients: Graph answers
@@ -109,7 +109,7 @@ function messageBody(
 // ─── Search ─────────────────────────────────────────────────────────────────
 
 /**
- * Whether a message the provider answered holds every term of the query —
+ * Whether a message the service answered holds every term of the query —
  * the bound applied after a full-text search (Graph does not combine
  * `$search` with `$filter`), and checked again after a `$filter` as a second
  * lock. A message whose fields cannot be read does not hold.

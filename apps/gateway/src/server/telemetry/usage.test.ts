@@ -79,7 +79,7 @@ describe('InstanceProfiler', () => {
   const source = {
     users: () => Promise.resolve(7),
     activeMissions: () => Promise.resolve(1),
-    accountsByProvider: () => Promise.resolve({ 'cloudflare-dns': 2 }),
+    accountsByService: () => Promise.resolve({ 'cloudflare-dns': 2 }),
   };
 
   it('puts the stored instance identifier on every profile, whatever the day', async () => {

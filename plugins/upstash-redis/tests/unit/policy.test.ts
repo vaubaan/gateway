@@ -18,7 +18,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ProviderPlugin, Resource } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin, Resource } from '@vaubaan/plugin-sdk';
 import {
   envResolverFor,
   evaluateCall,
@@ -29,7 +29,7 @@ import {
 import { upstashRedisPlugin } from '../../src/index.ts';
 
 /** Typed as the contract, so the optional `envOf` hook is read the way the gateway reads it. */
-const plugin: ProviderPlugin = upstashRedisPlugin;
+const plugin: ServicePlugin = upstashRedisPlugin;
 
 const indexed = indexCatalog(plugin.catalog);
 
@@ -37,7 +37,7 @@ type RiskDecision = ReturnType<typeof evaluateCall>;
 
 function database(env?: string): Resource {
   return {
-    provider: 'upstash-redis',
+    service: 'upstash-redis',
     ref: `db-${env ?? 'unlabelled'}`,
     displayName: env ?? 'unlabelled',
     ...(env !== undefined ? { env } : {}),

@@ -10,8 +10,8 @@
  * created from the setup page and their first sign-in enrols the factor before
  * the session exists. Every page is also checked for the security headers.
  *
- * Sign-in accounts stay a provider only for the length of this spec: the others
- * start a sign-in with `/auth/login`, which goes straight to the one provider.
+ * Sign-in accounts stay a sign-in provider only for the length of this spec: the others
+ * start a sign-in with `/auth/login`, which goes straight to the one sign-in provider.
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
@@ -109,7 +109,7 @@ test('an invited person creates a sign-in account on the link, signs in, enrols 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Add sign-in accounts');
   await expect(page.getByText(/Nothing to register anywhere/)).toBeVisible();
   await snap(page, 'settings-sign-in-add-local');
-  await page.getByRole('button', { name: 'Add the provider' }).click();
+  await page.getByRole('button', { name: 'Add the sign-in provider' }).click();
   await expect(page.getByTestId('idp-saved')).toBeVisible();
   const table = page.getByTestId('sign-in-providers');
   await expect(table.getByRole('row')).toHaveCount(3); // header, the directory, sign-in accounts

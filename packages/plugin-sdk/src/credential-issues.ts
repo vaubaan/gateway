@@ -44,7 +44,7 @@ export function credentialSpecIssues(spec: CredentialSpec, tools: ReadonlySet<un
   // one-place-to-authorize-services-token-first, amended 2026-10-31).
   if (spec.kind === 'api-key') {
     if (!isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
-      issues.push(`${at}.label: expected what the person creates, in the provider's words`);
+      issues.push(`${at}.label: expected what the person creates, in the service's words`);
     }
     if (typeof spec.verify !== 'function') {
       issues.push(`${at}.verify: expected the check at paste, a function`);
@@ -131,7 +131,7 @@ function screenshotIssues(shot: unknown, at: string): string[] {
   return issues;
 }
 
-/** A path is the provider's menu labels, in order: 1 to 8 segments, none empty, none long. */
+/** A path is the service's menu labels, in order: 1 to 8 segments, none empty, none long. */
 function pathIssues(path: unknown, at: string): string[] {
   if (!isList(path) || path.length === 0 || path.length > GUIDE_PATH_MAX_SEGMENTS) {
     return [`${at}: expected 1 to ${GUIDE_PATH_MAX_SEGMENTS} menu labels when present`];
@@ -209,10 +209,10 @@ function alternativesIssues(
 
 /**
  * A guide says where to click (`steps`), how wide to grant (`reach`), when the
- * token stops working (`expiry`) and where the provider documents it; its
+ * token stops working (`expiry`) and where the service documents it; its
  * permissions name real tools, in the closed access set, and cover every tool
  * this way of connecting can run: the page derives the permissions to grant
- * from it, so a tool nobody asked a permission for would fail at the provider.
+ * from it, so a tool nobody asked a permission for would fail at the service.
  */
 function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): string[] {
   if (!isRecord(guide)) {
@@ -228,7 +228,7 @@ function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): s
 }
 
 /**
- * Every step is one sentence to act on, with the provider's menu path, an
+ * Every step is one sentence to act on, with the service's menu path, an
  * https page, a command to copy and a screenshot's file name when it has them.
  */
 function stepIssues(steps: unknown, at: string): string[] {
@@ -287,7 +287,7 @@ function permissionIssues(permissions: unknown, tools: ReadonlySet<unknown>, at:
   if (!isList(permissions)) {
     return [`${at}: expected a list (empty when the token carries no choice)`];
   }
-  // A provider whose tokens carry no permission choice (Railway) lists none.
+  // A service whose tokens carry no permission choice (Railway) lists none.
   if (permissions.length === 0) return [];
   const issues: string[] = [];
   const served = new Set<unknown>();
@@ -297,7 +297,7 @@ function permissionIssues(permissions: unknown, tools: ReadonlySet<unknown>, at:
       issues.push(`${where}: expected { name, access, tools }`);
       return;
     }
-    if (!isName(permission.name)) issues.push(`${where}.name: expected the provider's name`);
+    if (!isName(permission.name)) issues.push(`${where}.name: expected the service's name`);
     if (!(TOKEN_PERMISSION_ACCESS as readonly unknown[]).includes(permission.access)) {
       issues.push(`${where}.access: expected one of ${TOKEN_PERMISSION_ACCESS.join(' | ')}`);
     }
@@ -361,7 +361,7 @@ function kindSpecIssues(spec: CredentialSpec): string[] {
 
 /**
  * Fields only a spec with a registered client carries: a brokered spec leaves
- * the provider's endpoints, PKCE, the client authentication and the
+ * the service's endpoints, PKCE, the client authentication and the
  * revocation to the broker.
  */
 const REGISTERED_CLIENT_ONLY_FIELDS = [

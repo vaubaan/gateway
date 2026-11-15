@@ -1,5 +1,5 @@
 /**
- * Credential of the `resend` provider : an API key with Full access, pasted
+ * Credential of the `resend` service : an API key with Full access, pasted
  * by hand (`api-key`), the one way of connecting.
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 :

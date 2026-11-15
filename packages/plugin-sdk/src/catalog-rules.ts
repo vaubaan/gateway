@@ -27,7 +27,7 @@ export const RETIRED_PRESETS_ISSUE =
 
 /** Which of the rules below may be waived : a catalog under construction, a test fixture. */
 export interface SemanticOptions {
-  /** Fail when no `<provider>.uncategorized-*` entry exists. Default true (risk-model spec §4.3). */
+  /** Fail when no `<service>.uncategorized-*` entry exists. Default true (risk-model spec §4.3). */
   readonly requireFallback?: boolean;
   /** Fail when the catalog declares no macro-action. Default true (ADR macro-actions-and-trust-levels-prefill-the-policy). */
   readonly requireMacroActions?: boolean;
@@ -88,7 +88,7 @@ export function macroActionIssues(
       const risk = byId.get(entry.risk_id);
       if (!risk) {
         issues.push(
-          `${where}.risk_id '${entry.risk_id}' is not an unqualified risk of the '${catalog.provider}' catalog`,
+          `${where}.risk_id '${entry.risk_id}' is not an unqualified risk of the '${catalog.service}' catalog`,
         );
         return;
       }
@@ -114,10 +114,10 @@ export function macroActionIssues(
 /**
  * Fallback rules (risk-model spec §4.3 ; ADR fallback-risk-only-when-
  * uncategorized) : exactly one fallback entry — `fallback: true`, or
- * detected by the catch-all pattern `<provider>.**.W` or the
- * `<provider>.uncategorized-` id — and that entry is named
- * `<provider>.uncategorized-*`, so audit logs read the same for every
- * provider, and matches the catch-all write `<provider>.**.W`. The pattern
+ * detected by the catch-all pattern `<service>.**.W` or the
+ * `<service>.uncategorized-` id — and that entry is named
+ * `<service>.uncategorized-*`, so audit logs read the same for every
+ * service, and matches the catch-all write `<service>.**.W`. The pattern
  * is checked because the fallback is the one entry that is left out of the
  * touched risks whenever another entry matches : flagged on a narrow
  * pattern, a named risk would silently stop being required.
@@ -128,8 +128,8 @@ export function fallbackIssues(
 ): string[] {
   const issues: string[] = [];
   const fallbacks = fallbackEntriesOf(catalog);
-  const prefix = fallbackRiskPrefix(catalog.provider);
-  const catchAll = `${catalog.provider}.**.W`;
+  const prefix = fallbackRiskPrefix(catalog.service);
+  const catchAll = `${catalog.service}.**.W`;
   if (fallbacks.length === 0) {
     if (options.requireFallback ?? true) {
       issues.push(
@@ -164,7 +164,7 @@ export function fallbackIssues(
  * when-uncategorized D2, as amended) : a reader of the YAML
  * sees that the entry behaves differently, and the runtime never depends on
  * the pattern convention. An entry recognised by convention alone (the
- * `<provider>.**.W` pattern or the `<provider>.uncategorized-` id) is
+ * `<service>.**.W` pattern or the `<service>.uncategorized-` id) is
  * reported here ; the loader surfaces it as a warning so a third-party
  * catalog written before the flag still boots, the test kit
  * (`assertPluginWellFormed`) as a failure.

@@ -34,13 +34,13 @@ const STAGING_REF = 'tlqgxnezmthbpzhdwxgi';
 const PROD_REF = 'prodxxxxxxxxxxxxxxxx';
 
 const staging: Resource = {
-  provider: 'supabase',
+  service: 'supabase',
   ref: STAGING_REF,
   env: 'staging',
   displayName: 'Acme / app-staging',
 };
 const prod: Resource = {
-  provider: 'supabase',
+  service: 'supabase',
   ref: PROD_REF,
   env: 'prod',
   displayName: 'Acme / app',
@@ -435,7 +435,7 @@ describe('discoverSupabaseResources', () => {
     const resources = await supabasePlugin.discoverResources(connCtx(fetch));
     expect(resources).toEqual([
       {
-        provider: 'supabase',
+        service: 'supabase',
         ref: STAGING_REF,
         displayName: 'Acme / app-staging',
         metadata: {
@@ -446,7 +446,7 @@ describe('discoverSupabaseResources', () => {
         },
       },
       {
-        provider: 'supabase',
+        service: 'supabase',
         ref: PROD_REF,
         displayName: 'Side project / app',
         metadata: { organization: 'side', organization_name: 'Side project', region: 'eu-west-1' },

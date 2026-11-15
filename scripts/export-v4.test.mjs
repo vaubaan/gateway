@@ -15,7 +15,7 @@ import {
   exportSql,
   parseArgs,
   parseEnvFile,
-  PASTED_KEY_PROVIDERS,
+  PASTED_KEY_SERVICES,
   requireEnv,
   summaryOf,
   UsageError,
@@ -28,7 +28,7 @@ const MASTER = randomBytes(32).toString('base64');
 const FINGERPRINT = `SHA256:${randomBytes(32).toString('base64').replace(/=+$/, '')}`;
 
 /**
- * The v4 sealing as provider-secrets.ts wrote it.
+ * The v4 sealing as service-secrets.ts wrote it.
  * @param {string} orgId
  * @param {string} plaintext
  * @param {string} [master]
@@ -170,14 +170,14 @@ describe('v4 decryption', () => {
 });
 
 describe('the bundle', () => {
-  it('decrypts the keys of the imported providers only', async () => {
+  it('decrypts the keys of the imported services only', async () => {
     const decryptor = await createV4Decryptor(MASTER);
     const bundle = buildBundle(
       raw({
         accounts: [
           {
             id: '0b6a1a3e-0000-4000-8000-0000000000b2',
-            provider: 'cloudflare-dns',
+            service: 'cloudflare-dns',
             status: 'connected',
             team_id: null,
             installation_id: null,
@@ -185,11 +185,11 @@ describe('the bundle', () => {
           },
           {
             id: '0b6a1a3e-0000-4000-8000-0000000000b4',
-            provider: 'supabase',
+            service: 'supabase',
             status: 'connected',
             team_id: null,
             installation_id: null,
-            // Even if a ciphertext slipped through, a provider outside the list is never decrypted.
+            // Even if a ciphertext slipped through, a service outside the list is never decrypted.
             access_token_sealed: await sealV4(ORG, 'supabase-oauth-token'),
           },
         ],
@@ -198,7 +198,7 @@ describe('the bundle', () => {
       options,
       NOW,
     );
-    expect(bundle.accounts.map((a) => [a.provider, a.access_token])).toEqual([
+    expect(bundle.accounts.map((a) => [a.service, a.access_token])).toEqual([
       ['cloudflare-dns', 'cf-token'],
       ['supabase', null],
     ]);
@@ -206,10 +206,10 @@ describe('the bundle', () => {
     expect(bundle.skipped.project_env_vars).toBe(0);
   });
 
-  it('selects no ciphertext for a provider whose secret is never imported', () => {
+  it('selects no ciphertext for a service whose secret is never imported', () => {
     const sql = exportSql();
     expect(sql).toContain('set default_transaction_read_only = on');
-    expect(sql).toContain(`in (${PASTED_KEY_PROVIDERS.map((p) => `'${p}'`).join(', ')})`);
+    expect(sql).toContain(`in (${PASTED_KEY_SERVICES.map((p) => `'${p}'`).join(', ')})`);
     expect(sql).not.toMatch(/refresh_token_encrypted/);
     expect(sql).toContain(":'org'");
     expect(sql).toContain('t.denied_risks');
@@ -406,7 +406,7 @@ describe('the bundle', () => {
         accounts: [
           {
             id: '0b6a1a3e-0000-4000-8000-0000000000b3',
-            provider: 'vercel',
+            service: 'vercel',
             status: 'connected',
             team_id: 'team_a',
             installation_id: null,

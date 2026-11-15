@@ -1,5 +1,5 @@
 /**
- * Classifier of the `template` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `template` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
@@ -19,10 +19,10 @@
 
 import { parseSlice, type ClassifyOutcome, type Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /**
- * An identifier of the provider : one path segment, no dot, no separator, no
+ * An identifier of the service : one path segment, no dot, no separator, no
  * escape. Both identifiers of this plugin (workspace ref, widget id) land in
  * a slice **and** in the request path, so one grammar serves both. A wider
  * class is not safe for a URL : `encodeURIComponent` leaves `.` and `..`
@@ -54,23 +54,23 @@ export function classifyTemplate(
 
   switch (tool) {
     case TOOL.listWidgets:
-      return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[*].R`)] };
+      return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[*].R`)] };
     case TOOL.getWidget: {
       const id = pathIdent(args.widget_id);
       if (!id) return { denied: MALFORMED_WIDGET_ID };
-      return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].R`)] };
+      return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[${id}].R`)] };
     }
     case TOOL.updateWidget: {
       const id = pathIdent(args.widget_id);
       if (!id) return { denied: MALFORMED_WIDGET_ID };
-      return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].W`)] };
+      return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[${id}].W`)] };
     }
     case TOOL.deleteWidget: {
       const id = pathIdent(args.widget_id);
       if (!id) return { denied: MALFORMED_WIDGET_ID };
       // The verb leaf : this slice touches `widget-delete` AND `widget-write`
       // (whose pattern `widget[**].W` covers it), so a mission needs both.
-      return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].delete.W`)] };
+      return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[${id}].delete.W`)] };
     }
     default:
       return { denied: `unknown tool '${tool}'` };
@@ -81,7 +81,7 @@ export function classifyTemplate(
  * The workspace a call targets, for `classify` and `execute` alike :
  *
  *   - `args.workspace` given : it must be a well-formed ref AND one of the
- *     mission's resources of this provider — anything else is refused (fail
+ *     mission's resources of this service — anything else is refused (fail
  *     closed, never the single resource as a silent substitute) ;
  *   - absent : the mission's single workspace, or a refusal when it holds
  *     none or several.
@@ -90,7 +90,7 @@ export function resolveWorkspace(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { ref: string } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.workspace !== undefined) {
     const explicit = pathIdent(args.workspace);
     if (!explicit) return { denied: 'workspace: malformed ref' };
@@ -102,7 +102,7 @@ export function resolveWorkspace(
   return {
     denied:
       own.length === 0
-        ? 'workspace: argument missing and the mission touches no workspace of this provider'
+        ? 'workspace: argument missing and the mission touches no workspace of this service'
         : `workspace: argument missing and the mission touches ${own.length} workspaces — name one`,
   };
 }

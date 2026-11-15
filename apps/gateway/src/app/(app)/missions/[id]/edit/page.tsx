@@ -14,7 +14,7 @@ import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 
 import type { ServiceMarkIcon } from '@/components/ui';
-import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
+import { riskPlanesOf, type RiskPlanes } from '@/lib/services/planes';
 
 import { MissionForm } from '../../new/mission-form';
 
@@ -85,11 +85,11 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
   // The services whose data model has several planes: the editor can be sliced by one.
   const planes: Record<string, RiskPlanes> = {};
   const icons: Record<string, ServiceMarkIcon | null> = {};
-  for (const { provider } of context) {
-    const plugin = session.root.registry.get(provider)?.plugin;
+  for (const { service } of context) {
+    const plugin = session.root.registry.get(service)?.plugin;
     const riskPlanes = plugin ? riskPlanesOf(plugin.dataModel, plugin.catalog) : null;
-    if (riskPlanes) planes[provider] = riskPlanes;
-    icons[provider] = plugin ? serviceIconOf(plugin) : null;
+    if (riskPlanes) planes[service] = riskPlanes;
+    icons[service] = plugin ? serviceIconOf(plugin) : null;
   }
   // "Raise this limit" on the mission page: the edit opens on that macro-action's Custom.
   const customSet = one(query.custom);

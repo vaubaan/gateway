@@ -1,13 +1,13 @@
 /**
- * Representative calls of every tool of the `notion` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `notion` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit (catalog coverage, identifier proof, catalog and data-model tests) and
  * the site classifies when it builds (ADR plugin-contract-and-credential-spec,
  * amendment 2026-11-05). One realistic call per tool, and the refused ones.
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 const id = (digit: string) =>
   `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
@@ -26,14 +26,14 @@ export const DISCUSSION = id('a');
 
 /** The root page the samples run on unless they name another resource. */
 export const EXAMPLE_PAGE_ROOT: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: ROOT,
   displayName: 'Handbook',
   metadata: { kind: 'page' },
 };
 /** The root database of the database samples. */
 export const EXAMPLE_DB_ROOT: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: DB,
   displayName: 'Tasks',
   metadata: { kind: 'database' },

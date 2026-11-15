@@ -99,7 +99,7 @@ describe('every shipped catalog groups its risks in macro-actions, and ships no 
           expect(action.id, action.id).not.toMatch(/[*?]/);
           for (const entry of action.entries) {
             expect(entry.risk_id, `${action.id}: ${entry.risk_id}`).not.toMatch(WILDCARD);
-            expect(parseRiskId(entry.risk_id)?.provider, entry.risk_id).toBe(id);
+            expect(parseRiskId(entry.risk_id)?.service, entry.risk_id).toBe(id);
           }
         }
       });

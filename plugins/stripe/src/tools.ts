@@ -2,7 +2,7 @@
  * Stripe MCP tools — thin wrappers over the Stripe REST API v1.
  *
  * 27 tools : 10 reads (GET) and 17 writes (POST / DELETE). Names follow the
- * `<provider>__<verb>_<noun>` convention of the SDK (`TOOL` in `identity.ts`).
+ * `<service>__<verb>_<noun>` convention of the SDK (`TOOL` in `identity.ts`).
  *
  * Every tool accepts an optional `account` argument : the ref of the Stripe
  * resource the call targets (`acct_123/test` or `acct_123/live`, as listed in

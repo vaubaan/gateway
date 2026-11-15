@@ -7,7 +7,7 @@ import {
   type TokenGuide,
 } from '../../src/credential.ts';
 import { pluginIssues } from '../../src/define-plugin.ts';
-import type { ProviderPlugin } from '../../src/plugin.ts';
+import type { ServicePlugin } from '../../src/plugin.ts';
 import { guideText } from '../../src/testing/guide.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
@@ -25,7 +25,7 @@ const GUIDE: TokenGuide = {
     { name: 'Things', access: 'read', tools: ['acme__list_things'] },
     { name: 'Things', access: 'read-write', tools: ['acme__update_thing'] },
   ],
-  expiry: { kind: 'provider-reports' },
+  expiry: { kind: 'service-reports' },
   docsUrl: 'https://acme.example/docs/tokens',
 };
 
@@ -38,11 +38,11 @@ const TOKEN: ApiKeyCredentialSpec = {
   verify: () => Promise.resolve({ account: 'acme-bot', expiresAt: null }),
 };
 
-function withCredential(credential: CredentialSpec): ProviderPlugin {
+function withCredential(credential: CredentialSpec): ServicePlugin {
   return { ...acmePlugin, credential };
 }
 
-function withGuide(guide: unknown): ProviderPlugin {
+function withGuide(guide: unknown): ServicePlugin {
   return withCredential({ ...TOKEN, guide } as ApiKeyCredentialSpec);
 }
 
@@ -71,7 +71,7 @@ describe('the token guide of an api-key credential', () => {
     );
   });
 
-  test('a provider whose tokens carry no permission choice lists none', () => {
+  test('a service whose tokens carry no permission choice lists none', () => {
     expect(pluginIssues(withGuide({ ...GUIDE, permissions: [] }))).toEqual([]);
   });
 
@@ -105,7 +105,7 @@ describe('the token guide of an api-key credential', () => {
   });
 
   test.each([
-    [{ kind: 'provider-reports' }, []],
+    [{ kind: 'service-reports' }, []],
     [{ kind: 'person-types', recommendedDays: 90 }, []],
     [{ kind: 'none', reason: 'Delete the key to end it.' }, []],
     [
@@ -118,13 +118,13 @@ describe('the token guide of an api-key credential', () => {
     ],
     [
       { kind: 'sometimes' },
-      ['credential.guide.expiry.kind: expected one of provider-reports | person-types | none'],
+      ['credential.guide.expiry.kind: expected one of service-reports | person-types | none'],
     ],
   ])('the expiry %j is checked by its kind', (expiry, expected) => {
     expect(pluginIssues(withGuide({ ...GUIDE, expiry }))).toEqual(expected);
   });
 
-  test('the guide points to the provider documentation over https', () => {
+  test('the guide points to the service documentation over https', () => {
     expect(pluginIssues(withGuide({ ...GUIDE, docsUrl: 'http://acme.example' }))).toContain(
       'credential.guide.docsUrl: expected an https URL',
     );
@@ -133,7 +133,7 @@ describe('the token guide of an api-key credential', () => {
   test('a token way without its guide, label, token page or check at paste is refused', () => {
     const bare = { kind: 'api-key', fields: TOKEN.fields } as unknown as ApiKeyCredentialSpec;
     expect(pluginIssues(withCredential(bare))).toEqual([
-      "credential.label: expected what the person creates, in the provider's words",
+      "credential.label: expected what the person creates, in the service's words",
       'credential.verify: expected the check at paste, a function',
       'credential.createUrl: expected the https URL of the token page',
       'credential.guide: expected { steps, reach, permissions, expiry, docsUrl }',
@@ -150,7 +150,7 @@ describe('the token guide of an api-key credential', () => {
       } as unknown as ApiKeyCredentialSpec),
     );
     expect(issues).toEqual([
-      "credential.label: expected what the person creates, in the provider's words",
+      "credential.label: expected what the person creates, in the service's words",
       'credential.verify: expected the check at paste, a function',
       'credential.createUrl: expected the https URL of the token page',
     ]);
@@ -183,7 +183,7 @@ describe('the alternatives of an api-key credential', () => {
   };
   const [WORKSPACE, PROJECT] = SPLIT.alternatives!;
 
-  function withAlternatives(alternatives: unknown): ProviderPlugin {
+  function withAlternatives(alternatives: unknown): ServicePlugin {
     return withCredential({ ...SPLIT, alternatives } as ApiKeyCredentialSpec);
   }
 

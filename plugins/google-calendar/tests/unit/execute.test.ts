@@ -24,7 +24,7 @@ import {
   mergedAttendees,
   resourcesOf,
 } from '../../src/execute.ts';
-import { PROVIDER_ID, SCOPES, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, SCOPES, TOOL } from '../../src/identity.ts';
 import {
   EVENT,
   EVENT_GET,
@@ -396,7 +396,7 @@ describe('discovery', () => {
     expect(fetch.calls[0]?.headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(resources).toEqual([
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: 'alice~acme.example',
         displayName: 'Alice',
         metadata: {
@@ -407,7 +407,7 @@ describe('discovery', () => {
         },
       },
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: TEAM,
         displayName: 'Team',
         metadata: {

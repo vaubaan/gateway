@@ -1,5 +1,5 @@
 /**
- * Execution and resource discovery of the `ssh` provider.
+ * Execution and resource discovery of the `ssh` service.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  *
@@ -24,7 +24,7 @@ import {
 
 import { resolveExecArgs } from './classify.ts';
 import { sshTarget, type SshTarget } from './credential.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S } from './tools.ts';
 import { ssh2Transport, type ExecResult, type SshTransport } from './transport.ts';
 
@@ -86,7 +86,7 @@ export function hostResource(target: SshTarget, probe?: ExecResult): Resource {
   const uname = probe && probe.exit_code === 0 ? probe.stdout.trim() : '';
   const [hostname, kernel, release, machine] = uname.split(/\s+/);
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: target.host,
     displayName: `${target.user}@${target.host}:${target.port}`,
     metadata: {

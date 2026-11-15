@@ -43,7 +43,7 @@ import {
 const MAILBOX = 'me@myorg.com';
 const PASSWORD = 'abcdefghijklmnop';
 const mailbox: Resource = {
-  provider: 'gmail',
+  service: 'gmail',
   ref: MAILBOX,
   displayName: MAILBOX,
   metadata: {

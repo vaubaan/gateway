@@ -5,7 +5,7 @@
  * Two bases, one interface:
  *
  *   owner   the user who owns the account, or any *current* member of the
- *           group that owns it: the provider's full catalog, as an explicit
+ *           group that owns it: the service's full catalog, as an explicit
  *           enumeration. "The owner needs no share."
  *   share   everyone else: the union of the restrictions of the active shares
  *           of that account whose target is the user or one of their
@@ -35,7 +35,7 @@ export type AuthorityBasis = 'owner' | 'share' | 'none';
 
 export interface AccountAuthority {
   readonly accountId: string;
-  readonly provider: string;
+  readonly service: string;
   readonly basis: AuthorityBasis;
   /** Explicit enumeration, catalog order. Empty means "may accept nothing". */
   readonly riskIds: readonly RiskId[];
@@ -122,9 +122,9 @@ export class AccountAuthorityService implements AuthorityService, AuthorityReche
   constructor(private readonly deps: AccountAuthorityDeps) {}
 
   async authorityOf(user: Subject, account: AccountRecord): Promise<AccountAuthority> {
-    const base = { accountId: account.id, provider: account.provider };
+    const base = { accountId: account.id, service: account.service };
     const none: AccountAuthority = { ...base, basis: 'none', riskIds: [] };
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     // No plugin, no catalog, no authority: nothing can be enumerated.
     if (!registered || !(await this.isActive(user))) return none;
 

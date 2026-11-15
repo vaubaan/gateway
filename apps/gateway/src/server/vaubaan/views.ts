@@ -50,7 +50,7 @@ import {
   takesFutureResources,
   type TrustLevel,
 } from '../missions';
-import type { ProviderCatalog } from './ports';
+import type { ServiceCatalog } from './ports';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Accounts
@@ -69,7 +69,7 @@ export interface ResourceView {
 }
 
 export interface EnvUsabilityView {
-  /** The provider reads the environment from the call itself: no label is needed. */
+  /** The service reads the environment from the call itself: no label is needed. */
   readonly derives_env: boolean;
   /**
    * The label the account's owner gave every resource without one of its own;
@@ -120,8 +120,8 @@ export interface EverythingSummaryView {
 
 export interface AccountView {
   readonly account_id: string;
-  readonly provider: string;
-  readonly provider_label: string;
+  readonly service: string;
+  readonly service_label: string;
   readonly display_name: string;
   /** `active`, or `expired`: missions on it fail until an owner reconnects it. */
   readonly status: string;
@@ -130,7 +130,7 @@ export interface AccountView {
     readonly basis: 'owner' | 'share';
     /** The exact restriction: every RiskId a mission of this user may accept here. Nothing else passes. */
     readonly risk_ids: readonly RiskId[];
-    /** True when `risk_ids` is the provider's whole catalog. */
+    /** True when `risk_ids` is the service's whole catalog. */
     readonly whole_catalog: boolean;
   };
   readonly resources: readonly ResourceView[];
@@ -199,8 +199,8 @@ function envUsability(account: IssuanceAccount): EnvUsabilityView {
 export function accountView(account: IssuanceAccount): AccountView {
   return {
     account_id: account.id,
-    provider: account.provider,
-    provider_label: account.provider_label,
+    service: account.service,
+    service_label: account.service_label,
     display_name: account.display_name,
     status: account.status,
     authority: {
@@ -256,8 +256,8 @@ export interface CatalogRiskView {
 }
 
 export interface CatalogView {
-  readonly provider: string;
-  readonly provider_label: string;
+  readonly service: string;
+  readonly service_label: string;
   readonly derives_env: boolean;
   /** The account the `in_my_authority` flags are about; `null` when none was named. */
   readonly account_id: string | null;
@@ -301,14 +301,11 @@ function trustLevelRules(): Record<TrustLevel, TrustLevelRuleView> {
   ) as Record<TrustLevel, TrustLevelRuleView>;
 }
 
-export function catalogView(
-  catalog: ProviderCatalog,
-  account: IssuanceAccount | null,
-): CatalogView {
+export function catalogView(catalog: ServiceCatalog, account: IssuanceAccount | null): CatalogView {
   const held = account ? new Set(account.authority) : null;
   return {
-    provider: catalog.provider,
-    provider_label: catalog.provider_label,
+    service: catalog.service,
+    service_label: catalog.service_label,
     derives_env: catalog.derives_env,
     account_id: account?.id ?? null,
     risks: catalog.risks.map((risk) => ({
@@ -558,7 +555,7 @@ export function missionView(
 export interface MissionDetailView extends MissionView {
   readonly accounts: readonly {
     readonly account_id: string;
-    readonly provider: string;
+    readonly service: string;
     readonly display_name: string;
     readonly status: string;
     /** A set takes the resources that later appear in its environment. */
@@ -594,7 +591,7 @@ export function missionDetailView(
     ...missionView(detail, viewer, maskToken),
     accounts: detail.accounts.map((c) => ({
       account_id: c.id,
-      provider: c.provider,
+      service: c.service,
       display_name: c.display_name,
       status: c.status,
       future: c.future,
@@ -628,14 +625,14 @@ export function missionDetailView(
 /** The uncovered list of spec §3.1: accepted risks outside the user's authority, per account. */
 export interface UncoveredView {
   readonly account_id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly risk_ids: readonly RiskId[];
 }
 
 export function uncoveredOfPreview(preview: MissionPreview): UncoveredView[] {
   return preview.accounts
     .filter((c) => c.exceeds.length > 0)
-    .map((c) => ({ account_id: c.account_id, provider: c.provider, risk_ids: c.exceeds }));
+    .map((c) => ({ account_id: c.account_id, service: c.service, risk_ids: c.exceeds }));
 }
 
 export interface PreviewView {
@@ -652,7 +649,7 @@ export interface PreviewView {
   readonly policy: MissionPreview['policy'];
   readonly accounts: readonly {
     readonly account_id: string;
-    readonly provider: string;
+    readonly service: string;
     readonly display_name: string;
     /** A set takes the resources that later appear in its environment. */
     readonly future: boolean;
@@ -703,7 +700,7 @@ export function previewView(preview: MissionPreview): PreviewView {
     policy: preview.policy,
     accounts: preview.accounts.map((c) => ({
       account_id: c.account_id,
-      provider: c.provider,
+      service: c.service,
       display_name: c.display_name,
       future: c.future,
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),

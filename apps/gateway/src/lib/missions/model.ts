@@ -52,7 +52,7 @@ export interface DraftPolicyEntry {
  * `all` and `account`, and a selection given without `resource_sets`, are split
  * by environment into one set per environment, each with the policy lines that
  * apply there (`previewDraft`); a resource without a label is left out of `all` and
- * `account` when the provider's catalog has env-qualified risks.
+ * `account` when the service's catalog has env-qualified risks.
  */
 export type DraftResources =
   | { readonly scope: 'all' }
@@ -67,8 +67,8 @@ export type DraftResources =
  * One account of a draft with its partition of the policy (spec §3.1 "A
  * multi-account mission composes its authority account by account").
  *
- * The account is named by id, or by `provider` when the creator holds
- * exactly one usable account of that provider (an agent's proposal).
+ * The account is named by id, or by `service` when the creator holds
+ * exactly one usable account of that service (an agent's proposal).
  *
  * `trust levels` + no `policy`   → what the macro-actions write at their trust levels,
  *                           bounded by the authority and the selection.
@@ -79,7 +79,7 @@ export type DraftResources =
  */
 export interface DraftAccount {
   readonly account_id?: string;
-  readonly provider?: string;
+  readonly service?: string;
   /**
    * Several resource sets on the account (risk model §4.7), each with its
    * resources, trust levels and policy, in order ("Resource set 1", "Resource set
@@ -178,7 +178,7 @@ export type { Reason, Row } from '@vaubaan/policy-engine';
 export const RISK_KINDS = ['read', 'write', 'destructive'] as const;
 export type RiskKind = (typeof RISK_KINDS)[number];
 
-/** One explicit `RiskId` of a provider's catalog, with what the interface shows. */
+/** One explicit `RiskId` of a service's catalog, with what the interface shows. */
 export interface CatalogRisk {
   readonly risk_id: RiskId;
   /** The catalog entry's id (`supabase.bulk-row-write` for `supabase[staging].bulk-row-write`). */
@@ -193,7 +193,7 @@ export interface CatalogRisk {
   readonly row: Row;
   /** The branch of the tree that decided the row; `null` in row 1. */
   readonly row_reason: Reason | null;
-  /** The catalog's catch-all (`<provider>.uncategorized-write`); only in "Anything else". */
+  /** The catalog's catch-all (`<service>.uncategorized-write`); only in "Anything else". */
   readonly fallback: boolean;
   readonly deprecated: boolean;
   /** Hard ceiling from the catalog's `infra_limits.calls_per_minute_max`, if any. */
@@ -222,15 +222,15 @@ export interface IssuanceResource {
 /** An account the creator holds authority on, with everything issuance needs. */
 export interface IssuanceAccount {
   readonly id: string;
-  readonly provider: string;
-  readonly provider_label: string;
-  /** What one resource of this provider is called (`resourceNounOf`): "board" / "boards". */
+  readonly service: string;
+  readonly service_label: string;
+  /** What one resource of this service is called (`resourceNounOf`): "board" / "boards". */
   readonly resource_noun: ResourceNoun;
   readonly display_name: string;
   readonly status: string;
   /**
    * True when the plugin derives the environment from the call itself
-   * (`ProviderPlugin.envOf`, e.g. Vercel's `env[prod]` segment): its
+   * (`ServicePlugin.envOf`, e.g. Vercel's `env[prod]` segment): its
    * env-qualified risks need no labelled resource to be reachable.
    */
   readonly derives_env: boolean;
@@ -281,7 +281,7 @@ export const PREVIEW_ISSUE_CODES = [
   'account-ambiguous',
   'account-unavailable',
   'duplicate-account',
-  'duplicate-provider',
+  'duplicate-service',
   'resource-not-in-account',
   'resource-stale',
   'resource-self',
@@ -295,7 +295,7 @@ export const PREVIEW_ISSUE_CODES = [
   'resource-set-mixed-env',
   /**
    * A resource without an environment label (or a set of future resources without an
-   * environment) on a provider whose catalog has env-qualified risks.
+   * environment) on a service whose catalog has env-qualified risks.
    */
   'resource-unlabelled',
   /** `resource_sets` beside the account's own `resources`, `policy`, `trust_levels`… */
@@ -420,7 +420,7 @@ export interface ResourceSetPreview {
  */
 export interface AccountPreview {
   readonly account_id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly display_name: string;
   /** The resources the mission would be persisted with, every set together. */
   readonly resources: readonly IssuanceResource[];

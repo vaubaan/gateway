@@ -22,7 +22,7 @@
  * The pipeline therefore rejects such a call before anything else looks at it
  * (`unfaithfulArgument`): what is fingerprinted, sealed for the approver and handed
  * to the plugin is always a value JSON carries as is. `-0` and `0` also share a
- * fingerprint; JSON carries both as `0` to the provider, and the difference is not
+ * fingerprint; JSON carries both as `0` to the service, and the difference is not
  * observable to a plugin short of `Object.is`: accepted.
  */
 

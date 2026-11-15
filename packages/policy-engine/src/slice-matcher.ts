@@ -25,8 +25,8 @@
  * matches one or more identifier characters (`BRACKET_IDENT_CHAR_CLASS`,
  * the class the parser accepts : a glob never covers less than an ident).
  *
- * Provider and action are matched by exact string equality (no wildcard on
- * those — a different provider or a different action is never the same
+ * Service and action are matched by exact string equality (no wildcard on
+ * those — a different service or a different action is never the same
  * risk).
  */
 
@@ -48,7 +48,7 @@ const IDENT_VALUE = new RegExp(`^${BRACKET_IDENT_CHAR_CLASS}*$`);
  *  Assumes `concrete` has no wildcards on its path (no `wild-one`/`wild-rec`,
  *  no list, no glob `*` inside an `ident`). */
 export function matches(pattern: Slice, concrete: Slice): boolean {
-  if (pattern.provider !== concrete.provider) return false;
+  if (pattern.service !== concrete.service) return false;
   if (pattern.action !== concrete.action) return false;
   return matchSegments(pattern.path, 0, concrete.path, 0);
 }
@@ -57,7 +57,7 @@ export function matches(pattern: Slice, concrete: Slice): boolean {
  *  This is the partial-order on patterns. `a.covers(b)` ⇒ `b` is a
  *  specialization of `a`. */
 export function covers(a: Slice, b: Slice): boolean {
-  if (a.provider !== b.provider) return false;
+  if (a.service !== b.service) return false;
   if (a.action !== b.action) return false;
   return coversSegments(a.path, 0, b.path, 0);
 }
@@ -65,7 +65,7 @@ export function covers(a: Slice, b: Slice): boolean {
 /** True iff there exists at least one concrete slice matched by both `a`
  *  and `b`. Symmetric : `intersects(a, b) === intersects(b, a)`. */
 export function intersects(a: Slice, b: Slice): boolean {
-  if (a.provider !== b.provider) return false;
+  if (a.service !== b.service) return false;
   if (a.action !== b.action) return false;
   return intersectSegments(a.path, 0, b.path, 0);
 }

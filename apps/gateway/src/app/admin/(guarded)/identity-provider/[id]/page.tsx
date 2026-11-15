@@ -1,7 +1,7 @@
 /**
  * `/admin/identity-provider/<id>` — edit a sign-in provider saved in Settings.
  * Its id and kind do not change; the secret is never shown back (blank keeps
- * it, unless the address changes). A provider set by the mounted configuration
+ * it, unless the address changes). A sign-in provider set by the mounted configuration
  * has no page here: it is changed where it is set.
  */
 import { notFound } from 'next/navigation';
@@ -30,16 +30,16 @@ export default async function SignInProviderPage({ params, searchParams }: Props
   const { id } = await params;
   const query = await searchParams;
   const problems = ([] as string[]).concat(query.problem ?? []);
-  const provider = await root.auth.providers.view(decodeURIComponent(id));
-  if (!provider || provider.source === 'file') notFound();
-  const github = provider.kind === 'github';
-  // A provider saved from a preset is edited with the preset's fields (the Entra tenant).
-  const tenant = provider.kind === 'oidc' ? entraTenantOf(provider.issuer) : null;
+  const signInProvider = await root.auth.signInProviders.view(decodeURIComponent(id));
+  if (!signInProvider || signInProvider.source === 'file') notFound();
+  const github = signInProvider.kind === 'github';
+  // A sign-in provider saved from a preset is edited with the preset's fields (the Entra tenant).
+  const tenant = signInProvider.kind === 'oidc' ? entraTenantOf(signInProvider.issuer) : null;
   const preset =
-    provider.kind === 'oidc'
+    signInProvider.kind === 'oidc'
       ? tenant
         ? ('entra' as const)
-        : issuerKey(provider.issuer) === GOOGLE_ISSUER
+        : issuerKey(signInProvider.issuer) === GOOGLE_ISSUER
           ? ('google' as const)
           : undefined
       : undefined;
@@ -48,8 +48,8 @@ export default async function SignInProviderPage({ params, searchParams }: Props
     <>
       <PageHeader
         doc={DOC_PAGES.signIn}
-        title={provider.name}
-        lede={`${provider.kind === 'local' ? 'Sign-in accounts' : github ? 'GitHub' : 'OpenID Connect'} provider ${provider.id}. Saving applies to the next sign-ins.`}
+        title={signInProvider.name}
+        lede={`${signInProvider.kind === 'local' ? 'Sign-in accounts' : github ? 'GitHub' : 'OpenID Connect'} sign-in provider ${signInProvider.id}. Saving applies to the next sign-ins.`}
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}
         width="narrow"
       />
@@ -65,31 +65,34 @@ export default async function SignInProviderPage({ params, searchParams }: Props
             </Callout>
           </div>
         )}
-        {provider.kind === 'local' ? (
+        {signInProvider.kind === 'local' ? (
           <LocalSignInProviderForm
             mode="update"
-            id={provider.id}
-            name={provider.name}
+            id={signInProvider.id}
+            name={signInProvider.name}
             cancelHref={IDP_PAGE}
           />
         ) : (
           <SignInProviderForm
             mode="update"
             values={{
-              kind: provider.kind,
+              kind: signInProvider.kind,
               ...(preset ? { preset } : {}),
               ...(tenant ? { tenant } : {}),
-              id: provider.id,
-              name: provider.name,
+              id: signInProvider.id,
+              name: signInProvider.name,
               issuer:
-                github && provider.issuer.hostname === 'github.com' ? '' : provider.issuer.href,
-              clientId: provider.clientId,
-              claims: provider.kind === 'oidc' ? provider.claims : DEFAULT_CLAIM_MAPPING,
-              domains: provider.allowedEmailDomains.join(' '),
-              admission: admissionOf(provider),
+                github && signInProvider.issuer.hostname === 'github.com'
+                  ? ''
+                  : signInProvider.issuer.href,
+              clientId: signInProvider.clientId,
+              claims:
+                signInProvider.kind === 'oidc' ? signInProvider.claims : DEFAULT_CLAIM_MAPPING,
+              domains: signInProvider.allowedEmailDomains.join(' '),
+              admission: admissionOf(signInProvider),
             }}
             hasSecret
-            callbackUrl={root.auth.flows.callbackUrl(provider.id).href}
+            callbackUrl={root.auth.flows.callbackUrl(signInProvider.id).href}
             cancelHref={IDP_PAGE}
           />
         )}

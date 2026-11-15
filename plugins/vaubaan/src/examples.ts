@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `vaubaan` provider
- * (`ProviderPlugin.examples`): the samples the plugin's tests run through the
+ * Representative calls of every tool of the `vaubaan` service
+ * (`ServicePlugin.examples`): the samples the plugin's tests run through the
  * kit and the site classifies when it builds. The account carries no resource,
  * so no sample names one.
  */
@@ -28,9 +28,9 @@ export const EXAMPLE_DRAFT = {
 export const vaubaanExamples: ToolSamples = samplesOn([], {
   [TOOL.listMyAccounts]: [{ args: {} }],
   [TOOL.getCatalog]: [
-    { args: { provider: 'github' } },
-    { args: { provider: 'github', account_id: '0193a4f2-0000-7000-8000-000000000001' } },
-    { args: { provider: '' }, expectDenied: true },
+    { args: { service: 'github' } },
+    { args: { service: 'github', account_id: '0193a4f2-0000-7000-8000-000000000001' } },
+    { args: { service: '' }, expectDenied: true },
   ],
   [TOOL.listMyMissions]: [
     { args: {} },

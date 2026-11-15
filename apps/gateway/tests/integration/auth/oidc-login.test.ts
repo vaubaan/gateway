@@ -16,7 +16,7 @@ import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../support/config/testing';
 import { FakeIdp } from './fake-idp';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const ADMIN_GROUP = 'gateway-admins';
@@ -67,7 +67,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
   });
 
   async function configureIdp(): Promise<void> {
-    await saveTestOidcProvider(root.store.config, {
+    await saveTestOidcSignInProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -272,7 +272,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
 
     // the bootstrap operator configures the IdP through the form (secret sealed, audited)
     const form = new URLSearchParams({
-      provider_id: 'idp',
+      sign_in_provider_id: 'idp',
       issuer: idp.issuer.href,
       client_id: CLIENT.clientId,
       client_secret: CLIENT.clientSecret,
@@ -387,7 +387,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
   });
 
   it('refuses an email outside the allowed domains and missing claims', async () => {
-    await saveTestOidcProvider(root.store.config, {
+    await saveTestOidcSignInProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -497,7 +497,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
           'content-type': 'application/x-www-form-urlencoded',
         }),
         body: new URLSearchParams({
-          provider_id: 'idp',
+          sign_in_provider_id: 'idp',
           issuer: idp.issuer.href,
           client_id: CLIENT.clientId,
           client_secret: CLIENT.clientSecret,
@@ -511,7 +511,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     vi.restoreAllMocks();
     // The settings are stored (one transaction); the missing entry is an error line naming the actor.
     expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
-    expect((await root.auth.providers.resolve('idp'))?.provider).toMatchObject({
+    expect((await root.auth.signInProviders.resolve('idp'))?.signInProvider).toMatchObject({
       clientId: CLIENT.clientId,
     });
     const errorLine = lines.find((l) => l.includes('audit entry not written'));
@@ -734,7 +734,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
   it('sessions live in the embedded store (web_sessions), not in process memory', async () => {
     await configureIdp();
     // No second factor here: the one-time notice of its recovery codes is a row too.
-    await root.auth.providers.setWaiver('idp', 'always');
+    await root.auth.signInProviders.setWaiver('idp', 'always');
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|hal', email: 'hal@example.com' });
     expect(await root.store.webSessions.count()).toBe(1);

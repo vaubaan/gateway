@@ -94,7 +94,7 @@ import {
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
-import { resourceNounOf } from '../../lib/providers/resource-noun';
+import { resourceNounOf } from '../../lib/services/resource-noun';
 import type {
   CatalogRisk,
   DraftAccount,
@@ -294,7 +294,7 @@ export interface MissionOnAccount {
   readonly resource_ids: readonly string[];
   /** True when a set of it takes the resources that later appear in its environment. */
   readonly future: boolean;
-  /** Accepted risks that belong to this account's provider. */
+  /** Accepted risks that belong to this account's service. */
   readonly permissions: number;
   /** How many of them wait for the creator's approval. */
   readonly asks_first: number;
@@ -577,9 +577,9 @@ export interface MissionDetailSet {
 
 export interface MissionDetailAccount {
   readonly id: string;
-  readonly provider: string;
-  readonly provider_label: string;
-  /** What one resource of this provider is called (`resourceNounOf`): "board" / "boards". */
+  readonly service: string;
+  readonly service_label: string;
+  /** What one resource of this service is called (`resourceNounOf`): "board" / "boards". */
   readonly resource_noun: ResourceNoun;
   readonly display_name: string;
   readonly status: string;
@@ -747,9 +747,9 @@ function issuedAuditOf(mission: MissionRecord, tokenPrefix: string): MissionIssu
 
 export class MissionService {
   private readonly mint: TokenMinter;
-  /** Catalog rows per provider. The catalogs are immutable for the life of the registry. */
+  /** Catalog rows per service. The catalogs are immutable for the life of the registry. */
   private readonly catalogRows = new Map<string, readonly CatalogRisk[]>();
-  /** Macro-actions per provider, "Anything else" included; immutable like the catalogs. */
+  /** Macro-actions per service, "Anything else" included; immutable like the catalogs. */
   private readonly catalogActions = new Map<string, readonly MacroAction[]>();
 
   private readonly budget: Pick<SessionService, 'stateOf'>;
@@ -783,7 +783,7 @@ export class MissionService {
     user: Subject,
     account: AccountRecord,
   ): Promise<IssuanceAccount | null> {
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     if (!registered) return null;
     const authority = await this.deps.authority.authorityOf(user, account);
     if (authority.basis === 'none' || authority.riskIds.length === 0) return null;
@@ -791,33 +791,33 @@ export class MissionService {
     const { plugin } = registered;
     return {
       ...accountSummaryOf(account),
-      provider_label: plugin.displayName,
+      service_label: plugin.displayName,
       resource_noun: resourceNounOf(plugin),
       derives_env: typeof plugin.envOf === 'function',
       default_env: account.defaultEnv,
       basis: authority.basis,
-      resources: resources.map((r) => toIssuanceResource(r, this.isSelf(account.provider, r))),
-      risks: this.risksOf(account.provider),
+      resources: resources.map((r) => toIssuanceResource(r, this.isSelf(account.service, r))),
+      risks: this.risksOf(account.service),
       authority: authority.riskIds,
-      macro_actions: this.macroActionsOf(account.provider),
+      macro_actions: this.macroActionsOf(account.service),
     };
   }
 
-  private macroActionsOf(provider: string): readonly MacroAction[] {
-    const cached = this.catalogActions.get(provider);
+  private macroActionsOf(service: string): readonly MacroAction[] {
+    const cached = this.catalogActions.get(service);
     if (cached) return cached;
-    const registered = this.deps.registry.get(provider);
+    const registered = this.deps.registry.get(service);
     const actions = registered ? macroActionsOf(registered.plugin.catalog) : [];
-    this.catalogActions.set(provider, actions);
+    this.catalogActions.set(service, actions);
     return actions;
   }
 
-  private risksOf(provider: string): readonly CatalogRisk[] {
-    const cached = this.catalogRows.get(provider);
+  private risksOf(service: string): readonly CatalogRisk[] {
+    const cached = this.catalogRows.get(service);
     if (cached) return cached;
-    const registered = this.deps.registry.get(provider);
+    const registered = this.deps.registry.get(service);
     const rows = registered ? enumerateCatalog(registered.plugin.catalog) : [];
-    this.catalogRows.set(provider, rows);
+    this.catalogRows.set(service, rows);
     return rows;
   }
 
@@ -911,10 +911,10 @@ export class MissionService {
     for (const c of mission.accounts) {
       const account = await this.deps.store.accounts.getById(c.accountId);
       if (!account) continue;
-      const provider = account.provider;
+      const service = account.service;
       const sets: DraftResourceSet[] = [];
       for (const set of c.resourceSets) {
-        const ids = await this.survivingResources(c.accountId, set, provider);
+        const ids = await this.survivingResources(c.accountId, set, service);
         const legacyWhole = set.mixedEnv && set.future;
         // A set that holds nothing and takes nothing later: "all", resolved at the copy.
         const nothing = ids.length === 0 && !set.future;
@@ -954,20 +954,20 @@ export class MissionService {
   private async survivingResources(
     accountId: string,
     set: MissionResourceSetRecord,
-    provider: string,
+    service: string,
   ): Promise<string[]> {
     const current = await this.deps.store.accounts.listResources(accountId);
     // A stale resource would refuse the copy: it is dropped like a vanished one.
     // So is one of the instance's own resources, which no mission may reach.
     const known = new Set(
-      current.filter((r) => !isStale(r) && !this.isSelf(provider, r)).map((r) => r.id),
+      current.filter((r) => !isStale(r) && !this.isSelf(service, r)).map((r) => r.id),
     );
     return set.resourceIds.filter((id) => known.has(id));
   }
 
   /** True when the resource is one of this instance's own (`selfResources`). */
-  private isSelf(provider: string, resource: Pick<AccountResourceRecord, 'ref'>): boolean {
-    return isSelfResource(this.deps.selfResources, provider, resource.ref);
+  private isSelf(service: string, resource: Pick<AccountResourceRecord, 'ref'>): boolean {
+    return isSelfResource(this.deps.selfResources, service, resource.ref);
   }
 
   /** The refusal of one more active mission, or `null` while one more fits. */
@@ -1112,7 +1112,7 @@ export class MissionService {
       const creator = await this.deps.store.users.getById(mission.creatorUserId);
       const membership = await this.membershipOf(mission, user.id);
       const accepted = mission.policy.filter(
-        (entry) => parseRiskId(entry.riskId)?.provider === account.provider,
+        (entry) => parseRiskId(entry.riskId)?.service === account.service,
       );
       const selection = mission.accounts.find((c) => c.accountId === accountId);
       listed.push({
@@ -1492,7 +1492,7 @@ export class MissionService {
     for (const c of mission.accounts) {
       const account = await this.deps.store.accounts.getById(c.accountId);
       const first = c.resourceSets[0];
-      if (account && first) firstSets.set(account.provider, first.id);
+      if (account && first) firstSets.set(account.service, first.id);
     }
     const expected = placeLines(mission, edit.expected_policy, asked, firstSets);
     const policy = placeLines(mission, edit.policy, asked, firstSets);
@@ -1550,7 +1550,7 @@ export class MissionService {
       const account = await this.deps.store.accounts.getById(c.accountId);
       accounts.push({
         account_id: c.accountId,
-        provider: account?.provider ?? '',
+        service: account?.service ?? '',
         display_name: account?.displayName ?? c.accountId,
         resource_sets: c.resourceSets.map((set) => ({
           key: set.id,
@@ -1708,7 +1708,7 @@ export class MissionService {
 
   /**
    * Why issuance would refuse these lines on the mission's accounts now: each line
-   * checked against the creator's authority on the account of its provider, on the
+   * checked against the creator's authority on the account of its service, on the
    * resources the mission reaches there. Empty when every line passes.
    */
   private async limitIssues(
@@ -1723,7 +1723,7 @@ export class MissionService {
     for (const [index, c] of mission.accounts.entries()) {
       const account = await this.deps.store.accounts.getById(c.accountId);
       if (!account) continue;
-      const own = lines.filter((line) => parseRiskId(line.risk_id)?.provider === account.provider);
+      const own = lines.filter((line) => parseRiskId(line.risk_id)?.service === account.service);
       if (own.length === 0) continue;
       for (const line of own) judged.add(line.risk_id);
       // A revoked account's part of the mission is lost for good: nothing widens on it.
@@ -1750,7 +1750,7 @@ export class MissionService {
     }
     const unplaced = lines.filter((line) => !judged.has(line.risk_id)).map((l) => l.risk_id);
     if (unplaced.length > 0) {
-      // A risk of a provider none of the mission's accounts is for: nothing grounds it.
+      // A risk of a service none of the mission's accounts is for: nothing grounds it.
       issues.push({
         code: 'exceeds-authority',
         message: `No account of this mission carries ${unplaced.join(', ')}.`,
@@ -1996,10 +1996,10 @@ export class MissionService {
     const accounts = new Map<string, { name: string; macroActions: readonly MacroAction[] }>();
     for (const c of mission.accounts) {
       const account = await this.deps.store.accounts.getById(c.accountId);
-      if (!account || !this.deps.registry.get(account.provider)) continue;
+      if (!account || !this.deps.registry.get(account.service)) continue;
       accounts.set(c.accountId, {
         name: account.displayName,
-        macroActions: this.macroActionsOf(account.provider),
+        macroActions: this.macroActionsOf(account.service),
       });
     }
     return trustRaiseOffers({
@@ -2186,14 +2186,14 @@ export class MissionService {
       const account = await this.deps.store.accounts.getById(c.accountId);
       if (!account) continue;
       const discovered = await this.deps.store.accounts.listResources(c.accountId);
-      const bySet = reachedResourcesBySet(c, discovered, (r) => this.isSelf(account.provider, r));
+      const bySet = reachedResourcesBySet(c, discovered, (r) => this.isSelf(account.service, r));
       const reachedIds = new Set([...bySet.values()].flat().map((r) => r.id));
       const reached = discovered.filter((r) => reachedIds.has(r.id));
       details.push({
         ...accountSummaryOf(account),
-        provider_label:
-          this.deps.registry.get(account.provider)?.plugin.displayName ?? account.provider,
-        resource_noun: resourceNounOf(this.deps.registry.get(account.provider)?.plugin ?? null),
+        service_label:
+          this.deps.registry.get(account.service)?.plugin.displayName ?? account.service,
+        resource_noun: resourceNounOf(this.deps.registry.get(account.service)?.plugin ?? null),
         resources: reached.map((r) => toIssuanceResource(r, false)),
         future: takesFutureResources(c),
         last_checked_at: lastDiscoveryAt(account),
@@ -2214,10 +2214,10 @@ export class MissionService {
   }
 
   private catalogRowsOf(
-    accounts: readonly Pick<MissionDetailAccount, 'provider'>[],
+    accounts: readonly Pick<MissionDetailAccount, 'service'>[],
   ): Map<string, CatalogRisk> {
     return new Map(
-      accounts.flatMap((c) => this.risksOf(c.provider).map((r) => [r.risk_id, r] as const)),
+      accounts.flatMap((c) => this.risksOf(c.service).map((r) => [r.risk_id, r] as const)),
     );
   }
 
@@ -2260,7 +2260,7 @@ export class MissionService {
         expires_at: mission.expiresAt,
       },
       accounts: accounts.map((c) => ({
-        provider_label: c.provider_label,
+        service_label: c.service_label,
         display_name: c.display_name,
         resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
         future: c.future,
@@ -2280,19 +2280,19 @@ export class MissionService {
     });
   }
 
-  /** The git remotes of the kit: per provider whose plugin declares one, the mission's repositories there. */
+  /** The git remotes of the kit: per service whose plugin declares one, the mission's repositories there. */
   private gitRemotesOf(accounts: readonly MissionDetailAccount[]): readonly KitGitRemote[] {
-    const providers = [...new Set(accounts.map((c) => c.provider))];
-    return providers.flatMap((providerId) => {
-      const remote = this.deps.registry.gitRemoteOf(providerId)?.plugin.gitRemote;
+    const services = [...new Set(accounts.map((c) => c.service))];
+    return services.flatMap((serviceId) => {
+      const remote = this.deps.registry.gitRemoteOf(serviceId)?.plugin.gitRemote;
       if (!remote) return [];
       const repositories = accounts
-        .filter((c) => c.provider === providerId)
+        .filter((c) => c.service === serviceId)
         .flatMap((c) => c.resources.map((r) => r.ref));
       if (repositories.length === 0) return [];
       return [
         {
-          base: gitRemoteBase(this.deps.publicUrl, providerId),
+          base: gitRemoteBase(this.deps.publicUrl, serviceId),
           insteadOf: remote.insteadOf ?? null,
           repositories: [...new Set(repositories)],
         },
@@ -2338,14 +2338,14 @@ function lineOfRisk(
 /**
  * The lines of a permission edit, each in its set: the one it names, else the set of the
  * mission's line of that risk (when only one set accepts it), else the set the answered
- * request names for it, else the first set of the account of its provider. `null` when
+ * request names for it, else the first set of the account of its service. `null` when
  * a line cannot be placed (several sets accept the risk, or no account is for it).
  */
 function placeLines(
   mission: Pick<MissionRecord, 'policy'>,
   lines: readonly MissionPolicyEntry[],
   asked: readonly RequestLine[],
-  /** The first set of the account of each provider of the mission. */
+  /** The first set of the account of each service of the mission. */
   firstSets: ReadonlyMap<string, string>,
 ): MissionPolicyEntry[] | null {
   const placed: MissionPolicyEntry[] = [];
@@ -2360,7 +2360,7 @@ function placeLines(
     const setId =
       only?.resourceSetId ??
       asked.find((a) => a.riskId === line.risk_id)?.resourceSetId ??
-      firstSets.get(parseRiskId(line.risk_id)?.provider ?? '');
+      firstSets.get(parseRiskId(line.risk_id)?.service ?? '');
     if (setId === undefined) return null;
     placed.push({ ...line, resource_set_id: setId });
   }

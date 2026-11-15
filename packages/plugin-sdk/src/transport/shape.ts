@@ -1,8 +1,8 @@
 /**
- * What a provider answers is untrusted : it becomes a typed value only
+ * What a service answers is untrusted : it becomes a typed value only
  * through a type guard, never a cast. `readShape` is that step, and fails
- * the way a provider failure fails (`UpstreamProtocolError`), so a shape
- * change at the provider is a call that failed at the provider, with the
+ * the way a service failure fails (`UpstreamProtocolError`), so a shape
+ * change at the service is a call that failed at the service, with the
  * request named, instead of a `TypeError` deep in `execute`.
  */
 

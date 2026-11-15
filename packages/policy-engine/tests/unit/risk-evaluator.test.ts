@@ -15,7 +15,7 @@ import {
 import { parseSlice } from '../../src/slice-dsl.ts';
 
 const githubCatalog: RiskCatalog = {
-  provider: 'github',
+  service: 'github',
   risks: [
     {
       id: 'github.read-code',
@@ -131,7 +131,7 @@ describe('risksTouchedBy', () => {
     // Two non-fallback entries matching the same slice both count : only the
     // fallback is subject to the "nothing else matched" rule.
     const overlapping = indexCatalog({
-      provider: 'ssh',
+      service: 'ssh',
       risks: [
         entry('ssh.exec-read', 'ssh.host[**].command.R'),
         entry('ssh.exec-read-secret-files', 'ssh.host[**].command.R'),
@@ -150,7 +150,7 @@ describe('risksTouchedBy', () => {
     // GitHub's fallback is `github.repo[**].W`, not `github.**.W` : the
     // explicit flag — or the `uncategorized-` id — identifies it.
     const flagged = indexCatalog({
-      provider: 'github',
+      service: 'github',
       risks: [
         entry('github.create-pr', 'github.repo[**].pr[**].W'),
         { ...entry('github.catch-all', 'github.repo[**].W'), fallback: true },
@@ -162,7 +162,7 @@ describe('risksTouchedBy', () => {
     ]);
   });
 
-  test('different provider returns empty', () => {
+  test('different service returns empty', () => {
     const touched = risksTouchedBy(s('vercel.project[gateway].deployment[*].W'), indexed);
     expect(touched).toEqual([]);
   });
@@ -204,7 +204,7 @@ describe('fallback detection', () => {
     expect(isFallbackEntry(entry('x.broken', 'not a slice'), 'x')).toBe(false);
   });
 
-  test('the id convention is `<provider>.uncategorized-`, dash included', () => {
+  test('the id convention is `<service>.uncategorized-`, dash included', () => {
     expect(fallbackRiskPrefix('x')).toBe('x.uncategorized-');
     expect(isFallbackEntry(entry('x.uncategorizedfoo', 'x.repo[**].W'), 'x')).toBe(false);
     expect(isFallbackEntry(entry('x.uncategorized', 'x.repo[**].W'), 'x')).toBe(false);
@@ -228,7 +228,7 @@ describe('fallback detection', () => {
     ]);
     expect(hasFallbackRisk(githubCatalog)).toBe(true);
     expect(indexed.entries.map((e) => e.fallback)).toEqual([false, false, false, false, true]);
-    expect(hasFallbackRisk({ provider: 'github', risks: githubCatalog.risks.slice(0, 2) })).toBe(
+    expect(hasFallbackRisk({ service: 'github', risks: githubCatalog.risks.slice(0, 2) })).toBe(
       false,
     );
   });
@@ -251,9 +251,9 @@ function entry(id: string, matches: string): RiskCatalog['risks'][number] {
 }
 
 describe('indexCatalog', () => {
-  test('rejects pattern for wrong provider', () => {
+  test('rejects pattern for wrong service', () => {
     const bogus: RiskCatalog = {
-      provider: 'github',
+      service: 'github',
       risks: [
         {
           id: 'github.bogus',
@@ -270,12 +270,12 @@ describe('indexCatalog', () => {
         },
       ],
     };
-    expect(() => indexCatalog(bogus)).toThrow(/provider/);
+    expect(() => indexCatalog(bogus)).toThrow(/service/);
   });
 
   test('rejects unparseable pattern', () => {
     const bogus: RiskCatalog = {
-      provider: 'github',
+      service: 'github',
       risks: [
         {
           id: 'github.bogus',
@@ -299,7 +299,7 @@ describe('indexCatalog', () => {
     // W8 — two entries with the same id silently lost `findRiskEntry`
     // lookups to "first match wins". Reject up front.
     const dup: RiskCatalog = {
-      provider: 'github',
+      service: 'github',
       risks: [
         {
           id: 'github.dup',

@@ -1,5 +1,5 @@
 /**
- * Streamed tool results — what a plugin uses when its provider answers
+ * Streamed tool results — what a plugin uses when its service answers
  * progressively (a log tail, a long export, a chunked HTTP body).
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ("Streaming : the gateway
@@ -15,23 +15,23 @@
  * plugin gains is `ExecuteContext.emitPart` : each part handed to it leaves
  * for the caller at once (a progress notification on the call's event
  * stream, when the caller asked for progress), while `execute` keeps
- * reading the provider. The complete result is still returned at the end.
+ * reading the service. The complete result is still returned at the end.
  *
  * Rules a streaming plugin follows :
  *
- *   - open the provider's response BEFORE the first `emitPart` : a rejected
+ *   - open the service's response BEFORE the first `emitPart` : a rejected
  *     credential (`UpstreamAuthError`) thrown before any part is retried by
  *     the host, one thrown after a part is final (the caller already holds
  *     what was sent) ;
  *   - `await` every `emitPart` : it is the backpressure, and it rejects when
  *     the caller is gone, which is how a long stream stops ;
- *   - throw when the provider's stream breaks : the host records the call as
+ *   - throw when the service's stream breaks : the host records the call as
  *     failed after N parts ; the credit stays consumed.
  */
 
 import type { McpToolContent, McpToolResult } from '@vaubaan/shared';
 
-/** Receives one part of a result as soon as the provider delivered it. */
+/** Receives one part of a result as soon as the service delivered it. */
 export type ToolResultPartSink = (part: McpToolContent) => Promise<void>;
 
 /** What `streamToolResult` needs of an `ExecuteContext`. */
@@ -41,7 +41,7 @@ export interface PartEmitter {
 
 /**
  * Append a part to the content of the final result. Consecutive text parts
- * are one text block : a provider's chunk boundaries mean nothing to the
+ * are one text block : a service's chunk boundaries mean nothing to the
  * reader of the complete result.
  */
 export function appendPart(content: McpToolContent[], part: McpToolContent): void {
@@ -58,7 +58,7 @@ export function appendPart(content: McpToolContent[], part: McpToolContent): voi
  * is handed to `ctx.emitPart` (when the host provides one) and appended to
  * the final content. An error of the iteration, or of the sink, propagates ;
  * leaving the loop that way ends the iteration (`return()` on the iterator),
- * so a provider body wrapped by `textParts` is cancelled.
+ * so a service body wrapped by `textParts` is cancelled.
  */
 export async function streamToolResult(
   ctx: PartEmitter,
@@ -73,7 +73,7 @@ export async function streamToolResult(
 }
 
 /**
- * A provider's response body as text parts, one per chunk received, decoded
+ * A service's response body as text parts, one per chunk received, decoded
  * as UTF-8 across chunk boundaries. Ending the iteration early cancels the
  * body ; a body that errors makes the iteration throw.
  */

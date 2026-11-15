@@ -1,11 +1,11 @@
 /**
- * Temporary refs a push created at the provider (spec §4.1 ter "Git remote";
+ * Temporary refs a push created at the service (spec §4.1 ter "Git remote";
  * migration 0015; ADR gateway-as-git-remote D5). The git door records each
  * one before the pack leaves, with the request's deadline, and drops the row
- * once the provider confirmed the ref deleted; a push answered
+ * once the service confirmed the ref deleted; a push answered
  * `approval-required` moves the deadline to the request's expiry. The
- * sweeper deletes at the provider what outlived its deadline (a crash, a
- * client gone, a provider that did not answer or refused the delete). The
+ * sweeper deletes at the service what outlived its deadline (a crash, a
+ * client gone, a service that did not answer or refused the delete). The
  * pack itself is never stored here.
  */
 
@@ -35,7 +35,7 @@ export interface PendingRefsRepo {
   listExpired(now: Iso, limit: number): Promise<PendingRefRecord[]>;
   /** The rows of one mission on one repository (a replay cleans what its request left). */
   listFor(missionId: string, repository: string): Promise<PendingRefRecord[]>;
-  /** How many temporary refs one mission holds at the provider, in flight or pending. */
+  /** How many temporary refs one mission holds at the service, in flight or pending. */
   countFor(missionId: string): Promise<number>;
   /** Moves the deadline of these rows (a push now waiting for an approval; a delete to retry). */
   extend(refs: readonly string[], expiresAt: Iso): Promise<void>;

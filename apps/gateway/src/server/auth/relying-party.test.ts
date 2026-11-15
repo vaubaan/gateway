@@ -54,7 +54,7 @@ describe('RelyingPartyFactory.checkIssuer — the form checks discovery before s
       json({ issuer: 'https://login.example.com/realms/other' }),
     );
     expect(await check(ISSUER)).toBe(
-      `the discovery document at ${WELL_KNOWN} names another issuer (https://login.example.com/realms/other): give the issuer exactly as the provider writes it there`,
+      `the discovery document at ${WELL_KNOWN} names another issuer (https://login.example.com/realms/other): give the issuer exactly as the sign-in provider writes it there`,
     );
   });
 

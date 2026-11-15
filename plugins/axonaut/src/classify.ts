@@ -1,9 +1,9 @@
 /**
- * Classifier of the `axonaut` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `axonaut` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *        §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/axonaut.md §2, §5.
+ * Handbook : docs/handbook/services/axonaut.md §2, §5.
  *
  * Pure : no IO, no credential, no `Date`. The work is done by `readCall`
  * (`call.ts`), the one reader `execute` sends from too: it resolves the

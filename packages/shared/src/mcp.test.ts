@@ -7,21 +7,21 @@ describe('toolPrefixFor / splitToolName', () => {
   test('maps hyphens to underscores and back', () => {
     expect(toolPrefixFor('cloudflare-dns')).toBe('cloudflare_dns__');
     expect(splitToolName('cloudflare_dns__list_records')).toEqual({
-      providerId: 'cloudflare-dns',
+      serviceId: 'cloudflare-dns',
       localName: 'list_records',
     });
   });
 
-  test('plain provider', () => {
+  test('plain service', () => {
     expect(splitToolName('github__list_branches')).toEqual({
-      providerId: 'github',
+      serviceId: 'github',
       localName: 'list_branches',
     });
   });
 
   test('splits on the first separator only', () => {
     expect(splitToolName('github__get__thing')).toEqual({
-      providerId: 'github',
+      serviceId: 'github',
       localName: 'get__thing',
     });
   });

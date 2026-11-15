@@ -5,7 +5,7 @@
  * time someone connects (RFC 7591 dynamic client registration) : no Miro app
  * to create, nothing to paste, no administrator step.
  *
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  * ADR      : docs/decisions/oauth-client-registered-by-the-gateway.md.
  *
  * Facts, from `https://mcp.miro.com/.well-known/oauth-authorization-server`

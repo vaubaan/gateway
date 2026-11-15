@@ -1,9 +1,9 @@
 /**
- * MCP tools of the `outlook` provider — the plugin's own, each implemented on
+ * MCP tools of the `outlook` service — the plugin's own, each implemented on
  * Microsoft Graph v1.0 (`mail.ts`, `calendar.ts`).
  *
  * ADR      : docs/decisions/outlook-through-the-oauth-broker-microsoft-provider.md.
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * Every tool takes `mailbox`, the account of the mission (its ref or its
  * address), the mission's single mailbox when omitted. The calendar tools

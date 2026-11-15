@@ -1,7 +1,7 @@
 /**
  * Test fixtures for the execution door. Not for production.
  *
- * `depotPlugin()` is a small provider with every shape the pipeline must
+ * `depotPlugin()` is a small service with every shape the pipeline must
  * handle — a resource ref the classifier requires, an account-level tool, an
  * env-scoped risk, a risk meant to be gated — and an `execute` the test
  * scripts. `executionInstance()` builds the real composition root on the
@@ -17,7 +17,7 @@ import {
   type CredentialSecret,
   type ExecuteContext,
   type McpToolResult,
-  type ProviderPlugin,
+  type ServicePlugin,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
@@ -55,7 +55,7 @@ export type DepotExecute = (
 ) => Promise<McpToolResult>;
 
 export interface DepotPlugin {
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   /** Every `execute` call, in order. */
   readonly calls: { tool: string; args: Readonly<Record<string, unknown>>; ctx: ExecuteContext }[];
   /** Replace what `execute` does; `null` restores the echo. */
@@ -103,7 +103,7 @@ export function depotPlugin(): DepotPlugin {
     id: DEPOT,
     displayName: 'Depot',
     version: '0.0.1',
-    description: 'Fixture provider of the execution door tests.',
+    description: 'Fixture service of the execution door tests.',
     tools: [
       tool('read_item', 'Read an item of a space.'),
       tool('write_item', 'Write an item of a space.'),
@@ -113,7 +113,7 @@ export function depotPlugin(): DepotPlugin {
     ],
     resourceCreatingTools: [`${DEPOT}__create_space`],
     dataModel: {
-      provider: DEPOT,
+      service: DEPOT,
       planes: [
         {
           slug: 'space',
@@ -142,7 +142,7 @@ export function depotPlugin(): DepotPlugin {
       ],
     },
     catalog: {
-      provider: DEPOT,
+      service: DEPOT,
       risks: [
         {
           id: `${DEPOT}.read`,
@@ -216,7 +216,7 @@ export function depotPlugin(): DepotPlugin {
       // tests pin the catalog's explicit ids).
       if (name === `${DEPOT}__create_space`)
         return { slices: [parseSlice(`${DEPOT}.account.spaces.W`)] };
-      const refs = resources.filter((r) => r.provider === DEPOT).map((r) => r.ref);
+      const refs = resources.filter((r) => r.service === DEPOT).map((r) => r.ref);
       const space =
         typeof args.space === 'string' ? args.space : refs.length === 1 ? refs[0] : undefined;
       if (space === undefined) return { denied: `${name} requires 'space'.` };
@@ -252,7 +252,7 @@ export function depotPlugin(): DepotPlugin {
         if (typeof ref !== 'string' || !/^[a-z0-9-]+$/.test(ref)) return [];
         return [
           {
-            provider: DEPOT,
+            service: DEPOT,
             ref,
             displayName: typeof created?.name === 'string' ? created.name : ref,
             metadata: { created_by_call: true },
@@ -262,7 +262,7 @@ export function depotPlugin(): DepotPlugin {
     },
     async refresh() {
       if (scriptedRefresh) return scriptedRefresh();
-      throw new UpstreamAuthError('the key was revoked at the provider', 401);
+      throw new UpstreamAuthError('the key was revoked at the service', 401);
     },
   });
 
@@ -368,7 +368,7 @@ export interface RpcBody {
 export const TEST_PUBLIC_URL = 'https://gateway.example.com';
 
 export interface ExecutionInstanceOptions {
-  readonly plugins?: readonly ProviderPlugin[];
+  readonly plugins?: readonly ServicePlugin[];
   readonly spaces?: readonly SeedSpace[];
   readonly env?: Record<string, string | undefined>;
   readonly deps?: RootDeps;
@@ -395,7 +395,7 @@ export async function executionInstance(
     displayName: 'Ada',
   });
   const account = await root.store.accounts.create({
-    provider: DEPOT,
+    service: DEPOT,
     owner: { kind: 'user', id: ada.id },
     displayName: 'Depot main',
     credential: serializeSecret(depotSecret()),

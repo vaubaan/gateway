@@ -1,10 +1,10 @@
 /**
- * Data model of the `ssh` provider — plane `host`.
+ * Data model of the `ssh` service — plane `host`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
- * SSH stays the simplest provider of the gateway : one plane, one resource
+ * SSH stays the simplest service of the gateway : one plane, one resource
  * (the host), one operation (a shell command). All the granularity lives in
  * the *content* of the command string, not in the structure of the host —
  * so the entities below `command` are **classification markers**, not things
@@ -15,10 +15,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const sshDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'host',

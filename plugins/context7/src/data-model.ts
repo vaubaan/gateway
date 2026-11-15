@@ -1,8 +1,8 @@
 /**
- * Data model of the `context7` provider.
+ * Data model of the `context7` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/context7.md.
+ * Handbook : docs/handbook/services/context7.md.
  *
  * One plane, `docs` : the library index one Context7 key can query (the
  * resource, one per account) and the libraries in it. Libraries are
@@ -14,10 +14,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 export const context7DataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'docs',

@@ -2,7 +2,7 @@
  * Reading of the SQL body of `supabase__apply_migration` : which write
  * classes does it take, on top of the schema write every migration is ?
  *
- * Handbook : docs/handbook/providers/supabase.md, "Reading a migration".
+ * Handbook : docs/handbook/services/supabase.md, "Reading a migration".
  *
  * Pure : no IO. This is not a SQL parser and does not try to be one. It is
  * an allow-list : a statement is *recognised* only when its leading keywords

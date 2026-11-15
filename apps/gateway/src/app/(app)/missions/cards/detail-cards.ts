@@ -50,8 +50,8 @@ function accountOf(
   );
   return {
     id: detailAccount.id,
-    provider: detailAccount.provider,
-    provider_label: detailAccount.provider_label,
+    service: detailAccount.service,
+    service_label: detailAccount.service_label,
     resource_noun: detailAccount.resource_noun,
     display_name: detailAccount.display_name,
     status: detailAccount.status,
@@ -71,10 +71,10 @@ export function detailCards(
   detail: Pick<MissionDetail, 'accounts' | 'policy'>,
   /** The creator's issuance context; empty for anyone else. */
   context: readonly IssuanceAccount[],
-  catalogOf: (provider: string) => CardCatalog | null,
+  catalogOf: (service: string) => CardCatalog | null,
 ): DetailCard[] {
   return detail.accounts.flatMap((c) => {
-    const catalog = catalogOf(c.provider);
+    const catalog = catalogOf(c.service);
     if (!catalog) return [];
     const own = context.find((x) => x.id === c.id);
     const account = accountOf(c, detail, own, catalog);

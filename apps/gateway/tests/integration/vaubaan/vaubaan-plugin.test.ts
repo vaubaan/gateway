@@ -100,7 +100,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     if (first.kind !== 'connected' || second.kind !== 'connected') throw new Error('one click');
     expect(second.account.id).toBe(first.account.id);
     expect(first.account).toMatchObject({
-      provider: 'vaubaan',
+      service: 'vaubaan',
       owner: { kind: 'user', id: rig.seeded.ada.id },
       metadata: { credential_kind: 'host' },
     });
@@ -128,7 +128,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     it('an owner sees their accounts, the Vaubaan account among them, with the whole catalog', async () => {
       const agent = await rig.agentOf(ADA);
       const { data } = await agent.call<AccountsAnswer>('list_my_accounts');
-      expect(data.accounts.map((c) => c.provider).sort()).toEqual([
+      expect(data.accounts.map((c) => c.service).sort()).toEqual([
         'github',
         'gmail',
         'supabase',
@@ -146,20 +146,20 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
       const { data } = await agent.call<AccountsAnswer>('list_my_accounts');
-      expect(data.accounts.map((c) => c.provider).sort()).toEqual(['github', 'vaubaan']);
-      const gh = data.accounts.find((c) => c.provider === 'github')!;
+      expect(data.accounts.map((c) => c.service).sort()).toEqual(['github', 'vaubaan']);
+      const gh = data.accounts.find((c) => c.service === 'github')!;
       expect(gh.authority).toEqual({ basis: 'share', risk_ids: [...SHARED], whole_catalog: false });
       await agent.close();
     });
 
-    it('get_catalog reads any shipped catalog, its own included, and refuses an unknown provider', async () => {
+    it('get_catalog reads any shipped catalog, its own included, and refuses an unknown service', async () => {
       const agent = await rig.agentOf(ADA);
       const own = await agent.call<{ risks: { risk_id: string }[] }>('get_catalog', {
-        provider: 'vaubaan',
+        service: 'vaubaan',
       });
       expect(own.data.risks.map((r) => r.risk_id)).toContain('vaubaan.mission-issue');
-      const unknown = await agent.call<Refused>('get_catalog', { provider: 'nope' });
-      expect(unknown.data.error.code).toBe('unknown-provider');
+      const unknown = await agent.call<Refused>('get_catalog', { service: 'nope' });
+      expect(unknown.data.error.code).toBe('unknown-service');
       await agent.close();
     });
   });
@@ -258,7 +258,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
       expect(answer.isError).toBe(true);
       expect(answer.data.error).toMatchObject({
         code: 'draft-refused',
-        uncovered: [{ account_id: github, provider: 'github', risk_ids: [NOT_SHARED] }],
+        uncovered: [{ account_id: github, service: 'github', risk_ids: [NOT_SHARED] }],
       });
       expect(await rig.root.store.missions.listForCreator(rig.seeded.bob.id)).toHaveLength(before);
       await agent.close();
@@ -267,7 +267,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     it('a mission issued here never carries a Vaubaan account (the self rule)', async () => {
       const agent = await rig.agentOf(ADA);
       const before = (await rig.root.store.missions.listForCreator(rig.seeded.ada.id)).length;
-      for (const vaubaan of [{ account_id: agent.accountId }, { provider: 'vaubaan' }]) {
+      for (const vaubaan of [{ account_id: agent.accountId }, { service: 'vaubaan' }]) {
         const answer = await agent.call<Refused>('issue_mission', {
           name: 'A second platform agent',
           accounts: [{ ...vaubaan, trust_levels: { read: 'careful' } }],
@@ -409,7 +409,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
       await agent.close();
     });
 
-    it('the provider tools of another service are not reachable with the platform key', async () => {
+    it('the service tools of another service are not reachable with the platform key', async () => {
       const agent = await rig.agentOf(ADA);
       const names = await agent.toolNames();
       expect(names.some((name) => name.startsWith('github__'))).toBe(false);

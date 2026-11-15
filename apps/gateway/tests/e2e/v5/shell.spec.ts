@@ -337,8 +337,8 @@ test('every old path answers with a permanent redirect to the page that replaced
       '/waiting/00000000-0000-0000-0000-000000000000',
     ],
     ['/audit?decision=refused', '/activity/record?decision=refused'],
-    ['/providers', '/reference'],
-    ['/providers/github', '/reference/github'],
+    ['/services', '/reference'],
+    ['/services/github', '/reference/github'],
     // What was shared with a person is a region of Accounts; connected apps were retired
     // with the management door, their addresses lead to Settings.
     ['/shares', '/accounts'],
@@ -349,7 +349,7 @@ test('every old path answers with a permanent redirect to the page that replaced
     expect(response.status(), from).toBe(308);
     expect(response.headers().location, from).toBe(to);
   }
-  // The callback a provider was given is part of the protocol: it is served, not redirected.
+  // The callback a service was given is part of the protocol: it is served, not redirected.
   const callback = await request.get(`${localOrigin()}/connections/callback/github`, {
     maxRedirects: 0,
   });
@@ -360,7 +360,7 @@ test('every old path answers with a permanent redirect to the page that replaced
   await page.goto('/connections');
   await expect(page).toHaveURL(/\/accounts$/);
   await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
-  await page.goto('/providers/github#risk-github.read-code');
+  await page.goto('/services/github#risk-github.read-code');
   await expect(page).toHaveURL(/\/reference\/github/);
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'GitHub', level: 2 })).toBeVisible();

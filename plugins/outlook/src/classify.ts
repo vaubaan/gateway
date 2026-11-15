@@ -1,9 +1,9 @@
 /**
- * Classifier of the `outlook` provider: `(tool, args, resources) → slices`.
+ * Classifier of the `outlook` service: `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *            §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/outlook.md.
+ * Handbook : docs/handbook/services/outlook.md.
  *
  * Pure. The call is read once by `readOutlookCall`; this file places what it
  * read on the data model. `m` is the mailbox ref (`[*]` when the slice
@@ -47,14 +47,14 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readOutlookCall, type OutlookCall } from './call.ts';
-import { CALENDAR_TOOLS, PROVIDER_ID, TOOL } from './identity.ts';
+import { CALENDAR_TOOLS, SERVICE_ID, TOOL } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 const ident = (value: string | null): SliceSegment =>
   value === null ? ANY_IDENT : identSegment(value);
 
 function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path, action };
+  return { service: SERVICE_ID, path, action };
 }
 
 function mailSlices(call: OutlookCall): Slice[] {
@@ -96,7 +96,7 @@ function mailSlices(call: OutlookCall): Slice[] {
     case TOOL.createFolder:
       return [slice('W', [...root, name('folder')])];
     default:
-      throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);
+      throw new Error(`${SERVICE_ID}: '${call.tool}' has no slice mapping`);
   }
 }
 
@@ -122,7 +122,7 @@ function calendarSlices(call: OutlookCall): Slice[] {
     case TOOL.respondToEvent:
       return [slice('W', [...event, name('response')])];
     default:
-      throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);
+      throw new Error(`${SERVICE_ID}: '${call.tool}' has no slice mapping`);
   }
 }
 

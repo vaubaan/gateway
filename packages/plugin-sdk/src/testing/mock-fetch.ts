@@ -2,7 +2,7 @@
  * `mockFetch` — a `fetch` double for plugin tests.
  *
  * Spec : docs/spec/vaubaan-gateway.md §10 ("no integration test against a
- * real provider, ever"). Plugins receive `fetch` through their context ;
+ * real service, ever"). Plugins receive `fetch` through their context ;
  * tests hand them this one. An unmatched request rejects with an error
  * naming the method and URL, so a test can never reach the network by
  * accident.

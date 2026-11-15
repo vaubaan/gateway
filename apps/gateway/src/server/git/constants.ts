@@ -34,7 +34,7 @@ export const MAX_REF_LISTING_BYTES = 16 * 1024 * 1024;
 
 /** Pushes of one mission in flight at once; one more is refused before its pack is read. */
 export const MAX_PUSHES_IN_FLIGHT_PER_MISSION = 2;
-/** Temporary refs one mission may hold at the provider, in flight or waiting for an approval. */
+/** Temporary refs one mission may hold at the service, in flight or waiting for an approval. */
 export const MAX_TEMPORARY_REFS_PER_MISSION = 100;
 
 /** Deadline of the deletion of temporary refs: it runs even when the client is gone. */

@@ -64,7 +64,7 @@ export async function currentAuthority(
   store: Store,
   user: UserRecord,
   administrators: ResolvedAdministrators,
-  providerId: string | null = null,
+  signInProviderId: string | null = null,
 ): Promise<Authority> {
   const groups = await store.groups.groupsOf(user.id);
   // A designated group is a group of one sign-in provider: only a membership that
@@ -72,7 +72,10 @@ export async function currentAuthority(
   // Administration, never makes anyone an operator.
   return {
     groups,
-    isOperator: isOperator({ id: user.id, email: user.email, providerId, groups }, administrators),
+    isOperator: isOperator(
+      { id: user.id, email: user.email, signInProviderId, groups },
+      administrators,
+    ),
   };
 }
 
@@ -88,20 +91,20 @@ export async function syncIdpGroups(
   userId: string,
   claimedNames: readonly string[],
   logger: Logger,
-  providerId: string,
+  signInProviderId: string,
 ): Promise<void> {
-  const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames, providerId);
+  const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames, signInProviderId);
   for (const name of skipped) {
     logger.warn(
       'group claim collides with a local group or a group of another sign-in provider; claim ignored',
-      { group: name, provider: providerId },
+      { group: name, sign_in_provider: signInProviderId },
     );
   }
 }
 
-/** What the sign-in knows besides the identity: which provider, and who administers. */
+/** What the sign-in knows besides the identity: which sign-in provider, and who administers. */
 export interface LoginContext {
-  readonly providerId: string;
+  readonly signInProviderId: string;
   readonly administrators: Pick<AdministratorsService, 'consumeAtSignIn' | 'current'>;
 }
 
@@ -163,24 +166,24 @@ export async function completeLogin(
   } catch (err) {
     settleFailed(err);
   }
-  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger, context.providerId);
+  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger, context.signInProviderId);
   try {
     await membershipsChanged?.();
   } catch (err) {
     settleFailed(err);
   }
   // A pending address that names this person becomes their own designation now.
-  await context.administrators.consumeAtSignIn(user, context.providerId);
+  await context.administrators.consumeAtSignIn(user, context.signInProviderId);
   const authority = await currentAuthority(
     deps.store,
     user,
     await context.administrators.current(),
-    context.providerId,
+    context.signInProviderId,
   );
 
   deps.logger.info('user signed in', {
     user_id: user.id,
-    provider: context.providerId,
+    sign_in_provider: context.signInProviderId,
     groups: authority.groups.length,
     operator: authority.isOperator,
   });

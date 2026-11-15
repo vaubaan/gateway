@@ -17,7 +17,7 @@ import {
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import defaultExport, { flyCatalog, flyPlugin } from '../../src/index.ts';
 import {
   acme,
@@ -81,14 +81,14 @@ describe('fly plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(flyCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(flyCatalog.catalog.service).toBe(SERVICE_ID);
     expect(flyCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and every tool has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and every tool has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(flyPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);
     expect(Object.keys(flyPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());

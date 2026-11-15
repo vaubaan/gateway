@@ -27,7 +27,7 @@ import {
 } from '@/lib/vocabulary';
 import type { MissionDetail } from '@/server/missions';
 import type { CatalogRisk } from '@/lib/missions/model';
-import { riskReferencePath } from '@/lib/providers/links';
+import { riskReferencePath } from '@/lib/services/links';
 import { parseRiskId } from '@vaubaan/shared';
 
 import styles from '../missions.module.css';
@@ -57,8 +57,8 @@ export function PermissionsUsage({
       return sets.map((set) => ({
         key: set ? `${account.id}:${set.id}` : account.id,
         title: set
-          ? `${account.provider_label} · ${account.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
-          : `${account.provider_label} · ${account.display_name}`,
+          ? `${account.service_label} · ${account.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
+          : `${account.service_label} · ${account.display_name}`,
         note: set
           ? reachedOnAccount(
               set.resources.map((r) => r.display_name || r.ref),
@@ -72,7 +72,7 @@ export function PermissionsUsage({
         entries: policy.filter((entry) =>
           set
             ? entry.resource_set_id === set.id
-            : parseRiskId(entry.risk_id)?.provider === account.provider,
+            : parseRiskId(entry.risk_id)?.service === account.service,
         ),
       }));
     })

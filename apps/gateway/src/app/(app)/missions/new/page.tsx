@@ -12,9 +12,9 @@ import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 
 import type { ServiceMarkIcon } from '@/components/ui';
-import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
+import { riskPlanesOf, type RiskPlanes } from '@/lib/services/planes';
 
-import { PLATFORM_PROVIDER, platformMissionDraft } from './form-state';
+import { PLATFORM_SERVICE, platformMissionDraft } from './form-state';
 import { MissionForm, type InitialDraft } from './mission-form';
 
 export const dynamic = 'force-dynamic';
@@ -39,11 +39,11 @@ export default async function NewMissionPage({ searchParams }: Props) {
   const planes: Record<string, RiskPlanes> = {};
   // Per service: its mark, on the cards and in "+ Add an account".
   const icons: Record<string, ServiceMarkIcon | null> = {};
-  for (const { provider } of context) {
-    const plugin = session.root.registry.get(provider)?.plugin;
+  for (const { service } of context) {
+    const plugin = session.root.registry.get(service)?.plugin;
     const riskPlanes = plugin ? riskPlanesOf(plugin.dataModel, plugin.catalog) : null;
-    if (riskPlanes) planes[provider] = riskPlanes;
-    icons[provider] = plugin ? serviceIconOf(plugin) : null;
+    if (riskPlanes) planes[service] = riskPlanes;
+    icons[service] = plugin ? serviceIconOf(plugin) : null;
   }
 
   let initial: InitialDraft | null = null;
@@ -62,7 +62,7 @@ export default async function NewMissionPage({ searchParams }: Props) {
       };
     }
   } else if (platform) {
-    const account = context.find((c) => c.id === platform && c.provider === PLATFORM_PROVIDER);
+    const account = context.find((c) => c.id === platform && c.service === PLATFORM_SERVICE);
     if (account) {
       const draft = platformMissionDraft(account);
       const preview = await service.preview(session.user, draft);

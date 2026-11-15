@@ -78,7 +78,7 @@ export async function seedInstance(
   const bob = await store.users.upsertFromIdp({ ...BOB, issuer });
   const owner = { kind: 'user', id: ada.id } as const;
   const github = await seedAccount(store, {
-    provider: 'github',
+    service: 'github',
     owner,
     displayName: 'acme-org',
     resources: [
@@ -88,7 +88,7 @@ export async function seedInstance(
     ],
   });
   const supabase = await seedAccount(store, {
-    provider: 'supabase',
+    service: 'supabase',
     owner,
     displayName: 'Acme Supabase',
     resources: [
@@ -97,7 +97,7 @@ export async function seedInstance(
     ],
   });
   const vercel = await seedAccount(store, {
-    provider: 'vercel',
+    service: 'vercel',
     owner,
     displayName: 'Acme Vercel',
     resources: [
@@ -106,7 +106,7 @@ export async function seedInstance(
     ],
   });
   const gmail = await seedAccount(store, {
-    provider: 'gmail',
+    service: 'gmail',
     owner,
     displayName: 'ops mailbox',
     resources: [],

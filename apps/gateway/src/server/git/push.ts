@@ -14,10 +14,10 @@
  *               before any byte leaves (ADR gateway-as-git-remote)
  *   4b. admit   the plugin asked whether its credential can carry the push
  *               (`gitRemote.admitPush`: a CI workflow change needs the
- *               provider permission to change workflows) — after the
+ *               service permission to change workflows) — after the
  *               mission's decision, before any byte leaves
- *   5. store   the pack at the provider under temporary refs (`temporary-refs.ts`)
- *   6. review   each update at the provider (`gitRemote.review`), the
+ *   5. store   the pack at the service under temporary refs (`temporary-refs.ts`)
+ *   6. review   each update at the service (`gitRemote.review`), the
  *               inspection's workflow paths added to it
  *   7. decide   one call, the reviewed updates as arguments
  *   8. move     allowed: the plugin's `execute` moves the real refs
@@ -148,7 +148,7 @@ export class Push {
         if (refused) return this.answer(refused, list, format);
       }
       // The mission has decided on what the push changes; whether the
-      // provider's credential can carry it is asked now, before a byte leaves.
+      // service's credential can carry it is asked now, before a byte leaves.
       await this.admit(refs, inspected);
       await refs.store(pack, list);
       const review = withInspection(await this.review(refs, list), inspected);

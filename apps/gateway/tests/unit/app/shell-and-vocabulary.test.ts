@@ -53,12 +53,12 @@ import {
   whyValue,
 } from '../../../src/lib/vocabulary';
 import { CONNECT_CALLBACK_PATH, ACCOUNTS_PATH } from '../../../src/server/accounts/service';
-import { PROVIDERS_PATH } from '../../../src/lib/providers/links';
+import { SERVICES_PATH } from '../../../src/lib/services/links';
 import { INBOX_PATH } from '../../../src/server/requests/url';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/app');
 
-/** Does a page or a route answer this path? Dynamic segments are tried as `[id]` and `[provider]`. */
+/** Does a page or a route answer this path? Dynamic segments are tried as `[id]` and `[service]`. */
 function served(path: string): boolean {
   const segments = path.split('/').filter(Boolean);
   const roots = ['(app)', '(public)', 'admin/(guarded)', ''];
@@ -148,7 +148,7 @@ describe('the routes follow the words', () => {
   it('serves the pages under the new names, from the constants the server redirects with', () => {
     expect(ACCOUNTS_PATH).toBe(ROUTES.accounts);
     expect(INBOX_PATH).toBe(ROUTES.waiting);
-    expect(PROVIDERS_PATH).toBe(ROUTES.reference);
+    expect(SERVICES_PATH).toBe(ROUTES.reference);
   });
 
   it('redirects every old page path to a page or a route that exists', () => {
@@ -168,12 +168,12 @@ describe('the routes follow the words', () => {
       const probe = target.startsWith('/waiting/') ? '/waiting/[id]' : target;
       const path = probe.replace('/reference/github', '/reference/[id]');
       expect(
-        served(path.replace('/accounts/new/github', '/accounts/new/[provider]')),
+        served(path.replace('/accounts/new/github', '/accounts/new/[service]')),
         `${source} → ${destination}`,
       ).toBe(true);
     }
     const sources = LEGACY_REDIRECTS.map((rule) => rule.source);
-    for (const old of ['/connections', '/requests', '/audit', '/providers']) {
+    for (const old of ['/connections', '/requests', '/audit', '/services']) {
       expect(sources, old).toContain(old);
     }
     // The two pages that were folded into another: what a colleague gave access to is a
@@ -185,9 +185,9 @@ describe('the routes follow the words', () => {
     expect(byOld.get('/admin/connections')).toBe(`${ROUTES.accounts}#without-owner`);
   });
 
-  it('never redirects the callback a provider was given: it is part of the protocol', () => {
+  it('never redirects the callback a service was given: it is part of the protocol', () => {
     expect(CONNECT_CALLBACK_PATH).toBe('/connections/callback');
-    expect(served('/connections/callback/[provider]')).toBe(true);
+    expect(served('/connections/callback/[service]')).toBe(true);
     const first = LEGACY_REDIRECTS.filter((rule) => rule.source.includes(':first'));
     expect(first.length).toBe(2);
     for (const rule of first) {
@@ -207,7 +207,7 @@ describe('the routes follow the words', () => {
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
       expect(source).toMatch(
-        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations|settings\/connected-apps|account)\b/,
+        /^\/(admin\/connections|connections|requests|audit|services|shares|delegations|settings\/connected-apps|account)\b/,
       );
     }
   });

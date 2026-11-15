@@ -1,4 +1,4 @@
-/** SEC 2026-10-15 re-check L-1: a self resource of an unknown provider stops the boot. */
+/** SEC 2026-10-15 re-check L-1: a self resource of an unknown service stops the boot. */
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError, loadInstanceConfig } from '../config';
@@ -16,7 +16,7 @@ function rootWith(selfResources: string) {
 }
 
 describe('self resources name registered plugins', () => {
-  it('refuses an entry whose provider no plugin has', async () => {
+  it('refuses an entry whose service no plugin has', async () => {
     const err = await rootWith('Railway:6f1c').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConfigError);
     expect((err as ConfigError).issues.map((i) => i.path)).toEqual(['self_resources']);
@@ -24,7 +24,7 @@ describe('self resources name registered plugins', () => {
 
   it('accepts an entry of a shipped plugin', async () => {
     const root = await rootWith('vercel:prj_host');
-    expect(root.config.selfResources.map((s) => s.provider)).toContain('vercel');
+    expect(root.config.selfResources.map((s) => s.service)).toContain('vercel');
     await root.close();
   });
 });

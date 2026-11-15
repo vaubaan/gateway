@@ -3,7 +3,7 @@
  *
  * Stubs the `Classifier` (the `classify` half of the plugin contract, plus
  * the optional `envOf`) so we can drive specific slice outputs without a
- * real provider plugin. The catalog is built in memory from a minimal
+ * real plugin. The catalog is built in memory from a minimal
  * `RiskCatalog`; environments are resolved from the plugin's `envOf` first,
  * then from the mission's resources.
  */
@@ -18,7 +18,7 @@ import {
 } from '../../src/risk-gateway.ts';
 
 const catalog: RiskCatalog = {
-  provider: 'supabase',
+  service: 'supabase',
   risks: [
     {
       id: 'supabase.read-data',
@@ -77,7 +77,7 @@ const catalog: RiskCatalog = {
 
 const indexed = indexCatalog(catalog);
 
-const resources: Resource[] = [{ provider: 'supabase', ref: 'prj_x', displayName: 'prj_x' }];
+const resources: Resource[] = [{ service: 'supabase', ref: 'prj_x', displayName: 'prj_x' }];
 
 function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): Classifier {
   return {
@@ -86,7 +86,7 @@ function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): Classifier {
       const action = outcome === 'read' ? 'R' : 'W';
       const cardinality = outcome === 'bulk' ? 'bulk' : 'one';
       const slice: Slice = {
-        provider: 'supabase',
+        service: 'supabase',
         path: [
           { kind: 'name', value: 'project' },
           { kind: 'ident', value: 'prj_x' },
@@ -168,11 +168,11 @@ describe('evaluateCallForMission', () => {
 
   test('environment qualification comes from the resources by default', () => {
     const envCatalog = indexCatalog({
-      provider: 'supabase',
+      service: 'supabase',
       risks: [{ ...catalog.risks[2]!, acceptable_in_envs: ['staging', 'prod'] }],
     });
     const staging: Resource = {
-      provider: 'supabase',
+      service: 'supabase',
       ref: 'prj_x',
       env: 'staging',
       displayName: 'staging',
@@ -249,11 +249,11 @@ describe('evaluateCallForMission', () => {
 
   test("`envResolver: 'unqualified'` names the mode without a resolver", () => {
     const envCatalog = indexCatalog({
-      provider: 'supabase',
+      service: 'supabase',
       risks: [{ ...catalog.risks[2]!, acceptable_in_envs: ['staging', 'prod'] }],
     });
     const staging: Resource = {
-      provider: 'supabase',
+      service: 'supabase',
       ref: 'prj_x',
       env: 'staging',
       displayName: 'staging',

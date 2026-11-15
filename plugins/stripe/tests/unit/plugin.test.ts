@@ -13,7 +13,7 @@ import {
   serializeSlice,
   type AccountContext,
   type ExecuteContext,
-  type ProviderPlugin,
+  type ServicePlugin,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import {
@@ -38,14 +38,14 @@ import {
 } from '../../src/index.ts';
 
 const testRes: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_1/test',
   env: 'test',
   displayName: 'Acme (test)',
   metadata: { account_id: 'acct_1', mode: 'test' },
 };
 const liveRes: Resource = {
-  provider: 'stripe',
+  service: 'stripe',
   ref: 'acct_1/live',
   env: 'live',
   displayName: 'Acme (live)',
@@ -145,8 +145,8 @@ describe('classifyStripe — resource resolution', () => {
     expect(denied('stripe__get_balance', { account: 42 }, both)).toBe('account: malformed ref');
   });
 
-  test('ignores resources of other providers', () => {
-    const other: Resource = { provider: 'github', ref: 'acme/app', displayName: 'app' };
+  test('ignores resources of other services', () => {
+    const other: Resource = { service: 'github', ref: 'acme/app', displayName: 'app' };
     expect(slices('stripe__get_balance', {}, [other, testRes])).toEqual([
       'stripe.account[acct_1/test].mode[test].balance.R',
     ]);
@@ -171,23 +171,23 @@ describe('modeOf', () => {
     expect(modeOf({ ...liveRes, env: 'prod' })).toBe('live');
     expect(modeOf({ ...liveRes, metadata: { mode: 'test' } })).toBe('live');
     expect(
-      modeOf({ provider: 'stripe', ref: 'acct_1', displayName: 'x', metadata: { mode: 'test' } }),
+      modeOf({ service: 'stripe', ref: 'acct_1', displayName: 'x', metadata: { mode: 'test' } }),
     ).toBe('test');
-    expect(modeOf({ provider: 'stripe', ref: 'acct_1', env: 'live', displayName: 'x' })).toBeNull();
+    expect(modeOf({ service: 'stripe', ref: 'acct_1', env: 'live', displayName: 'x' })).toBeNull();
     expect(
-      modeOf({ provider: 'stripe', ref: 'acct_1', env: 'production', displayName: 'x' }),
+      modeOf({ service: 'stripe', ref: 'acct_1', env: 'production', displayName: 'x' }),
     ).toBeNull();
   });
 
   test('stripeResourceRef builds the ref modeOf reads back', () => {
     expect(stripeResourceRef('acct_1', 'test')).toBe('acct_1/test');
     expect(
-      modeOf({ provider: 'stripe', ref: stripeResourceRef('acct_1', 'test'), displayName: 'x' }),
+      modeOf({ service: 'stripe', ref: stripeResourceRef('acct_1', 'test'), displayName: 'x' }),
     ).toBe('test');
   });
 
   test('a resource without a determinable mode is refused, as `execute` refuses it', () => {
-    const unknown: Resource = { provider: 'stripe', ref: 'acct_1', displayName: 'x' };
+    const unknown: Resource = { service: 'stripe', ref: 'acct_1', displayName: 'x' };
     expect(denied('stripe__get_balance', {}, [unknown])).toBe(
       "account: cannot determine the test/live mode of 'acct_1'",
     );
@@ -383,14 +383,14 @@ describe('discoverStripeResources with mockFetch', () => {
     );
     expect(resources).toEqual([
       {
-        provider: 'stripe',
+        service: 'stripe',
         ref: 'acct_1/test',
         env: 'test',
         displayName: 'Acme Inc. (test)',
         metadata: { account_id: 'acct_1', mode: 'test' },
       },
       {
-        provider: 'stripe',
+        service: 'stripe',
         ref: 'acct_1/live',
         env: 'live',
         displayName: 'Acme (live)',
@@ -463,12 +463,12 @@ describe('discoverStripeResources with mockFetch', () => {
 });
 
 describe('plugin declaration', () => {
-  test('docsUrl points at the modelling handbook of this provider', () => {
-    expect(stripePlugin.docsUrl).toMatch(/\/docs\/handbook\/providers\/stripe\.md$/);
+  test('docsUrl points at the modelling handbook of this service', () => {
+    expect(stripePlugin.docsUrl).toMatch(/\/docs\/handbook\/services\/stripe\.md$/);
   });
 
   test('no envOf hook : the environment is the label discovery wrote, checked against the mode', () => {
-    const contract: ProviderPlugin = stripePlugin;
+    const contract: ServicePlugin = stripePlugin;
     expect(contract.envOf).toBeUndefined();
   });
 });

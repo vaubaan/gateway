@@ -11,7 +11,7 @@
  * protocol v2. A payload is at most 65516 bytes.
  *
  * Pure and dependency-free : the host's git door and the plugins that speak
- * to their provider's git server share it. Nothing here buffers more than
+ * to their service's git server share it. Nothing here buffers more than
  * one pkt-line : the pack that follows the command list of a push is handed
  * on as a stream (`PktLineReader.rest`).
  */

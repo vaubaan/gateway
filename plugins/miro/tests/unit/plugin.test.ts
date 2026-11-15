@@ -23,7 +23,7 @@ import {
   LEFT_OUT_UPSTREAM_TOOLS,
   LOCATOR,
   MIRO_OAUTH,
-  PROVIDER_ID,
+  SERVICE_ID,
   TELEMETRY_ARGUMENTS,
   TOOL,
   UPSTREAM_TOOL,
@@ -72,14 +72,14 @@ describe('miro plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(miroCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(miroCatalog.catalog.service).toBe(SERVICE_ID);
     expect(miroCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and every tool has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and every tool has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(miroPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(miroPlugin.tools).toHaveLength(28);
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);

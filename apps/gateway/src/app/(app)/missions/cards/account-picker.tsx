@@ -8,7 +8,7 @@
  * by one, and "+ future <resources>" adds those that later appear in that environment.
  * Resources hidden from new missions are collapsed under "Hidden from new missions (n)",
  * never ticked by default. Resources without a label are listed but not selectable where
- * the provider needs labels. "Change" on a card reopens step 2.
+ * the service needs labels. "Change" on a card reopens step 2.
  */
 import Link from 'next/link';
 import { useState } from 'react';
@@ -53,7 +53,7 @@ function blockedBy(
 ): string | null {
   const taken = state.cards.some((card) => {
     const other = context.find((c) => c.id === card.accountId);
-    return other !== undefined && other.provider === account.provider && other.id !== account.id;
+    return other !== undefined && other.service === account.service && other.id !== account.id;
   });
   return taken ? CARD_WORDS.oneAccountPerService : null;
 }
@@ -92,7 +92,7 @@ export function AccountPicker({
   if (!account) {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const offered = offeredAccounts(context, state).filter(({ account: c }) => {
-      const text = `${c.provider_label} ${c.display_name}`.toLowerCase();
+      const text = `${c.service_label} ${c.display_name}`.toLowerCase();
       return terms.every((term) => text.includes(term));
     });
     return (
@@ -126,7 +126,7 @@ export function AccountPicker({
                   title={blocked ?? undefined}
                   onClick={() => setAccountId(c.id)}
                 >
-                  <ServiceMark name={c.provider_label} icon={icons[c.provider] ?? null} />
+                  <ServiceMark name={c.service_label} icon={icons[c.service] ?? null} />
                   {accountLabel(c)}
                   <span className={styles.accountFree}>
                     {blocked ??

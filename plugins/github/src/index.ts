@@ -1,9 +1,9 @@
 /**
- * `@vaubaan/plugin-github` — the GitHub provider plugin.
+ * `@vaubaan/plugin-github` — the GitHub plugin.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/github.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/github.md ; guide : plugins/README.md.
  *
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates
  * the definition at import time ; the YAML catalog is loaded here, once,
@@ -18,7 +18,7 @@ import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubGitRemoteOf } from './git-remote.ts';
 import { githubExamples } from './examples.ts';
-import { EXCLUDED_TOOLS, PROVIDER_ID } from './identity.ts';
+import { EXCLUDED_TOOLS, SERVICE_ID } from './identity.ts';
 import { GITHUB_ICON, GITHUB_ICON_COLOR } from './icon.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
@@ -33,7 +33,7 @@ export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);
 export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
 
 export const githubPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'GitHub',
   icon: GITHUB_ICON,
   iconColor: GITHUB_ICON_COLOR,
@@ -45,7 +45,7 @@ export const githubPlugin = definePlugin({
     'One account is one fine-grained personal access token, made at GitHub for the organisation or the user that owns the repositories; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.',
   manualRevocation:
     'Delete the token at GitHub, signed in as the account that created it: Settings, Developer settings, Personal access tokens, Fine-grained tokens.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/github.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/github.md',
   // The instance as the agents' git remote (spec §4.1 ter) : clone, fetch and push
   // with the mission key as the password, every push decided ref by ref.
   gitRemote: githubGitRemote,
@@ -66,7 +66,7 @@ export default githubPlugin;
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
 export { expiryOf, GITHUB_TOKEN_FIELD, verifyGithubToken } from './credential.ts';
 export { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
-export { EXCLUDED_TOOLS, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXCLUDED_TOOLS, SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { EXAMPLE_REPOSITORY, githubExamples } from './examples.ts';
 export { discoverGithubResources, executeGithub } from './execute.ts';
 export { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall } from './git-call.ts';

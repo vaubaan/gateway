@@ -205,7 +205,7 @@ describe('execute — get_job_logs', () => {
     expect(fetch.calls).toHaveLength(1);
   });
 
-  test('an expired log (410) is a provider failure with its status', async () => {
+  test('an expired log (410) is a service failure with its status', async () => {
     const fetch = mockFetch([
       { method: 'GET', url: `${API}/actions/jobs/9/logs`, status: 410, body: { message: 'Gone' } },
     ]);

@@ -1,11 +1,11 @@
-# Risk catalog of the `template` provider.
+# Risk catalog of the `template` service.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 #
 # Rules the loader enforces at boot :
-#   - `provider` is the plugin id ; every risk id starts with it ;
-#   - every `matches` pattern parses as a slice of this provider ;
-#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
+#   - `service` is the plugin id ; every risk id starts with it ;
+#   - every `matches` pattern parses as a slice of this service ;
+#   - exactly one `<service>.uncategorized-*` fallback exists, flagged `fallback: true` ;
 #   - every risk but the fallback in exactly one macro-action, with an
 #     explicit base budget (quota and rate limit) — never a wildcard, no gate.
 #
@@ -22,7 +22,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: template
+service: template
 catalog_version: 5
 catalog_date: 2026-11-13
 

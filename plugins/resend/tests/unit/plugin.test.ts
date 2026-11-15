@@ -40,7 +40,7 @@ import {
 } from '../../src/index.ts';
 
 const prodDomain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'notifications.acme.com',
   env: 'prod',
   displayName: 'notifications.acme.com',
@@ -54,7 +54,7 @@ const prodDomain: Resource = {
   },
 };
 const stagingDomain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'staging.acme.dev',
   env: 'staging',
   displayName: 'staging.acme.dev',
@@ -67,14 +67,14 @@ const stagingDomain: Resource = {
   },
 };
 const newsletter: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'seg_news',
   env: 'prod',
   displayName: 'Newsletter',
   metadata: { kind: 'segment', segment_id: 'seg_news' },
 };
 const testSegment: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'seg_test',
   env: 'staging',
   displayName: 'QA list',
@@ -1010,7 +1010,7 @@ describe('discoverResendResources with mockFetch', () => {
     const resources = await resendPlugin.discoverResources(account(fetch));
     expect(resources).toEqual([
       {
-        provider: 'resend',
+        service: 'resend',
         ref: 'notifications.acme.com',
         displayName: 'Notifications.acme.com',
         metadata: {
@@ -1024,7 +1024,7 @@ describe('discoverResendResources with mockFetch', () => {
         },
       },
       {
-        provider: 'resend',
+        service: 'resend',
         ref: 'staging.acme.dev',
         displayName: 'staging.acme.dev (pending)',
         metadata: {
@@ -1037,7 +1037,7 @@ describe('discoverResendResources with mockFetch', () => {
         },
       },
       {
-        provider: 'resend',
+        service: 'resend',
         ref: 'seg_news',
         displayName: 'Newsletter',
         metadata: { kind: 'segment', segment_id: 'seg_news' },

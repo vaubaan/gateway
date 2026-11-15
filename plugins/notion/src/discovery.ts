@@ -1,8 +1,8 @@
 /**
- * Resource discovery of the `notion` provider : one resource per top-level
+ * Resource discovery of the `notion` service : one resource per top-level
  * page or database shared with the account.
  *
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
  * Search cannot enumerate everything an account reaches, but "any pages
  * or databases that are directly shared with an account are guaranteed to
@@ -27,7 +27,7 @@ import {
 
 import { readOrMissing, request } from './api.ts';
 import { cursor, notionId } from './ids.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { isResultList, type Json, type ResultList } from './json.ts';
 import { ENDPOINT, parentRef } from './parents.ts';
 
@@ -38,7 +38,7 @@ export const MAX_DISCOVERED_ROOTS = 200;
 
 /** A ceiling of discovery reached : the account shares more than one discovery reads. */
 function tooMany(message: string): never {
-  throw new Error(`${PROVIDER_ID}: ${message}`);
+  throw new Error(`${SERVICE_ID}: ${message}`);
 }
 
 /** Notion answered something discovery does not recognise : its failure, not the plugin's. */
@@ -135,7 +135,7 @@ export async function discoverNotionResources(ctx: AccountContext): Promise<read
   for (const page of pages) {
     if (await isTopLevel(ctx, page.parent, found)) {
       roots.push({
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: notionId(page.id)!,
         displayName: pageTitle(page),
         metadata: { kind: 'page' },
@@ -146,7 +146,7 @@ export async function discoverNotionResources(ctx: AccountContext): Promise<read
     const parent = databaseParent ?? (await databaseParentOf(ctx, database));
     if (await isTopLevel(ctx, parent, found)) {
       roots.push({
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: database,
         displayName: plainText(source.title) || 'Untitled',
         metadata: { kind: 'database' },

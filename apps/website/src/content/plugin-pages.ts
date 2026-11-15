@@ -326,7 +326,7 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
       `**${BROKER_ADMIN_TITLE}** (an administrator, once):`,
       '',
       ...brokerAdminSentences(c, plugin.name).map((s) => `- ${s}`),
-      `- Provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
+      `- OAuth provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
       '',
     );
   }

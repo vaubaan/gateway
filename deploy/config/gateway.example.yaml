@@ -21,7 +21,7 @@
 # Booleans are written true / false and integers unquoted (the yes / on / 1
 # spellings are accepted in environment variables only).
 
-# REQUIRED. Public origin of the instance: provider callbacks, request URLs
+# REQUIRED. Public origin of the instance: sign-in and service callbacks, request URLs
 # and the bootstrap kit are built from it. Must be https (TLS is terminated
 # by your reverse proxy, see deploy/caddy/Caddyfile). A sub-path is allowed.
 # env: VAUBAAN_PUBLIC_URL
@@ -53,9 +53,9 @@
 # env: VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS
 # accept_shared_address_windows: false
 
-# Provider resources that host or run this instance: never reachable by a
+# Service resources that host or run this instance: never reachable by a
 # mission (not offered at issuance, refused at execution). Each entry is
-# <provider>:<ref>, the ref as the account's discovery stores it. On
+# <service>:<ref>, the ref as the account's discovery stores it. On
 # Railway the instance's own project (RAILWAY_PROJECT_ID) is always counted.
 # env: VAUBAAN_SELF_RESOURCES (comma-separated)
 # self_resources:
@@ -120,13 +120,13 @@
 #   previous_keys:
 #     1: ${file:/run/secrets/vaubaan_master_key_v1}
 
-# The single-provider block `idp:` of earlier builds is refused: write that
-# provider as `sign_in.idp` (kind oidc) under `sign_in:` below, and register its
+# The single sign-in provider block `idp:` of earlier builds is refused: write
+# it as `sign_in.idp` (kind oidc) under `sign_in:` below, and register its
 # callback <public_url>/auth/callback/idp at the identity provider.
 
 # OAuth brokers this instance is enrolled with, keyed by a name of your choice.
-# A broker owns an OAuth client at a provider that offers no key a person can
-# make (Google Calendar) and runs the sign-in for the instance; it gives you a
+# A broker owns an OAuth client at an OAuth provider (Google) for a service that
+# offers no key a person can make (Google Calendar) and runs the sign-in for the instance; it gives you a
 # URL and a key, and records <public_url>/connections/callback/<plugin id>.
 # Without one, such a plugin is listed as not configured.
 # env: VAUBAAN_OAUTH_BROKER_<NAME>_<FIELD>, e.g. VAUBAAN_OAUTH_BROKER_MAIN_URL
@@ -134,13 +134,14 @@
 #   main:
 #     url: https://broker.example.com/v1
 #     key: ${file:/run/secrets/oauth_broker_key}
-#     # The broker providers it serves (google). Unset: every provider.
+#     # The broker providers it serves (google). Unset: every one.
 #     # providers: [google]
 
 # More sign-in providers, keyed by an id of your choice (lower-case letters,
 # digits, hyphens). Each is a button on the sign-in page; its callback is
-# <public_url>/auth/callback/<id>. A person signing in through two providers is
-# two users: accounts are never joined by email. Providers can also be added in
+# <public_url>/auth/callback/<id>. A person signing in through two sign-in
+# providers is two users: accounts are never joined by email. Sign-in providers
+# can also be added in
 # Settings → Sign-in.
 # env: VAUBAAN_SIGN_IN_<ID>_<FIELD>, e.g. VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID
 # sign_in:
@@ -169,17 +170,18 @@
 #       # The claim that says the email is verified. Entra ID sends no
 #       # email_verified: request the optional claim xms_edov and name it here.
 #       email_verified: xms_edov
-#     # Admit a verified email only, as on an open provider. Set it when the
+#     # Admit a verified email only, as on an open sign-in provider. Set it when the
 #     # admin rule uses emails on Entra ID (better: an admin group by object id).
 #     require_verified_email: true
 #     allowed_email_domains:
 #       - partner.example.com
 
 # REQUIRED (one of the two). Who is operator once bootstrap_token is revoked:
-# members of a group of a named sign-in provider (<provider-id>:<group>; a
-# GitHub group is a team, org/team; a bare name is accepted while one provider is
-# configured), and/or an explicit list of emails (matched on the verified
-# address of a user of any provider, and always admitted to sign in).
+# members of a group of a named sign-in provider (<sign-in provider>:<group>; a
+# GitHub group is a team, org/team; a bare name is accepted while one
+# sign-in provider is configured), and/or an explicit list of emails (matched on
+# the verified address of a user of any sign-in provider, and always admitted to
+# sign in).
 # Example values: anyone your IdP places in the group named here is an
 # operator, so uncomment `group` only with the name of a group you control.
 # admin:
@@ -341,14 +343,14 @@
 #   rate_limit_per_minute: 600
 
 # The deadline of one tool call on the execution door, in seconds (integer
-# >= 1). A provider that has not answered by then is left: the call is
+# >= 1). A service that has not answered by then is left: the call is
 # stopped, recorded in the audit as an upstream error ending in "(timeout)",
 # and the agent is told so. It was counted against the mission.
 # env: VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS
 # execution:
 #   call_timeout_seconds: 120
 
-# The git remote (https://<public_url>/git/<provider>/<owner>/<repo>.git, spec §4.1 ter).
+# The git remote (https://<public_url>/git/<service>/<owner>/<repo>.git, spec §4.1 ter).
 # max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is
 #   refused, and git prints why.
 # request_timeout: how long one git request may last (at most 1h). Behind

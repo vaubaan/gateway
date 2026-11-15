@@ -1,5 +1,5 @@
 /**
- * The identifier grammars of the `miro` provider, and the proof that the
+ * The identifier grammars of the `miro` service, and the proof that the
  * board URL sent to Miro is the gateway's : built from the classified ref and
  * item, whatever the agent wrote.
  */

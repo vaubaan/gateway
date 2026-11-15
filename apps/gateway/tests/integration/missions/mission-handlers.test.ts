@@ -140,11 +140,11 @@ describe('missions: HTTP handlers', () => {
       post(
         '/api/missions/preview',
         await sessionHeaders(root, seeded.ada),
-        // An agent's proposal names the provider and the refs, not the ids.
+        // An agent's proposal names the service and the refs, not the ids.
         draft({
           accounts: [
             {
-              provider: 'github',
+              service: 'github',
               // Trust levels beside a policy decide nothing: they only redraw the form.
               trust_levels: { read: 'trusting', propose: 'trusting' },
               resources: { scope: 'selected', resource_refs: ['acme/app'] },

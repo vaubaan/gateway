@@ -17,7 +17,7 @@
  *                          one queued: a burst of creations is two discoveries,
  *                          not one per call
  *   bounded retry          a discovery that failed, or that found nothing new
- *                          (a provider that lists a resource a moment after
+ *                          (a service that lists a resource a moment after
  *                          creating it), is run again after each delay of
  *                          `retryDelaysMs`, then given up
  *   audited once           one `resources-discovered` entry per scheduled
@@ -73,7 +73,7 @@ export interface ScheduledCause extends DiscoveryAfterCallCause {
 }
 
 export interface DiscoveryAfterCallDeps {
-  readonly registry: Pick<PluginRegistry, 'providerForTool'>;
+  readonly registry: Pick<PluginRegistry, 'serviceForTool'>;
   readonly service: Pick<AccountService, 'discoverAfterCall' | 'auditDiscoveryAfterCall'>;
   readonly logger: Logger;
   readonly retryDelaysMs?: readonly number[];
@@ -112,10 +112,10 @@ export class DiscoveryAfterCall {
    */
   afterCall(ctx: MissionContext, call: AnsweredCall, createdRefs: readonly string[] = []): boolean {
     if (this.stopped || call.accountId === null || isErrorResult(call.result)) return false;
-    const registered = this.deps.registry.providerForTool(call.tool);
+    const registered = this.deps.registry.serviceForTool(call.tool);
     if (!registered?.plugin.resourceCreatingTools?.includes(call.tool)) return false;
     const account = ctx.accounts.find((c) => c.id === call.accountId);
-    if (!account || account.provider !== registered.plugin.id) return false;
+    if (!account || account.service !== registered.plugin.id) return false;
     this.schedule(call.accountId, {
       missionId: ctx.mission.id,
       tool: call.tool,

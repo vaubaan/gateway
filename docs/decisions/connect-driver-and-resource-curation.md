@@ -76,7 +76,7 @@ take the hint at their next discovery. A creating call's answer carries no hint 
 - A hidden resource is left out of "every resource known", of future joins and of the mission
   form's default ticks; reach is still the stored lists, so a running mission keeps it.
 - GitHub's rule and its trade-off (a granted public repository is hidden until shown): handbook
-  [providers/github](../handbook/providers/github.md).
+  [services/github](../handbook/services/github.md).
 
 ### Rejected alternatives
 

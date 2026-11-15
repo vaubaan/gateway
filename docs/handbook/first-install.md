@@ -34,7 +34,7 @@ Coming from v4, the earlier hosted product: import an organization with
 
 ## Traps
 
-- Expected during the day: a gated permission refuses with an `approval_url` until approved, then the identical call replays; a call without its resource ref is "Vaubaan rejected the call" with no code; one account per provider per mission (`duplicate-provider`); a provider 403 is a failed call, only a 401 refreshes and may expire the account.
+- Expected during the day: a gated permission refuses with an `approval_url` until approved, then the identical call replays; a call without its resource ref is "Vaubaan rejected the call" with no code; one account per service per mission (`duplicate-service`); a service 403 is a failed call, only a 401 refreshes and may expire the account.
 - GitHub: a fine-grained token per organisation, the organisation as resource owner; Workflows write only if missions push `.github/workflows/`. Resend: a full-access key (discovery lists domains). Cloudflare: an API token, not the Global API Key.
 
 ## Debug — reading a refusal

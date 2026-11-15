@@ -1,5 +1,5 @@
 /**
- * IMAP transport of the `gmail` provider : one connection per call to
+ * IMAP transport of the `gmail` service : one connection per call to
  * `imap.gmail.com:993` (implicit TLS), signed in with the app password,
  * through `imapflow`.
  *

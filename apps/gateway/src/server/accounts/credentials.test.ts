@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { makeUnowned } from '../../../tests/support/store/testing';
 import { parseSecret, serializeSecret } from './credential-codec';
 import { REFRESH_SKEW_MS } from './credentials';
-import { AccountUnavailableError, ProviderUnreachableError } from './errors';
+import { AccountUnavailableError, ServiceUnreachableError } from './errors';
 import {
   API_KEY_SPEC,
   accountsHarness,
@@ -37,14 +37,14 @@ function secret(overrides: Partial<OAuth2Secret> = {}): OAuth2Secret {
 
 async function seed(
   h: AccountsHarness,
-  provider: string,
+  service: string,
   credential: CredentialSecret,
 ): Promise<string> {
   const owner = await h.actor('owner@example.com');
   const account = await h.store.accounts.create({
-    provider,
+    service,
     owner: { kind: 'user', id: owner.user.id },
-    displayName: provider,
+    displayName: service,
     credential: serializeSecret(credential),
     credentialExpiresAt: credential.kind === 'oauth2' ? credential.expiresAt : null,
   });
@@ -238,12 +238,12 @@ describe('refresh', () => {
     await expect(h.broker.resolve(id)).rejects.toBeInstanceOf(AccountUnavailableError);
   });
 
-  it('leaves the account active when the provider is merely unreachable', async () => {
+  it('leaves the account active when the service is merely unreachable', async () => {
     const h = await configured(
       oauthHarness([{ method: 'POST', url: TOKEN_URL, status: 503, body: 'try later' }]),
     );
     const id = await seed(h, 'oauthco', secret());
-    await expect(h.broker.refresh(id)).rejects.toBeInstanceOf(ProviderUnreachableError);
+    await expect(h.broker.refresh(id)).rejects.toBeInstanceOf(ServiceUnreachableError);
     expect((await h.store.accounts.getById(id))!.status).toBe('active');
   });
 
@@ -273,7 +273,7 @@ describe('refresh', () => {
     expect(h.fetch.calls).toHaveLength(0);
   });
 
-  it('never resurrects an account revoked while the provider was answering', async () => {
+  it('never resurrects an account revoked while the service was answering', async () => {
     const h = await configured(
       oauthHarness([
         {
@@ -340,7 +340,7 @@ describe('refresh', () => {
     expect((await h.store.accounts.getById(a))!.status).toBe('expired');
 
     failure = new Error('socket hang up');
-    await expect(h.broker.refresh(b)).rejects.toBeInstanceOf(ProviderUnreachableError);
+    await expect(h.broker.refresh(b)).rejects.toBeInstanceOf(ServiceUnreachableError);
     expect((await h.store.accounts.getById(b))!.status).toBe('active');
   });
 });

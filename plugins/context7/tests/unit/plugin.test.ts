@@ -21,7 +21,7 @@ import {
 import upstream from '../../src/upstream-tools.json' with { type: 'json' };
 import defaultExport, {
   API_KEY_FIELD,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   context7Catalog,
   context7Plugin,
@@ -44,7 +44,7 @@ describe('context7 plugin — structural kit', () => {
     const report = assertCatalogCoverage(context7Plugin);
     assertSlicesOnDataModel(context7Plugin, SAMPLES, { resources: [index] });
     const named = context7Catalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
-    expect(named).toEqual([`${PROVIDER_ID}.query-docs`]);
+    expect(named).toEqual([`${SERVICE_ID}.query-docs`]);
     expect(report.risksTouched).toEqual(named);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
@@ -68,10 +68,10 @@ describe('context7 plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(context7Catalog.catalog.provider).toBe(PROVIDER_ID);
-    expect(context7Plugin.id).toBe(PROVIDER_ID);
+    expect(context7Catalog.catalog.service).toBe(SERVICE_ID);
+    expect(context7Plugin.id).toBe(SERVICE_ID);
     expect(context7Catalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
@@ -105,7 +105,7 @@ describe('context7 plugin — structural kit', () => {
         id: 'ask',
         entries: [
           {
-            risk_id: `${PROVIDER_ID}.query-docs`,
+            risk_id: `${SERVICE_ID}.query-docs`,
             quota: 300,
             rate_limit: { max: 20, window_seconds: 60 },
           },
@@ -119,7 +119,7 @@ describe('context7 plugin — structural kit', () => {
   test('a query runs freely from Careful on', () => {
     expect(policyFromMacroActions(context7Plugin, { ask: 'careful' })).toEqual([
       {
-        risk_id: `${PROVIDER_ID}.query-docs`,
+        risk_id: `${SERVICE_ID}.query-docs`,
         quota: 300,
         rate_limit: { max: 20, window_seconds: 60 },
         gate: 'auto',
@@ -140,7 +140,7 @@ describe('context7 plugin — structural kit', () => {
 
 describe('context7 tools — the frozen upstream surface', () => {
   test('exactly the two tools of tools/list, prefixed, with their schemas unchanged', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(upstream.map((t) => t.name)).toEqual(['resolve-library-id', 'query-docs']);
     expect(context7Plugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     for (const [i, tool] of context7Plugin.tools.entries()) {

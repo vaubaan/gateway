@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Gmail : search, read, draft and label over IMAP and send over SMTP with an app password, under identity-zoned risks",
+  "description": "Vaubaan Gateway plugin for Gmail : search, read, draft and label over IMAP and send over SMTP with an app password, under identity-zoned risks",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

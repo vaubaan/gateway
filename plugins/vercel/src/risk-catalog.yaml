@@ -1,12 +1,12 @@
-# Risk catalog of the `vercel` provider.
+# Risk catalog of the `vercel` service.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/vercel.md.
+# Handbook : docs/handbook/services/vercel.md.
 #
 # Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
 # the only catalog artefact.
 #
-# 16 named risks + 1 fallback. Env-specific pairs of the provider research
+# 16 named risks + 1 fallback. Env-specific pairs of the service research
 # (deploy-preview / deploy-prod, env-var-write-preview / env-var-write-prod)
 # are single entries with `acceptable_in_envs` and a `vector_overrides.prod`
 # block ; the runtime qualifies them per environment (`vercel[prod].deploy`).
@@ -15,7 +15,7 @@
 # `env[<label>]` segment of the slice.
 #
 # Rules the loader enforces : every id starts with `vercel.` ; every pattern
-# parses as a slice of this provider ; the `vercel.uncategorized-*` fallback
+# parses as a slice of this service ; the `vercel.uncategorized-*` fallback
 # exists ; every other live risk sits in exactly one macro-action with a
 # numeric base quota and rate limit.
 #
@@ -32,7 +32,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 7 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: vercel
+service: vercel
 catalog_version: 7
 catalog_date: 2026-11-13
 

@@ -1,8 +1,8 @@
 /**
- * The credential of the `notion` provider : an internal account token,
+ * The credential of the `notion` service : an internal account token,
  * pasted by hand (`api-key`).
  *
- * Handbook : docs/handbook/providers/notion.md ; ADRs
+ * Handbook : docs/handbook/services/notion.md ; ADRs
  *            one-place-to-authorize-services-token-first (token first),
  *            plugin-contract-and-credential-spec (label, guide, verify).
  *

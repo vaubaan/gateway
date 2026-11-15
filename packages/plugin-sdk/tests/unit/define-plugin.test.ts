@@ -6,7 +6,7 @@ import {
   definePlugin,
   pluginIssues,
 } from '../../src/define-plugin.ts';
-import type { ProviderPlugin } from '../../src/plugin.ts';
+import type { ServicePlugin } from '../../src/plugin.ts';
 import {
   CredentialKindMismatch,
   expectCredentialKind,
@@ -34,7 +34,7 @@ describe('definePlugin', () => {
         acmePlugin.tools[0]!,
         acmePlugin.tools[0]!,
       ],
-    } as ProviderPlugin;
+    } as ServicePlugin;
     const err = (() => {
       try {
         definePlugin(broken);
@@ -50,8 +50,8 @@ describe('definePlugin', () => {
         expect.stringMatching(/^version: expected semver/),
         expect.stringMatching(/tools\[0\]\.name 'other__x' must start with 'Acme__'/),
         expect.stringMatching(/tools\[2\]\.name 'acme__list_things' is declared twice/),
-        expect.stringMatching(/dataModel.provider 'acme' must equal the plugin id/),
-        expect.stringMatching(/catalog.provider 'acme' must equal the plugin id/),
+        expect.stringMatching(/dataModel.service 'acme' must equal the plugin id/),
+        expect.stringMatching(/catalog.service 'acme' must equal the plugin id/),
       ]),
     );
   });
@@ -95,7 +95,7 @@ describe('definePlugin', () => {
     const noun = (one: unknown, other: unknown) =>
       pluginIssues({
         ...acmePlugin,
-        resourceNoun: { one, other } as ProviderPlugin['resourceNoun'],
+        resourceNoun: { one, other } as ServicePlugin['resourceNoun'],
       });
     expect(noun('board', 'boards')).toEqual([]);
     expect(noun('library index', 'library indexes')).toEqual([]);
@@ -122,7 +122,7 @@ describe('definePlugin', () => {
     expect(
       pluginIssues({
         ...acmePlugin,
-        resourceNoun: 'board' as unknown as ProviderPlugin['resourceNoun'],
+        resourceNoun: 'board' as unknown as ServicePlugin['resourceNoun'],
       }),
     ).toEqual(['resourceNoun: expected { one, other } when present']);
     expect(() =>
@@ -151,7 +151,7 @@ describe('definePlugin', () => {
   });
 
   test('excludedTools is optional; it names tools the plugin does not declare, one sentence each', () => {
-    const reason = 'It runs whatever the provider does with it.';
+    const reason = 'It runs whatever the service does with it.';
     expect(pluginIssues({ ...acmePlugin, excludedTools: { acme__dispatch: reason } })).toEqual([]);
     expect(
       pluginIssues({
@@ -173,7 +173,7 @@ describe('definePlugin', () => {
       [],
     );
     expect(
-      pluginIssues({ ...acmePlugin, examples: [] as unknown as ProviderPlugin['examples'] }),
+      pluginIssues({ ...acmePlugin, examples: [] as unknown as ServicePlugin['examples'] }),
     ).toEqual(['examples: expected a record tool → sample calls']);
     expect(pluginIssues({ ...acmePlugin, examples: { acme__nope: [{ args: {} }] } })).toEqual([
       "examples: 'acme__nope' is not a tool of this plugin",
@@ -183,7 +183,7 @@ describe('definePlugin', () => {
     ]);
     const malformed = {
       [tool]: [{ args: 'x' }, { args: {}, resources: 'all', expectDenied: 'yes' }],
-    } as unknown as ProviderPlugin['examples'];
+    } as unknown as ServicePlugin['examples'];
     expect(pluginIssues({ ...acmePlugin, examples: malformed })).toEqual([
       `examples.${tool}[0].args: expected an object`,
       `examples.${tool}[1].resources: expected a list when present`,
@@ -223,7 +223,7 @@ describe('definePlugin', () => {
     expect(
       pluginIssues({
         ...acmePlugin,
-        createdResources: 'nope' as unknown as ProviderPlugin['createdResources'],
+        createdResources: 'nope' as unknown as ServicePlugin['createdResources'],
       }),
     ).toEqual(['createdResources: expected a function when present']);
   });
@@ -264,13 +264,13 @@ describe('definePlugin', () => {
       'manualRevocation: expected at most 400 characters',
     ]);
     expect(pluginIssues({ ...acmePlugin, revoke: async () => undefined })).toEqual([]);
-    expect(pluginIssues({ ...acmePlugin, revoke: 'yes' } as unknown as ProviderPlugin)).toEqual([
+    expect(pluginIssues({ ...acmePlugin, revoke: 'yes' } as unknown as ServicePlugin)).toEqual([
       'revoke: expected a function when present',
     ]);
   });
 
   test('an oauth2 revocation block names an https endpoint and one of the two request shapes', () => {
-    const oauth = (extra: Record<string, unknown>): ProviderPlugin => ({
+    const oauth = (extra: Record<string, unknown>): ServicePlugin => ({
       ...acmePlugin,
       credential: {
         kind: 'oauth2',
@@ -310,7 +310,7 @@ describe('definePlugin', () => {
 
   test('an oauth2 spec names the registration endpoint of the client the gateway registers itself', () => {
     // No administrator declares an OAuth client (ADR gmail-over-imap-with-an-app-password).
-    const oauth = (clientRegistration: unknown): ProviderPlugin =>
+    const oauth = (clientRegistration: unknown): ServicePlugin =>
       ({
         ...acmePlugin,
         credential: {
@@ -323,7 +323,7 @@ describe('definePlugin', () => {
           refreshable: true,
           ...(clientRegistration === undefined ? {} : { clientRegistration }),
         },
-      }) as ProviderPlugin;
+      }) as ServicePlugin;
     expect(pluginIssues(oauth({ registrationUrl: 'https://auth.example/register' }))).toEqual([]);
     expect(pluginIssues(oauth(undefined))).toEqual([
       'credential.clientRegistration: expected { registrationUrl }',
@@ -334,11 +334,11 @@ describe('definePlugin', () => {
   });
 
   test('an oauth2 spec names one client source: a registered client or a broker (ADR google-calendar-through-an-oauth-broker D3)', () => {
-    const brokered = (credential: Record<string, unknown>): ProviderPlugin =>
+    const brokered = (credential: Record<string, unknown>): ServicePlugin =>
       ({
         ...acmePlugin,
         credential: { kind: 'oauth2', scopes: ['read'], ...credential },
-      }) as unknown as ProviderPlugin;
+      }) as unknown as ServicePlugin;
     expect(pluginIssues(brokered({ broker: { provider: 'google' } }))).toEqual([]);
     expect(pluginIssues(brokered({ broker: { provider: 'Google' } }))).toEqual([
       "credential.broker: expected { provider } with a lowercase slug such as 'google'",
@@ -354,7 +354,7 @@ describe('definePlugin', () => {
         }),
       ),
     ).toEqual(['credential: declare one client source, clientRegistration or broker, not both']);
-    // The provider's endpoints, PKCE and the client are the broker's.
+    // The service's endpoints, PKCE and the client are the broker's.
     expect(
       pluginIssues(
         brokered({
@@ -378,7 +378,7 @@ describe('definePlugin', () => {
     const withHandouts = {
       ...acmePlugin,
       tokenHandouts: [{ tool: tool!.name, riskIds: [risk!.id] }],
-    } as unknown as ProviderPlugin;
+    } as unknown as ServicePlugin;
     expect(pluginIssues(withHandouts)).toEqual([RETIRED_TOKEN_HANDOUTS_ISSUE]);
     expect(pluginIssues(acmePlugin)).toEqual([]);
   });
@@ -387,7 +387,7 @@ describe('definePlugin', () => {
     const withPresets = {
       ...acmePlugin,
       catalog: { ...acmePlugin.catalog, presets: [] },
-    } as ProviderPlugin;
+    } as ServicePlugin;
     expect(pluginIssues(withPresets)).toEqual([`catalog: ${RETIRED_PRESETS_ISSUE}`]);
   });
 
@@ -396,7 +396,7 @@ describe('definePlugin', () => {
   // this path too, for `definePlugin`, the registry and the test kit.
   describe('budget rules on a TypeScript catalog', () => {
     const [first, ...others] = acmePlugin.catalog.macro_actions ?? [];
-    const withEntry = (entry: Record<string, unknown>): ProviderPlugin =>
+    const withEntry = (entry: Record<string, unknown>): ServicePlugin =>
       ({
         ...acmePlugin,
         catalog: {
@@ -416,7 +416,7 @@ describe('definePlugin', () => {
             ...others,
           ],
         },
-      }) as unknown as ProviderPlugin;
+      }) as unknown as ServicePlugin;
     const at = 'catalog: macro_actions[0].entries[0]';
 
     test('a legal budget passes', () => {
@@ -464,17 +464,17 @@ describe('definePlugin', () => {
   });
 
   test('optional hooks must be functions when present', () => {
-    const bad = { ...acmePlugin, envOf: 'prod' } as unknown as ProviderPlugin;
+    const bad = { ...acmePlugin, envOf: 'prod' } as unknown as ServicePlugin;
     expect(pluginIssues(bad)).toEqual(['envOf: expected a function when present']);
-    const good: ProviderPlugin = { ...acmePlugin, envOf: () => undefined };
+    const good: ServicePlugin = { ...acmePlugin, envOf: () => undefined };
     expect(pluginIssues(good)).toEqual([]);
   });
 
   test('data-model integrity is checked', () => {
-    const orphan: ProviderPlugin = {
+    const orphan: ServicePlugin = {
       ...acmePlugin,
       dataModel: {
-        provider: 'acme',
+        service: 'acme',
         planes: [
           {
             slug: 'p',
@@ -484,7 +484,7 @@ describe('definePlugin', () => {
       },
     };
     expect(pluginIssues(orphan).join('\n')).toMatch(
-      /dataModel: provider 'acme' plane 'p': entity 'a' has parent 'ghost'/,
+      /dataModel: service 'acme' plane 'p': entity 'a' has parent 'ghost'/,
     );
   });
 
@@ -492,14 +492,14 @@ describe('definePlugin', () => {
     const [first, ...rest] = acmePlugin.catalog.risks;
     if (!first) throw new Error('the acme fixture has risks');
     const typo = { ...first, matches: 'acme.space[**].thnig[**].R' };
-    const offModel: ProviderPlugin = {
+    const offModel: ServicePlugin = {
       ...acmePlugin,
       catalog: { ...acmePlugin.catalog, risks: [typo, ...rest] },
     };
     expect(pluginIssues(offModel)).toEqual([
       `catalog: risks[0] '${first.id}' matches 'acme.space[**].thnig[**].R': 'thnig' is not below 'space' : did you mean 'thing' ?`,
     ]);
-    const retired: ProviderPlugin = {
+    const retired: ServicePlugin = {
       ...acmePlugin,
       catalog: { ...acmePlugin.catalog, risks: [{ ...typo, deprecated: true }, ...rest] },
     };
@@ -507,13 +507,13 @@ describe('definePlugin', () => {
   });
 
   test('credential spec rules per kind', () => {
-    const noSecret: ProviderPlugin = {
+    const noSecret: ServicePlugin = {
       ...acmePlugin,
       credential: apiKeyCredentialFixture([{ name: 'account', label: 'Account', secret: false }]),
     };
     expect(pluginIssues(noSecret)).toEqual([expect.stringMatching(/at least one secret field/)]);
 
-    const oauthNoRefresh: ProviderPlugin = {
+    const oauthNoRefresh: ServicePlugin = {
       ...acmePlugin,
       credential: {
         kind: 'oauth2',
@@ -537,19 +537,19 @@ describe('definePlugin', () => {
     // standard refresh_token grant from the spec.
     expect(oauthIssues.filter((m) => /refresh/.test(m))).toEqual([]);
 
-    const ssh: ProviderPlugin = {
+    const ssh: ServicePlugin = {
       ...acmePlugin,
       credential: { kind: 'ssh-key', algorithm: 'ed25519', fields: [] },
     };
     expect(pluginIssues(ssh)).toEqual([]);
 
     // A host account declares its kind and nothing else: no field, no guide, no check.
-    const host: ProviderPlugin = { ...acmePlugin, credential: { kind: 'host' } };
+    const host: ServicePlugin = { ...acmePlugin, credential: { kind: 'host' } };
     expect(pluginIssues(host)).toEqual([]);
     const hostWithField = {
       ...acmePlugin,
       credential: { kind: 'host', fields: [{ name: 'token', label: 'Token', secret: true }] },
-    } as unknown as ProviderPlugin;
+    } as unknown as ServicePlugin;
     expect(pluginIssues(hostWithField)).toEqual([
       'credential: a host account declares nothing but its kind (fields)',
     ]);
@@ -557,7 +557,7 @@ describe('definePlugin', () => {
     const unknownKind = {
       ...acmePlugin,
       credential: { kind: 'magic' },
-    } as unknown as ProviderPlugin;
+    } as unknown as ServicePlugin;
     expect(pluginIssues(unknownKind)).toEqual([
       expect.stringMatching(/credential.kind: expected one of/),
     ]);
@@ -568,7 +568,7 @@ describe('definePlugin', () => {
       ...acmePlugin,
       execute: undefined,
       refresh: 'nope',
-    } as unknown as ProviderPlugin;
+    } as unknown as ServicePlugin;
     expect(pluginIssues(noExec)).toEqual(
       expect.arrayContaining([
         'execute: expected a function',

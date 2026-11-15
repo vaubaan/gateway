@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Button, Callout, Hint, Input, PageHeader, Select, SummaryLine } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
-import { riskExplainer } from '@/lib/providers/reference';
+import { riskExplainer } from '@/lib/services/reference';
 import {
   ACTIVITY_WORDS,
   count,

@@ -8,7 +8,7 @@
  * `.github/workflows/` on a feature branch touches that risk and the ungated
  * `github.feature-branch-write`: a multi-risk call with one gated risk. Over JSON-RPC
  * on `/mcp`: refusal → the creator grants → the identical replay passes and reaches
- * the provider → the second identical replay is refused.
+ * the service → the second identical replay is refused.
  */
 import { githubPlugin } from '@vaubaan/plugin-github';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
@@ -60,11 +60,11 @@ async function openRig(): Promise<Rig> {
     env: {
       VAUBAAN_LOG_LEVEL: 'debug',
     },
-    deps: { providerFetch: upstream, logWrite: (_level, text) => logs.push(text) },
+    deps: { serviceFetch: upstream, logWrite: (_level, text) => logs.push(text) },
   });
   const { store, missions } = instance.root;
   const github = await store.accounts.create({
-    provider: 'github',
+    service: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({ kind: 'api-key', fields: { token: PAT }, metadata: {} }),
@@ -184,7 +184,7 @@ describe('approve an action through the execution door (GitHub macro-actions at 
     });
     expect(decided).toMatchObject({ ok: true, request: { state: 'granted' } });
 
-    // ── The identical replay: it passes, reaches the provider, counts on both risks ──
+    // ── The identical replay: it passes, reaches the service, counts on both risks ──
     const replay = await write({ ...ARGS });
     expect(replay.error).toBeUndefined();
     expect(replay.result?.isError ?? false).toBe(false);

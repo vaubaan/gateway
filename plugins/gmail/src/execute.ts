@@ -1,11 +1,11 @@
 /**
- * Execution, verification and resource discovery of the `gmail` provider,
+ * Execution, verification and resource discovery of the `gmail` service,
  * over IMAP, and over SMTP for the two sends.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  * ADR  : docs/decisions/gmail-over-imap-with-an-app-password.md (D2) ;
  *        docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * `execute` takes its ids and labels from the classifier's grammar functions
  * only (`gmailId`, `writableLabel`) and its recipients from the same parser
@@ -56,7 +56,7 @@ import {
   type SmtpMail,
   type SmtpReceipt,
 } from './smtp.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 import {
   imapflowTransport,
@@ -769,7 +769,7 @@ export interface GmailRuntime {
 /** The mailbox as the account's single resource. */
 export function mailboxResource(email: string): Resource {
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: email,
     displayName: email,
     metadata: { account_email: email },
@@ -842,7 +842,7 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
           return plan;
         });
       } catch (err) {
-        // ⚠ Gmail refusing a send is the provider's failure, yet it stays the
+        // ⚠ Gmail refusing a send is the service's failure, yet it stays the
         // tool error the handbook documents (Traps, Debug) : its code for the
         // agent, never an `UpstreamAuthError` — a Workspace administrator can
         // block SMTP while IMAP works.

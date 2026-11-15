@@ -1,9 +1,9 @@
 /**
- * Classifier of the `vercel` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `vercel` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/vercel.md.
+ * Handbook : docs/handbook/services/vercel.md.
  *
  * Pure : no IO, no credential, no `Date`. Every known tool maps to at least
  * one slice ; an unknown tool, a project the mission does not hold, an
@@ -20,7 +20,7 @@
  *     lookup) need no project ;
  *   - the environment is the closed Vercel triad, emitted as the
  *     `env[<label>]` segment. It is read from `target` only where the
- *     provider receives that argument (`upsert_env_var`) ; `deploy_to_vercel`
+ *     service receives that argument (`upsert_env_var`) ; `deploy_to_vercel`
  *     has no such argument upstream and is always classified on `prod` ;
  *   - a deployment and an env var sit under their environment in the data
  *     model (`project[p].env[e].deployment[d]`, `….env[e].env-var[k]`). The
@@ -61,7 +61,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { isCustomTool, toolDeclaresProperty, toolRequiresProperty, vercelTools } from './tools.ts';
 
 /** Vaubaan env labels of a Vercel project. The closed Vercel triad. */
@@ -77,7 +77,7 @@ interface Denial {
 }
 
 /**
- * An opaque identifier of the provider (`prj_…`, an env var id, `dpl_…`) :
+ * An opaque identifier of the service (`prj_…`, an env var id, `dpl_…`) :
  * one path segment, no dot, no separator, no escape, bounded. It lands in a
  * slice **and** in a request path, so one grammar serves both. A wider class
  * is not safe for a URL : `encodeURIComponent` leaves `.` and `..` untouched
@@ -213,14 +213,14 @@ export function toVercelEnv(target: unknown): VercelEnv | null {
  *
  * `NO_SINGLE_ENV` for a slice whose `env` segment is followed by anything but
  * one label of the triad (`env[*]`, `env[prod,preview]`, `env[staging]`) :
- * such a slice reaches several environments, or one the provider does not
+ * such a slice reaches several environments, or one the service does not
  * have. No env-scoped risk can be priced on it, and the owner's label must
  * not stand in — the host refuses. This classifier emits `env[*]` only on
  * slices no env-scoped risk matches (the deployment and env-var reads, the
  * bypass-token mint) ; elsewhere the rule keeps a future slice from failing open.
  */
 export function vercelEnvOf(slice: Slice): VercelEnv | null | typeof NO_SINGLE_ENV {
-  if (slice.provider !== PROVIDER_ID) return null;
+  if (slice.service !== SERVICE_ID) return null;
   for (let i = 0; i < slice.path.length - 1; i++) {
     const seg = slice.path[i]!;
     if (seg.kind !== 'name' || seg.value !== 'env') continue;
@@ -282,7 +282,7 @@ function envsForUpsert(target: unknown): VercelEnv[] | null {
 }
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -371,7 +371,7 @@ export function resolveProject(
   resources: readonly Resource[],
   required: boolean,
 ): { ref: string | null } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.projectId !== undefined) {
     const explicit = pathIdent(args.projectId);
     if (explicit === null) return { denied: 'projectId: malformed project ref' };

@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `outlook` provider
- * (`ProviderPlugin.examples`): the samples the plugin's tests run through the
+ * Representative calls of every tool of the `outlook` service
+ * (`ServicePlugin.examples`): the samples the plugin's tests run through the
  * kit (catalog coverage, data model, identifier proof) and the site classifies
  * when it builds (ADR plugin-contract-and-credential-spec, amendment
  * 2026-11-05). One realistic call per tool, on a Microsoft 365 mailbox whose
@@ -9,7 +9,7 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const ACCOUNT = 'alice@contoso.example';
 export const MAILBOX = 'alice~contoso.example';
@@ -23,7 +23,7 @@ export const EVENT = 'AAMkAGIAAAoZDOFAAA';
 
 /** The mailbox the samples run on: internal domain, allowlisted domain and address. */
 export const EXAMPLE_MAILBOX: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: MAILBOX,
   displayName: `Alice <${ACCOUNT}>`,
   metadata: {

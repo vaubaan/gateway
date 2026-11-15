@@ -16,10 +16,10 @@ import {
 const NOW = new Date('2026-10-31T15:30:00.000Z');
 
 function counts(users: number, accounts: number, activeMissions: number): InstanceCounts {
-  const byProvider: Record<string, number> = accounts > 0 ? { github: accounts } : {};
+  const byService: Record<string, number> = accounts > 0 ? { github: accounts } : {};
   return {
     users: async () => users,
-    accounts: async () => ({ total: accounts, byProvider }),
+    accounts: async () => ({ total: accounts, byService }),
     activeMissions: async () => activeMissions,
   };
 }
@@ -107,7 +107,7 @@ describe('collectOpsStats', () => {
     const stats = await collectOpsStats({
       counts: {
         users: async () => 3,
-        accounts: async () => ({ total: 4, byProvider: { github: 3, vercel: 1 } }),
+        accounts: async () => ({ total: 4, byService: { github: 3, vercel: 1 } }),
         activeMissions: async () => 2,
       },
       limits: { users: 10, accounts: null, activeMissions: 5 },
@@ -132,7 +132,7 @@ describe('collectOpsStats', () => {
     expect(stats).toEqual({
       generated_at: '2026-10-31T15:30:00.000Z',
       users: 3,
-      accounts: { total: 4, by_provider: { github: 3, vercel: 1 } },
+      accounts: { total: 4, by_service: { github: 3, vercel: 1 } },
       active_missions: 2,
       calls_today: { since: '2026-10-31T00:00:00.000Z', allowed: 41, refused: 7 },
       store: { kind: 'sqlite', bytes: 81_920 },

@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { LocalDate } from '@/components/LocalDate';
 import { AgentLabel, DataTable, Mono, type Column, type RowTone } from '@/components/ui';
 import type { SessionEventView } from '@/server/audit';
-import { riskReferencePath } from '@/lib/providers/links';
+import { riskReferencePath } from '@/lib/services/links';
 import { ROUTES } from '@/lib/vocabulary';
 
 import styles from '../missions.module.css';

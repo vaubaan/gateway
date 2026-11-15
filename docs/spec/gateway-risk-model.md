@@ -26,20 +26,20 @@ status: stable
 ## 0. The idea — accepted risks, not granted capabilities
 
 The delegating human states **which consequences they accept**, from a short list of named risks per
-provider, written by the plugin author and reviewed like code.
+service, written by the plugin author and reviewed like code.
 
 - **Default deny.** A call is allowed only if every risk it touches is accepted. A call that touches
   nothing the catalog knows is refused.
-- **Plugins classify, the gateway decides.** A plugin knows its provider and nothing about missions,
+- **Plugins classify, the gateway decides.** A plugin knows its service and nothing about missions,
   accepted risks or budgets.
 - **Always an enumeration.** Accepted risks are explicit identifiers. No wildcard, no "everything"
   sentinel, at any level.
 
 ## 1. Three pillars and one decision
 
-- **Plugin** (per provider): a data model (§2) and a classifier,
+- **Plugin** (per service): a data model (§2) and a classifier,
   `(tool, arguments, resources) → slices`.
-- **Catalog** (per provider, static, versioned): risk entries, one fallback, macro-actions (§4).
+- **Catalog** (per service, static, versioned): risk entries, one fallback, macro-actions (§4).
 - **Mission policy** (per mission): `RiskId → (budget, gate)`; the keys are the accepted risks.
 - **Decision** (per call): (1) slices = classify; (2) risks touched = the entries those slices
   match, each qualified by the environment of its slice; (3) risks touched ⊆ accepted risks, else
@@ -49,9 +49,9 @@ Steps 1 to 3 are **stateless**: they read the call, the catalog and the mission 
 
 ## 2. The data model, per plane
 
-Each **plane** of a provider (a repository, a database, a mailbox) declares its entities and how
-they nest; slice paths name them. Each provider's model is in its handbook
-([providers](../handbook/providers/README.md)).
+Each **plane** of a service (a repository, a database, a mailbox) declares its entities and how
+they nest; slice paths name them. Each service's model is in its handbook
+([services](../handbook/services/README.md)).
 
 ### 2.1 Entities, containment, cardinality
 
@@ -70,8 +70,8 @@ they nest; slice paths name them. Each provider's model is in its handbook
 
 ### 2.3 The environment carrier
 
-At most one entity of a provider's data model carries the environment (the project, a hosting `env`,
-the account mode, the mailbox…; none for some). Each provider handbook names it. Resolution at call
+At most one entity of a service's data model carries the environment (the project, a hosting `env`,
+the account mode, the mailbox…; none for some). Each service handbook names it. Resolution at call
 time: §6.
 
 ## 3. Slices
@@ -82,7 +82,7 @@ catalog matches them, the audit records them. A mission creator never writes one
 ### 3.1 Grammar
 
 ```
-slice    ::= provider '.' segment ('.' segment)* '.' action
+slice    ::= service '.' segment ('.' segment)* '.' action
 segment  ::= name | '[' inner ']' | '*' | '**'
 inner    ::= '*' | '**' | item (',' item)*
 name     ::= [a-zA-Z0-9_/-]+              an entity or a virtual leaf
@@ -94,7 +94,7 @@ action   ::= 'R' | 'W'
 - `[*]` is exactly one identifier; `[**]` or bare `**` is any number of segments, none included.
 - `*` inside an identifier globs one or more identifier characters (`[feature/*]`); a list may mix
   exact ids and globs (`[main,master,release-*]`).
-- No regular expressions, predicates or operators. Provider and action are never wildcards.
+- No regular expressions, predicates or operators. Service and action are never wildcards.
 
 ### 3.2 Examples
 
@@ -111,12 +111,12 @@ Emitted: `github.repo[acme/api].branch[main].merge-into.W`. Catalog patterns:
 
 ## 4. The risk catalog
 
-The dictionary of what a human may accept for one provider. One entry is one business intent that
+The dictionary of what a human may accept for one service. One entry is one business intent that
 fits in a sentence; fine-grained intents, never one broad risk covering everything.
 
 ### 4.1 An entry
 
-- `id` — the `RiskId`, `<provider>.<name>`; `label` shown to the human; `reason` — why it is a risk.
+- `id` — the `RiskId`, `<service>.<name>`; `label` shown to the human; `reason` — why it is a risk.
 - `matches` — one slice pattern or a list; the entry is touched when any intersects a slice.
 - `vector` (§4.2) and `vector_overrides` per environment
   ([per-env vector](./risk-entry-per-env-vector.md)).
@@ -142,8 +142,8 @@ load (`persistence`, retired on 2026-11-13, included).
 
 ### 4.3 The fallback entry
 
-- Every catalog declares **exactly one** fallback, `<provider>.uncategorized-…`, matching
-  `<provider>.**.W`, flagged `fallback: true`; zero or two and the catalog does not load.
+- Every catalog declares **exactly one** fallback, `<service>.uncategorized-…`, matching
+  `<service>.**.W`, flagged `fallback: true`; zero or two and the catalog does not load.
 - **It counts only when nothing else matched**, slice by slice: named entries match → only they are
   touched; else a write → the fallback; else a read → refused as a catalog gap.
 - **No catalog macro-action includes it**; a creator may accept it by hand, or tick the
@@ -269,7 +269,7 @@ What a creator ticks per account, in the connector's words
 
 ## 5. What a mission carries
 
-Its accounts (one provider each); per account its resources (ref, optional environment label);
+Its accounts (one service each); per account its resources (ref, optional environment label);
 its resource sets (§4.7), each with its policy, one explicit entry per accepted risk, env-scoped
 risks qualified. No slice, pattern, explicit deny, macro-action or trust level.
 
@@ -280,7 +280,7 @@ Each slice gets at most one environment, in this order:
 1. **Derived by the plugin** when the environment is part of the call (an `env[prod]` segment),
    whatever the resource's label. A slice spanning several environments derives none.
 2. **Otherwise the label of the resources the slice names** (every identifier or list value equal to
-   a mission resource's ref; labels that disagree give none); naming none, the label of the mission's only resource of that provider; with
+   a mission resource's ref; labels that disagree give none); naming none, the label of the mission's only resource of that service; with
    several, none. Resources of one call naming several environments resolve to none.
 3. **Otherwise none.**
 
@@ -307,9 +307,9 @@ their union, all required.
 1. **Dispatching, cancelling or re-running a CI workflow** is not exposed (it runs with the
    repository's secrets); the classifier refuses it by name. A file write on a workflow definition
    is a named risk.
-2. **Free-form SQL is read-only, guaranteed by the provider**, not proven by the classifier; writes
+2. **Free-form SQL is read-only, guaranteed by the service**, not proven by the classifier; writes
    go through dedicated tools, migrations are read statement by statement and fail closed. **Reading
-   provider-managed schemas** (auth users, secret vault, storage internals) is a risk of its own in
+   schemas the service manages** (auth users, secret vault, storage internals) is a risk of its own in
    no read preset, decided by what the SQL names; a query the classifier cannot read with confidence
    touches it too.
 
@@ -338,7 +338,7 @@ their union, all required.
 
 Checked at draft and again at issuance. Per account, each requested risk may be **unknown** (not
 an explicit id of the catalog), **duplicate**, **exceeds authority**, **unresolvable** (an
-environment no selected resource carries, on a provider that does not derive it), **budget missing**
+environment no selected resource carries, on a service that does not derive it), **budget missing**
 or **budget invalid** (not positive whole numbers, gate outside the closed set, rate above the
 catalog ceiling). Any finding blocks issuance, reported with its risks.
 
@@ -383,8 +383,8 @@ reason, "the hardest to repair"; the six axes, `persistence` → the five facts 
 ## 15. What is checked mechanically
 
 - **At catalog load** any finding stops the gateway, with its location: malformed fields; an id not
-  `<provider>.<name>`, duplicated or with a wildcard; a pattern that does not parse or names another
-  provider; a vector axis missing or out of scale; an invalid environment label; a fallback breaking
+  `<service>.<name>`, duplicated or with a wildcard; a pattern that does not parse or names another
+  service; a vector axis missing or out of scale; an invalid environment label; a fallback breaking
   §4.3; a `presets` key; no macro-action, or macro-actions breaking §4.6 (a `narrative` that is not
   a string of at most 600 characters included).
 - **In each plugin's tests**: every tool has a sample call yielding slices its own catalog matches;

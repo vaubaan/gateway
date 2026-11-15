@@ -1,7 +1,7 @@
 /**
- * Classifier of the `fly` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `fly` service : `(tool, args, resources) → slices`.
  *
- * Spec : docs/spec/gateway-risk-model.md §7. Handbook : docs/handbook/providers/fly.md.
+ * Spec : docs/spec/gateway-risk-model.md §7. Handbook : docs/handbook/services/fly.md.
  *
  * Pure. Every identifier and value is read by `readFlyCall`, the reader
  * `execute` uses too ; this module only says what the call touches. The
@@ -24,12 +24,12 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { isDenial, readFlyCall, type FlyCall } from './call.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 
 function slice(path: readonly SliceSegment[], action: 'R' | 'W'): Slice {
-  return { provider: PROVIDER_ID, path: [...path], action };
+  return { service: SERVICE_ID, path: [...path], action };
 }
 
 function orgPath(call: FlyCall): SliceSegment[] {

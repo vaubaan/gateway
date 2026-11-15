@@ -1,7 +1,7 @@
 /**
  * `require_verified_email` and `claims.email_verified` (security review
  * 2026-10-15, auth M3): an admin rule by email on a company directory whose
- * `email` claim is not verified (Entra ID) can ask for the provider's own
+ * `email` claim is not verified (Entra ID) can ask for the sign-in provider's own
  * verification signal (`xms_edov`).
  */
 import { describe, expect, it } from 'vitest';
@@ -52,7 +52,7 @@ describe('a verified email for a company directory', () => {
     const base = { iss: ENTRA, sub: 'x', email: 'Boss@acme.example' };
     expect(mapClaims({ ...base, xms_edov: true }, mapping).emailVerified).toBe(true);
     expect(mapClaims(base, mapping).emailVerified).toBeNull();
-    // `email_verified` means nothing to this provider's mapping.
+    // `email_verified` means nothing to this sign-in provider's mapping.
     expect(mapClaims({ ...base, email_verified: true }, mapping).emailVerified).toBeNull();
     expect(() => mapClaims({ ...base, xms_edov: false }, mapping)).toThrow(LoginError);
   });
@@ -68,19 +68,19 @@ describe('a verified email for a company directory', () => {
   });
 
   it('with the option, an unverified admin email is refused; a verified one is admitted', async () => {
-    const provider = entra({ requireVerifiedEmail: true });
+    const signInProvider = entra({ requireVerifiedEmail: true });
     const unverified = {
       email: 'boss@acme.example',
       emailVerified: null,
       subject: 'x',
       groups: [],
     } as const;
-    expect(await codeOf(admit(unverified, provider, admins))).toBe('email-not-verified');
+    expect(await codeOf(admit(unverified, signInProvider, admins))).toBe('email-not-verified');
     const verified = { ...unverified, emailVerified: true } as const;
-    expect(await admit(verified, provider, admins)).toBe('administrator');
+    expect(await admit(verified, signInProvider, admins)).toBe('administrator');
   });
 
-  it('is read from the environment, and refused on a GitHub provider', () => {
+  it('is read from the environment, and refused on a GitHub sign-in provider', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({
         VAUBAAN_SIGN_IN_ENTRA_KIND: 'oidc',
@@ -92,11 +92,11 @@ describe('a verified email for a company directory', () => {
         VAUBAAN_SIGN_IN_ENTRA_REQUIRE_VERIFIED_EMAIL: 'true',
       }),
     });
-    const provider = config.signIn.find((p) => p.id === 'entra');
-    expect(provider?.kind).toBe('oidc');
-    if (provider?.kind !== 'oidc') return;
-    expect(provider.requireVerifiedEmail).toBe(true);
-    expect(provider.claims.emailVerified).toBe('xms_edov');
+    const signInProvider = config.signIn.find((p) => p.id === 'entra');
+    expect(signInProvider?.kind).toBe('oidc');
+    if (signInProvider?.kind !== 'oidc') return;
+    expect(signInProvider.requireVerifiedEmail).toBe(true);
+    expect(signInProvider.claims.emailVerified).toBe('xms_edov');
 
     expect(() =>
       loadInstanceConfig({
@@ -120,9 +120,9 @@ describe('a verified email for a company directory', () => {
         VAUBAAN_SIGN_IN_KC_CLIENT_SECRET: 's',
       }),
     });
-    const provider = config.signIn.find((p) => p.id === 'kc');
-    if (provider?.kind !== 'oidc') throw new Error('expected an oidc provider');
-    expect(provider.requireVerifiedEmail).toBe(false);
-    expect(provider.claims.emailVerified).toBe('email_verified');
+    const signInProvider = config.signIn.find((p) => p.id === 'kc');
+    if (signInProvider?.kind !== 'oidc') throw new Error('expected an oidc provider');
+    expect(signInProvider.requireVerifiedEmail).toBe(false);
+    expect(signInProvider.claims.emailVerified).toBe('email_verified');
   });
 });

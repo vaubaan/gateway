@@ -1,5 +1,5 @@
 /**
- * The executor and the discovery of the `miro` provider, against a mock of
+ * The executor and the discovery of the `miro` service, against a mock of
  * Miro's MCP server : what is sent, what is passed back, how a failure is
  * thrown, how boards are found in an answer whose shape Miro does not
  * document.
@@ -168,7 +168,7 @@ describe('execute — one tools/call to Miro’s MCP server', () => {
         }),
       },
     ]);
-    // A provider failure for the host (HTTP 502), Miro's words for the agent.
+    // A service failure for the host (HTTP 502), Miro's words for the agent.
     const failure = executeMiro(context(frame), TOOL.prototypeRead, { board: BOARD });
     await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
     await expect(failure).rejects.toThrow(/Invalid params: svg/);
@@ -244,9 +244,9 @@ describe('discovery — the boards of the team, from board_search_boards', () =>
     );
     const boards = await discoverMiroResources(context(fetch));
     expect(boards).toEqual([
-      { provider: 'miro', ref: BOARD, displayName: 'Workshop', metadata: { url: BOARD_URL } },
+      { service: 'miro', ref: BOARD, displayName: 'Workshop', metadata: { url: BOARD_URL } },
       {
-        provider: 'miro',
+        service: 'miro',
         ref: 'o9J_kzlUDmo~',
         displayName: 'Retro',
         metadata: { url: 'https://miro.com/app/board/o9J_kzlUDmo=/' },
@@ -284,9 +284,9 @@ describe('discovery — the boards of the team, from board_search_boards', () =>
     ]);
     const boards = await discoverMiroResources(context(fetch));
     expect(boards).toEqual([
-      { provider: 'miro', ref: BOARD, displayName: 'Workshop', metadata: { url: BOARD_URL } },
+      { service: 'miro', ref: BOARD, displayName: 'Workshop', metadata: { url: BOARD_URL } },
       {
-        provider: 'miro',
+        service: 'miro',
         ref: 'o9J_kzlUDmo~',
         displayName: 'Retro',
         metadata: { url: 'https://miro.com/app/board/o9J_kzlUDmo=/' },

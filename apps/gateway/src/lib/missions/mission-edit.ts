@@ -64,7 +64,7 @@ export interface MissionSnapshotSet {
 /** One account of a mission, with its resource sets. */
 export interface MissionSnapshotAccount {
   readonly account_id: string;
-  readonly provider: string;
+  readonly service: string;
   /** The account's name, for the words of a change; not part of the revision. */
   readonly display_name: string;
   /** Its sets, by position; never empty. */
@@ -90,7 +90,7 @@ export function policyOfAccount(c: MissionSnapshotAccount): MissionPolicyEntry[]
 
 /**
  * What a revision is computed over: the editable state with the policy flat, so the
- * store can compute it from a mission row inside its transaction (no provider lookup).
+ * store can compute it from a mission row inside its transaction (no service lookup).
  */
 export interface RevisionInput {
   readonly name: string;
@@ -239,7 +239,7 @@ function draftSetOf(set: MissionSnapshotSet): DraftResourceSet {
 
 export interface AccountRef {
   readonly account_id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly display_name: string;
 }
 
@@ -300,7 +300,7 @@ function sameLine(a: MissionPolicyEntry, b: MissionPolicyEntry): boolean {
 }
 
 function refOf(c: MissionSnapshotAccount): AccountRef {
-  return { account_id: c.account_id, provider: c.provider, display_name: c.display_name };
+  return { account_id: c.account_id, service: c.service, display_name: c.display_name };
 }
 
 /** The key of a line in a diff: its set and its risk. */
@@ -659,8 +659,8 @@ function accountOutcome(sets: readonly KeptOutcome[]): KeptOutcome | null {
 /** The account a draft line names, as the preview resolves it. */
 function accountIdOf(draft: DraftAccount, context: readonly IssuanceAccount[]): string | null {
   if (draft.account_id) return draft.account_id;
-  if (!draft.provider) return null;
-  const candidates = context.filter((c) => c.provider === draft.provider && c.status === 'active');
+  if (!draft.service) return null;
+  const candidates = context.filter((c) => c.service === draft.service && c.status === 'active');
   const [only] = candidates;
   return candidates.length === 1 && only ? only.id : null;
 }
@@ -751,7 +751,7 @@ export function judgeEdit(
         placed.add(id);
         accounts.push({
           account_id: id,
-          provider: ctx.provider,
+          service: ctx.service,
           display_name: ctx.display_name,
           resource_sets: resolved.resource_sets.map((set) =>
             newSetOf(id, set.index + 1, set, drafted[set.index], ctx),
@@ -847,7 +847,7 @@ function accountWide(issue: PreviewIssue): boolean {
     issue.code === 'account-unknown' ||
     issue.code === 'account-ambiguous' ||
     issue.code === 'duplicate-account' ||
-    issue.code === 'duplicate-provider' ||
+    issue.code === 'duplicate-service' ||
     issue.code === 'resource-sets-overlap' ||
     issue.code === 'resource-sets-mixed'
   );

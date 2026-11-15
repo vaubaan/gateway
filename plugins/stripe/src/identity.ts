@@ -1,23 +1,23 @@
 /**
- * Identity of the `stripe` provider — the one place its ids are written.
+ * Identity of the `stripe` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/stripe.md.
+ * Handbook : docs/handbook/services/stripe.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns — is derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'stripe';
+/** The service id. */
+export const SERVICE_ID = 'stripe';
 
 /** `stripe__` : prepended to every tool name. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
-/** Public API of the provider — a fact about Stripe, not instance configuration. */
+/** Public API of the service — a fact about Stripe, not instance configuration. */
 export const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
 /** The MCP tool names, in the order `tools/list` gives them. */

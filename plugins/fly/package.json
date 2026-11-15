@@ -3,7 +3,7 @@
   "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Fly.io provider plugin for Vaubaan Gateway — apps, machines, volumes, secrets, addresses and certificates through the Machines API",
+  "description": "Fly.io plugin for Vaubaan Gateway — apps, machines, volumes, secrets, addresses and certificates through the Machines API",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

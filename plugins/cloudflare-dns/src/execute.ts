@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `cloudflare-dns` provider — Cloudflare REST API v4.
+ * Upstream calls of the `cloudflare-dns` service — Cloudflare REST API v4.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives decrypted
  *        in the context, is used for one call, and never reaches the agent.
@@ -19,7 +19,7 @@
  *     the record is apex, wildcard, MX or NS, or cannot be read back, the
  *     call is refused before the PATCH / DELETE ;
  *   - `list_zones` is filtered to the mission's zones ;
- *   - a provider failure is **thrown**, never turned into a result : 401 /
+ *   - a service failure is **thrown**, never turned into a result : 401 /
  *     403 from Cloudflare → `UpstreamAuthError`, any other failed status →
  *     `UpstreamHttpError`, an answer that is not JSON (but for the BIND
  *     export) or not the envelope read → `UpstreamProtocolError`. The host
@@ -28,7 +28,7 @@
  *     argument, a zone outside the mission, a malformed identifier, a
  *     critical record declared as an ordinary one) is an `ExecutorRefusal`,
  *     turned into the `isError` result by `declining` : nothing failed at
- *     the provider.
+ *     the service.
  */
 
 import {
@@ -54,7 +54,7 @@ import {
   tokenOf,
   type Endpoint,
 } from './cloudflare-api.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import {
   isCriticalRecord,
   pathIdent,
@@ -82,7 +82,7 @@ interface Route extends Endpoint {
 function segment(value: string): string {
   if (pathIdent(value) === null) {
     throw new ExecutorRefusal(
-      `${PROVIDER_ID}: refusing to build a request path from an unsafe identifier`,
+      `${SERVICE_ID}: refusing to build a request path from an unsafe identifier`,
     );
   }
   return encodeURIComponent(value);
@@ -172,7 +172,7 @@ export function executeCloudflareDns(
 
 function refuseUndeclared(tool: string, args: Args): void {
   const undeclared = undeclaredArgument(tool, args);
-  if (undeclared !== null) throw new ExecutorRefusal(`${PROVIDER_ID}: ${undeclared}`);
+  if (undeclared !== null) throw new ExecutorRefusal(`${SERVICE_ID}: ${undeclared}`);
 }
 
 async function executeRoute(
@@ -189,7 +189,7 @@ async function executeRoute(
   }
 
   const target = resolveZoneResource(args, ctx.resources);
-  if ('denied' in target) throw new ExecutorRefusal(`${PROVIDER_ID}: ${target.denied}`);
+  if ('denied' in target) throw new ExecutorRefusal(`${SERVICE_ID}: ${target.denied}`);
   // The query string and the JSON body below are built from the arguments: only what
   // the tool declares — hence what the classifier read — may be in them.
   refuseUndeclared(tool, args);
@@ -267,7 +267,7 @@ function zoneResource(zone: ZoneDto): Resource {
   if (typeof account.name === 'string' && account.name) metadata.account_name = account.name;
   if (typeof zone.status === 'string' && zone.status) metadata.status = zone.status;
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: zone.id,
     displayName: zone.name,
     metadata,
@@ -277,7 +277,7 @@ function zoneResource(zone: ZoneDto): Resource {
 function recordIdArg(value: unknown): string {
   const recordId = pathIdent(value);
   if (recordId === null) {
-    throw new ExecutorRefusal(`${PROVIDER_ID}: record_id: missing or malformed identifier`);
+    throw new ExecutorRefusal(`${SERVICE_ID}: record_id: missing or malformed identifier`);
   }
   return recordId;
 }
@@ -291,7 +291,7 @@ function zonesOfTheMission(
   answer: { readonly result: readonly unknown[] },
   resources: readonly Resource[],
 ): unknown {
-  const refs = new Set(resources.filter((x) => x.provider === PROVIDER_ID).map((x) => x.ref));
+  const refs = new Set(resources.filter((x) => x.service === SERVICE_ID).map((x) => x.ref));
   return {
     ...answer,
     result: answer.result.filter(
@@ -335,7 +335,7 @@ async function assertDeclaredSensitivity(
   const name = typeof current?.name === 'string' ? current.name : '';
   if (isCriticalRecord(type, name, zoneName)) {
     throw new ExecutorRefusal(
-      `${PROVIDER_ID}: the record is a critical record (${type} ${name}) but the call ` +
+      `${SERVICE_ID}: the record is a critical record (${type} ${name}) but the call ` +
         `declared an ordinary one (${String(args.type)} ${String(args.name)}) ; name the ` +
         'record as it is so the change is classified as a critical record write',
     );

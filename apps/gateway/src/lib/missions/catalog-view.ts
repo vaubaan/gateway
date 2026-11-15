@@ -1,5 +1,5 @@
 /**
- * A provider's catalog as issuance sees it: explicit ids, a row and its
+ * A service's catalog as issuance sees it: explicit ids, a row and its
  * reason for ordering (worst first), and whether an env-qualified id can ever
  * be touched with a given resource selection.
  *
@@ -45,7 +45,7 @@ export function riskKindOf(entry: Pick<RiskEntry, 'matches'>, vector: RiskVector
 }
 
 /** The display row of one explicit id of `entry` (an id `explicitRiskIdsOf(entry)` returned). */
-function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk {
+function riskOf(entry: RiskEntry, service: string, riskId: RiskId): CatalogRisk {
   const env = isEnvScopedEntry(entry) ? (parseRiskId(riskId)?.env ?? null) : null;
   const vector = resolveVector(entry, env);
   return {
@@ -58,7 +58,7 @@ function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk
     kind: riskKindOf(entry, vector),
     row: rowOf(vector),
     row_reason: reasonOf(vector),
-    fallback: isFallbackEntry(entry, provider),
+    fallback: isFallbackEntry(entry, service),
     deprecated: entry.deprecated === true,
     rate_ceiling_per_minute: entry.infra_limits?.calls_per_minute_max ?? null,
   };
@@ -73,7 +73,7 @@ function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk
  */
 export function enumerateCatalog(catalog: RiskCatalog): CatalogRisk[] {
   return catalog.risks.flatMap((entry) =>
-    explicitRiskIdsOf(entry).map((riskId) => riskOf(entry, catalog.provider, riskId)),
+    explicitRiskIdsOf(entry).map((riskId) => riskOf(entry, catalog.service, riskId)),
   );
 }
 
@@ -179,7 +179,7 @@ export interface RiskKindGroup {
 }
 
 /**
- * The rows as the granular editor and the provider reference list them:
+ * The rows as the granular editor and the service reference list them:
  * reads, then writes, then irreversible writes; inside a group, one family
  * per catalog entry in catalog order. Empty groups are left out. An env-scoped
  * entry whose vector turns irreversible in one environment only appears in

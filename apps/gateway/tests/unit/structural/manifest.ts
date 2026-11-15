@@ -196,7 +196,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'plugins-read-through-the-transport',
     statement:
-      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own, and never casts an answer to a DTO type.",
+      "A plugin reads its service's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own, and never casts an answer to a DTO type.",
     source: 'ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
     proofs: [
       {
@@ -204,7 +204,7 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'the checks read a body read and a DTO cast, and nothing else',
           'reads no response body itself',
-          "casts no provider's answer to a DTO",
+          "casts no service's answer to a DTO",
         ],
       },
       {
@@ -219,13 +219,13 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'plugin-names-declared-once',
     statement:
-      'A plugin writes its provider id and its tool names once, in src/identity.ts (and declares its tools in src/tools.ts); no other source file writes a tool name or the provider id as a literal.',
+      'A plugin writes its service id and its tool names once, in src/identity.ts (and declares its tools in src/tools.ts); no other source file writes a tool name or the service id as a literal.',
     source: 'plugins/README.md step 1 and step 4',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-names-declared-once.test.ts`,
         tests: [
-          'writes no tool name and no provider id outside identity.ts and tools.ts',
+          'writes no tool name and no service id outside identity.ts and tools.ts',
           'every literal of another meaning is still in its file',
         ],
       },
@@ -499,7 +499,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'config-examples-match-the-loader',
     statement:
-      'The documented configuration is the accepted one: the handbook’s key table names exactly the keys the loader takes, and the two deployment examples set none of the retired per-provider OAuth-client keys.',
+      'The documented configuration is the accepted one: the handbook’s key table names exactly the keys the loader takes, and the two deployment examples set none of the retired per-service OAuth-client keys.',
     source: 'spec §4.3; ADR docker-image-and-config-format',
     proofs: [
       {
@@ -510,7 +510,7 @@ export const INVARIANTS: readonly Invariant[] = [
         ],
       },
       {
-        file: `${STRUCTURAL}/example-config-providers.test.ts`,
+        file: `${STRUCTURAL}/example-config-retired-keys.test.ts`,
         tests: ['%s', 'the check reads commented and active lines alike'],
       },
     ],
@@ -688,7 +688,7 @@ export const INVARIANTS: readonly Invariant[] = [
         file: 'packages/policy-engine/tests/unit/risk-runtime.test.ts',
         tests: [
           'a slice no catalog entry matches denies the call, although another slice is covered and accepted',
-          'a slice of another provider is not dropped: it denies',
+          'a slice of another service is not dropped: it denies',
           'no slice → deny (classification gap)',
         ],
       },
@@ -906,7 +906,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'shipped-plugin-icons',
     statement:
-      'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no provider → icon or colour list of its own.',
+      'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no service → icon or colour list of its own.',
     source: 'ADR service-icons-declared-by-the-plugin; style-guide §5 "Service mark"',
     proofs: [
       {
@@ -1054,7 +1054,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'client-imports-no-server-value',
     statement:
-      'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, providers, shares) import no value from src/server.',
+      'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, services, shares) import no value from src/server.',
     source: 'Packages audit 2026-10-31, F6; handbook web-app',
     proofs: [
       {
@@ -1085,7 +1085,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'one-word-per-thing',
     statement:
-      'What a person or an agent reads says account for an account at a service: the interface words, the bootstrap text, the site documentation, the handbooks and every plugin README, catalog, tool schema and data model, the word it replaced kept only for its unrelated senses and for the names that cannot move.',
+      'What a person or an agent reads says account for an account at a service, service for GitHub, Vercel or Gmail, and plugin only for the code package: the interface words, the bootstrap text, the site (documentation, landing, trust page), the handbooks and every plugin README, catalog, tool schema, data model, credential guide, summary and tool titles; connection and provider are kept only for their other senses (a TLS connection, a sign-in provider, the OAuth provider of a broker, another product’s term) and for the names that cannot move.',
     source: 'ADR one-word-per-thing-account-service-plugin',
     proofs: [
       {
@@ -1093,6 +1093,8 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'scans the human-facing text',
           'no human-facing text says connection for an account',
+          'no human-facing text says provider for a service',
+          'the site says what a service lets an agent do, not what its plugin does',
         ],
       },
     ],

@@ -1,6 +1,6 @@
 /**
  * The two type guards every reader of untyped input needs (a parsed YAML
- * document, a definition from untyped code, a provider's answer).
+ * document, a definition from untyped code, a service's answer).
  */
 
 /** A plain object : not `null`, not an array. */

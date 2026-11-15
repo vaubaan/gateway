@@ -6,7 +6,7 @@ token comes from the **OAuth broker** the instance is enrolled with: the broker 
 registration and keeps no token; the instance keeps the refresh token and the current access token.
 Mail and calendar data never go through the broker.
 
-Handbook: [`docs/handbook/providers/outlook.md`](../../docs/handbook/providers/outlook.md).
+Handbook: [`docs/handbook/services/outlook.md`](../../docs/handbook/services/outlook.md).
 ADR: [`outlook-through-the-oauth-broker-microsoft-provider`](../../docs/decisions/outlook-through-the-oauth-broker-microsoft-provider.md).
 Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).
 

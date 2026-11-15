@@ -279,7 +279,7 @@ describe('ssh2Transport — the host key is verified against the pin before anyt
 
 const HOST = 'vps-1.example.com';
 const resource: Resource = {
-  provider: 'ssh',
+  service: 'ssh',
   ref: HOST,
   env: 'staging',
   displayName: `deploy@${HOST}:22`,

@@ -134,7 +134,7 @@ describe('code exchange', () => {
     });
   });
 
-  it('refuses a PKCE exchange without a verifier before calling the provider', async () => {
+  it('refuses a PKCE exchange without a verifier before calling the service', async () => {
     const fetch = tokenRoute({ access_token: 'at' });
     await expect(
       exchangeCode(OAUTH_SPEC, CLIENT, { ...exchange, codeVerifier: null }, io(fetch)),
@@ -179,7 +179,7 @@ describe('code exchange', () => {
     expect(secret.expiresAt).toBe('2026-10-13T09:02:00.000Z');
   });
 
-  it('reports a rejected grant with the provider error and never echoes the client secret', async () => {
+  it('reports a rejected grant with the service error and never echoes the client secret', async () => {
     const fetch = tokenRoute({ error: 'invalid_grant', error_description: 'code expired' }, 400);
     const err: unknown = await exchangeCode(OAUTH_SPEC, CLIENT, exchange, io(fetch)).catch(
       (e: unknown) => e,
@@ -226,7 +226,7 @@ describe('refresh_token grant', () => {
     metadata: { account: 'acme' },
   };
 
-  it('rotates the refresh token when the provider issues a new one', async () => {
+  it('rotates the refresh token when the service issues a new one', async () => {
     const fetch = tokenRoute({ access_token: 'at-new', refresh_token: 'rt-new', expires_in: 3600 });
     const next = await refreshGrant(OAUTH_SPEC, CLIENT, current, io(fetch));
     expect(Object.fromEntries(form(fetch.calls[0]!.body))).toEqual({
@@ -249,7 +249,7 @@ describe('refresh_token grant', () => {
     expect(next.refreshToken).toBe('rt-old');
   });
 
-  it('is a rejection when no refresh token is stored, without calling the provider', async () => {
+  it('is a rejection when no refresh token is stored, without calling the service', async () => {
     const fetch = mockFetch([]);
     await expect(
       refreshGrant(OAUTH_SPEC, CLIENT, { ...current, refreshToken: null }, io(fetch)),
@@ -258,8 +258,8 @@ describe('refresh_token grant', () => {
   });
 });
 
-describe('revocation of the grant at the provider', () => {
-  const URL_ = 'https://provider.example.com/oauth/revoke';
+describe('revocation of the grant at the service', () => {
+  const URL_ = 'https://service.example.com/oauth/revoke';
   const secret = { accessToken: 'at-PLAINTEXT', refreshToken: 'rt-PLAINTEXT' };
   const route = (status = 200, body: unknown = {}) =>
     mockFetch([{ method: 'POST', url: URL_, status, body }]);

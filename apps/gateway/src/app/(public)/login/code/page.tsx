@@ -1,5 +1,5 @@
 /**
- * `/login/code` — the second factor of a sign-in through any provider (ADR
+ * `/login/code` — the second factor of a sign-in through any sign-in provider (ADR
  * administrators-live-in-the-instance, §7): the code of the authenticator app, or a
  * recovery code. Reachable only with the step cookie the sign-in set; without it,
  * back to the sign-in page.

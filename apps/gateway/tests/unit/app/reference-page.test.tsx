@@ -13,7 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import githubPlugin from '@vaubaan/plugin-github';
-import { createRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { createRegistry, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import supabasePlugin from '@vaubaan/plugin-supabase';
 
 import { getRoot, resetRoot, type GatewayRoot } from '@/server/compose';
@@ -37,7 +37,7 @@ const DOCS_URL = 'https://docs.example.test/docs';
 
 let root: GatewayRoot;
 
-async function signedIn(plugins?: readonly ProviderPlugin[]): Promise<void> {
+async function signedIn(plugins?: readonly ServicePlugin[]): Promise<void> {
   root = await getRoot({
     loadConfig: () =>
       loadInstanceConfig({
@@ -77,7 +77,7 @@ async function gatewayPage(id: string): Promise<string> {
 }
 
 /** `/plugins/<id>` as the site renders it, the collector unread. */
-function sitePage(plugin: ProviderPlugin): string {
+function sitePage(plugin: ServicePlugin): string {
   const [info] = withHealth(
     [sitePluginInfo(plugin, `plugins/${plugin.id}`, `@vaubaan/plugin-${plugin.id}`)],
     unreadSnapshot('offline in the tests'),
@@ -152,7 +152,7 @@ describe('/reference/<id> is the site’s page of the plugin', () => {
   });
 
   it('draws the plugin the instance runs: another version shows its own version and catalog', async () => {
-    const older: ProviderPlugin = {
+    const older: ServicePlugin = {
       ...githubPlugin,
       version: '0.9.0',
       catalog: {

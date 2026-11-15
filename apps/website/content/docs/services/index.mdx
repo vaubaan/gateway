@@ -1,0 +1,40 @@
+---
+title: Connect a service
+description: How an account of a service is connected to an instance — a key pasted by hand, a client the gateway registers, or a client an OAuth broker holds — and where each service's guide lives, on its plugin page.
+---
+
+Connecting a service means giving the instance, once, a credential for an account at a service — a key created by hand, or the service's own sign-in — so that missions can then use that account's resources without the agent ever holding the credential. Each service has one way.
+
+## The three ways
+
+Each service connects one way, chosen by its plugin; the connect page and the service's page below follow it.
+
+### A key you create and paste
+
+GitHub, Fly, Supabase, Vercel, Stripe, Notion, Cloudflare and most others (a token); Gmail and CalDAV (an app password); SSH (a private key).
+
+The person who connects creates the key at the service and pastes it once on the instance; nobody declares anything beforehand. The connect page links the page where the key is made, says how wide to grant (the widest the service offers for what the account connects: each mission narrows what an agent may do, so the key is made once; where the service makes the key either wide or confined to one project, the narrowest that fits your missions comes first — a key per project keeps a leak or a mistake inside that project, one key for everything makes every mission depend on it), which permissions to tick and who knows the expiry. The instance checks the key with the service before storing anything, and the account page warns before the expiry it knows.
+
+A key pasted by hand is a long-lived secret that acts as a person or a service account: its reach is what was granted at the service, and removing the account here deletes nothing there (accepted risk A30 of the [threat model](https://github.com/vaubaan/gateway/blob/main/docs/handbook/threat-model.md#accepted-risks)).
+
+### A client the gateway registers itself
+
+Miro.
+
+The person signs in at the service and allows the gateway; nothing to create or paste. The first time someone connects, the instance registers its own OAuth client at the service (dynamic client registration, RFC 7591): every instance has its own client, never one shared with another instance. Tokens are short-lived and refreshed by the instance.
+
+### A client an OAuth broker holds, set up once for everyone
+
+Google Calendar; Outlook (mail and calendar of a Microsoft account).
+
+Google offers neither a key a person can make for Calendar nor client registration. The person signs in at Google and allows the gateway; nothing to create or paste. The Google client is held by an **OAuth broker** the instance is enrolled with, set up once by an administrator for every person on the instance. The broker keeps no token: the instance keeps the refresh token, sealed so that only its broker can open it, and the broker adds the client secret when the instance refreshes. Until a broker serving Google is configured (`oauth_brokers.<name>` in the configuration), the plugin is listed as not configured and no Google Calendar account can be connected. Outlook works the same way with Microsoft, which disabled app passwords for Exchange Online and offers no client registration either: a broker serving `microsoft` holds one Entra app, and an organisation whose policy blocks user consent needs one administrator's consent for it. Microsoft has no way to withdraw one refresh token, so disconnecting erases the gateway's copy and the person removes the app from their Microsoft account.
+
+The consent screen names the application that holds the Google client. An administrator either enrols the instance with a broker someone else operates, or runs the published broker image with the company's own Google client ([Your own OAuth broker](/docs/operations/oauth-broker)). A broker runs attested in an enclave, or is declared not attested; the instance's configuration says which.
+
+After connecting, the owner labels resources with their environment (`staging`, `prod`) on the account's page, and can give access to a teammate or a team.
+
+**No plugin has yet executed a tool against the real service it models**: every service call of the test suites is answered by a double ([known limitations](/docs/known-limitations)).
+
+## Each service's guide
+
+Each service's guide is on its plugin page, section "Connecting an account" ([the plugins](/plugins), then a service, `#connect`): the kind of account, the steps with the menus to follow at the service highlighted, a screenshot of the hard screen where one helps (with where it comes from and its licence), the permissions to grant, who knows the expiry and what the connect page asks. It is generated from the plugin's own declaration, the same the instance's connect screen shows. The former addresses `/docs/services/<service>` redirect there.

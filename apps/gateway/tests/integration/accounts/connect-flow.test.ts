@@ -2,7 +2,7 @@
  * Accounts end to end inside the process (spec §10 "integration on an
  * ephemeral instance with embedded store"): the composition root over the
  * `:memory:` store with the REAL encryptor, a fixture plugin registry, a
- * mocked provider (`mockFetch`, which rejects any other request), and the
+ * mocked service (`mockFetch`, which rejects any other request), and the
  * host-agnostic handlers driven with web-standard `Request`s.
  *
  *   the gateway registers its OAuth client → user connects → the account
@@ -44,17 +44,17 @@ interface Session {
 
 describe('accounts: registered client, connect, resources, revoke', () => {
   let root: GatewayRoot;
-  let provider: MockFetch;
+  let service: MockFetch;
   let upstream: Resource[];
   let logLines: string[];
 
   beforeEach(async () => {
     logLines = [];
     upstream = [
-      { provider: 'oauthco', ref: 'proj-a', displayName: 'Project A' },
-      { provider: 'oauthco', ref: 'proj-b', displayName: 'Project B' },
+      { service: 'oauthco', ref: 'proj-a', displayName: 'Project A' },
+      { service: 'oauthco', ref: 'proj-b', displayName: 'Project B' },
     ];
-    provider = mockFetch([
+    service = mockFetch([
       {
         method: 'POST',
         url: OAUTH_SPEC.clientRegistration.registrationUrl,
@@ -97,12 +97,12 @@ describe('accounts: registered client, connect, resources, revoke', () => {
             displayName: 'Key Co',
             credential: API_KEY_SPEC,
             discoverResources: async () => [
-              { provider: 'keyco', ref: 'acct:live', env: 'live', displayName: 'Acme (live)' },
+              { service: 'keyco', ref: 'acct:live', env: 'live', displayName: 'Acme (live)' },
             ],
           }),
           fixturePlugin({ id: 'sshco', credential: SSH_KEY_SPEC }),
         ]),
-      providerFetch: provider,
+      serviceFetch: service,
       ...memoryStoreDeps,
     });
   });
@@ -210,8 +210,8 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     expect(await noticeOf(landed, alice)).toBeNull(); // read once
 
     // The gateway registered its client first, then exchanged with it, the redirect URI on public_url.
-    expect(provider.calls[0]!.url).toBe(OAUTH_SPEC.clientRegistration.registrationUrl);
-    const exchange = provider.calls[1]!;
+    expect(service.calls[0]!.url).toBe(OAUTH_SPEC.clientRegistration.registrationUrl);
+    const exchange = service.calls[1]!;
     expect(exchange.headers.authorization).toBe(
       `Basic ${Buffer.from(`company-client-id:${CLIENT_SECRET}`).toString('base64')}`,
     );
@@ -271,8 +271,8 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     expect(await noticeOf(edited, alice)).toMatchObject({ title: 'Resource saved' });
 
     upstream = [
-      { provider: 'oauthco', ref: 'proj-a', displayName: 'Project A (renamed upstream)' },
-      { provider: 'oauthco', ref: 'proj-c', displayName: 'Project C' },
+      { service: 'oauthco', ref: 'proj-a', displayName: 'Project A (renamed upstream)' },
+      { service: 'oauthco', ref: 'proj-c', displayName: 'Project C' },
     ];
     agePastStaleGrace(root.store, accountId); // proj-b was seen long ago
     const refreshed = await handlers.discover(
@@ -291,7 +291,7 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     const replay = await handlers.callback(get(callbackQuery, alice), 'oauthco');
     expect(location(replay).pathname).toBe('/accounts');
     expect((await noticeOf(replay, alice))?.lines[0]).toContain('already used');
-    expect(provider.calls).toHaveLength(2); // the registration and the one exchange
+    expect(service.calls).toHaveLength(2); // the registration and the one exchange
     expect(await root.store.accounts.list()).toHaveLength(1);
 
     const bob = await signIn('bob@example.com');
@@ -307,7 +307,7 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     // ── Revoke ──────────────────────────────────────────────────────────────
     const revoked = await handlers.revoke(post(`/accounts/${accountId}/revoke`, alice), accountId);
     expect(location(revoked).pathname).toBe(`/accounts/${accountId}`);
-    // This provider documents no revocation endpoint: the person is told, as a warning,
+    // This service documents no revocation endpoint: the person is told, as a warning,
     // that the access still stands there and is theirs to remove.
     const told = await noticeOf(revoked, alice);
     expect(told).toMatchObject({ tone: 'warning', title: 'Account disconnected' });
@@ -431,7 +431,7 @@ describe('accounts: registered client, connect, resources, revoke', () => {
       (await handlers.connect(post('/accounts/connect/keyco', bootstrap), 'keyco')).status,
     ).toBe(403);
 
-    // The provider's redirect arriving without a session goes to sign-in.
+    // The service's redirect arriving without a session goes to sign-in.
     const anonymous = await handlers.callback(
       get('/connections/callback/oauthco?code=c&state=s', null),
       'oauthco',
@@ -456,6 +456,6 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     expect(await noticeOf(again, alice)).not.toBeNull();
 
     expect(await root.store.accounts.list()).toEqual([]);
-    expect(provider.calls).toHaveLength(0);
+    expect(service.calls).toHaveLength(0);
   });
 });

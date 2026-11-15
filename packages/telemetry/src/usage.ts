@@ -7,7 +7,7 @@
  * FROZEN SHAPES, like the plugin-health report (`report.ts`). Every value is a
  * word of a closed vocabulary, a shape bounded by a plugin's own declaration,
  * or a bucket. No string comes from an argument, a result, an error, a
- * provider, a person or a value the company configured — which is why a risk
+ * service, a person or a value the company configured — which is why a risk
  * travels without its environment qualifier (the label is the company's) and
  * a count travels as a bucket. Adding a key is a spec change (§9).
  *
@@ -96,7 +96,7 @@ export interface DecisionReportInput {
 export function isReportableRiskId(plugin: string, value: unknown): value is string {
   if (typeof value !== 'string' || value.length > MAX_RISK_ID_LENGTH) return false;
   const parsed = parseRiskId(value);
-  return parsed !== null && parsed.env === null && parsed.provider === plugin;
+  return parsed !== null && parsed.env === null && parsed.service === plugin;
 }
 
 function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {

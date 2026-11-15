@@ -218,7 +218,7 @@ describe('restore of a store copy', () => {
     older.close();
     const report = await restore({ sha256: sha256Of(backup), dryRun: true });
     expect(report.schemaVersion).toBe(15);
-    expect(report.shippedSchemaVersion).toBe(36);
+    expect(report.shippedSchemaVersion).toBe(37);
   });
 
   it('refuses a copy whose key version this instance does not hold, or whose key does not fit', async () => {

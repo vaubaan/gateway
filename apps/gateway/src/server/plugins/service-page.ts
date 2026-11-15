@@ -11,13 +11,13 @@
  * process, and the page data depends on nothing else.
  */
 import { pluginInfo, type PluginInfo } from '@vaubaan/plugin-page/info';
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import { connectFileUrl } from './connect-files';
 
-const built = new WeakMap<ProviderPlugin, PluginInfo>();
+const built = new WeakMap<ServicePlugin, PluginInfo>();
 
-export function servicePageInfo(plugin: ProviderPlugin): PluginInfo {
+export function servicePageInfo(plugin: ServicePlugin): PluginInfo {
   const known = built.get(plugin);
   if (known) return known;
   const info = pluginInfo(plugin, { figureSrc: connectFileUrl, examples: 'lenient' });

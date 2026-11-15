@@ -30,7 +30,7 @@ import { createGmailPlugin } from '../../src/index.ts';
 import { fakeGmail, message } from './fake-imap.ts';
 
 const mailbox: Resource = {
-  provider: 'gmail',
+  service: 'gmail',
   ref: 'me@myorg.com',
   displayName: 'me@myorg.com',
   env: null,

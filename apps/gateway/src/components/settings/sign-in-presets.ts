@@ -1,6 +1,6 @@
 /**
  * The presets of "Add a sign-in provider" (spec §4.2 Settings → Sign-in):
- * Google and Entra ID are OpenID Connect providers whose issuer, claim names
+ * Google and Entra ID are OpenID Connect sign-in providers whose issuer, claim names
  * and admission rule the form can fill in, and whose registration steps it can
  * spell out. A preset changes nothing on the server: what is saved is a
  * provider of kind `oidc`, as if typed by hand. Pure data, used by the page and
@@ -21,7 +21,7 @@ export interface SignInPresetDefinition {
   readonly label: string;
   readonly title: string;
   readonly lede: string;
-  /** The provider id the form suggests when it is free. */
+  /** The sign-in provider id the form suggests when it is free. */
   readonly suggestedId: string;
   readonly suggestedName: string;
   /** A fixed issuer (Google), or `null` when the form asks for the tenant instead (Entra). */

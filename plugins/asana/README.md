@@ -6,7 +6,7 @@ Agents read projects and tasks, create, change, comment on and delete tasks. No 
 administration, no access rights, no attachments.
 
 Handbook (model, edge cases, traps):
-[`docs/handbook/providers/asana.md`](../../docs/handbook/providers/asana.md). Kit:
+[`docs/handbook/services/asana.md`](../../docs/handbook/services/asana.md). Kit:
 [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -66,7 +66,7 @@ in that project, and refuses otherwise.
 | `asana__add_comment`   | `POST /tasks/{t}/stories`                                           | `asana.project[<p>].task[<t>].comment.W`                           |
 | `asana__delete_task`   | `DELETE /tasks/{t}`                                                 | `…task[<t>].W` and `…task[<t>].delete.W`                           |
 
-- `search_tasks` is **Asana Premium only** (a 402 otherwise, returned as the provider's failure)
+- `search_tasks` is **Asana Premium only** (a 402 otherwise, returned as the service's failure)
   and Asana allows **60 searches a minute** per token: `task-read` carries
   `infra_limits.calls_per_minute_max: 60`, so no mission is issued with a faster rate for it.
 - `list_tasks` is paged: `limit` (1 to 100, default 50) and `offset`, the `next_offset` of the

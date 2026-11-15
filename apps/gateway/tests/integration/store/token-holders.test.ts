@@ -157,7 +157,7 @@ describe('token holders (migration 0010)', () => {
       })
     ).id;
     const account = await t.store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: ada },
       displayName: 'gh',
       credential: null,

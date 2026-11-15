@@ -1,18 +1,18 @@
 # `@vaubaan/plugin-supabase`
 
-Provider plugin for [Supabase](https://supabase.com) : Postgres, Storage,
+Plugin for [Supabase](https://supabase.com) : Postgres, Storage,
 Auth (GoTrue) and Edge Functions of the company's projects, reached through
 the Supabase **Management API** with a personal access token pasted once.
 
 Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 [`plugins/README.md`](../README.md) and the
 [plugin-sdk handbook](../../docs/handbook/plugin-sdk.md)). Modelling handbook :
-[`docs/handbook/providers/supabase.md`](../../docs/handbook/providers/supabase.md).
+[`docs/handbook/services/supabase.md`](../../docs/handbook/services/supabase.md).
 
 ```
 plugins/supabase/
   src/
-    identity.ts           the provider id, the 44 tool names (`TOOL`), the API addresses
+    identity.ts           the service id, the 44 tool names (`TOOL`), the API addresses
     risk-catalog.yaml     24 risks + 1 deprecated + fallback, 5 macro-actions (loaded at boot)
     data-model.ts         4 planes : db, storage, auth, functions ; the managed schemas
     tools.ts              44 MCP tools, prefix `supabase__`

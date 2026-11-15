@@ -13,7 +13,7 @@ import { assertSlicesOnDataModel, PluginAssertionError } from '../../src/testing
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 const model: DataModel = {
-  provider: 'acme',
+  service: 'acme',
   planes: [
     {
       slug: 'workspace',

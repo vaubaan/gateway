@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `stripe` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `stripe` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -9,17 +9,17 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const EXAMPLE_TEST_MODE: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'acct_1/test',
   env: 'test',
   displayName: 'Acme (test)',
   metadata: { account_id: 'acct_1', mode: 'test' },
 };
 export const EXAMPLE_LIVE_MODE: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'acct_1/live',
   env: 'live',
   displayName: 'Acme (live)',

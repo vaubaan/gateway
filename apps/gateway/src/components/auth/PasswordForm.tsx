@@ -30,10 +30,10 @@ export function PasswordSignInForm({
   returnTo,
   heading,
 }: {
-  /** `/auth/local/<provider>`. */
+  /** `/auth/local/<sign-in provider>`. */
   action: string;
   returnTo: string;
-  /** The provider's name: "Sign in with <name>". */
+  /** The sign-in provider's name: "Sign in with <name>". */
   heading: string;
 }) {
   return (

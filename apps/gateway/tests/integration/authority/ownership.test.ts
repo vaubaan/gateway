@@ -13,7 +13,7 @@ import { ConnectError } from '../../../src/server/accounts';
 import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
 import { authorityRig, OPERATOR_EMAIL, PURGE, READ, type AuthorityRig } from './support';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };
@@ -256,7 +256,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
   it('expires an unowned account whose credential dies; it stays reassignable and its new owner reconnects', async () => {
     await transferToAdmins();
     await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
-    // The provider rejects the key and the plugin cannot refresh it.
+    // The service rejects the key and the plugin cannot refresh it.
     await expect(rig.root.accounts.credentials.refresh(rig.account.id)).rejects.toBeDefined();
     expect((await rig.root.store.accounts.getById(rig.account.id))?.status).toBe('expired');
 
@@ -282,7 +282,7 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
   beforeEach(async () => {
     idp = new FakeIdp(CLIENT);
     rig = await authorityRig({ deps: { oidc: { fetch: idp.fetch, allowInsecureIssuer: true } } });
-    await saveTestOidcProvider(rig.root.store.config, {
+    await saveTestOidcSignInProvider(rig.root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,

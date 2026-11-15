@@ -18,7 +18,7 @@ import type { GitTarget } from './upstream';
 import { gitText } from './wire';
 import { refusalLine, refusalText, resultText } from './words';
 
-/** An admitted git request, about one repository of the mission's provider. */
+/** An admitted git request, about one repository of the mission's service. */
 export interface Scope {
   readonly ctx: MissionContext;
   readonly client: ClientOrigin;
@@ -50,10 +50,10 @@ export function pushCall(scope: Scope, args: Record<string, unknown>): CallReque
   return gitCall(scope, scope.registered.plugin.gitRemote!.pushTool, args);
 }
 
-/** The target of an admitted call: the mission's account to the plugin's provider. */
+/** The target of an admitted call: the mission's account to the plugin's service. */
 export function targetOf(scope: Scope): GitTarget {
   const { plugin } = scope.registered;
-  const account = scope.ctx.accounts.find((c) => c.provider === plugin.id);
+  const account = scope.ctx.accounts.find((c) => c.service === plugin.id);
   // The precheck's resource stage refuses a mission without this account.
   if (!account) throw new Error('git door: a prechecked call without its account');
   return { plugin, remote: plugin.gitRemote!, account, repository: scope.repository };
@@ -111,12 +111,12 @@ export function refusedListing(outcome: CallOutcome): Response {
   return gitText(HTTP_FORBIDDEN, text);
 }
 
-/** The provider did not answer: a 502 naming it, the reason logged. */
+/** The service did not answer: a 502 naming it, the reason logged. */
 export function upstreamFailure(logger: Logger, scope: Scope, what: string): Response {
   const name = scope.registered.plugin.displayName;
-  logger.warn('git: the provider did not answer', {
+  logger.warn('git: the service did not answer', {
     mission_id: scope.ctx.mission.id,
-    provider: scope.registered.plugin.id,
+    service: scope.registered.plugin.id,
     error: what,
   });
   return gitText(

@@ -42,7 +42,7 @@ export interface EvaluateCallInput {
   readonly executed_slices: readonly Slice[];
   /** The mission's accepted risks — the keys of its policy. */
   readonly accepted_risks: ReadonlySet<RiskId>;
-  /** The indexed catalog of the provider in question. */
+  /** The indexed catalog of the service in question. */
   readonly catalog: IndexedRiskCatalog;
   /**
    * How the touched risks are env-qualified before the subset check
@@ -74,7 +74,7 @@ export interface EvaluateCallInput {
  *   const decision = evaluateCall({
  *     executed_slices: outcome.slices,
  *     accepted_risks: new Set(acceptedRisksOf(mission)),
- *     catalog: registry.catalogOf(provider),
+ *     catalog: registry.catalogOf(service),
  *     envResolver: envResolverFor(missionResources, plugin.envOf),
  *   });
  *   if (decision.outcome === 'allowed') { budget, gate, execute } else { refuse }
@@ -121,8 +121,8 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       executed_slices,
       [],
       risks_touched.filter(accepted),
-      `no risk in the '${catalog.provider}' catalog matches ${uncovered.map(serializeSlice).join(' ; ')}. ` +
-        `Every slice of a call must be covered: add a catalog entry — at minimum extend the '<provider>.uncategorized-*' fallback.`,
+      `no risk in the '${catalog.service}' catalog matches ${uncovered.map(serializeSlice).join(' ; ')}. ` +
+        `Every slice of a call must be covered: add a catalog entry — at minimum extend the '<service>.uncategorized-*' fallback.`,
     );
   }
 
@@ -143,8 +143,8 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       executed_slices,
       [],
       [],
-      `no risk in the '${catalog.provider}' catalog matches the executed slice(s). ` +
-        `Add a catalog entry — at minimum extend the '<provider>.uncategorized-*' fallback.`,
+      `no risk in the '${catalog.service}' catalog matches the executed slice(s). ` +
+        `Add a catalog entry — at minimum extend the '<service>.uncategorized-*' fallback.`,
     );
   }
 

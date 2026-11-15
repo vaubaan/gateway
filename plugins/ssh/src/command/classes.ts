@@ -3,7 +3,7 @@
  * and its argument values : destructive, package, service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure. Each detector is a table of command names and verbs ; a verb may be
  * looked for among all the arguments, which can only over-flag. When the

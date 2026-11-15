@@ -67,7 +67,7 @@ describe('admission', () => {
     ).toBe('administrator');
   });
 
-  it('an administrator of the store is admitted by an invitation-only provider', async () => {
+  it('an administrator of the store is admitted by an invitation-only sign-in provider', async () => {
     const p = oidc(DIRECTORY, { invitationOnly: true });
     const admins = { ...nobodyInvited, isAdministrator: async () => true };
     expect(await admit(who('a@example.com', true, ['gateway-admins']), p, admins)).toBe(
@@ -86,7 +86,7 @@ describe('admission', () => {
     ).toBe('invitation');
   });
 
-  it('an open provider never admits an email it did not say it verified, invited or admin alike', async () => {
+  it('an open sign-in provider never admits an email it did not say it verified, invited or admin alike', async () => {
     const p = oidc(GOOGLE, { invitationOnly: true });
     const everything = {
       isInvited: async () => true,
@@ -98,8 +98,8 @@ describe('admission', () => {
     expect(await admit(who('ops@example.com', true), p, everything)).toBe('invitation');
   });
 
-  it('an open provider without a rule would admit nobody but invited people and admins', async () => {
-    // Such a provider is refused at load and save; admission still fails closed.
+  it('an open sign-in provider without a rule would admit nobody but invited people and admins', async () => {
+    // Such a sign-in provider is refused at load and save; admission still fails closed.
     const p = oidc(GOOGLE);
     expect(await code(admit(who('x@gmail.example'), p, nobodyInvited))).toBe('not-invited');
   });

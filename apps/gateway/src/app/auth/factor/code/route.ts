@@ -1,6 +1,6 @@
 /**
- * `POST /auth/factor/code` — the second factor of a sign-in through any provider: a code, or a recovery code (ADR administrators-live-in-the-instance, §7).
- * The step cookie names the person and the provider. One-line adapter.
+ * `POST /auth/factor/code` — the second factor of a sign-in through any sign-in provider: a code, or a recovery code (ADR administrators-live-in-the-instance, §7).
+ * The step cookie names the person and the sign-in provider. One-line adapter.
  */
 import { getRoot } from '@/server/compose';
 

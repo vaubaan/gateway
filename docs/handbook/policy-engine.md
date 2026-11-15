@@ -57,7 +57,7 @@ last_reviewed: 2026-11-13
   and never drops an env-scoped one (it appears in `missing_risks`); `'unqualified'` is for tooling
   and tests only. New code names the mode.
 - Environment of a slice: the plugin's `envOf` first, then the resource's label, else none.
-  `NO_SINGLE_ENV` (not `null`) for a wildcard or list, so the label is not consulted. No provider
+  `NO_SINGLE_ENV` (not `null`) for a wildcard or list, so the label is not consulted. No service
   `switch` here or in gateway-core.
 
 ## Traps
@@ -68,7 +68,7 @@ last_reviewed: 2026-11-13
 - `resourceEnvResolver` compares every identifier of the slice with resource refs, so a table or
   branch named like another resource counts; disagreeing labels resolve to `null`, never the first
   match.
-- `isFallbackEntry` also recognises `<provider>.uncategorized-` by id (dash included); the SDK
+- `isFallbackEntry` also recognises `<service>.uncategorized-` by id (dash included); the SDK
   loader requires the explicit flag and the catch-all write.
 - `evaluateCall` reads the mission's `accepted_risks` and nothing else: there is no explicit deny
   (spec §4.1); a risk is refused because it is not accepted.

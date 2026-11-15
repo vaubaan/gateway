@@ -17,7 +17,7 @@
  *                   account holding the project's resources.
  *
  * A dry run computes the same plan and writes nothing: it never contacts a
- * provider, so what depends on an account still to create is reported as
+ * service, so what depends on an account still to create is reported as
  * "computed at apply". Nothing here prints; the caller renders the report and
  * prints the mission keys (`cli.ts`).
  *
@@ -48,16 +48,16 @@ import type { Store } from '../store';
 import type { AccountRecord, AccountResourceRecord } from '../store/types';
 import type { V4Account, V4Bundle, V4Mission, V4Project } from './bundle';
 import {
-  isCaseInsensitiveRefProvider,
-  isPastedKeyProvider,
+  isCaseInsensitiveRefService,
+  isPastedKeyService,
   pastedKeyFields,
-  SSH_PROVIDER,
+  SSH_SERVICE,
   sshHostFields,
-  STRIPE_PROVIDER,
+  STRIPE_SERVICE,
   stripeKeyFields,
 } from './credential-mapping';
 import {
-  providerOfV4Risk,
+  serviceOfV4Risk,
   translateRisks,
   type CarriedRisk,
   type DroppedRisk,
@@ -79,7 +79,7 @@ const SYSTEM = 'vaubaan-v4';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ImporterPorts {
-  /** The single provider list: a v4 provider the instance does not ship is reported. */
+  /** The single service list: a v4 service the instance does not ship is reported. */
   readonly registry: PluginRegistry;
   readonly store: Pick<Store, 'users' | 'groups' | 'accounts' | 'missions'>;
   readonly accounts: Pick<AccountService, 'importPastedKey' | 'importSshKey' | 'updateResource'>;
@@ -109,7 +109,7 @@ export function missionSourceOf(mission: Pick<V4Mission, 'token_id'>): string {
 
 export interface ImportOptions {
   readonly ownerEmail: string;
-  /** False: the dry run, nothing is written and no provider is contacted. */
+  /** False: the dry run, nothing is written and no service is contacted. */
   readonly apply: boolean;
   /**
    * `--carry-unbudgeted <quota>`: keep, with this quota and the `approval`
@@ -153,12 +153,12 @@ export type AccountStatus =
   | 'already-connected'
   /** The check, the first discovery or the key was refused: nothing stored. */
   | 'failed'
-  | 'provider-not-shipped'
+  | 'service-not-shipped'
   | 'revoked-in-v4';
 
 export interface AccountOutcome {
   readonly source: string;
-  readonly provider: string;
+  readonly service: string;
   readonly displayName: string;
   readonly status: AccountStatus;
   readonly accountId: string | null;
@@ -167,9 +167,9 @@ export interface AccountOutcome {
 }
 
 export interface ByHandOutcome {
-  readonly provider: string;
+  readonly service: string;
   /** `connected` when the owner already holds an account of it. */
-  readonly status: 'to-connect' | 'connected' | 'provider-not-shipped' | 'revoked-in-v4';
+  readonly status: 'to-connect' | 'connected' | 'service-not-shipped' | 'revoked-in-v4';
   readonly reason: string;
 }
 
@@ -184,7 +184,7 @@ export type LabelStatus =
   | 'not-owned';
 
 export interface ResourceOutcome {
-  readonly provider: string;
+  readonly service: string;
   readonly accountId: string;
   readonly ref: string;
   readonly status: LabelStatus;
@@ -195,7 +195,7 @@ export interface ResourceOutcome {
 
 export interface UnmatchedBinding {
   readonly projectId: string;
-  readonly provider: string;
+  readonly service: string;
   readonly ref: string;
 }
 
@@ -210,7 +210,7 @@ export type MissionStatus =
   | 'refused';
 
 export interface MissionAccountPlan {
-  readonly provider: string;
+  readonly service: string;
   readonly accountId: string;
   readonly refs: readonly string[];
   readonly riskIds: readonly RiskId[];
@@ -225,9 +225,9 @@ export interface MissionOutcome {
   readonly accounts: readonly MissionAccountPlan[];
   /** Why the mission waits, or what blocked it (deferred, refused). */
   readonly reasons: readonly string[];
-  readonly dropped: readonly (DroppedRisk & { readonly provider: string })[];
+  readonly dropped: readonly (DroppedRisk & { readonly service: string })[];
   /** v4 risks no macro-action budgets, kept under approval (`--carry-unbudgeted`). */
-  readonly carried: readonly (CarriedRisk & { readonly provider: string })[];
+  readonly carried: readonly (CarriedRisk & { readonly service: string })[];
   /**
    * `--reissue`: the mission an earlier import issued for the same v4 token,
    * which this run does not revoke.
@@ -274,7 +274,7 @@ export interface ImportReport {
 /** One credential of the bundle that becomes an account. */
 interface Source {
   readonly source: string;
-  readonly provider: string;
+  readonly service: string;
   readonly displayName: string;
   readonly revokedInV4: boolean;
   /** The non-secret values a hand-made account is recognised by. */
@@ -296,15 +296,15 @@ type Matcher =
 /** One v4 binding of a project, deduplicated. */
 interface Binding {
   readonly projectId: string;
-  readonly provider: string;
+  readonly service: string;
   readonly matcher: Matcher;
   readonly label: string;
   /** Every non-null v4 label the duplicates carried. */
   readonly v4Labels: readonly string[];
 }
 
-function bindingKey(b: Pick<Binding, 'projectId' | 'provider' | 'label'>): string {
-  return `${b.projectId}\u0000${b.provider}\u0000${b.label}`;
+function bindingKey(b: Pick<Binding, 'projectId' | 'service' | 'label'>): string {
+  return `${b.projectId}\u0000${b.service}\u0000${b.label}`;
 }
 
 /** v4 holds duplicated rows: one binding per (project, service, resource), labels merged. */
@@ -318,15 +318,15 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
   };
   for (const b of bundle.bindings) {
     // Stripe and SSH resources come from their own tables in v4.
-    if (b.provider === STRIPE_PROVIDER || b.provider === SSH_PROVIDER) continue;
+    if (b.service === STRIPE_SERVICE || b.service === SSH_SERVICE) continue;
     add(
       {
         projectId: b.project_id,
-        provider: b.provider,
+        service: b.service,
         matcher: {
           kind: 'ref',
           ref: b.resource_ref,
-          ignoreCase: isCaseInsensitiveRefProvider(b.provider),
+          ignoreCase: isCaseInsensitiveRefService(b.service),
         },
         label: b.resource_ref,
       },
@@ -338,7 +338,7 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
       add(
         {
           projectId,
-          provider: STRIPE_PROVIDER,
+          service: STRIPE_SERVICE,
           matcher: { kind: 'stripe-account', accountId: account.account_id, mode },
           label: `${account.account_id}/${mode}`,
         },
@@ -351,7 +351,7 @@ export function normalizeBindings(bundle: V4Bundle): Binding[] {
       add(
         {
           projectId,
-          provider: SSH_PROVIDER,
+          service: SSH_SERVICE,
           matcher: { kind: 'ref', ref: host.host_address, ignoreCase: true },
           label: host.host_address,
         },
@@ -500,11 +500,11 @@ export class Importer {
   }
 
   private visibleFieldsOf(
-    provider: string,
+    service: string,
     kind: 'api-key' | 'ssh-key',
     values: Record<string, string>,
   ) {
-    const spec = this.ports.registry.get(provider)?.plugin.credential;
+    const spec = this.ports.registry.get(service)?.plugin.credential;
     const fields = spec && spec.kind === kind ? spec.fields : [];
     const visible: Record<string, string> = {};
     for (const field of fields) {
@@ -514,31 +514,31 @@ export class Importer {
     return visible;
   }
 
-  private label4(provider: string): string {
-    return this.ports.registry.get(provider)?.plugin.displayName ?? provider;
+  private label4(service: string): string {
+    return this.ports.registry.get(service)?.plugin.displayName ?? service;
   }
 
   private sourcesOf(bundle: V4Bundle): Source[] {
     const org = bundle.organization.slug;
     const sources: Source[] = [];
-    const projectsOf = (provider: string) =>
-      new Set(bundle.bindings.filter((b) => b.provider === provider).map((b) => b.project_id));
+    const projectsOf = (service: string) =>
+      new Set(bundle.bindings.filter((b) => b.service === service).map((b) => b.project_id));
 
     for (const account of bundle.accounts) {
       const mapped = pastedKeyFields(account);
       if (!mapped.ok) continue;
-      const source = `provider_admins/${account.id}`;
+      const source = `service_admins/${account.id}`;
       const importedFrom = this.importedFrom(bundle, source);
-      const displayName = `${this.label4(account.provider)} (v4 ${org})`;
+      const displayName = `${this.label4(account.service)} (v4 ${org})`;
       sources.push({
         source,
-        provider: account.provider,
+        service: account.service,
         displayName,
         revokedInV4: account.status === 'revoked',
-        visibleFields: this.visibleFieldsOf(account.provider, 'api-key', mapped.fields),
-        projectIds: projectsOf(account.provider),
+        visibleFields: this.visibleFieldsOf(account.service, 'api-key', mapped.fields),
+        projectIds: projectsOf(account.service),
         create: (actor) =>
-          this.ports.accounts.importPastedKey(actor, account.provider, {
+          this.ports.accounts.importPastedKey(actor, account.service, {
             displayName,
             fields: mapped.fields,
             importedFrom,
@@ -550,16 +550,16 @@ export class Importer {
       const source = `stripe_bindings/${account.account_id}`;
       const importedFrom = this.importedFrom(bundle, source);
       const fields = stripeKeyFields(account);
-      const displayName = `${this.label4(STRIPE_PROVIDER)} ${account.account_id}`;
+      const displayName = `${this.label4(STRIPE_SERVICE)} ${account.account_id}`;
       sources.push({
         source,
-        provider: STRIPE_PROVIDER,
+        service: STRIPE_SERVICE,
         displayName,
         revokedInV4: false,
-        visibleFields: this.visibleFieldsOf(STRIPE_PROVIDER, 'api-key', fields),
+        visibleFields: this.visibleFieldsOf(STRIPE_SERVICE, 'api-key', fields),
         projectIds: new Set(account.projects.map((p) => p.project_id)),
         create: (actor) =>
-          this.ports.accounts.importPastedKey(actor, STRIPE_PROVIDER, {
+          this.ports.accounts.importPastedKey(actor, STRIPE_SERVICE, {
             displayName,
             fields,
             importedFrom,
@@ -573,16 +573,16 @@ export class Importer {
       const fields = sshHostFields(host);
       sources.push({
         source,
-        provider: SSH_PROVIDER,
+        service: SSH_SERVICE,
         displayName: host.host_slug,
         revokedInV4: false,
-        visibleFields: this.visibleFieldsOf(SSH_PROVIDER, 'ssh-key', fields),
+        visibleFields: this.visibleFieldsOf(SSH_SERVICE, 'ssh-key', fields),
         projectIds: new Set(host.project_ids),
         create: (actor) => {
           // Converted here, at apply only: the dry run never touches the key.
           const keyPair = importEd25519PrivateKey(host.private_key, SSH_KEY_COMMENT);
           return this.ports.accounts.importSshKey(actor, {
-            providerId: SSH_PROVIDER,
+            serviceId: SSH_SERVICE,
             displayName: host.host_slug,
             fields,
             keyPair,
@@ -609,16 +609,16 @@ export class Importer {
       detail: string | null = null,
     ): AccountOutcome => ({
       source: source.source,
-      provider: source.provider,
+      service: source.service,
       displayName: source.displayName,
       status,
       accountId,
       detail,
     });
-    if (!this.ports.registry.has(source.provider)) return outcome('provider-not-shipped');
+    if (!this.ports.registry.has(source.service)) return outcome('service-not-shipped');
     if (source.revokedInV4) return outcome('revoked-in-v4');
 
-    const owned = (await this.owned(actor)).filter((c) => c.provider === source.provider);
+    const owned = (await this.owned(actor)).filter((c) => c.service === source.service);
     const imported = owned.find((c) => importedSourceOf(c) === source.source);
     if (imported) return outcome('already-imported', imported.id);
     const byHand = owned.find((c) =>
@@ -642,32 +642,32 @@ export class Importer {
     const owned = await this.owned(actor);
     const outcomes: ByHandOutcome[] = [];
     for (const account of bundle.accounts) {
-      if (isPastedKeyProvider(account.provider) && pastedKeyFields(account).ok) continue;
+      if (isPastedKeyService(account.service) && pastedKeyFields(account).ok) continue;
       outcomes.push(this.byHandOf(account, owned));
     }
     return outcomes;
   }
 
   private byHandOf(account: V4Account, owned: readonly AccountRecord[]): ByHandOutcome {
-    const provider = account.provider;
-    if (!this.ports.registry.has(provider)) {
+    const service = account.service;
+    if (!this.ports.registry.has(service)) {
       return {
-        provider,
-        status: 'provider-not-shipped',
+        service,
+        status: 'service-not-shipped',
         reason: 'this instance ships no plugin for it',
       };
     }
     if (account.status === 'revoked') {
-      return { provider, status: 'revoked-in-v4', reason: 'the v4 account was revoked' };
+      return { service, status: 'revoked-in-v4', reason: 'the v4 account was revoked' };
     }
-    const reason = isPastedKeyProvider(provider)
+    const reason = isPastedKeyService(service)
       ? (pastedKeyFields(account) as { readonly reason: string }).reason
       : account.installation_id !== null
         ? 'a v4 GitHub App installation: connect this account with a fine-grained token'
         : 'a v4 OAuth grant: sharing its refresh token would break v4 or v5';
     return {
-      provider,
-      status: owned.some((c) => c.provider === provider) ? 'connected' : 'to-connect',
+      service,
+      status: owned.some((c) => c.service === service) ? 'connected' : 'to-connect',
       reason,
     };
   }
@@ -696,7 +696,7 @@ export class Importer {
     >();
     for (const binding of bindings) {
       for (const h of held) {
-        if (h.issuance.provider !== binding.provider) continue;
+        if (h.issuance.service !== binding.service) continue;
         for (const record of h.records) {
           if (!matches(binding.matcher, record)) continue;
           const entry = perResource.get(record.id) ?? {
@@ -716,7 +716,7 @@ export class Importer {
       const v5 = v4Labels.filter(isV5Label);
       const plan = (status: LabelStatus, env: string | null = record.env): LabelPlan => ({
         accountId: h.issuance.id,
-        provider: h.issuance.provider,
+        service: h.issuance.service,
         resourceId: record.id,
         ref: record.ref,
         status,
@@ -737,7 +737,7 @@ export class Importer {
 
   private async label(actor: Actor, plan: LabelPlan, apply: boolean): Promise<ResourceOutcome> {
     const outcome: ResourceOutcome = {
-      provider: plan.provider,
+      service: plan.service,
       accountId: plan.accountId,
       ref: plan.ref,
       status: plan.status,
@@ -780,8 +780,8 @@ export class Importer {
       missionId: null,
       accounts: [] as MissionAccountPlan[],
       reasons: [] as string[],
-      dropped: [] as (DroppedRisk & { provider: string })[],
-      carried: [] as (CarriedRisk & { provider: string })[],
+      dropped: [] as (DroppedRisk & { service: string })[],
+      carried: [] as (CarriedRisk & { service: string })[],
       previous: null as MissionOutcome['previous'],
       expanded: [] as { v4RiskId: string; v5RiskIds: RiskId[] }[],
       unbound: [] as string[],
@@ -814,31 +814,31 @@ export class Importer {
       }
     }
 
-    const providers = [...new Set(bindings.map((b) => b.provider))].filter((p) =>
+    const services = [...new Set(bindings.map((b) => b.service))].filter((p) =>
       this.ports.registry.has(p),
     );
-    const notShipped = [...new Set(bindings.map((b) => b.provider))].filter(
+    const notShipped = [...new Set(bindings.map((b) => b.service))].filter(
       (p) => !this.ports.registry.has(p),
     );
     base.reasons.push(...notShipped.map((p) => `${p}: this instance ships no plugin for it`));
 
-    const chosen: { provider: string; held: Held; records: AccountResourceRecord[] }[] = [];
+    const chosen: { service: string; held: Held; records: AccountResourceRecord[] }[] = [];
     const deferred: string[] = [];
     let waitsForCreation = false;
-    for (const provider of providers) {
-      const own = bindings.filter((b) => b.provider === provider);
-      const best = bestAccount(held, provider, own);
+    for (const service of services) {
+      const own = bindings.filter((b) => b.service === service);
+      const best = bestAccount(held, service, own);
       if (best && best.records.length > 0) {
-        chosen.push({ provider, held: best.held, records: best.records });
+        chosen.push({ service, held: best.held, records: best.records });
         continue;
       }
-      if (input.waiting.some((s) => s.provider === provider && s.projectIds.has(project.id))) {
+      if (input.waiting.some((s) => s.service === service && s.projectIds.has(project.id))) {
         waitsForCreation = true;
         continue;
       }
-      const label = this.label4(provider);
+      const label = this.label4(service);
       deferred.push(
-        held.some((h) => h.issuance.provider === provider)
+        held.some((h) => h.issuance.service === service)
           ? `${label}: none of the project's resources (${own.map((b) => b.label).join(', ')}) is among the discovered resources of your accounts; refresh their discovery`
           : `${label}: no account connected yet; connect one, then run the import again`,
       );
@@ -848,18 +848,18 @@ export class Importer {
 
     const plans: MissionAccountPlan[] = [];
     const draftAccounts: MissionDraft['accounts'][number][] = [];
-    const inMission = new Set(chosen.map((c) => c.provider));
+    const inMission = new Set(chosen.map((c) => c.service));
     base.unbound.push(
       ...mission.accepted_risks.filter((id) => {
-        const provider = providerOfV4Risk(id);
-        return provider === null || !inMission.has(provider);
+        const service = serviceOfV4Risk(id);
+        return service === null || !inMission.has(service);
       }),
     );
-    for (const { provider, held: h, records } of chosen) {
+    for (const { service, held: h, records } of chosen) {
       const selected: IssuanceResource[] = h.issuance.resources.filter((r) =>
         records.some((record) => record.id === r.id),
       );
-      const ids = mission.accepted_risks.filter((id) => providerOfV4Risk(id) === provider);
+      const ids = mission.accepted_risks.filter((id) => serviceOfV4Risk(id) === service);
       const translation = translateRisks(
         ids,
         h.issuance,
@@ -867,17 +867,17 @@ export class Importer {
         mission.denied_risks,
         input.carryUnbudgeted === null ? null : { quota: input.carryUnbudgeted },
       );
-      base.dropped.push(...translation.dropped.map((d) => ({ ...d, provider })));
-      base.carried.push(...translation.carried.map((c) => ({ ...c, provider })));
+      base.dropped.push(...translation.dropped.map((d) => ({ ...d, service })));
+      base.carried.push(...translation.carried.map((c) => ({ ...c, service })));
       base.expanded.push(
         ...translation.expanded.map((e) => ({ v4RiskId: e.v4RiskId, v5RiskIds: [...e.v5RiskIds] })),
       );
       if (translation.entries.length === 0) {
-        base.reasons.push(`${this.label4(provider)}: no v4 risk of this service carries over`);
+        base.reasons.push(`${this.label4(service)}: no v4 risk of this service carries over`);
         continue;
       }
       plans.push({
-        provider,
+        service,
         accountId: h.issuance.id,
         refs: selected.map((r) => r.ref),
         riskIds: translation.entries.map((e) => e.risk_id),
@@ -941,7 +941,7 @@ export class Importer {
 
 interface LabelPlan {
   readonly accountId: string;
-  readonly provider: string;
+  readonly service: string;
   readonly resourceId: string;
   readonly ref: string;
   readonly status: LabelStatus;
@@ -982,7 +982,7 @@ function visibleFieldsOfRecord(c: Pick<AccountRecord, 'metadata'>): Record<strin
 
 /**
  * Two sets of non-secret values describe the same account: they share at
- * least one key and agree on every shared key. A provider whose form has no
+ * least one key and agree on every shared key. A service whose form has no
  * non-secret value (a Cloudflare token) is never recognised this way.
  */
 export function sameVisibleFields(
@@ -995,12 +995,12 @@ export function sameVisibleFields(
 
 function bestAccount(
   held: readonly Held[],
-  provider: string,
+  service: string,
   bindings: readonly Binding[],
 ): { readonly held: Held; readonly records: AccountResourceRecord[] } | null {
   let best: { held: Held; records: AccountResourceRecord[] } | null = null;
   for (const h of held) {
-    if (h.issuance.provider !== provider) continue;
+    if (h.issuance.service !== service) continue;
     const records = h.records.filter(
       (r) => r.staleSince === null && bindings.some((b) => matches(b.matcher, r)),
     );
@@ -1041,14 +1041,14 @@ function unmatchedOf(
   registry: PluginRegistry,
 ): UnmatchedBinding[] {
   return bindings
-    .filter((b) => registry.has(b.provider))
+    .filter((b) => registry.has(b.service))
     .filter(
       (b) =>
         !held.some(
-          (h) => h.issuance.provider === b.provider && h.records.some((r) => matches(b.matcher, r)),
+          (h) => h.issuance.service === b.service && h.records.some((r) => matches(b.matcher, r)),
         ),
     )
-    .map((b) => ({ projectId: b.projectId, provider: b.provider, ref: b.label }));
+    .map((b) => ({ projectId: b.projectId, service: b.service, ref: b.label }));
 }
 
 function issueLines(issues: readonly PreviewIssue[]): string[] {

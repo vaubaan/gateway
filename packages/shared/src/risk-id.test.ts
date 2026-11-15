@@ -4,7 +4,7 @@ import {
   baseRiskId,
   formatRiskId,
   isExplicitRiskId,
-  isProviderId,
+  isServiceId,
   isRiskId,
   parseRiskId,
 } from './risk-id.ts';
@@ -12,7 +12,7 @@ import {
 describe('parseRiskId', () => {
   test('account-scoped form', () => {
     expect(parseRiskId('github.merge-protected')).toEqual({
-      provider: 'github',
+      service: 'github',
       env: null,
       name: 'merge-protected',
     });
@@ -20,15 +20,15 @@ describe('parseRiskId', () => {
 
   test('env-scoped form', () => {
     expect(parseRiskId('supabase[prod].bulk-row-write')).toEqual({
-      provider: 'supabase',
+      service: 'supabase',
       env: 'prod',
       name: 'bulk-row-write',
     });
   });
 
-  test('hyphenated provider and dotted name', () => {
+  test('hyphenated service and dotted name', () => {
     expect(parseRiskId('cloudflare-dns.zone.record-write')).toEqual({
-      provider: 'cloudflare-dns',
+      service: 'cloudflare-dns',
       env: null,
       name: 'zone.record-write',
     });
@@ -60,9 +60,9 @@ describe('formatRiskId', () => {
   });
 
   test('null or empty env yields the account-scoped form', () => {
-    expect(formatRiskId({ provider: 'vercel', env: null, name: 'deploy' })).toBe('vercel.deploy');
-    expect(formatRiskId({ provider: 'vercel', env: '', name: 'deploy' })).toBe('vercel.deploy');
-    expect(formatRiskId({ provider: 'vercel', name: 'deploy' })).toBe('vercel.deploy');
+    expect(formatRiskId({ service: 'vercel', env: null, name: 'deploy' })).toBe('vercel.deploy');
+    expect(formatRiskId({ service: 'vercel', env: '', name: 'deploy' })).toBe('vercel.deploy');
+    expect(formatRiskId({ service: 'vercel', name: 'deploy' })).toBe('vercel.deploy');
   });
 });
 
@@ -76,13 +76,13 @@ describe('baseRiskId', () => {
   });
 });
 
-describe('isProviderId / isExplicitRiskId', () => {
-  test('provider ids are lowercase hyphenated slugs', () => {
-    expect(isProviderId('github')).toBe(true);
-    expect(isProviderId('cloudflare-dns')).toBe(true);
-    expect(isProviderId('upstash_redis')).toBe(false);
-    expect(isProviderId('GitHub')).toBe(false);
-    expect(isProviderId('-x')).toBe(false);
+describe('isServiceId / isExplicitRiskId', () => {
+  test('service ids are lowercase hyphenated slugs', () => {
+    expect(isServiceId('github')).toBe(true);
+    expect(isServiceId('cloudflare-dns')).toBe(true);
+    expect(isServiceId('upstash_redis')).toBe(false);
+    expect(isServiceId('GitHub')).toBe(false);
+    expect(isServiceId('-x')).toBe(false);
   });
   test('an explicit id carries no wildcard', () => {
     expect(isExplicitRiskId('github.read-code')).toBe(true);

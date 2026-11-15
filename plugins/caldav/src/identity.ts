@@ -1,18 +1,18 @@
 /**
- * Identity of the `caldav` provider — the one place its ids are written.
+ * Identity of the `caldav` service — the one place its ids are written.
  *
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5).
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
- * Everything else — the data-model provider, the tool names, the resources
+ * Everything else — the data-model service, the tool names, the resources
  * `discoverResources` returns, the credential fields — derives from this
- * module, so a classifier can never emit slices under one provider while the
+ * module, so a classifier can never emit slices under one service while the
  * executor filters resources under another.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
+/** The service id. */
 export const CALDAV_PLUGIN_ID = 'caldav';
 
 /** The version, equal to `package.json` (telemetry reports it). */

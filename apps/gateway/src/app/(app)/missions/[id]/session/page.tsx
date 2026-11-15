@@ -61,7 +61,7 @@ import {
   type MissionSessionView,
   type SessionHolderView,
 } from '@/server/audit';
-import { riskExplainer } from '@/lib/providers/reference';
+import { riskExplainer } from '@/lib/services/reference';
 
 import styles from '../../missions.module.css';
 import { missionMark } from '../../mission-view';

@@ -7,11 +7,11 @@ import {
   serviceIconOf,
 } from '../../src/registry.ts';
 import type { GitRemoteCapability } from '../../src/git/remote.ts';
-import type { ProviderPlugin } from '../../src/plugin.ts';
+import type { ServicePlugin } from '../../src/plugin.ts';
 import { acmePlugin, acmeTools } from '../fixtures/acme/acme-plugin.ts';
 
 /** A second valid plugin, derived from acme with another id. */
-function cloneAs(id: string, overrides: Partial<ProviderPlugin> = {}): ProviderPlugin {
+function cloneAs(id: string, overrides: Partial<ServicePlugin> = {}): ServicePlugin {
   const prefix = `${id.replaceAll('-', '_')}__`;
   const rename = (s: string) =>
     s.replace(/^acme/, id).replaceAll('acme.', `${id}.`).replaceAll('acme[', `${id}[`);
@@ -20,10 +20,10 @@ function cloneAs(id: string, overrides: Partial<ProviderPlugin> = {}): ProviderP
     id,
     displayName: id.toUpperCase(),
     tools: acmeTools.map((t) => ({ ...t, name: t.name.replace('acme__', prefix) })),
-    dataModel: { ...acmePlugin.dataModel, provider: id },
+    dataModel: { ...acmePlugin.dataModel, service: id },
     catalog: {
       ...acmePlugin.catalog,
-      provider: id,
+      service: id,
       risks: acmePlugin.catalog.risks.map((r) => ({
         ...r,
         id: rename(r.id),
@@ -51,16 +51,16 @@ describe('PluginRegistry — derivations', () => {
     expect(registry.get('nope')).toBeUndefined();
     expect(registry.require('beta-cloud').plugin.displayName).toBe('BETA-CLOUD');
     expect(() => registry.require('nope')).toThrow(
-      /Unknown provider 'nope' \(known: acme, beta-cloud\)/,
+      /Unknown service 'nope' \(known: acme, beta-cloud\)/,
     );
   });
 
-  test('providerForTool: exact name, prefix rule for unlisted tools, null otherwise', () => {
-    expect(registry.providerForTool('acme__list_things')?.plugin.id).toBe('acme');
-    expect(registry.providerForTool('beta_cloud__update_thing')?.plugin.id).toBe('beta-cloud');
-    expect(registry.providerForTool('beta_cloud__not_declared')?.plugin.id).toBe('beta-cloud');
-    expect(registry.providerForTool('gamma__x')).toBeNull();
-    expect(registry.providerForTool('no_separator')).toBeNull();
+  test('serviceForTool: exact name, prefix rule for unlisted tools, null otherwise', () => {
+    expect(registry.serviceForTool('acme__list_things')?.plugin.id).toBe('acme');
+    expect(registry.serviceForTool('beta_cloud__update_thing')?.plugin.id).toBe('beta-cloud');
+    expect(registry.serviceForTool('beta_cloud__not_declared')?.plugin.id).toBe('beta-cloud');
+    expect(registry.serviceForTool('gamma__x')).toBeNull();
+    expect(registry.serviceForTool('no_separator')).toBeNull();
   });
 
   test('toolDeclarations concatenates every plugin', () => {
@@ -78,7 +78,7 @@ describe('PluginRegistry — derivations', () => {
         id: 'acme',
         displayName: 'Acme',
         version: '1.2.3',
-        description: 'Fixture provider.',
+        description: 'Fixture service.',
         icon: null,
         summary: null,
       },
@@ -86,14 +86,14 @@ describe('PluginRegistry — derivations', () => {
         id: 'beta-cloud',
         displayName: 'BETA-CLOUD',
         version: '1.2.3',
-        description: 'Fixture provider.',
+        description: 'Fixture service.',
         icon: null,
         summary: null,
       },
     ]);
   });
 
-  test('labels carry the summary of the provider reference when the plugin has one', () => {
+  test('labels carry the summary of the service reference when the plugin has one', () => {
     const withSummary = new PluginRegistry([
       { ...acmePlugin, summary: 'One account is one Acme account.' },
     ]);
@@ -167,7 +167,7 @@ describe('PluginRegistry — conflicts', () => {
 
   test('a tool outside the plugin prefix is rejected before any cross-plugin check', () => {
     const legal = cloneAs('thief');
-    const stolen: ProviderPlugin = {
+    const stolen: ServicePlugin = {
       ...legal,
       tools: [...legal.tools, { ...acmeTools[0]!, name: 'acme__list_things' }],
     };

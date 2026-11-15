@@ -17,7 +17,7 @@ export class CredentialFormatError extends Error {
 /**
  * The grant of a brokered account (ADR
  * oauth-broker-stateless-in-an-attested-enclave D1): the broker it was
- * obtained through, by name, and the provider's refresh token, which the
+ * obtained through, by name, and the service's refresh token, which the
  * broker does not keep. Sealed beside the secret, never handed to a plugin:
  * the plugin's secret carries the access token alone.
  */

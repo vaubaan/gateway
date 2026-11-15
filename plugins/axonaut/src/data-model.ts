@@ -1,7 +1,7 @@
 /**
- * Data model of the `axonaut` provider.
+ * Data model of the `axonaut` service.
  *
- * Spec : docs/spec/gateway-risk-model.md §2 ; handbook docs/handbook/providers/axonaut.md §1.
+ * Spec : docs/spec/gateway-risk-model.md §2 ; handbook docs/handbook/services/axonaut.md §1.
  *
  * One plane, `erp`, rooted at the `account` — the Axonaut company account an
  * API key opens, and the one resource of an account. Axonaut's REST API is
@@ -17,7 +17,7 @@
 
 import type { DataModel, DataModelEntity } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 /** A collection of the account: one record by id, or all of them (a list). */
 function collection(name: string, description: string): DataModelEntity {
@@ -29,7 +29,7 @@ function leaf(name: string, parent: string, description: string): DataModelEntit
 }
 
 export const axonautDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'erp',

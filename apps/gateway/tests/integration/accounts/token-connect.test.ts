@@ -64,7 +64,7 @@ describe('a GitHub account connected with a token', () => {
       loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL }) }),
       logWrite: () => undefined,
       buildRegistry: async () => createRegistry([githubPlugin]),
-      providerFetch: async (input, init) => {
+      serviceFetch: async (input, init) => {
         const response = await github(input, init);
         // The branch route answers 401 once the token is "revoked at GitHub".
         if (rejectToken && String(input).endsWith('/branches')) {
@@ -145,7 +145,7 @@ describe('a GitHub account connected with a token', () => {
     const alice = await signIn('alice@example.com');
 
     // The token is the one way: nothing to declare first.
-    const offered = await root.accounts.service.provider('github');
+    const offered = await root.accounts.service.service('github');
     expect(offered).toMatchObject({ kind: 'api-key', redirects: false });
 
     // A classic token is refused by the field's shape, before GitHub is asked.
@@ -177,7 +177,7 @@ describe('a GitHub account connected with a token', () => {
     expect(notice?.tone).toBe('success');
     const [account] = await root.store.accounts.list();
     expect(account).toMatchObject({
-      provider: 'github',
+      service: 'github',
       displayName: 'GitHub bot',
       status: 'active',
       credentialExpiresAt: '2027-01-15T10:30:00.000Z',
@@ -246,9 +246,9 @@ describe('a GitHub account connected with a token', () => {
       { user: alice.user, groups: [] },
       account!.id,
     );
-    expect(revoked.providerGrant).toBe('manual');
+    expect(revoked.serviceGrant).toBe('manual');
     expect(github.calls).toHaveLength(calls);
-    expect(root.accounts.service.providerGrantOf(revoked).grant.byHand).toMatch(
+    expect(root.accounts.service.serviceGrantOf(revoked).grant.byHand).toMatch(
       /Fine-grained tokens/,
     );
   });

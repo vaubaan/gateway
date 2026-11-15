@@ -47,7 +47,7 @@ describe('retention of the session history', () => {
     ).id;
     accountId = (
       await t.store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: userId },
         displayName: 'gh',
         credential: null,
@@ -361,7 +361,7 @@ describe('the retention sweeper purges the session history with the audit', () =
         email: 'u@example.com',
       });
       const account = await root.store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: user.id },
         displayName: 'gh',
         credential: null,

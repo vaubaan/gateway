@@ -1,8 +1,8 @@
 /**
- * Execution of the `vaubaan` provider.
+ * Execution of the `vaubaan` service.
  *
  * ADR      : docs/decisions/platform-management-is-a-plugin-on-the-execution-door.md.
- * Handbook : docs/handbook/providers/vaubaan.md.
+ * Handbook : docs/handbook/services/vaubaan.md.
  *
  * The plugin's own `execute` refuses every call: the tools act on the gateway's
  * own services, which only the host can hand over. The host composes the real
@@ -19,14 +19,14 @@
 
 import type { McpToolResult, Resource } from '@vaubaan/plugin-sdk';
 
-import { actOf, PROVIDER_ID } from './identity.ts';
+import { actOf, SERVICE_ID } from './identity.ts';
 import type { VaubaanAnswer, VaubaanHostExecute, VaubaanPorts } from './ports.ts';
 
 /** Thrown by the plugin's own `execute`: only the host that composed it runs a call. */
 export class HostOnlyPluginError extends Error {
   constructor() {
     super(
-      `${PROVIDER_ID}: this plugin runs only inside the gateway that composed it (createVaubaanExecute)`,
+      `${SERVICE_ID}: this plugin runs only inside the gateway that composed it (createVaubaanExecute)`,
     );
     this.name = 'HostOnlyPluginError';
   }
@@ -89,7 +89,7 @@ export const INTERNAL_ERROR_RESULT: McpToolResult = {
 export function createVaubaanExecute(ports: VaubaanPorts): VaubaanHostExecute {
   return async (ctx, tool, args) => {
     const act = actOf(tool);
-    if (act === null) throw new Error(`${PROVIDER_ID}: unknown tool '${tool}'`);
+    if (act === null) throw new Error(`${SERVICE_ID}: unknown tool '${tool}'`);
     try {
       // nosemgrep: unsafe-dynamic-method -- `act` is a key of the closed `ACT` table (`actOf` answers `null` for any other name, refused above), and `ports` is a frozen object of exactly those seven functions (`VAUBAAN_PORT_NAMES`)
       return toolResultOf(await ports[act](ctx.caller, args));

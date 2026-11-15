@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-notion`
 
-Notion as a Vaubaan Gateway provider plugin on the v5 SDK
+Notion as a Vaubaan Gateway plugin on the v5 SDK
 (`@vaubaan/plugin-sdk`). Pages, page content (blocks), databases (data
 sources and their entries) and comments, over Notion's REST API with
 `Notion-Version: 2026-03-11` — with **one resource per top-level page or
@@ -8,7 +8,7 @@ database shared with the account**, and every id a call names proven to
 be under that resource before anything is read or written.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
-Modelling handbook: [`docs/handbook/providers/notion.md`](../../docs/handbook/providers/notion.md).
+Modelling handbook: [`docs/handbook/services/notion.md`](../../docs/handbook/services/notion.md).
 Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Data model
@@ -53,7 +53,7 @@ parent the token can neither find nor read (a `GET` answering 404). At most
 200 roots. Discovery fails rather than truncate when a ceiling is reached.
 
 ```ts
-{ provider: 'notion', ref: '1f2e…-…', displayName: 'Handbook', metadata: { kind: 'page' } }
+{ service: 'notion', ref: '1f2e…-…', displayName: 'Handbook', metadata: { kind: 'page' } }
 ```
 
 ## Tools

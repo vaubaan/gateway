@@ -1,9 +1,9 @@
 /**
- * Upstream calls of the `axonaut` provider, and the discovery of its account.
+ * Upstream calls of the `axonaut` service, and the discovery of its account.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives decrypted
  *        in the context, is used for one call, and is never returned.
- * Handbook : docs/handbook/providers/axonaut.md §6.
+ * Handbook : docs/handbook/services/axonaut.md §6.
  *
  *   - every request goes through the SDK's `httpJson` (bounded answer, no
  *     redirect, failures thrown typed: 401 / 403 `UpstreamAuthError`, another
@@ -39,9 +39,9 @@ import {
 
 import { readCall, type Method } from './call.ts';
 import { axonautId } from './fields.ts';
-import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
+import { API_KEY_FIELD, SERVICE_ID } from './identity.ts';
 
-/** Public API of the provider — a fact about Axonaut, not instance configuration. */
+/** Public API of the service — a fact about Axonaut, not instance configuration. */
 export const AXONAUT_API_BASE = 'https://axonaut.com/api/v2';
 
 /** The header Axonaut reads the key from (`securitySchemes.userApiKey`, `in: header`). */
@@ -114,12 +114,12 @@ export async function discoverAxonautResources(ctx: AccountContext): Promise<rea
   // A ref the classifier would refuse is of no use to a mission: say so now.
   const ref = axonautId(me.account.id);
   if (ref === null) {
-    throw new UpstreamProtocolError(`${PROVIDER_ID} GET /me: the account id is not an Axonaut id`);
+    throw new UpstreamProtocolError(`${SERVICE_ID} GET /me: the account id is not an Axonaut id`);
   }
   const companyName = me.account.companyName || `Axonaut account ${ref}`;
   return [
     {
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref,
       displayName: companyName,
       metadata: {
@@ -140,9 +140,9 @@ export interface RequestOptions {
 }
 
 function keyOf(ctx: AccountContext): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const key = secret.fields[API_KEY_FIELD];
-  if (!key) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
+  if (!key) throw new Error(`${SERVICE_ID}: the credential has no '${API_KEY_FIELD}' field`);
   return key;
 }
 
@@ -165,7 +165,7 @@ export async function request<T>(
         ...(options.page !== undefined ? { page: String(options.page) } : {}),
       },
       ...(options.body !== undefined ? { body: options.body } : {}),
-      what: `${PROVIDER_ID} ${method} ${path}`,
+      what: `${SERVICE_ID} ${method} ${path}`,
     },
     guard,
   );

@@ -24,14 +24,14 @@ export default async function ForgotPasswordPage({ searchParams }: Props) {
   const sent = params[FORGOT_SENT_PARAM] !== undefined;
   const { root } = await currentPrincipal();
   const instance = await root.instance.name.identity();
-  const local = (await root.auth.providers.views()).some((p) => p.kind === 'local');
+  const local = (await root.auth.signInProviders.views()).some((p) => p.kind === 'local');
   const sendsMail = root.auth.sendsMail;
 
   return (
     <AuthPage instance={instance} footer={<BuildFooter />}>
       <AuthHeading title="Forgot your password?">
         {!local
-          ? 'This gateway keeps no sign-in accounts: you sign in through a provider, which keeps your password.'
+          ? 'This gateway keeps no sign-in accounts: you sign in through a sign-in provider, which keeps your password.'
           : sendsMail
             ? 'Enter the address of your account. If it has one, a link to choose a new password is sent to it; it works once, for fifteen minutes.'
             : 'This gateway sends no mail. Ask an administrator: they can hand you a link to choose a new password.'}

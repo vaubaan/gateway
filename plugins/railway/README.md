@@ -1,10 +1,10 @@
 # `@vaubaan/plugin-railway`
 
-Vaubaan Gateway provider plugin for [Railway](https://railway.com). It
+Vaubaan Gateway plugin for [Railway](https://railway.com). It
 rewraps the official Railway MCP server (`https://mcp.railway.com/`, 10
 tools) and adds four GraphQL-backed environment-variable tools, under the
 `railway__` prefix. Written against `@vaubaan/plugin-sdk` only. Maintainer
-handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
+handbook: [`docs/handbook/services/railway.md`](../../docs/handbook/services/railway.md);
 decisions: [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md),
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
 

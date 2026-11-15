@@ -1,10 +1,10 @@
 /**
  * The execution door over HTTP, with the real GitHub plugin and a mocked
  * upstream (spec §10 "integration on an ephemeral instance"; never a real
- * provider): an MCP client — the official SDK client, as a coding agent's
+ * service): an MCP client — the official SDK client, as a coding agent's
  * runtime would use it — connects with the mission token, lists the tools and
  * calls one; the gateway sends the account's token to the GitHub API and
- * returns the provider's answer.
+ * returns the service's answer.
  *
  * Also here: the protocol edges of the door (2025-era and 2026-07-28 clients,
  * plain `curl`-style JSON-RPC), the bearer dispatch and the separation of the
@@ -73,11 +73,11 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
       VAUBAAN_LOG_LEVEL: 'debug',
       ...env,
     },
-    deps: { providerFetch: upstream, logWrite: (_level, text) => logs.push(text) },
+    deps: { serviceFetch: upstream, logWrite: (_level, text) => logs.push(text) },
   });
   const { store } = instance.root;
   const github = await store.accounts.create({
-    provider: 'github',
+    service: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
@@ -244,7 +244,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
   });
 
   describe('tools/list and the catalog', () => {
-    it('lists only the providers the mission holds an account and an accepted risk for', async () => {
+    it('lists only the services the mission holds an account and an accepted risk for', async () => {
       const githubOnly = await instance.issueGithub();
       const depotOnly = await instance.issue({ policy: [line('depot.read')] });
 
@@ -293,8 +293,8 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       expect(catalog.mission.period?.end).toBeTruthy();
       const { tools } = catalog;
       // The whole surface of the instance, with what this mission can call flagged.
-      expect(tools.some((t) => t.provider === 'github' && !t.callable)).toBe(true);
-      expect(tools.filter((t) => t.callable).map((t) => t.provider)).toEqual([
+      expect(tools.some((t) => t.service === 'github' && !t.callable)).toBe(true);
+      expect(tools.filter((t) => t.callable).map((t) => t.service)).toEqual([
         ...Array<string>(5).fill('depot'),
         'vaubaan',
       ]);
@@ -307,7 +307,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       expect(catalog.accounts).toEqual([
         {
           id: instance.account.id,
-          provider: 'depot',
+          service: 'depot',
           name: 'Depot main',
           status: 'active',
           resources: [

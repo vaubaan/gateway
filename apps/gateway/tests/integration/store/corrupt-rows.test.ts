@@ -44,7 +44,7 @@ describe('store rows with a value outside a closed set', () => {
     ).id;
     accountId = (
       await store.accounts.create({
-        provider: 'github',
+        service: 'github',
         owner: { kind: 'user', id: userId },
         displayName: 'gh',
         credential: null,

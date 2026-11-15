@@ -6,8 +6,8 @@
 
 export const LOGIN_ERROR_CODES = [
   'idp-not-configured',
-  'provider-unknown',
-  'provider-disabled',
+  'sign-in-provider-unknown',
+  'sign-in-provider-disabled',
   'discovery-failed',
   'login-expired',
   'state-mismatch',
@@ -37,10 +37,10 @@ export function isLoginErrorCode(raw: string): raw is LoginErrorCode {
 /** What the login page says for each code. One sentence, no IdP detail. */
 export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'idp-not-configured': 'No identity provider is configured on this gateway yet.',
-  'provider-unknown':
-    'This sign-in provider is not offered by this gateway (any more). Choose one of the providers below.',
-  'provider-disabled':
-    'This sign-in provider is switched off on this gateway. Choose one of the providers below, or ask an administrator.',
+  'sign-in-provider-unknown':
+    'This sign-in provider is not offered by this gateway (any more). Choose one of the sign-in providers below.',
+  'sign-in-provider-disabled':
+    'This sign-in provider is switched off on this gateway. Choose one of the sign-in providers below, or ask an administrator.',
   'discovery-failed':
     'The identity provider could not be reached. Try again or contact the administrator of this gateway.',
   'login-expired': 'The sign-in attempt expired. Start again.',
@@ -96,7 +96,7 @@ export class IdpSettingsError extends Error {
 
 /** A local-account act refused (ADR local-accounts-sign-in-provider): a closed code and its sentence. */
 export const SIGN_IN_ACCOUNT_ERROR_CODES = [
-  'no-local-provider',
+  'no-local-sign-in-provider',
   'link-invalid',
   'sign-in-account-exists',
   'sign-in-account-not-found',
@@ -107,7 +107,7 @@ export const SIGN_IN_ACCOUNT_ERROR_CODES = [
 export type SignInAccountErrorCode = (typeof SIGN_IN_ACCOUNT_ERROR_CODES)[number];
 
 export const SIGN_IN_ACCOUNT_ERROR_MESSAGES: Readonly<Record<SignInAccountErrorCode, string>> = {
-  'no-local-provider': 'This gateway keeps no sign-in accounts.',
+  'no-local-sign-in-provider': 'This gateway keeps no sign-in accounts.',
   'link-invalid':
     'This link is not valid any more: it was used, it expired, or a newer one replaced it. Ask for another one.',
   'sign-in-account-exists':

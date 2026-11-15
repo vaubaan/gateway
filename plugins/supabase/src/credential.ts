@@ -1,5 +1,5 @@
 /**
- * Credential of the `supabase` provider : a personal access token for the
+ * Credential of the `supabase` service : a personal access token for the
  * Management API, pasted by hand (`api-key` kind), the one way of connecting.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADR
@@ -33,7 +33,7 @@ import {
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, SUPABASE_API_BASE, TOOL } from './identity.ts';
+import { SERVICE_ID, SUPABASE_API_BASE, TOOL } from './identity.ts';
 import { SUPABASE_DATA_PLANE_TOOLS } from './tools.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
@@ -152,7 +152,7 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
 export function supabaseBearerOf(pluginId: string, credential: CredentialSecret): string {
   const token = expectCredentialKind(pluginId, credential, 'api-key').fields[SUPABASE_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error(`${PROVIDER_ID}: the stored token has no '${SUPABASE_TOKEN_FIELD}' field`);
+    throw new Error(`${SERVICE_ID}: the stored token has no '${SUPABASE_TOKEN_FIELD}' field`);
   }
   return token;
 }
@@ -167,7 +167,7 @@ export async function verifySupabaseToken(ctx: AccountContext): Promise<Credenti
     ctx,
     {
       url: `${SUPABASE_API_BASE}/organizations`,
-      headers: { authorization: `Bearer ${supabaseBearerOf(PROVIDER_ID, ctx.credential)}` },
+      headers: { authorization: `Bearer ${supabaseBearerOf(SERVICE_ID, ctx.credential)}` },
     },
     isList,
   );

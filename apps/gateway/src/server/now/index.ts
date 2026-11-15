@@ -22,7 +22,7 @@ export function nowDepsOf(root: GatewayRoot): NowDeps {
 
 export function setupDepsOf(root: GatewayRoot): SetupDeps {
   return {
-    providers: root.auth.providers,
+    signInProviders: root.auth.signInProviders,
     telemetry: root.telemetry,
   };
 }

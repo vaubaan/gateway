@@ -2,7 +2,7 @@
  * Resend MCP tools — thin wrappers over the Resend REST API (api.resend.com).
  *
  * 27 tools : 10 reads (one of them, `describe_zones`, synthetic) and 17 writes.
- * Names follow the SDK convention `<provider>__<verb>_<noun>` (prefix `resend__`).
+ * Names follow the SDK convention `<service>__<verb>_<noun>` (prefix `resend__`).
  *
  * Resource arguments are explicit, as the contributor guide asks :
  *   - `domain`      — the sending domain ref (`notifications.acme.com`) for the

@@ -15,14 +15,14 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ProviderPlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
 import { envResolverFor, evaluateCall, policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
 import { supabaseCatalog, supabasePlugin } from '../../src/index.ts';
 
 const { catalog, indexed } = supabaseCatalog;
 /** Through the contract type : `envOf` is optional and Supabase does not implement it. */
-const plugin: ProviderPlugin = supabasePlugin;
+const plugin: ServicePlugin = supabasePlugin;
 
 const STAGING = 'stagingprojectrefxxx';
 const PROD = 'prodprojectrefxxxxxx';
@@ -30,7 +30,7 @@ const PREVIEW = 'previewprojectrefxxx';
 const UNLABELLED = 'unlabelledprojectref';
 
 const project = (ref: string, env?: string): Resource => ({
-  provider: 'supabase',
+  service: 'supabase',
   ref,
   displayName: ref,
   ...(env === undefined ? {} : { env }),

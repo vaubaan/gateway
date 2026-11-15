@@ -2,7 +2,7 @@
  * The board a successful `miro__board_create` created, read from Miro's answer
  * (ADR created-resources-join-the-mission).
  *
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  *
  * Observed live on 2026-10-24 through the gateway : one text block whose text
  * is JSON, `{"miro_url":"https://miro.com/app/board/uXjVEVgYKSE=/","name":"…"}`.
@@ -15,7 +15,7 @@
 import { jsonObjectsOf, type McpToolResult, type Resource } from '@vaubaan/plugin-sdk';
 
 import { boardIdOfUrl, boardRefOf } from './identifiers.ts';
-import { MIRO_BOARD_URL_BASE, PROVIDER_ID, TOOL } from './identity.ts';
+import { MIRO_BOARD_URL_BASE, SERVICE_ID, TOOL } from './identity.ts';
 
 /** The keys of an answer that may carry the new board's link. */
 const LINK_KEYS = ['miro_url', 'viewLink', 'url', 'boardUrl', 'link'] as const;
@@ -30,7 +30,7 @@ interface CreatedBoard {
 }
 
 /**
- * `ProviderPlugin.createdResources` : the board `miro__board_create` made, or
+ * `ServicePlugin.createdResources` : the board `miro__board_create` made, or
  * `[]` when the answer names no board, or names several (a creation makes
  * one ; an answer that names two is not read).
  */
@@ -53,7 +53,7 @@ export function createdMiroResources(
   if (!board || ref === null) return [];
   return [
     {
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref,
       displayName: board.name ?? board.id,
       metadata: { url: `${MIRO_BOARD_URL_BASE}${board.id}/` },

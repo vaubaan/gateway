@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `github` provider : `execute` and `discoverResources`.
+ * Upstream calls of the `github` service : `execute` and `discoverResources`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *        decrypted in the context, is used for one call, and is never
@@ -32,7 +32,7 @@ import { githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from '.
 import { githubTokenOf } from './credential.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { readJobLogs } from './job-logs.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 
@@ -156,7 +156,7 @@ const FINE_GRAINED_PREFIX = 'github_pat_';
 
 /**
  * Whether a repository of `/user/repos` is listed hidden from new missions
- * (handbook providers/github "Repositories outside the grant"). GitHub gives a
+ * (handbook services/github "Repositories outside the grant"). GitHub gives a
  * token no way to list the repositories it was granted, and every token reads
  * every public repository; so only a **public** repository is ever hidden:
  *   - one the user cannot push to (`permissions.push` false): no token of theirs
@@ -180,7 +180,7 @@ function resourceOf(repository: unknown, fineGrained: boolean): Resource | null 
   if (named === null) return null;
   const { default_branch: defaultBranch, private: isPrivate, archived } = repository;
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: named.ref,
     displayName: named.ref,
     metadata: {

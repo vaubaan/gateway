@@ -42,7 +42,7 @@ folders=(
 # leaves this list only when it can only be wrong on this code base.
 excluded=(
   # Flags every template string that contains `<`: error messages quoting
-  # "<provider>.<name>", and the two server-rendered documents, which build
+  # "<service>.<name>", and the two server-rendered documents, which build
   # their HTML from escapeHtml() (apps/gateway/src/server/http/document.ts).
   # The rest of the interface is React, which escapes by construction.
   html-in-template-string.yaml

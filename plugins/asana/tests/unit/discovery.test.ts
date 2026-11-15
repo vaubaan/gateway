@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest';
 
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
-import { PROVIDER_ID } from '../../src/identity.ts';
+import { SERVICE_ID } from '../../src/identity.ts';
 import { MAX_PROJECTS, asanaPlugin } from '../../src/index.ts';
 import { WORKSPACE, api, ctx } from './fixtures.ts';
 
@@ -48,19 +48,19 @@ describe('discoverAsanaResources', () => {
     ]);
     expect(await asanaPlugin.discoverResources(ctx(fetch))).toEqual([
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: '1200000000000001',
         displayName: 'Engineering / Roadmap',
         metadata: { workspace_gid: WORKSPACE, workspace_name: 'Acme', team_name: 'Engineering' },
       },
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: '1200000000000002',
         displayName: 'Acme / Hiring',
         metadata: { workspace_gid: WORKSPACE, workspace_name: 'Acme' },
       },
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: '1200000000000009',
         displayName: 'Side / Garden',
         metadata: { workspace_gid: SECOND_WORKSPACE, workspace_name: 'Side' },

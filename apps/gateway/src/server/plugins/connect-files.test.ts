@@ -2,17 +2,17 @@ import { copyFileSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { PluginRegistry, ServicePlugin } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
 import { BUNDLED_PLUGINS_DIR, connectFileUrl, readConnectFile } from './connect-files';
 import { bundledInventory, type PluginInventoryEntry } from './inventory';
 
-const CLOUDFLARE = SHIPPED_PLUGINS.find((p) => p.id === 'cloudflare-dns') as ProviderPlugin;
+const CLOUDFLARE = SHIPPED_PLUGINS.find((p) => p.id === 'cloudflare-dns') as ServicePlugin;
 const FILE = 'create-token.webp';
 
-function registryOf(plugins: readonly ProviderPlugin[]): PluginRegistry {
+function registryOf(plugins: readonly ServicePlugin[]): PluginRegistry {
   return {
     get: (id: string) => {
       const plugin = plugins.find((p) => p.id === id);

@@ -51,10 +51,10 @@ export const VAUBAAN_MISSION_METHODS = [
   'get',
 ] as const satisfies readonly (keyof VaubaanMissions)[];
 
-/** One provider's catalog as the tools show it: explicit ids and macro-actions, no behaviour. */
-export interface ProviderCatalog {
-  readonly provider: string;
-  readonly provider_label: string;
+/** One service's catalog as the tools show it: explicit ids and macro-actions, no behaviour. */
+export interface ServiceCatalog {
+  readonly service: string;
+  readonly service_label: string;
   /** The plugin derives the environment from the call: env-qualified ids need no labelled resource. */
   readonly derives_env: boolean;
   /** The whole catalog as explicit `RiskId`s, catalog order. */
@@ -65,9 +65,9 @@ export interface ProviderCatalog {
 
 /** The catalogs of the plugins the instance ships: static data, read from the registry. */
 export interface VaubaanCatalog {
-  /** Provider ids, registry order. */
-  providers(): readonly string[];
-  get(provider: string): ProviderCatalog | null;
+  /** Service ids, registry order. */
+  services(): readonly string[];
+  get(service: string): ServiceCatalog | null;
 }
 
 export interface VaubaanModuleDeps {

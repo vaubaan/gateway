@@ -44,7 +44,7 @@ export interface RecoveryHandlers {
 export interface RecoveryHandlerDeps extends ThrottleDeps {
   readonly publicUrl: URL;
   readonly recovery: RecoveryService;
-  readonly providers: Pick<SignInProvidersService, 'view'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'view'>;
   readonly signInAccounts: Pick<SignInAccountsService, 'createLink'>;
   readonly sessions: SessionStore;
   readonly logger: Logger;
@@ -124,19 +124,22 @@ export function createRecoveryHandlers(deps: RecoveryHandlerDeps): RecoveryHandl
         return typeof value === 'string' ? value.trim() : '';
       };
       const kind = field('kind');
-      const provider = field('provider');
+      const signInProvider = field('sign_in_provider');
       let target: NameRequest;
       if (kind === 'user') target = { kind, userId: field('user') };
-      else if (kind === 'group') target = { kind, provider, group: field('group') };
-      else target = { kind: 'email', provider, email: field('email').toLowerCase() };
+      else if (kind === 'group') target = { kind, signInProvider, group: field('group') };
+      else target = { kind: 'email', signInProvider, email: field('email').toLowerCase() };
       try {
         const { named, clearCookie: clear } = await deps.recovery.name(request.headers, target);
         let signInAccountLink: string | undefined;
-        if (target.kind === 'email' && (await deps.providers.view(provider))?.kind === 'local') {
+        if (
+          target.kind === 'email' &&
+          (await deps.signInProviders.view(signInProvider))?.kind === 'local'
+        ) {
           // No mail may be set: the link that creates the account is shown once.
           const issued = await deps.signInAccounts.createLink({
             kind: 'invite',
-            providerId: provider,
+            signInProviderId: signInProvider,
             email: target.email,
             createdBy: 'recovery',
           });

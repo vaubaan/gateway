@@ -21,8 +21,8 @@ import {
 } from '@/lib/accounts/session';
 import { holderWords } from '@/lib/vocabulary';
 import { accountPath, isConnectError } from '@/server/accounts';
-import { providerPath } from '@/lib/providers/links';
-import { providerReference } from '@/lib/providers/reference';
+import { servicePath } from '@/lib/services/links';
+import { serviceReference } from '@/lib/services/reference';
 import {
   isShareError,
   SHARE_CONFIRM_PARAM,
@@ -135,7 +135,7 @@ export default async function GiveAccessPage({
   }
   // A macro-action names unqualified ids: it ticks every explicit id of them, retired ones aside.
   const macroActions: AccessMacroAction[] = (
-    providerReference(root.registry, account.provider)?.macro_actions ?? []
+    serviceReference(root.registry, account.service)?.macro_actions ?? []
   ).map((action) => ({
     id: action.id,
     label: action.label,
@@ -165,9 +165,9 @@ export default async function GiveAccessPage({
             closeHref={base}
             account={account.displayName}
             service={{
-              id: account.provider,
-              label: context.providerLabel,
-              referenceHref: providerPath(account.provider),
+              id: account.service,
+              label: context.serviceLabel,
+              referenceHref: servicePath(account.service),
             }}
             fields={SHARE_FIELDS}
             risks={context.risks}

@@ -8,8 +8,8 @@
  * Single-process: a run never overlaps another (the next one is armed when a run ends,
  * and `runOnce` hands back the run in progress); a second process would run its own
  * schedule. A failed discovery is recorded on the account by the service and logged
- * here by account only — never the provider's words (handbook accounts). The
- * first run waits one interval after the start: a restart does not hit every provider.
+ * here by account only — never the service's words (handbook accounts). The
+ * first run waits one interval after the start: a restart does not hit every service.
  */
 import type { Logger } from '../logging';
 import type { MissionsRepo } from '../store';

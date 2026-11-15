@@ -4,7 +4,7 @@
 # google-calendar-through-an-oauth-broker, D5).
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 , §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/caldav.md.
+# Handbook : docs/handbook/services/caldav.md.
 #
 # 9 named risks + 1 fallback = 10. Ids are never renamed or deleted
 # (deprecate instead). Every slice is rooted at `calendar[<ref>]`, a mission
@@ -38,7 +38,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: caldav
+service: caldav
 catalog_version: 5
 catalog_date: 2026-11-13
 

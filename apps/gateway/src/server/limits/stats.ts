@@ -1,7 +1,7 @@
 /**
  * The body of `GET /ops/stats` (spec §4.3 bis): counts only, for the operator's
  * monitoring. Never a name, an e-mail, an identifier of an item, a resource or a
- * configuration value: the provider ids, the key versions and the ceilings are the
+ * configuration value: the service ids, the key versions and the ceilings are the
  * only words, and they are the gateway's own.
  */
 import type { LimitsConfig } from '../config/types';
@@ -13,7 +13,7 @@ export interface OpsStats {
   readonly users: number;
   readonly accounts: {
     readonly total: number;
-    readonly by_provider: Readonly<Record<string, number>>;
+    readonly by_service: Readonly<Record<string, number>>;
   };
   readonly active_missions: number;
   readonly calls_today: {
@@ -68,7 +68,7 @@ export async function collectOpsStats(sources: OpsStatsSources): Promise<OpsStat
   return {
     generated_at: sources.now.toISOString(),
     users,
-    accounts: { total: accounts.total, by_provider: { ...accounts.byProvider } },
+    accounts: { total: accounts.total, by_service: { ...accounts.byService } },
     active_missions: activeMissions,
     calls_today: { since, allowed: calls.allowed, refused: calls.refused },
     store: { kind: sources.store.kind, bytes: sources.store.sizeOnDisk() },

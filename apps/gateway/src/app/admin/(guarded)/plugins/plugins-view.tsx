@@ -24,7 +24,7 @@ import {
   Tag,
   type ServiceMarkIcon,
 } from '@/components/ui';
-import { providerPath } from '@/lib/providers/links';
+import { servicePath } from '@/lib/services/links';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
 import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
@@ -41,7 +41,7 @@ export interface PluginLine {
   readonly entry: PluginInventoryEntry;
   /** The service's mark; `null` for a plugin that is not registered or declares none. */
   readonly icon: ServiceMarkIcon | null;
-  /** Accounts not revoked of this provider. */
+  /** Accounts not revoked of this service. */
   readonly accounts: number;
   /** Community validation; `null` when telemetry is off or nothing is known. */
   readonly validation: ValidationStatus | null;
@@ -217,7 +217,7 @@ function PluginRow({ line }: { line: PluginLine }) {
           {entry.enabled && <ValidationBadge status={line.validation} />}
         </span>
       }
-      href={entry.enabled ? providerPath(entry.id) : undefined}
+      href={entry.enabled ? servicePath(entry.id) : undefined}
       muted={!entry.enabled}
       description={
         <>

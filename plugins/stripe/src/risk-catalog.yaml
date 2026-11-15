@@ -1,4 +1,4 @@
-# Risk catalog of the `stripe` provider.
+# Risk catalog of the `stripe` service.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps),
 #        §4.6 (macro-actions).
@@ -37,7 +37,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 9 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: stripe
+service: stripe
 catalog_version: 9
 catalog_date: 2026-11-13
 

@@ -1,10 +1,10 @@
 /**
- * `@vaubaan/plugin-context7` — the Context7 provider plugin.
+ * `@vaubaan/plugin-context7` — the Context7 plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADRs     : docs/decisions/rewrap-official-mcps.md (the rewrap shape) ;
  *            docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/context7.md ; guide : plugins/README.md.
+ * Handbook : docs/handbook/services/context7.md ; guide : plugins/README.md.
  *
  * Why : "everything goes through our gateway, zero env". The Context7 key is
  * a gateway account only, and agents reach Context7's two documentation
@@ -23,7 +23,7 @@ import { context7DataModel } from './data-model.ts';
 import { context7Examples } from './examples.ts';
 import { discoverContext7Resources, executeContext7 } from './execute.ts';
 import { CONTEXT7_ICON, CONTEXT7_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { context7ToolTitles, context7Tools } from './tools.ts';
 
 // `catalogPathNextTo` keeps the path a filesystem path the bundler leaves
@@ -31,7 +31,7 @@ import { context7ToolTitles, context7Tools } from './tools.ts';
 export const context7Catalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const context7Plugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Context7',
   icon: CONTEXT7_ICON,
   iconColor: CONTEXT7_ICON_COLOR,
@@ -43,7 +43,7 @@ export const context7Plugin = definePlugin({
   summary:
     'One account is a Context7 API key of a teamspace. It has one resource, the library index the key can query: the public libraries its teamspace policies allow and its private sources. The documentation questions an agent asks are sent to Context7. There is no environment.',
   manualRevocation: CONTEXT7_MANUAL_REVOCATION,
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/context7.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/context7.md',
   tools: context7Tools,
   toolTitles: context7ToolTitles,
   examples: context7Examples,
@@ -80,7 +80,7 @@ export {
   CONTEXT7_MCP_SERVER,
   CONTEXT7_MCP_URL,
   INDEX_REF,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
 } from './identity.ts';

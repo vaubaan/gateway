@@ -19,7 +19,7 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { PROVIDER_ID, SCOPES, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, SCOPES, TOOL } from '../../src/identity.ts';
 import defaultExport, { googleCalendarCatalog, googleCalendarPlugin } from '../../src/index.ts';
 import { EVENT_GET, SAMPLES, context, primary, team } from './fixtures.ts';
 
@@ -62,14 +62,14 @@ describe('google-calendar plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(googleCalendarCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(googleCalendarCatalog.catalog.service).toBe(SERVICE_ID);
     expect(googleCalendarCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and every tool has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and every tool has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(prefix).toBe('google_calendar__');
     expect(googleCalendarPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(googleCalendarPlugin.tools).toHaveLength(9);

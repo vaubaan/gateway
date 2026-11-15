@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `fly` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `fly` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -10,12 +10,12 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** An app of the `vaubaan` organization as discovery returns it, labelled by its owner. */
 function exampleApp(name: string, env: 'prod' | 'staging', id: string): Resource {
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: name,
     env,
     displayName: name,

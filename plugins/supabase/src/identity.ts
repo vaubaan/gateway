@@ -1,23 +1,23 @@
 /**
- * Identity of the `supabase` provider — the one place its ids and Supabase's
+ * Identity of the `supabase` service — the one place its ids and Supabase's
  * own addresses are written.
  *
- * Handbook : docs/handbook/providers/supabase.md ; guide : plugins/README.md, step 1.
+ * Handbook : docs/handbook/services/supabase.md ; guide : plugins/README.md, step 1.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns, the credential checks — is derived from this module, so
  * a renamed tool is a compile error everywhere it is dispatched.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'supabase';
+/** The service id. */
+export const SERVICE_ID = 'supabase';
 
 /** `supabase__` : the prefix of every tool name. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names, in the order `tools.ts` declares them. */
 export const TOOL = {

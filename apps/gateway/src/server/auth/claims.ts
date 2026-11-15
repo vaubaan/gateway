@@ -39,9 +39,9 @@ export interface IdentityClaims {
   /** Lower-cased. */
   readonly email: string;
   /**
-   * Whether the provider says it verified the email: `true` when it says so, `null`
+   * Whether the sign-in provider says it verified the email: `true` when it says so, `null`
    * when it says nothing (many company directories never send the claim). An
-   * explicit `false` never gets this far (`email-not-verified`). An open provider is
+   * explicit `false` never gets this far (`email-not-verified`). An open sign-in provider is
    * admitted on `true` only (`admission.ts`).
    */
   readonly emailVerified: true | null;
@@ -50,7 +50,7 @@ export interface IdentityClaims {
   readonly groups: readonly string[];
   /**
    * The authentication methods the ID token names (`amr`, RFC 8176), when it names
-   * any: `mfa` says the provider asked a second factor. Absent: it says nothing.
+   * any: `mfa` says the sign-in provider asked a second factor. Absent: it says nothing.
    */
   readonly amr?: readonly string[];
 }

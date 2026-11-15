@@ -1,14 +1,14 @@
 /**
  * Structural test (`plugins/README.md`, step 1 and step 4): a plugin writes
- * its provider id and its tool names once, in `src/identity.ts`, and its tool
- * declarations in `src/tools.ts`; every other file imports `PROVIDER_ID` and
+ * its service id and its tool names once, in `src/identity.ts`, and its tool
+ * declarations in `src/tools.ts`; every other file imports `SERVICE_ID` and
  * `TOOL`. A tool renamed in one place is then a compile error everywhere
  * else, never a classifier branch that silently stops matching.
  *
  * Read with the TypeScript parser over every source file of every plugin
  * folder but those two (the YAML is not TypeScript): a string literal, a
  * template literal's text or an object key that starts with the plugin's
- * tool prefix (`github__`), or a string literal equal to its provider id
+ * tool prefix (`github__`), or a string literal equal to its service id
  * (`'github'`), is refused, with its file and line. A literal equal to an id
  * that names something else (ssh's remote command `ssh`) is listed below
  * with its reason.
@@ -21,7 +21,7 @@ import {
   eachNode,
   parsed,
   PLUGIN_FOLDERS,
-  providerIdOf,
+  serviceIdOf,
   REPO,
   sourceFilesOf,
   where,
@@ -31,7 +31,7 @@ import {
 const DECLARING_FILES = new Set(['identity.ts', 'tools.ts']);
 
 /**
- * Literals equal to a provider id that name something else, each with the
+ * Literals equal to a service id that name something else, each with the
  * reason. Keyed by `plugins/<folder>/src/<file>` and the literal; the line
  * may move.
  */
@@ -43,7 +43,7 @@ const OTHER_MEANINGS: Readonly<Record<string, Readonly<Record<string, string>>>>
 
 /** `file:line 'text'` of every name of the plugin written outside the declaring files. */
 function namesWrittenOutside(folder: string): string[] {
-  const id = providerIdOf(folder);
+  const id = serviceIdOf(folder);
   const prefix = toolPrefixFor(id);
   const found: string[] = [];
   for (const path of sourceFilesOf(folder)) {
@@ -77,7 +77,7 @@ function writtenName(node: ts.Node): string | null {
   return null;
 }
 
-describe('a plugin declares its provider id and its tool names once', () => {
+describe('a plugin declares its service id and its tool names once', () => {
   it('finds the plugin folders, the template among them', () => {
     expect(PLUGIN_FOLDERS).toContain('_template');
     expect(PLUGIN_FOLDERS.length).toBeGreaterThan(1);
@@ -98,7 +98,7 @@ describe('a plugin declares its provider id and its tool names once', () => {
   });
 
   it.each(PLUGIN_FOLDERS)(
-    '%s writes no tool name and no provider id outside identity.ts and tools.ts',
+    '%s writes no tool name and no service id outside identity.ts and tools.ts',
     (folder) => {
       expect(namesWrittenOutside(folder)).toEqual([]);
     },

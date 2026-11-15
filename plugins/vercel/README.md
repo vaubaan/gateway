@@ -1,12 +1,12 @@
 # `@vaubaan/plugin-vercel`
 
-Vercel provider plugin for Vaubaan Gateway: projects, deployments, logs,
+Vercel plugin for Vaubaan Gateway: projects, deployments, logs,
 environment variables, custom domains, firewall (WAF) and toolbar comments.
 Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 
 - Contract: ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
-- Modelling: handbook [`providers/vercel`](../../docs/handbook/providers/vercel.md)
+- Modelling: handbook [`services/vercel`](../../docs/handbook/services/vercel.md)
   (data model, tool → slice mapping, catalog, edge cases).
 - Upstream: ADR [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md).
 - Arguments and refusals: ADR [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
@@ -16,7 +16,7 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 | File                    | Role                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                        |
-| `src/identity.ts`       | `PROVIDER_ID`, `TOOL` (the 32 tool names), the REST base and the MCP server: every name written once.                                                         |
+| `src/identity.ts`       | `SERVICE_ID`, `TOOL` (the 32 tool names), the REST base and the MCP server: every name written once.                                                          |
 | `src/risk-catalog.yaml` | 16 risks + fallback, five macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                                |
 | `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                           |
 | `src/tools.ts`          | 32 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 14 custom REST (`custom-tools.ts`).                                                    |
@@ -167,7 +167,7 @@ returns that project alone, its `accountId` as `metadata.team_id`. In team
 mode it reads `GET /v2/teams/{team_id}` (validates the token and
 names the team), then pages `GET /v10/projects?teamId=…&limit=100` through
 `pagination.next` / `until`, at most 10 pages (1 000 projects). Each project
-becomes `{ provider: 'vercel', ref: project.id, displayName: project.name,
+becomes `{ service: 'vercel', ref: project.id, displayName: project.name,
 metadata: { team_id, team_slug, team_name, framework, environments } }`.
 
 ## Tests

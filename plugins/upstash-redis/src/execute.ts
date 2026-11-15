@@ -1,9 +1,9 @@
 /**
- * Upstream calls of the `upstash-redis` provider, and resource discovery.
+ * Upstream calls of the `upstash-redis` service, and resource discovery.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned), §5.
- * Handbook : docs/handbook/providers/upstash-redis.md.
+ * Handbook : docs/handbook/services/upstash-redis.md.
  *
  * Two upstream surfaces, one credential :
  *   - the 6 management tools hit the Management API (`api.upstash.com/v2`)
@@ -15,7 +15,7 @@
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;
- *   - both surfaces are called with the SDK's `httpJson` : a provider failure
+ *   - both surfaces are called with the SDK's `httpJson` : a service failure
  *     is **thrown**, never returned — 401 / 403 from either surface →
  *     `UpstreamAuthError` (the host treats a 401 as a rejected credential —
  *     the account ends up `expired` — and a 403 as a failed call), any
@@ -70,7 +70,7 @@ import {
   upstashAuth,
   type UpstashAuth,
 } from './credential.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { ACCOUNT_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 /** Databases kept by `discoverResources` (the list endpoint is unpaged upstream). */
@@ -100,7 +100,7 @@ interface UpstashCall {
 type ManagementMethod = 'GET' | 'POST' | 'DELETE';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ProviderPlugin entry points
+// ServicePlugin entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function executeUpstashRedis(
@@ -154,7 +154,7 @@ export async function discoverUpstashRedisResources(
   // An entry that names no database is skipped : the rest of the list stays usable.
   const all = listed.filter(isNamedDatabase);
   if (all.length > MAX_DISCOVERED_DATABASES) {
-    ctx.logger?.warn(`${PROVIDER_ID}: more databases than the discovery cap, list truncated`, {
+    ctx.logger?.warn(`${SERVICE_ID}: more databases than the discovery cap, list truncated`, {
       total: all.length,
       cap: MAX_DISCOVERED_DATABASES,
     });
@@ -293,7 +293,7 @@ export function redactDatabases(payload: unknown): unknown {
 /**
  * The REST endpoint and token of a database, read from the Management API.
  * `databaseId` is a ref `resolveDatabase` returned : one path segment. An
- * answer that gives no usable endpoint or token is the provider's failure
+ * answer that gives no usable endpoint or token is the service's failure
  * (`UpstreamProtocolError`) : nothing is sent.
  */
 async function databaseConnection(
@@ -322,7 +322,7 @@ async function databaseConnection(
   return { endpoint, restToken };
 }
 
-/** Where every per-database REST endpoint lives. A fact about the provider. */
+/** Where every per-database REST endpoint lives. A fact about the service. */
 export const UPSTASH_REST_HOST_SUFFIX = '.upstash.io';
 
 /** One DNS label: the database's name at Upstash (`us1-merry-cat-32748`). */

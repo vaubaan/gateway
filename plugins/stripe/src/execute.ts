@@ -1,5 +1,5 @@
 /**
- * Upstream calls of the `stripe` provider — Stripe REST API v1.
+ * Upstream calls of the `stripe` service — Stripe REST API v1.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives decrypted
  *        in the context, is used for one call, and never reaches the agent.
@@ -46,7 +46,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { DECLARED_ARGUMENTS, undeclaredStripeArgument } from './classify.ts';
-import { PROVIDER_ID, STRIPE_API_BASE, TOOL } from './identity.ts';
+import { SERVICE_ID, STRIPE_API_BASE, TOOL } from './identity.ts';
 import {
   KEY_FIELD_BY_MODE,
   STRIPE_MODES,
@@ -210,7 +210,7 @@ export interface StripeAccount {
  * describe its account (a restricted key) is refused with the fix.
  */
 export async function stripeAccounts(ctx: AccountContext): Promise<readonly StripeAccount[]> {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const accounts: StripeAccount[] = [];
   for (const mode of STRIPE_MODES) {
     const field = KEY_FIELD_BY_MODE[mode];
@@ -239,7 +239,7 @@ async function readAccount(
 ): Promise<AccountDto> {
   try {
     return await callStripeApi(ctx, key, 'GET', '/account', {}, isAccountDto, {
-      what: `${PROVIDER_ID}: GET /account with the ${mode}-mode key`,
+      what: `${SERVICE_ID}: GET /account with the ${mode}-mode key`,
     });
   } catch (err) {
     // 403 : the key is valid but lacks a permission — a restricted key.
@@ -259,7 +259,7 @@ async function readAccount(
  */
 export async function discoverStripeResources(ctx: AccountContext): Promise<readonly Resource[]> {
   return (await stripeAccounts(ctx)).map(({ mode, id, label }) => ({
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     ref: stripeResourceRef(id, mode),
     env: mode,
     displayName: `${label} (${mode})`,
@@ -276,7 +276,7 @@ function isAccountDto(value: unknown): value is AccountDto {
 }
 
 function keyFor(ctx: AccountContext, mode: StripeMode): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const key = secret.fields[KEY_FIELD_BY_MODE[mode]];
   if (!key) throw new ExecutorRefusal(`stripe: this account has no ${mode}-mode key`);
   return key;

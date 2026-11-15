@@ -1,6 +1,6 @@
 /**
  * The token guide of the connect page (`TokenGuide`), rendered to static
- * markup from a `ConnectableProvider`: how wide to grant and why, the steps
+ * markup from a `ConnectableService`: how wide to grant and why, the steps
  * with their menu path, page, command and screenshot, the documentation, the
  * expiry by who knows it; the permissions by name and access, without the
  * tools they serve.
@@ -9,13 +9,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { expiryWords, permissionLines, TokenGuide } from '@/components/accounts/TokenGuide';
-import type { ConnectableProvider, TokenGuideView } from '@/server/accounts';
+import type { ConnectableService, TokenGuideView } from '@/server/accounts';
 
 const GUIDE: TokenGuideView = {
   steps: [
     {
       do: 'Open the tokens page.',
-      url: 'https://provider.example.com/tokens',
+      url: 'https://service.example.com/tokens',
       path: ['Settings', 'Developer settings', 'Tokens'],
       figure: null,
     },
@@ -41,14 +41,14 @@ const GUIDE: TokenGuideView = {
     { name: 'Contents', access: 'read-write' },
     { name: 'Metadata', access: 'read' },
   ],
-  expiry: { kind: 'provider-reports' },
-  docsUrl: 'https://provider.example.com/docs/tokens',
+  expiry: { kind: 'service-reports' },
+  docsUrl: 'https://service.example.com/docs/tokens',
 };
 
-function provider(
+function service(
   guide: TokenGuideView,
-  alternatives: ConnectableProvider['alternatives'] = [],
-): ConnectableProvider {
+  alternatives: ConnectableService['alternatives'] = [],
+): ConnectableService {
   return {
     id: 'acme',
     displayName: 'Acme',
@@ -61,7 +61,7 @@ function provider(
     brokerAttested: null,
     fields: [],
     alternatives,
-    createUrl: 'https://provider.example.com/tokens',
+    createUrl: 'https://service.example.com/tokens',
     label: 'personal access token',
     guide,
     unavailable: null,
@@ -70,7 +70,7 @@ function provider(
 
 describe('the token guide of the connect page', () => {
   const html = renderToStaticMarkup(
-    <TokenGuide service="Acme" provider={provider(GUIDE)} formId="f" />,
+    <TokenGuide serviceName="Acme" service={service(GUIDE)} formId="f" />,
   );
 
   it('says how wide to grant, and why, above the steps', () => {
@@ -104,7 +104,7 @@ describe('the token guide of the connect page', () => {
 
   it('links a step to its page and shows its command as code to copy', () => {
     expect(html).toMatch(
-      /Open the tokens page\. \(<a href="https:\/\/provider\.example\.com\/tokens"/,
+      /Open the tokens page\. \(<a href="https:\/\/service\.example\.com\/tokens"/,
     );
     expect(html).toMatch(
       /<pre[^>]*aria-label="Command to copy"[^>]*><code>acme tokens create --all<\/code>/,
@@ -112,7 +112,7 @@ describe('the token guide of the connect page', () => {
   });
 
   it('links the service documentation and asks to tick every permission', () => {
-    expect(html).toContain('href="https://provider.example.com/docs/tokens"');
+    expect(html).toContain('href="https://service.example.com/docs/tokens"');
     expect(html).toContain('Tick all of them');
   });
 
@@ -129,9 +129,7 @@ describe('the token guide of the connect page', () => {
   });
 
   it('words the expiry by who knows it', () => {
-    expect(expiryWords('Acme', { kind: 'provider-reports' })).toMatch(
-      /tells this gateway the date/,
-    );
+    expect(expiryWords('Acme', { kind: 'service-reports' })).toMatch(/tells this gateway the date/);
     expect(expiryWords('Acme', { kind: 'person-types', recommendedDays: 90 })).toMatch(
       /about 90 days at Acme\. Acme does not tell this gateway the date/,
     );
@@ -159,8 +157,8 @@ describe('the token guide of a key with alternatives', () => {
   ];
   const html = renderToStaticMarkup(
     <TokenGuide
-      service="Acme"
-      provider={provider(GUIDE, alternatives)}
+      serviceName="Acme"
+      service={service(GUIDE, alternatives)}
       chosen="project"
       formId="connect-form"
     />,

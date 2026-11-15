@@ -4,7 +4,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/fly.md ; guide : plugins/fly/README.md.
+ * Handbook : docs/handbook/services/fly.md ; guide : plugins/fly/README.md.
  */
 
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
@@ -15,7 +15,7 @@ import { createdFlyResources } from './created.ts';
 import { flyExamples } from './examples.ts';
 import { discoverFlyResources, executeFly } from './execute.ts';
 import { FLY_ICON, FLY_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { flyCredential } from './token.ts';
 import { flyToolTitles, flyTools } from './tools.ts';
 
@@ -24,7 +24,7 @@ import { flyToolTitles, flyTools } from './tools.ts';
 export const flyCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const flyPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Fly.io',
   icon: FLY_ICON,
   iconColor: FLY_ICON_COLOR,
@@ -37,7 +37,7 @@ export const flyPlugin = definePlugin({
     'One account is one Fly organization token; one resource is one app of that organization. The owner labels each app staging or prod, and writes are held per label. Machines only run images pinned by digest under the allowed prefixes of the account, secret values are never read back, and running a command inside a machine is its own permission.',
   manualRevocation:
     'Revoke the token in the Fly dashboard (organization, Tokens) or with fly tokens revoke <id>.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/fly.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/fly.md',
   tools: flyTools,
   toolTitles: flyToolTitles,
   examples: flyExamples,
@@ -77,7 +77,7 @@ export {
   DEFAULT_IMAGE_PREFIXES,
   IMAGE_PREFIXES_FIELD,
   ORG_SLUG_FIELD,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
 } from './identity.ts';
 export { FLY_API_BASE, FLY_LOGS_BASE, verifyFlyToken } from './token.ts';

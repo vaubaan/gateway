@@ -1,6 +1,6 @@
 /**
  * The demo instance: the real application on `http://localhost:<port>`, with
- * a simulated identity provider and simulated providers, for a human with a
+ * a simulated identity provider and simulated services, for a human with a
  * normal browser (handbook demo-mode).
  *
  * One process, built like the browser tests' ephemeral instance
@@ -17,7 +17,7 @@
  *   - the demo IdP (`demo-idp.ts`)
  *     served by the same listener under `/__demo/`, which exists nowhere but
  *     in this file: a normally composed root has no such route;
- *   - every provider request answered by `providers.ts`; the collector and
+ *   - every service request answered by `services.ts`; the collector and
  *     the client-document fetchers refuse outright.
  *
  * The listener binds 127.0.0.1 only.
@@ -30,7 +30,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { createRegistry, type ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import type { CustomFetch } from '../../src/server/auth/relying-party';
 import type { RateLimiter } from '../../src/server/compose/ports';
@@ -41,7 +41,7 @@ import { MASTER_KEY_BYTES } from '../../src/server/config/load';
 import { SlidingWindowRateLimiter } from '../../src/server/rate-limit';
 import { DEMO_IDP_PATH, DemoIdp } from './demo-idp';
 import { ALICE } from './people';
-import { createDemoProviders, type DemoProviders } from './providers';
+import { createDemoServices, type DemoServices } from './services';
 import { seedDemo, type SeedSummary } from './seed';
 
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -74,7 +74,7 @@ export interface RunningDemo {
   readonly logPath: string;
   readonly kept: boolean;
   readonly root: GatewayRoot;
-  readonly providers: DemoProviders;
+  readonly services: DemoServices;
   readonly seeded: SeedSummary;
   close(): Promise<void>;
 }
@@ -104,7 +104,7 @@ function listen(server: Server, port: number): Promise<number> {
  * here simulates. Everything else of every plugin — tools, catalog,
  * classifier, the check of a pasted token — is the shipped code.
  */
-function demoPlugins(): ProviderPlugin[] {
+function demoPlugins(): ServicePlugin[] {
   return SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind !== 'ssh-key');
 }
 
@@ -150,7 +150,7 @@ function demoConfig(origin: string, storePath: string, idp: DemoIdp) {
 
 /**
  * The surface rate limits of the real instance, lifted while the seed runs:
- * the seed connects four providers in Alice's name within a second, and the
+ * the seed connects four services in Alice's name within a second, and the
  * first minute of the tour should not find her connect allowance spent.
  */
 class SeedAwareRateLimiter implements RateLimiter {
@@ -203,7 +203,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
   const port = await listen(server, options.port);
   const origin = `http://localhost:${port}`;
 
-  const providers = createDemoProviders({
+  const services = createDemoServices({
     onUnmatched: (error) => process.stderr.write(`\n${error.message}\n`),
   });
   const idp = new DemoIdp(origin);
@@ -238,7 +238,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       loadConfig: demoConfig(origin, storePath, idp),
       buildRegistry: async () => createRegistry(demoPlugins()),
       oidc: { fetch: toLoopback, allowInsecureIssuer: true },
-      providerFetch: providers.fetch,
+      serviceFetch: services.fetch,
       telemetryFetch: refuseOutbound('telemetry'),
       rateLimiter,
       // The instance log goes to a file next to the store, not over the tour.
@@ -251,9 +251,9 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
     // The demo's directory stands in for one that enforces its own second factor: its
     // people sign in without the gateway's code — Alice, an administrator, gives it
     // (ADR administrators-live-in-the-instance §7).
-    await root.auth.providers.setWaiver('idp', 'always');
+    await root.auth.signInProviders.setWaiver('idp', 'always');
     progress('seeding people, accounts, missions and calls');
-    const seeded = await seedDemo({ root, idp, providers });
+    const seeded = await seedDemo({ root, idp, services });
     // The seed answered Alice's second factor with a secret nobody keeps: she enrols her
     // own at her first sign-in in the browser.
     for (const user of await root.store.users.list())
@@ -281,7 +281,7 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
       logPath,
       kept,
       root,
-      providers,
+      services,
       seeded,
       async close() {
         application = null;

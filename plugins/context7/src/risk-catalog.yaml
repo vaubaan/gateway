@@ -1,12 +1,12 @@
-# Risk catalog of the `context7` provider.
+# Risk catalog of the `context7` service.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/context7.md.
+# Handbook : docs/handbook/services/context7.md.
 #
 # Rules the loader enforces at boot :
-#   - `provider` is the plugin id ; every risk id starts with it ;
-#   - every `matches` pattern parses as a slice of this provider ;
-#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
+#   - `service` is the plugin id ; every risk id starts with it ;
+#   - every `matches` pattern parses as a slice of this service ;
+#   - exactly one `<service>.uncategorized-*` fallback exists, flagged `fallback: true` ;
 #   - every risk but the fallback in exactly one macro-action, with an
 #     explicit base budget (quota and rate limit) — never a wildcard, no gate.
 #
@@ -16,11 +16,11 @@
 #
 # 1 risk + 1 fallback. Both tools are the same act : send the agent's
 # question to Context7 and read documentation back. The vector is what a
-# documentation read is : nothing at the provider changes, one library, its
+# documentation read is : nothing at the service changes, one library, its
 # contents, within the plan's quota, seen by the company. The question leaving
 # the company is said in the reason and the narrative. No environment : Context7 has
 # none, no risk is env-scoped. No `infra_limits` : Context7 publishes no rate
-# figure, and a 429 is a provider failure.
+# figure, and a 429 is a service failure.
 
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-levels-prefill-the-policy). No risk,
@@ -34,7 +34,7 @@
 # filed as irreversible (the question cannot be recalled), which put a
 # documentation read in the row "Cannot be repaired" ; it is now the vector of
 # a read (reversible, single, data, free, internal).
-provider: context7
+service: context7
 catalog_version: 5
 catalog_date: 2026-11-13
 
@@ -48,7 +48,7 @@ risks:
       spends the key's monthly Context7 quota.
     matches: 'context7.index[**].library[**].R'
     vector:
-      reversibility: reversible # a read changes nothing at the provider
+      reversibility: reversible # a read changes nothing at the service
       blast: single
       data: data #                documentation contents
       cost: free #                within the plan's monthly quota

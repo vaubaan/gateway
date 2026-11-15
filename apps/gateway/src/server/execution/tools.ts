@@ -3,7 +3,7 @@
  *
  * `tools/list` shows the tools a mission can potentially call: every tool of
  * a plugin for which the mission holds an account AND accepts at
- * least one risk. The filter is per provider, not per tool: a plugin does not
+ * least one risk. The filter is per service, not per tool: a plugin does not
  * declare which risks a tool can touch (that depends on the arguments —
  * the branch, the path, the environment), so a finer static filter would
  * either hide callable tools or need a contract the plugins do not have. A
@@ -38,32 +38,32 @@ import type { CurrentPeriod, MissionState } from '../budget';
 import { gitRemoteUrl } from '../git/paths';
 
 /**
- * Providers for which the mission holds an account that still serves it (not lost:
+ * Services for which the mission holds an account that still serves it (not lost:
  * revoked, or the creator's access withdrawn) and accepts at least one risk.
  */
-export function callableProviders(ctx: MissionContext): Set<string> {
+export function callableServices(ctx: MissionContext): Set<string> {
   const accepted = new Set<string>();
   for (const entry of ctx.policy) {
     const parsed = parseRiskId(entry.risk_id);
-    if (parsed) accepted.add(parsed.provider);
+    if (parsed) accepted.add(parsed.service);
   }
   return new Set(
     ctx.accounts
       .filter((c) => !c.lost)
-      .map((c) => c.provider)
+      .map((c) => c.service)
       .filter((p) => accepted.has(p)),
   );
 }
 
 /** What `tools/list` returns for the mission. */
 export function callableTools(ctx: MissionContext, registry: PluginRegistry): McpToolDeclaration[] {
-  const providers = callableProviders(ctx);
+  const services = callableServices(ctx);
   const tools: McpToolDeclaration[] = [];
   for (const { plugin } of registry.all()) {
-    if (!providers.has(plugin.id)) continue;
-    // A mission holds one account per provider; a tool its way of
+    if (!services.has(plugin.id)) continue;
+    // A mission holds one account per service; a tool its way of
     // connecting cannot run is not listed (the resource stage refuses it too).
-    const account = ctx.accounts.find((c) => c.provider === plugin.id);
+    const account = ctx.accounts.find((c) => c.service === plugin.id);
     tools.push(...plugin.tools.filter((t) => unavailableReason(plugin, account, t.name) === null));
   }
   return tools;
@@ -71,7 +71,7 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
 
 export interface CatalogTool {
   readonly name: string;
-  readonly provider: string;
+  readonly service: string;
   readonly description: string;
   /** True when `tools/list` shows it to this mission. */
   readonly callable: boolean;
@@ -83,7 +83,7 @@ export interface CatalogResource {
   readonly display_name: string;
   /**
    * The repository's remote on this instance (spec §4.1 ter), for a resource
-   * of the provider whose git remote the instance is: `git clone` it with the
+   * of the service whose git remote the instance is: `git clone` it with the
    * mission key as the password. Absent otherwise.
    */
   readonly git_remote?: string;
@@ -95,8 +95,8 @@ export interface CatalogResource {
 }
 
 /**
- * Where the instance's git remotes live: under `<public_url>/git/<provider>/`
- * for every provider whose plugin declares one.
+ * Where the instance's git remotes live: under `<public_url>/git/<service>/`
+ * for every service whose plugin declares one.
  */
 export interface GitRemoteView {
   readonly publicUrl: URL;
@@ -104,7 +104,7 @@ export interface GitRemoteView {
 
 export interface CatalogAccount {
   readonly id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly name: string;
   readonly status: AccountStatus;
   /**
@@ -170,7 +170,7 @@ export function buildCatalog(
     for (const tool of plugin.tools) {
       tools.push({
         name: tool.name,
-        provider: plugin.id,
+        service: plugin.id,
         description: tool.description,
         callable: callable.has(tool.name),
       });
@@ -197,7 +197,7 @@ export function buildCatalog(
     callable_tools: [...callable],
     accounts: ctx.accounts.map((account) => ({
       id: account.id,
-      provider: account.provider,
+      service: account.service,
       name: account.display_name,
       status: account.status,
       ...(account.lost ? { lost: account.lost } : {}),
@@ -207,8 +207,8 @@ export function buildCatalog(
           ref: r.ref,
           env: r.env ?? null,
           display_name: r.displayName,
-          ...(gitRemote && registry.gitRemoteOf(account.provider)
-            ? { git_remote: gitRemoteUrl(gitRemote.publicUrl, account.provider, r.ref) }
+          ...(gitRemote && registry.gitRemoteOf(account.service)
+            ? { git_remote: gitRemoteUrl(gitRemote.publicUrl, account.service, r.ref) }
             : {}),
           ...setLabelOfResource(ctx, r.id),
         })),

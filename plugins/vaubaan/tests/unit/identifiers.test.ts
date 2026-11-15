@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { serializeSlice, type ExecuteContext, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { serializeSlice, type ExecuteContext, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import { assertIdentifiersRefused } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -39,7 +39,7 @@ function recordingPorts(seen: unknown[]): VaubaanPorts {
 }
 
 /** The plugin as the host runs it: the caller added to the SDK's context. */
-function asComposedByTheHost(seen: unknown[]): ProviderPlugin {
+function asComposedByTheHost(seen: unknown[]): ServicePlugin {
   const execute = createVaubaanExecute(recordingPorts(seen));
   return {
     ...vaubaanPlugin,

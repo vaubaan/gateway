@@ -26,7 +26,7 @@ import {
   type RedisCommandClass,
 } from '../../src/index.ts';
 
-const database: Resource = { provider: 'upstash-redis', ref: 'db-1', displayName: 'db-1' };
+const database: Resource = { service: 'upstash-redis', ref: 'db-1', displayName: 'db-1' };
 
 const KS = 'upstash-redis.database[db-1].key-space';
 const READ = `${KS}[*].R`;

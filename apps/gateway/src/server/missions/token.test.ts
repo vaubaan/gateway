@@ -69,7 +69,7 @@ describe('parseMissionDraft', () => {
     name: 'm',
     accounts: [
       {
-        provider: 'github',
+        service: 'github',
         trust_levels: { read: 'trusting', propose: 'careful' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
         policy: [{ risk_id: 'github.code-read', quota: 5, gate: 'approval' }],
@@ -92,7 +92,7 @@ describe('parseMissionDraft', () => {
   it('accepts the built-in everything-i-hold in place of trust levels', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      accounts: [{ provider: 'github', everything_i_hold: true }],
+      accounts: [{ service: 'github', everything_i_hold: true }],
     });
     expect(parsed.ok && parsed.draft.accounts[0]?.everything_i_hold).toBe(true);
   });
@@ -100,7 +100,7 @@ describe('parseMissionDraft', () => {
   it('refuses a trust level that is not one of the three', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      accounts: [{ provider: 'github', trust_levels: { read: 'reckless' } }],
+      accounts: [{ service: 'github', trust_levels: { read: 'reckless' } }],
     });
     expect(parsed.ok).toBe(false);
     expect(!parsed.ok && parsed.problems.join(' ')).toContain('accounts.0.trust_levels');

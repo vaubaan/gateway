@@ -11,7 +11,7 @@
  *   POST /admin/users/invitations/remove  remove an invitation (form field `email`)
  *   POST /admin/users/<id>/make-administrator     the user administers from now on
  *   POST /admin/users/<id>/unmake-administrator   no longer (refused for the last way in)
- *   POST /admin/users/administrators/group        name a group of a provider (fields `provider`, `group`)
+ *   POST /admin/users/administrators/group        name a group of a sign-in provider (fields `provider`, `group`)
  *   POST /admin/users/administrators/remove       remove a designation (field `designation`)
  *   POST /admin/users/administrators/apply-configuration  apply the configuration's admin rule
  *   POST /api/admin/setup/finish          end the setup: the install token is revoked
@@ -64,7 +64,7 @@ export interface UserAdminHandlerDeps {
   readonly users: UserAdminService;
   readonly invitations: InvitationService;
   readonly signInAccounts: SignInAccountsService;
-  readonly providers: Pick<SignInProvidersService, 'views'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'views'>;
   /** The designations of the administrators (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
   readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
@@ -120,7 +120,7 @@ export async function setupCannotFinish(deps: {
     return 'Download the encryption key and confirm you kept it first.';
   }
   if ((await deps.administrators.withAWayIn()).length === 0) {
-    return 'Name an administrator who can sign in first: create their sign-in account, or make the identity of a passed provider test an administrator.';
+    return 'Name an administrator who can sign in first: create their sign-in account, or make the identity of a passed sign-in provider test an administrator.';
   }
   return null;
 }
@@ -130,9 +130,9 @@ const plural = (count: number, one: string, many: string): string => (count === 
 export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHandlers {
   const redirectWithNotice = createNoticeRedirect(deps, USERS_PAGE);
 
-  /** The one local provider of the instance, or `null`. */
-  async function localProvider(): Promise<{ id: string; issuer: URL } | null> {
-    return (await deps.providers.views()).find((p) => p.kind === 'local') ?? null;
+  /** The one local sign-in provider of the instance, or `null`. */
+  async function localSignInProvider(): Promise<{ id: string; issuer: URL } | null> {
+    return (await deps.signInProviders.views()).find((p) => p.kind === 'local') ?? null;
   }
 
   /**
@@ -141,13 +141,13 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
    */
   async function linkLines(
     kind: LocalLinkKind,
-    providerId: string,
+    signInProviderId: string,
     email: string,
     actor: string,
   ): Promise<string[]> {
     const issued = await deps.signInAccounts.createLink({
       kind,
-      providerId,
+      signInProviderId,
       email,
       createdBy: actor,
     });
@@ -232,14 +232,14 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       let notice: Notice;
       try {
         const invited = await deps.invitations.invite(auditActorId(principal), email);
-        const local = await localProvider();
+        const local = await localSignInProvider();
         notice = {
           tone: 'success',
           title: `${invited} invited`,
           lines: local
             ? await linkLines('invite', local.id, invited, auditActorId(principal))
             : [
-                'They can sign in through any provider of this gateway that verified this address. Nothing was sent: tell them where to sign in.',
+                'They can sign in through any sign-in provider of this gateway that verified this address. Nothing was sent: tell them where to sign in.',
               ],
         };
       } catch (err) {
@@ -257,7 +257,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           tone: 'success',
           title: `Second factor of ${user.email} reset`,
           lines: [
-            'Their next sign-in asks them to set a new one up, unless their provider’s waiver applies (never to an administrator).',
+            'Their next sign-in asks them to set a new one up, unless their sign-in provider’s waiver applies (never to an administrator).',
           ],
         };
       });
@@ -275,8 +275,8 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       const email = field('email').trim().toLowerCase();
       let notice: Notice;
       try {
-        const local = await localProvider();
-        if (!local) throw new SignInAccountError('no-local-provider');
+        const local = await localSignInProvider();
+        if (!local) throw new SignInAccountError('no-local-sign-in-provider');
         if (field('password') !== field('password_again')) {
           throw new SignInAccountError(
             'password-weak',
@@ -287,7 +287,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         // A new person: refused at the ceiling before the account exists (spec §4.3 bis).
         await deps.users.refuseNewUser();
         const signInAccount = await deps.signInAccounts.createSignInAccount({
-          providerId: local.id,
+          signInProviderId: local.id,
           email,
           password: field('password'),
           actor,
@@ -324,8 +324,8 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       const email = typeof emailField === 'string' ? emailField : '';
       let notice: Notice;
       try {
-        const local = await localProvider();
-        if (!local) throw new SignInAccountError('no-local-provider');
+        const local = await localSignInProvider();
+        if (!local) throw new SignInAccountError('no-local-sign-in-provider');
         if (kind === 'invite' && !(await deps.invitations.isInvited(email.trim().toLowerCase()))) {
           // The link admits nobody by itself: the address must be invited first.
           throw new SignInAccountError('not-admitted');
@@ -392,7 +392,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
             tone: 'warning',
             title: `${user.email} is not administrator by name`,
             lines: [
-              'They administer through a group of their sign-in provider: remove that group from the administrators below, or remove them from the group at the provider.',
+              'They administer through a group of their sign-in provider: remove that group from the administrators below, or remove them from the group at the signInProvider.',
             ],
           };
         }
@@ -410,19 +410,23 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
       if (principal instanceof Response) return principal;
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const provider = String(form.get('provider') ?? '').trim();
+      const signInProvider = String(form.get('sign_in_provider') ?? '').trim();
       const group = String(form.get('group') ?? '').trim();
       let notice: Notice;
       try {
-        const row = await deps.administrators.grantGroup(provider, group, auditActorId(principal));
+        const row = await deps.administrators.grantGroup(
+          signInProvider,
+          group,
+          auditActorId(principal),
+        );
         notice = {
           tone: 'success',
           title: row
-            ? `Members of “${group}” (${provider}) administer this gateway`
-            : `“${group}” (${provider}) already did`,
+            ? `Members of “${group}” (${signInProvider}) administer this gateway`
+            : `“${group}” (${signInProvider}) already did`,
           lines: row
             ? [
-                'Each member is an administrator from their next sign-in through that provider, as long as the provider says they belong to the group.',
+                'Each member is an administrator from their next sign-in through that sign-in provider, as long as the sign-in provider says they belong to the group.',
               ]
             : [],
         };
@@ -485,7 +489,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
               tone: 'success',
               title: 'The setup is finished',
               lines: [
-                'The install token and the setup link no longer open anything. From now on people sign in through the providers that are on.',
+                'The install token and the setup link no longer open anything. From now on people sign in through the sign-in providers that are on.',
               ],
             };
           }

@@ -56,7 +56,7 @@ const resourcesSchema = z.discriminatedUnion('scope', [
     .object({ scope: z.literal('all') })
     .strict()
     .describe(
-      'Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions.',
+      'Every resource of the account known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the service has environment-dependent permissions.',
     ),
   z
     .object({ scope: z.literal('account') })
@@ -149,10 +149,10 @@ const resourceSetSchema = z
 const accountSchema = z
   .object({
     account_id: text.optional().describe('Id of one of the user’s accounts (`list_my_accounts`).'),
-    provider: text
+    service: text
       .optional()
       .describe(
-        'Instead of `account_id`, when the user holds exactly one usable account of that provider.',
+        'Instead of `account_id`, when the user holds exactly one usable account of that service.',
       ),
     resources: resourcesField(),
     future: futureField(),
@@ -192,7 +192,7 @@ export const missionDraftSchema = z
     accounts: z
       .array(accountSchema)
       .max(MAX_ACCOUNTS)
-      .describe('At least one account; at most one account per provider.'),
+      .describe('At least one account; at most one account per service.'),
     period: periodSchema,
     expires_at: z
       .string()

@@ -84,7 +84,7 @@ export interface Store {
   readonly administrators: AdministratorsRepo;
   /** The accounts, secrets and links of a sign-in provider of kind `local`. */
   readonly signInAccounts: SignInAccountsRepo;
-  /** The second factor of every person, whatever their provider (migration 0021). */
+  /** The second factor of every person, whatever their service (migration 0021). */
   readonly secondFactors: SecondFactorsRepo;
   /** The devices a person receives notifications on, subscriptions sealed (migration 0030). */
   readonly notificationDevices: NotificationDevicesRepo;

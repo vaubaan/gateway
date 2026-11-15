@@ -69,7 +69,7 @@ export {
   ENV_LABEL_PATTERN,
   formatRiskId,
   isExplicitRiskId,
-  isProviderId,
+  isServiceId,
   isRiskId,
   parseRiskId,
   WILDCARD_CHARS,

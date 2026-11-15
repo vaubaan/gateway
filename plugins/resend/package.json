@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Resend — outbound email with recipient zoning, one resource per sending domain and per segment",
+  "description": "Vaubaan Gateway plugin for Resend — outbound email with recipient zoning, one resource per sending domain and per segment",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

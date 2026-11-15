@@ -123,17 +123,17 @@ interface Step {
   readonly counted: boolean;
 }
 
-/** A provider set up for another address (a restore on a new host): one sentence, or nothing. */
+/** A sign-in provider set up for another address (a restore on a new host): one sentence, or nothing. */
 function elsewhereWords(
-  providers: readonly Pick<SignInProviderView, 'name' | 'kind' | 'registeredFor'>[],
+  signInProviders: readonly Pick<SignInProviderView, 'name' | 'kind' | 'registeredFor'>[],
   publicUrl: URL,
 ): string {
-  const moved = providers.flatMap((provider) => {
-    const host = setUpElsewhere(provider, publicUrl);
-    return host ? [`${provider.name} (set up for ${host})`] : [];
+  const moved = signInProviders.flatMap((signInProvider) => {
+    const host = setUpElsewhere(signInProvider, publicUrl);
+    return host ? [`${signInProvider.name} (set up for ${host})`] : [];
   });
   if (moved.length === 0) return '';
-  return ` ${listOf(moved)} ${moved.length === 1 ? 'needs' : 'need'} this address registered at the provider before anyone signs in through ${moved.length === 1 ? 'it' : 'them'}.`;
+  return ` ${listOf(moved)} ${moved.length === 1 ? 'needs' : 'need'} this address registered at the sign-in provider before anyone signs in through ${moved.length === 1 ? 'it' : 'them'}.`;
 }
 
 function listOf(names: readonly string[]): string {
@@ -175,9 +175,9 @@ export default async function SetupPage({ searchParams }: Props) {
   const notice = await takeNotice(root, principal.sessionId, params);
   const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
   const keyProblem = isKeyProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
-  const [providers, rule, bootstrap, ownerless, telemetry, users, identity, key, ceilings] =
+  const [signInProviders, rule, bootstrap, ownerless, telemetry, users, identity, key, ceilings] =
     await Promise.all([
-      root.auth.providers.views(),
+      root.auth.signInProviders.views(),
       root.auth.administrators.current(),
       root.auth.bootstrap.state(),
       root.accounts.service.listOwnerless(),
@@ -200,8 +200,8 @@ export default async function SetupPage({ searchParams }: Props) {
         {
           id: view.user.id,
           email: view.user.email,
-          providerId:
-            providers.find(
+          signInProviderId:
+            signInProviders.find(
               (p) =>
                 view.user.issuer !== null && issuerKey(p.issuer) === issuerKey(view.user.issuer),
             )?.id ?? null,
@@ -213,7 +213,7 @@ export default async function SetupPage({ searchParams }: Props) {
   const host = root.config.publicUrl.host;
   // Sign-in accounts: the setup creates the first administrator's account, for any address,
   // and names them administrator (ADR administrators-live-in-the-instance, §4).
-  const local = providers.find((provider) => provider.kind === 'local') ?? null;
+  const local = signInProviders.find((signInProvider) => signInProvider.kind === 'local') ?? null;
   const firstAdministrator: 'done' | 'todo' | null =
     local && bootstrap.status === 'active' ? (rule.userIds.size > 0 ? 'done' : 'todo') : null;
   const drift = await root.auth.administrators.configurationDrift();
@@ -246,17 +246,19 @@ export default async function SetupPage({ searchParams }: Props) {
     {
       key: 'sign-in',
       counted: true,
-      state: providers.some((provider) => provider.enabled) ? 'done' : 'todo',
+      state: signInProviders.some((signInProvider) => signInProvider.enabled) ? 'done' : 'todo',
       title:
-        providers.length > 0
-          ? `Sign-in through ${listOf(providers.map((provider) => provider.name))}`
+        signInProviders.length > 0
+          ? `Sign-in through ${listOf(signInProviders.map((signInProvider) => signInProvider.name))}`
           : 'Sign-in',
       description:
-        providers.length > 0
-          ? `People sign in through these providers; teams come from your directory. No password is stored here.${elsewhereWords(providers, root.config.publicUrl)}`
+        signInProviders.length > 0
+          ? `People sign in through these sign-in providers; teams come from your directory. No password is stored here.${elsewhereWords(signInProviders, root.config.publicUrl)}`
           : 'Nobody can sign in yet: add your company’s directory (OpenID Connect) or GitHub.',
       action:
-        providers.length > 0 ? undefined : { label: 'Set up sign-in', href: ADMIN_PAGES.signIn },
+        signInProviders.length > 0
+          ? undefined
+          : { label: 'Set up sign-in', href: ADMIN_PAGES.signIn },
     },
     {
       key: 'address',
@@ -452,7 +454,7 @@ export default async function SetupPage({ searchParams }: Props) {
               ariaLabel="Finish the setup"
               variant="primary"
               title="Finish the setup?"
-              consequence="The install token and the setup link stop working for good. From then on people sign in through the providers that are on; a lost way in is recovered with the master key."
+              consequence="The install token and the setup link stop working for good. From then on people sign in through the sign-in providers that are on; a lost way in is recovered with the master key."
               confirmLabel="Finish setup"
               testId="finish-setup-button"
             />

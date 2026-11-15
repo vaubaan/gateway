@@ -70,7 +70,7 @@ describe('sign-in limits', () => {
   });
 
   it('the bootstrap endpoint: a hard window, then a durable revocation of a guessed token', async () => {
-    root = await rootWithoutProvider();
+    root = await rootWithoutSignInProvider();
     const post = (token: string): Promise<Response> =>
       root.auth.handlers.bootstrapLogin(
         new Request(`${PUBLIC_URL}/api/auth/bootstrap`, {
@@ -91,7 +91,7 @@ describe('sign-in limits', () => {
   });
 
   it('revokes the bootstrap token after BOOTSTRAP_MAX_MISSES wrong ones', async () => {
-    root = await rootWithoutProvider();
+    root = await rootWithoutSignInProvider();
     for (let i = 0; i < BOOTSTRAP_MAX_MISSES - 1; i += 1) {
       expect(await root.auth.bootstrap.recordMiss()).toBe(false);
     }
@@ -101,7 +101,7 @@ describe('sign-in limits', () => {
   });
 });
 
-function rootWithoutProvider(): Promise<GatewayRoot> {
+function rootWithoutSignInProvider(): Promise<GatewayRoot> {
   return buildRoot({
     loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL }) }),
     logWrite: () => undefined,

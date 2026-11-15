@@ -17,7 +17,7 @@ import {
   executeOutlook,
   mailboxResource,
 } from '../../src/execute.ts';
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { SERVICE_ID, TOOL } from '../../src/identity.ts';
 import { ACCOUNT, CALENDAR, EVENT, context, mailbox, requestOf } from './fixtures.ts';
 
 function json(result: { readonly content: readonly { type: string; text?: string }[] }): unknown {
@@ -266,7 +266,7 @@ describe('writes', () => {
     ]);
   });
 
-  test('a provider failure is thrown', async () => {
+  test('a service failure is thrown', async () => {
     const fetch = mockFetch([
       { url: () => true, status: 404, body: { error: { code: 'ErrorItemNotFound' } } },
     ]);
@@ -297,7 +297,7 @@ describe('discovery', () => {
     });
     expect(resources).toEqual([
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: 'alice~contoso.example',
         displayName: 'Alice Martin <alice@contoso.example>',
         metadata: {

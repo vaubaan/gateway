@@ -1,7 +1,7 @@
 /**
  * One reading of an `axonaut` call, for `classify` and `execute` alike.
  *
- * Spec : docs/spec/gateway-risk-model.md §3, §7 ; handbook docs/handbook/providers/axonaut.md §2.
+ * Spec : docs/spec/gateway-risk-model.md §3, §7 ; handbook docs/handbook/services/axonaut.md §2.
  *
  * `readCall(tool, args, resources)` is pure: it resolves the account, reads
  * the declared arguments through `fields.ts`, and returns at once the slices
@@ -21,7 +21,7 @@
 import { ANY_IDENT, type Resource, type Slice, type SliceSegment } from '@vaubaan/plugin-sdk';
 
 import { axonautId, readArguments, type ProductLine, type Values } from './fields.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { TOOL_SPEC_BY_NAME } from './tools.ts';
 
 type Args = Readonly<Record<string, unknown>>;
@@ -64,7 +64,7 @@ export function resolveAccount(
   args: Args,
   resources: readonly Resource[],
 ): { readonly ref: string } | { readonly denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.account !== undefined) {
     const explicit = axonautId(args.account);
     if (explicit === null) return { denied: 'account: malformed Axonaut id' };
@@ -113,7 +113,7 @@ function idOf(values: Values, key: string): string | undefined {
  */
 function requiredId(values: Values, key: string): string {
   const value = idOf(values, key);
-  if (value === undefined) throw new Error(`${PROVIDER_ID}: '${key}' was not read`);
+  if (value === undefined) throw new Error(`${SERVICE_ID}: '${key}' was not read`);
   return value;
 }
 
@@ -214,7 +214,7 @@ function anyGiven(values: Values, keys: readonly string[]): boolean {
  */
 export function readCall(tool: string, args: Args, resources: readonly Resource[]): CallReading {
   const spec = TOOL_SPEC_BY_NAME.get(tool);
-  if (spec === undefined) return { denied: `unknown ${PROVIDER_ID} tool '${tool}'` };
+  if (spec === undefined) return { denied: `unknown ${SERVICE_ID} tool '${tool}'` };
   const account = resolveAccount(args, resources);
   if ('denied' in account) return account;
   const read = readArguments(spec.fields, spec.required, args);
@@ -223,12 +223,12 @@ export function readCall(tool: string, args: Args, resources: readonly Resource[
 
   const root: readonly SliceSegment[] = [name('account'), ident(account.ref)];
   const R = (...path: SliceSegment[]): Slice => ({
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     path: [...root, ...path],
     action: 'R',
   });
   const W = (...path: SliceSegment[]): Slice => ({
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     path: [...root, ...path],
     action: 'W',
   });
@@ -568,6 +568,6 @@ export function readCall(tool: string, args: Args, resources: readonly Resource[
       return deleteOne('task', 'task_id', 'tasks');
 
     default:
-      return { denied: `unknown ${PROVIDER_ID} tool '${tool}'` };
+      return { denied: `unknown ${SERVICE_ID} tool '${tool}'` };
   }
 }

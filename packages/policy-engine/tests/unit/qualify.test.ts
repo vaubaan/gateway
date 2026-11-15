@@ -145,13 +145,13 @@ describe('qualify / unqualify round-trip', () => {
 
 describe('resourceEnvResolver', () => {
   const staging: Resource = {
-    provider: 'supabase',
+    service: 'supabase',
     ref: 'stg-ref',
     env: 'staging',
     displayName: 'Staging',
   };
-  const prod: Resource = { provider: 'supabase', ref: 'prd-ref', env: 'prod', displayName: 'Prod' };
-  const unlabelled: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
+  const prod: Resource = { service: 'supabase', ref: 'prd-ref', env: 'prod', displayName: 'Prod' };
+  const unlabelled: Resource = { service: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
   test('two identifiers that name resources of different environments: no environment', () => {
     // The resolver cannot know which segment is the resource. An identifier a caller
@@ -176,7 +176,7 @@ describe('resourceEnvResolver', () => {
   });
 
   test('a labelled and an unlabelled resource cited together: no environment', () => {
-    const bare: Resource = { provider: 'supabase', ref: 'bare-ref', displayName: 'Bare' };
+    const bare: Resource = { service: 'supabase', ref: 'bare-ref', displayName: 'Bare' };
     const r = resourceEnvResolver([staging, bare]);
     expect(r.resolveEnv(parseSlice('supabase.project[stg-ref].table[bare-ref].W'))).toBeNull();
   });
@@ -191,7 +191,7 @@ describe('resourceEnvResolver', () => {
     ).toBe('staging');
   });
 
-  test('null when the slice provider has no resource', () => {
+  test('null when the slice service has no resource', () => {
     expect(
       resourceEnvResolver([staging]).resolveEnv(parseSlice('vercel.project[x].deployment[*].W')),
     ).toBeNull();
@@ -233,7 +233,7 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
 
   test('Vercel-like : the slice segment wins over the resource label (or its absence)', () => {
     const project: Resource = {
-      provider: 'vercel',
+      service: 'vercel',
       ref: 'prj_1',
       displayName: 'gateway',
       env: 'staging', // an owner label that would be wrong for a prod env-var write
@@ -248,7 +248,7 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
     // No env segment → the label applies.
     expect(resolver.resolveEnv(parseSlice('vercel.project[prj_1].domain[x].W'))).toBe('staging');
     // Unlabelled resource and no env segment → unqualified.
-    const unlabelled: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'gateway' };
+    const unlabelled: Resource = { service: 'vercel', ref: 'prj_1', displayName: 'gateway' };
     expect(
       envResolverFor([unlabelled], vercelEnvOf).resolveEnv(
         parseSlice('vercel.project[prj_1].domain[x].W'),
@@ -258,8 +258,8 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
 
   test('Supabase-like : no plugin hook, the owner label on the matching resource applies', () => {
     const resources: Resource[] = [
-      { provider: 'supabase', ref: 'abc', env: 'prod', displayName: 'prod db' },
-      { provider: 'supabase', ref: 'def', env: 'staging', displayName: 'staging db' },
+      { service: 'supabase', ref: 'abc', env: 'prod', displayName: 'prod db' },
+      { service: 'supabase', ref: 'def', env: 'staging', displayName: 'staging db' },
     ];
     const resolver = envResolverFor(resources);
     expect(
@@ -274,8 +274,8 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
 
   test('Stripe-like : the plugin labelled one resource per mode at discovery ; a hook that defers lets the label through', () => {
     const resources: Resource[] = [
-      { provider: 'stripe', ref: 'acct_1/test', env: 'test', displayName: 'Acme (test)' },
-      { provider: 'stripe', ref: 'acct_1/live', env: 'live', displayName: 'Acme (live)' },
+      { service: 'stripe', ref: 'acct_1/test', env: 'test', displayName: 'Acme (test)' },
+      { service: 'stripe', ref: 'acct_1/live', env: 'live', displayName: 'Acme (live)' },
     ];
     const defers: EnvDeriver = () => undefined;
     const resolver = envResolverFor(resources, defers);
@@ -288,7 +288,7 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
   });
 
   test('an empty string or null from the hook defers to the label', () => {
-    const resources: Resource[] = [{ provider: 'x', ref: 'r', env: 'prod', displayName: 'r' }];
+    const resources: Resource[] = [{ service: 'x', ref: 'r', env: 'prod', displayName: 'r' }];
     expect(envResolverFor(resources, () => '').resolveEnv(parseSlice('x.thing[r].W'))).toBe('prod');
     expect(envResolverFor(resources, () => null).resolveEnv(parseSlice('x.thing[r].W'))).toBe(
       'prod',
@@ -298,13 +298,13 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
   test('NO_SINGLE_ENV from the hook: no environment, and the label does not stand in', () => {
     // The slice names its environment, but not exactly one (`env[*]`, `env[prod,preview]`).
     // Falling back to the owner's label would price a call that reaches `prod` as `staging`.
-    const resources: Resource[] = [{ provider: 'x', ref: 'r', env: 'staging', displayName: 'r' }];
+    const resources: Resource[] = [{ service: 'x', ref: 'r', env: 'staging', displayName: 'r' }];
     const resolver = envResolverFor(resources, () => NO_SINGLE_ENV);
     expect(resolver.resolveEnv(parseSlice('x.thing[r].env[*].var[K].W'))).toBeNull();
   });
 
   test('without a hook it is exactly resourceEnvResolver', () => {
-    const resources: Resource[] = [{ provider: 'x', ref: 'r', env: 'prod', displayName: 'r' }];
+    const resources: Resource[] = [{ service: 'x', ref: 'r', env: 'prod', displayName: 'r' }];
     const slice = parseSlice('x.thing[r].W');
     expect(envResolverFor(resources).resolveEnv(slice)).toBe(
       resourceEnvResolver(resources).resolveEnv(slice),

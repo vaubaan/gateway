@@ -1,5 +1,5 @@
 /**
- * Classifier of the `stripe` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `stripe` service : `(tool, args, resources) → slices`.
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *        §10 ("a classification error is a security hole").
@@ -55,14 +55,14 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { modeOf, readIdArgs, resolveStripeResource } from './resources.ts';
 import { stripeTools } from './tools.ts';
 
 type Args = Readonly<Record<string, unknown>>;
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER_ID, path: segments, action };
+  return { service: SERVICE_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -131,7 +131,7 @@ export function undeclaredStripeArgument(tool: string, args: Args): string | nul
 }
 
 function unknownTool(tool: string): string {
-  return `unknown ${PROVIDER_ID} tool '${tool}'.`;
+  return `unknown ${SERVICE_ID} tool '${tool}'.`;
 }
 
 export function classifyStripe(

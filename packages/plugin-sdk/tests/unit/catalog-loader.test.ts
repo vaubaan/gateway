@@ -40,7 +40,7 @@ function doc(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 
 function baseDoc(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
-    provider: 'acme',
+    service: 'acme',
     risks: [
       risk('acme.read-things', 'acme.space[**].thing[**].R'),
       {
@@ -100,8 +100,8 @@ function issuesOf(fn: () => unknown): string[] {
 describe('loadCatalogFile — fixture', () => {
   const loaded = loadCatalogFile(FIXTURE);
 
-  test('parses provider, version and the date scalar', () => {
-    expect(loaded.catalog.provider).toBe('acme');
+  test('parses service, version and the date scalar', () => {
+    expect(loaded.catalog.service).toBe('acme');
     expect(loaded.catalog.catalog_version).toBe(4);
     expect(loaded.catalog.catalog_date).toBe('2026-10-31');
   });
@@ -160,7 +160,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     );
   });
 
-  test('id of another provider', () => {
+  test('id of another service', () => {
     const d = doc({
       risks: [
         risk('other.read', 'acme.space[**].R'),
@@ -168,7 +168,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
       ],
     });
     expect(issuesOf(() => validateCatalog(d)).join('\n')).toMatch(
-      /risks\[0\]\.id 'other.read' belongs to provider 'other'/,
+      /risks\[0\]\.id 'other.read' belongs to service 'other'/,
     );
   });
 
@@ -472,12 +472,12 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     );
   });
 
-  test('provider slug and top-level shape', () => {
+  test('service slug and top-level shape', () => {
     expect(issuesOf(() => validateCatalog('nope'))).toEqual([
       expect.stringMatching(/expected a mapping/),
     ]);
-    expect(issuesOf(() => validateCatalog(doc({ provider: 'Acme_Co' }))).join('\n')).toMatch(
-      /provider: expected a lowercase slug/,
+    expect(issuesOf(() => validateCatalog(doc({ service: 'Acme_Co' }))).join('\n')).toMatch(
+      /service: expected a lowercase slug/,
     );
     expect(issuesOf(() => validateCatalog(doc({ risks: [] }))).join('\n')).toMatch(
       /risks: expected a non-empty list/,
@@ -487,7 +487,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
   test('YAML syntax errors surface as a CatalogError naming the source', () => {
     const err = (() => {
       try {
-        parseCatalogYaml('provider: [unclosed', { source: 'broken.yaml' });
+        parseCatalogYaml('service: [unclosed', { source: 'broken.yaml' });
       } catch (e) {
         return e as CatalogError;
       }
@@ -499,11 +499,11 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
   });
 
   test.each([
-    ['a JS function', 'provider: !!js/function "function () { return 1 }"'],
-    ['a JS regexp', 'provider: !!js/regexp /x/'],
-    ['a custom local tag', 'provider: !acme vercel'],
-    ['a YAML 1.1 binary', 'provider: !!binary AAAA'],
-    ['a complex mapping key', '? [provider]\n: vercel'],
+    ['a JS function', 'service: !!js/function "function () { return 1 }"'],
+    ['a JS regexp', 'service: !!js/regexp /x/'],
+    ['a custom local tag', 'service: !acme vercel'],
+    ['a YAML 1.1 binary', 'service: !!binary AAAA'],
+    ['a complex mapping key', '? [service]\n: vercel'],
   ])('%s is refused as a YAML syntax error, never constructed', (_label, text) => {
     expect(issuesOf(() => parseCatalogYaml(text))[0]).toMatch(/^YAML syntax:/);
   });

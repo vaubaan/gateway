@@ -30,7 +30,7 @@ import defaultExport, {
   HostOnlyPluginError,
   INTERNAL_ERROR_RESULT,
   MALFORMED_MISSION_ID,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   vaubaanCatalog,
   vaubaanPlugin,
@@ -39,11 +39,11 @@ import defaultExport, {
 } from '../../src/index.ts';
 
 const RISK = {
-  readSetup: `${PROVIDER_ID}.read-setup`,
-  readMissions: `${PROVIDER_ID}.read-missions`,
-  issue: `${PROVIDER_ID}.mission-issue`,
-  rotate: `${PROVIDER_ID}.mission-key-rotate`,
-  revoke: `${PROVIDER_ID}.mission-revoke`,
+  readSetup: `${SERVICE_ID}.read-setup`,
+  readMissions: `${SERVICE_ID}.read-missions`,
+  issue: `${SERVICE_ID}.mission-issue`,
+  rotate: `${SERVICE_ID}.mission-key-rotate`,
+  revoke: `${SERVICE_ID}.mission-revoke`,
 } as const;
 
 function slices(tool: string, args: Record<string, unknown>): string[] {
@@ -72,8 +72,8 @@ describe('vaubaan plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(vaubaanCatalog.catalog.provider).toBe(PROVIDER_ID);
-    expect(vaubaanPlugin.id).toBe(PROVIDER_ID);
+    expect(vaubaanCatalog.catalog.service).toBe(SERVICE_ID);
+    expect(vaubaanPlugin.id).toBe(SERVICE_ID);
   });
 
   test('the plugin is the default export, at the version of its package', () => {
@@ -143,27 +143,27 @@ describe('vaubaan catalog — the macro-actions at each trust level', () => {
 
 describe('classifyVaubaan', () => {
   test('each tool lands on its plane', () => {
-    expect(slices(TOOL.listMyAccounts, {})).toEqual([`${PROVIDER_ID}.account[*].R`]);
-    expect(slices(TOOL.previewPolicy, { name: 'x' })).toEqual([`${PROVIDER_ID}.account[*].R`]);
-    expect(slices(TOOL.getCatalog, { provider: 'github' })).toEqual([
-      `${PROVIDER_ID}.catalog[github].R`,
+    expect(slices(TOOL.listMyAccounts, {})).toEqual([`${SERVICE_ID}.account[*].R`]);
+    expect(slices(TOOL.previewPolicy, { name: 'x' })).toEqual([`${SERVICE_ID}.account[*].R`]);
+    expect(slices(TOOL.getCatalog, { service: 'github' })).toEqual([
+      `${SERVICE_ID}.catalog[github].R`,
     ]);
-    expect(slices(TOOL.listMyMissions, {})).toEqual([`${PROVIDER_ID}.mission[*].R`]);
+    expect(slices(TOOL.listMyMissions, {})).toEqual([`${SERVICE_ID}.mission[*].R`]);
     expect(slices(TOOL.listMyMissions, { mission_id: EXAMPLE_MISSION_ID })).toEqual([
-      `${PROVIDER_ID}.mission[${EXAMPLE_MISSION_ID}].R`,
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].R`,
     ]);
-    expect(slices(TOOL.issueMission, { name: 'x' })).toEqual([`${PROVIDER_ID}.mission[*].issue.W`]);
+    expect(slices(TOOL.issueMission, { name: 'x' })).toEqual([`${SERVICE_ID}.mission[*].issue.W`]);
     expect(slices(TOOL.rotateMissionToken, { mission_id: EXAMPLE_MISSION_ID })).toEqual([
-      `${PROVIDER_ID}.mission[${EXAMPLE_MISSION_ID}].token.W`,
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].token.W`,
     ]);
     expect(slices(TOOL.revokeMission, { mission_id: EXAMPLE_MISSION_ID })).toEqual([
-      `${PROVIDER_ID}.mission[${EXAMPLE_MISSION_ID}].revoke.W`,
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].revoke.W`,
     ]);
   });
 
   test('refuses an unknown tool, an undeclared argument, a missing mission id', () => {
-    expect(classifyVaubaan(`${PROVIDER_ID}__request_permission`, {})).toEqual({
-      denied: `unknown tool '${PROVIDER_ID}__request_permission'`,
+    expect(classifyVaubaan(`${SERVICE_ID}__request_permission`, {})).toEqual({
+      denied: `unknown tool '${SERVICE_ID}__request_permission'`,
     });
     expect('denied' in classifyVaubaan(TOOL.revokeMission, { mission_id: 'm', force: 1 })).toBe(
       true,
@@ -204,7 +204,7 @@ describe('the two executes', () => {
         { mission_id: 'm1' },
       ],
     ]);
-    await expect(execute(ctx(), `${PROVIDER_ID}__nope`, {})).rejects.toThrow(/unknown tool/);
+    await expect(execute(ctx(), `${SERVICE_ID}__nope`, {})).rejects.toThrow(/unknown tool/);
   });
 
   test('a port that throws answers internal-error, with nothing of the cause', async () => {

@@ -1,5 +1,5 @@
 /**
- * Credential of the `upstash-redis` provider : the Upstash Developer API key.
+ * Credential of the `upstash-redis` service : the Upstash Developer API key.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2.
  * ADR  : one-place-to-authorize-services-token-first (amended 2026-10-31 :
@@ -35,16 +35,16 @@ import {
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 import { upstashRedisTools } from './tools.ts';
 
-/** The Upstash Developer (Management) API. A fact about the provider. */
+/** The Upstash Developer (Management) API. A fact about the service. */
 export const UPSTASH_MANAGEMENT_API = 'https://api.upstash.com/v2';
 
 /** Where a person creates and deletes Developer API keys. */
 export const UPSTASH_API_KEYS_URL = 'https://console.upstash.com/account/api';
 
-/** Loose email shape : one `@`, no whitespace. The provider validates the rest. */
+/** Loose email shape : one `@`, no whitespace. The service validates the rest. */
 export const UPSTASH_EMAIL_PATTERN = '^[^\\s@]+@[^\\s@]+$';
 
 export const upstashRedisCredential: ApiKeyCredentialSpec = {
@@ -107,10 +107,10 @@ export interface UpstashAuth {
 /**
  * Narrow the secret the host hands the plugin. Throws `CredentialKindMismatch`
  * on the wrong kind and a plain `Error` when a field is missing — both mean a
- * host bug, not a provider error, so neither is an `UpstreamAuthError`.
+ * host bug, not a service error, so neither is an `UpstreamAuthError`.
  */
 export function upstashAuth(secret: CredentialSecret): UpstashAuth {
-  const apiKey = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
+  const apiKey = expectCredentialKind(SERVICE_ID, secret, 'api-key');
   const email = apiKey.fields.email;
   const key = apiKey.fields.api_key;
   if (typeof email !== 'string' || !new RegExp(UPSTASH_EMAIL_PATTERN).test(email)) {

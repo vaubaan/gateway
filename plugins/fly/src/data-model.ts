@@ -1,7 +1,7 @@
 /**
- * Data model of the `fly` provider.
+ * Data model of the `fly` service.
  *
- * Spec : docs/spec/gateway-risk-model.md §2. Handbook : docs/handbook/providers/fly.md.
+ * Spec : docs/spec/gateway-risk-model.md §2. Handbook : docs/handbook/services/fly.md.
  *
  * One plane, `apps`. The organization is the root (one per account) ; the
  * app is the resource the owner labels `staging` or `prod`. Operations that
@@ -12,13 +12,13 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 const one = ['one'] as const;
 const many = ['one', 'unbounded'] as const;
 
 export const flyDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'apps',

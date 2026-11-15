@@ -24,7 +24,7 @@ import { resultText } from './support.ts';
 const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
 
-const project: Resource = { provider: 'supabase', ref: REF, displayName: 'Acme / app' };
+const project: Resource = { service: 'supabase', ref: REF, displayName: 'Acme / app' };
 const credential: CredentialSecret = {
   kind: 'api-key',
   fields: { access_token: 'sbp_access' },

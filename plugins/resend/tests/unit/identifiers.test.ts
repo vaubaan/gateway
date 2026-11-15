@@ -2,7 +2,7 @@
  * Identifier positions of the `resend` plugin : every value that reaches the
  * request path — from the arguments (`id`, `segment_id`, a contact selector),
  * from the mission's resources (a segment ref, a domain's `domain_id`) or
- * from the provider's own answer (the id of a contact just created) — goes
+ * from the service's own answer (the id of a contact just created) — goes
  * through one grammar per kind (`pathIdent`, `contactSelector`, `domainName`
  * in `resources.ts`), in `classify` and in `execute` alike.
  *
@@ -57,7 +57,7 @@ const UUID = '4dd369bc-aa82-4ff3-97de-514ae3000ee0';
 const FROM = 'noreply@notifications.acme.com';
 
 const prodDomain: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'notifications.acme.com',
   displayName: 'notifications.acme.com',
   env: 'prod',
@@ -65,7 +65,7 @@ const prodDomain: Resource = {
 };
 
 const segment: Resource = {
-  provider: 'resend',
+  service: 'resend',
   ref: 'seg_news',
   displayName: 'Newsletter',
   env: 'prod',
@@ -342,7 +342,7 @@ describe('`domain` — a mission resource ; the path carries its `domain_id`', (
   }
 });
 
-describe('an id the provider answers — the contact just created', () => {
+describe('an id the service answers — the contact just created', () => {
   test('a created id that is not one path segment is not used to build the membership path', async () => {
     for (const id of ['..', '.', 'a/../b', 'a/b', '%2e%2e', 'ct_1?x=1#y', 'a.b']) {
       const fetch = permissiveFetch({ id });

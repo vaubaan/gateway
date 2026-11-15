@@ -19,7 +19,7 @@
  *   - synchronous and non-blocking: it must not await the network;
  *   - it never throws (the stage also guards the call);
  *   - it reads the event and keeps nothing of it but what it derives for the
- *     report: the outcome carries the provider's result or error, which may
+ *     report: the outcome carries the service's result or error, which may
  *     echo the call's arguments. Reducing it to a closed vocabulary is the
  *     implementation's job (`server/telemetry/outcome.ts`).
  *
@@ -27,7 +27,7 @@
  * no argument: the stage does not hand over what a report may never contain.
  */
 import type { AuditEntry, AuditWriter } from '@vaubaan/gateway-core';
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import type { RefusalCode, RiskId } from '@vaubaan/shared';
 
 /** What `plugin.execute` ended with: its result, or what was thrown at the end of the retries. */
@@ -36,7 +36,7 @@ export type PluginOutcome =
 
 export interface PluginExecution {
   /** The plugin that ran: its id, its version and the tools it declares. */
-  readonly plugin: Pick<ProviderPlugin, 'id' | 'version' | 'tools'>;
+  readonly plugin: Pick<ServicePlugin, 'id' | 'version' | 'tools'>;
   readonly tool: string;
   readonly outcome: PluginOutcome;
   /** From the first `execute` to the final outcome, retries included. Bucketed before it leaves. */

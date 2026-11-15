@@ -10,7 +10,7 @@ import { silentLogger } from '../logging/logger';
 import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import { LOCAL_LOCKOUT, SignInAccountsService } from './sign-in-accounts';
 
-const PROVIDER = 'local';
+const SIGN_IN_PROVIDER = 'local';
 const ADA = 'ada@example.com';
 const PASSWORD = 'a sentence ada remembers';
 
@@ -47,7 +47,7 @@ describe('the cost of a password check', () => {
       passwords,
     });
     await accounts.createSignInAccount({
-      providerId: PROVIDER,
+      signInProviderId: SIGN_IN_PROVIDER,
       email: ADA,
       password: PASSWORD,
       actor: 'bootstrap',
@@ -58,12 +58,12 @@ describe('the cost of a password check', () => {
   });
 
   it('an unknown address and a wrong password each cost one hash, and get one answer', async () => {
-    expect(await accounts.checkPassword(PROVIDER, 'bob@example.com', PASSWORD)).toEqual({
+    expect(await accounts.checkPassword(SIGN_IN_PROVIDER, 'bob@example.com', PASSWORD)).toEqual({
       ok: false,
       cause: 'unknown',
     });
     expect(passwords.verifications).toBe(1);
-    expect(await accounts.checkPassword(PROVIDER, ADA, 'not the sentence')).toEqual({
+    expect(await accounts.checkPassword(SIGN_IN_PROVIDER, ADA, 'not the sentence')).toEqual({
       ok: false,
       cause: 'wrong',
     });
@@ -72,15 +72,17 @@ describe('the cost of a password check', () => {
 
   it('a locked account is refused before any hash, the right password included', async () => {
     for (let miss = 0; miss < LOCAL_LOCKOUT.maxAttempts; miss += 1) {
-      await accounts.checkPassword(PROVIDER, ADA, 'not the sentence');
+      await accounts.checkPassword(SIGN_IN_PROVIDER, ADA, 'not the sentence');
     }
     const before = passwords.verifications;
-    expect(await accounts.checkPassword(PROVIDER, ADA, PASSWORD)).toEqual({
+    expect(await accounts.checkPassword(SIGN_IN_PROVIDER, ADA, PASSWORD)).toEqual({
       ok: false,
       cause: 'locked',
     });
     expect(passwords.verifications).toBe(before);
     test.clock.advance(LOCAL_LOCKOUT.lockMs + 1);
-    expect(await accounts.checkPassword(PROVIDER, ADA, PASSWORD)).toMatchObject({ ok: true });
+    expect(await accounts.checkPassword(SIGN_IN_PROVIDER, ADA, PASSWORD)).toMatchObject({
+      ok: true,
+    });
   });
 });

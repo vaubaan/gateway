@@ -1,10 +1,10 @@
 /**
  * `/admin/identity-provider/<id>/test` — what the last test of a sign-in provider
- * found (ADR administrators-live-in-the-instance, §5): the provider ran its sign-in
+ * found (ADR administrators-live-in-the-instance, §5): the sign-in provider ran its sign-in
  * to the end in another window, and the gateway signed nobody in. The page shows
- * what the provider returned and the verdict a sign-in would get; from the result
- * the tester switches the provider on, or makes the tested identity an
- * administrator (the setup through a provider).
+ * what the sign-in provider returned and the verdict a sign-in would get; from the result
+ * the tester switches the sign-in provider on, or makes the tested identity an
+ * administrator (the setup through a sign-in provider).
  */
 import { notFound } from 'next/navigation';
 
@@ -48,9 +48,9 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
   const { root, principal } = await requireOperator();
   const { id } = await params;
   const query = await searchParams;
-  const provider = await root.auth.providers.view(id);
-  if (!provider) notFound();
-  const state = await root.auth.providers.state(id);
+  const signInProvider = await root.auth.signInProviders.view(id);
+  if (!signInProvider) notFound();
+  const state = await root.auth.signInProviders.state(id);
   const test = state.test;
   const problems = ([] as string[]).concat(query.problem ?? []);
   const madeAdministrator = query.administrator === '1';
@@ -62,8 +62,8 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
     <>
       <PageHeader
         doc={DOC_PAGES.signIn}
-        title={`Test of ${provider.name}`}
-        lede="The provider ran its sign-in to the end in another window. Nothing was created here: no person, no session; your own session is untouched."
+        title={`Test of ${signInProvider.name}`}
+        lede="The sign-in provider ran its sign-in to the end in another window. Nothing was created here: no person, no session; your own session is untouched."
         crumbs={[{ label: SETTINGS_PAGES.signIn.title, href: IDP_PAGE }]}
         width="narrow"
       />
@@ -83,7 +83,7 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
             title={`${identity.email} administers this gateway`}
             testId="test-made-administrator"
           >
-            Their first sign-in through {provider.name} sets their second factor up.
+            Their first sign-in through {signInProvider.name} sets their second factor up.
           </Callout>
         )}
         {!test ? (
@@ -94,7 +94,7 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
           <Callout tone="bad" title="The test failed" testId="test-failed">
             {test.error && isLoginErrorCode(test.error)
               ? LOGIN_ERROR_MESSAGES[test.error]
-              : 'The provider refused the sign-in.'}
+              : 'The sign-in provider refused the sign-in.'}
             {test.detail && <span className={styles.sub}>{test.detail}</span>}
           </Callout>
         ) : (
@@ -105,13 +105,13 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
                 ? 'Passed: this person would sign in as an administrator'
                 : verdict?.admitted
                   ? 'Passed: this person would sign in'
-                  : 'Passed: the provider works, and this person would be refused'
+                  : 'Passed: the sign-in provider works, and this person would be refused'
             }
             testId="test-passed"
           >
             <KeyValue
               items={[
-                { term: 'Provider', value: <Mono>{provider.id}</Mono> },
+                { term: 'Sign-in provider', value: <Mono>{signInProvider.id}</Mono> },
                 { term: 'Subject', value: <Mono>{identity?.subject ?? '—'}</Mono> },
                 {
                   term: 'Email',
@@ -154,25 +154,27 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
           </Callout>
         )}
         <div className={styles.formActions}>
-          {provider.kind !== 'local' && (
-            <form method="post" action={signInTestPath(provider.id)} target="_blank">
+          {signInProvider.kind !== 'local' && (
+            <form method="post" action={signInTestPath(signInProvider.id)} target="_blank">
               <Button type="submit">Test again</Button>
             </form>
           )}
-          {provider.source === 'store' && !provider.enabled && testPassedSinceSaved(state) && (
-            <form
-              method="post"
-              action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/enable`}
-            >
-              <Button type="submit" variant="primary" data-testid="test-enable">
-                Switch it on
-              </Button>
-            </form>
-          )}
+          {signInProvider.source === 'store' &&
+            !signInProvider.enabled &&
+            testPassedSinceSaved(state) && (
+              <form
+                method="post"
+                action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/enable`}
+              >
+                <Button type="submit" variant="primary" data-testid="test-enable">
+                  Switch it on
+                </Button>
+              </form>
+            )}
           {mine && test?.outcome === 'passed' && identity && !verdict?.administrator && (
             <form
               method="post"
-              action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/test/administrator`}
+              action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/test/administrator`}
             >
               <Button type="submit" data-testid="test-make-administrator">
                 Make {identity.email} an administrator

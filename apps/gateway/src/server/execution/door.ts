@@ -120,7 +120,7 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
    * account and in the mission — local writes only — (ADR
    * created-resources-join-the-mission), then schedules the account's
    * discovery off the request path (ADR created-resources-join-the-mission).
-   * Must never wait on a provider. Absent: nothing follows a call.
+   * Must never wait on a service. Absent: nothing follows a call.
    */
   readonly afterCall?: (ctx: MissionContext, call: AnsweredCall) => void | Promise<void>;
   readonly logger: Logger;
@@ -216,7 +216,7 @@ export class ExecutionDoor {
               ...catalog.tools,
               {
                 name: tool.name,
-                provider: 'vaubaan',
+                service: 'vaubaan',
                 description: tool.description ?? '',
                 callable: true,
               },
@@ -386,7 +386,7 @@ export class ExecutionDoor {
           );
         case 'failed':
           if (outcome.refusal) throw refusalError(outcome.refusal);
-          // The call was allowed and counted; the provider failed. A tool-level
+          // The call was allowed and counted; the service failed. A tool-level
           // error, so the model reads it and can react.
           return {
             isError: true,

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { validateDataModel, type DataModel } from './data-model.ts';
 
 const model: DataModel = {
-  provider: 'acme',
+  service: 'acme',
   planes: [
     {
       slug: 'space',
@@ -22,10 +22,10 @@ const model: DataModel = {
 describe('validateDataModel', () => {
   test('a consistent model has no error', () => {
     expect(validateDataModel(model)).toEqual([]);
-    expect(validateDataModel({ provider: 'acme', planes: [] })).toEqual([]);
+    expect(validateDataModel({ service: 'acme', planes: [] })).toEqual([]);
   });
 
-  test('an orphan parent is reported with provider, plane and entity', () => {
+  test('an orphan parent is reported with service, plane and entity', () => {
     const orphan: DataModel = {
       ...model,
       planes: [
@@ -38,7 +38,7 @@ describe('validateDataModel', () => {
       ],
     };
     expect(validateDataModel(orphan)).toEqual([
-      "provider 'acme' plane 'space': entity 'thing' has parent 'ghost' which is not declared in this plane.",
+      "service 'acme' plane 'space': entity 'thing' has parent 'ghost' which is not declared in this plane.",
     ]);
   });
 
@@ -59,7 +59,7 @@ describe('validateDataModel', () => {
 
   test('every orphan is listed', () => {
     const two: DataModel = {
-      provider: 'acme',
+      service: 'acme',
       planes: [
         {
           slug: 'p',

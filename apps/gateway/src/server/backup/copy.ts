@@ -71,7 +71,7 @@ export async function writeStoreCopy(options: StoreCopyOptions): Promise<StoreCo
       sealedKeyVersions: [...new Set(sealedVersionsOf(copy).map((v) => v.keyVersion))].sort(
         (a, b) => a - b,
       ),
-      carried: carried.providers,
+      carried: carried.signInProviders,
     };
   } finally {
     copy?.close();
@@ -83,8 +83,8 @@ async function writeIntoCopy(options: StoreCopyOptions): Promise<CarriedSignIn> 
   const clock = { now: options.now ?? (() => new Date()) };
   const copy = openCopyConfig(options.target, options.encryptor, clock);
   try {
-    const providers = new SignInProvidersService(config, async () => [], copy.config, clock);
-    const carried = await providers.carryIntoStore();
+    const signInProviders = new SignInProvidersService(config, async () => [], copy.config, clock);
+    const carried = await signInProviders.carryIntoStore();
     await copy.config.delete(BACKUP_STATUS_KEY);
     return carried;
   } finally {

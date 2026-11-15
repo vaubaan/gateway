@@ -28,7 +28,7 @@ const READ_VECTOR = {
 } as const;
 
 export const ACME_CATALOG: RiskCatalog = {
-  provider: 'acme',
+  service: 'acme',
   risks: [
     {
       id: 'acme.read',
@@ -155,8 +155,8 @@ export const ACME_STALE: IssuanceResource = {
 export function acmeAccount(overrides: Partial<IssuanceAccount> = {}): IssuanceAccount {
   return {
     id: 'conn-acme',
-    provider: 'acme',
-    provider_label: 'Acme',
+    service: 'acme',
+    service_label: 'Acme',
     resource_noun: { one: 'thing', other: 'things' },
     display_name: 'Acme main',
     status: 'active',
@@ -186,14 +186,14 @@ export interface SeededAccount {
 export async function seedAccount(
   store: Pick<Store, 'accounts'>,
   input: {
-    readonly provider: string;
+    readonly service: string;
     readonly owner: Principal;
     readonly displayName: string;
     readonly resources: readonly SeedResource[];
   },
 ): Promise<SeededAccount> {
   const account = await store.accounts.create({
-    provider: input.provider,
+    service: input.service,
     owner: input.owner,
     displayName: input.displayName,
     credential: JSON.stringify({ kind: 'test', note: 'never sent upstream' }),
@@ -209,10 +209,10 @@ export async function seedAccount(
   return { account, resources };
 }
 
-/** Every environment label a provider's catalog names, in first-seen order. */
-export function catalogEnvs(registry: PluginRegistry, provider: string): string[] {
+/** Every environment label a service's catalog names, in first-seen order. */
+export function catalogEnvs(registry: PluginRegistry, service: string): string[] {
   const envs = new Set<string>();
-  for (const risk of registry.require(provider).plugin.catalog.risks) {
+  for (const risk of registry.require(service).plugin.catalog.risks) {
     for (const env of risk.acceptable_in_envs ?? []) envs.add(env);
   }
   return [...envs];

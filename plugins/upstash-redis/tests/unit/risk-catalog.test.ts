@@ -1,7 +1,7 @@
 /**
  * Catalog lint — takes the catalog as the plugin loads it from the YAML,
  * validates the static schema, parses every
- * `matches` slice pattern, and walks every MCP tool exposed by the provider
+ * `matches` slice pattern, and walks every MCP tool exposed by the service
  * to assert that AT LEAST ONE non-fallback risk matches at least one of the
  * tool's emitted slices.
  */
@@ -17,7 +17,7 @@ import { classifyUpstashRedis, upstashRedisCatalog, upstashRedisTools } from '..
 const parsedCatalog = upstashRedisCatalog.catalog;
 
 const database: Resource = {
-  provider: 'upstash-redis',
+  service: 'upstash-redis',
   ref: 'db-abc-123',
   displayName: 'db-abc-123',
 };
@@ -27,7 +27,7 @@ const RISK_ID_REGEX =
 
 describe('upstash-redis risk-catalog — YAML structural validation', () => {
   test('YAML parses into a valid RiskCatalog shape', () => {
-    expect(parsedCatalog.provider).toBe('upstash-redis');
+    expect(parsedCatalog.service).toBe('upstash-redis');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
     expect(parsedCatalog.risks.length).toBeGreaterThanOrEqual(10);
   });
@@ -93,7 +93,7 @@ describe('upstash-redis risk-catalog — every `matches` pattern parses via pars
         typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
       for (const raw of raws) {
         const parsed = parseSlice(raw);
-        expect(parsed.provider).toBe('upstash-redis');
+        expect(parsed.service).toBe('upstash-redis');
       }
     });
   }

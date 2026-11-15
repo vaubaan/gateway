@@ -1,9 +1,9 @@
 /**
- * Classifier of the `railway` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `railway` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3 (slice DSL), §7 (plugin contract) ;
  *            docs/spec/vaubaan-gateway.md §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/railway.md.
+ * Handbook : docs/handbook/services/railway.md.
  *
  * Pure : no IO, no credential, no `Date`. Every tool maps to at least one
  * slice ; a call the plugin cannot place on the data model is `denied`
@@ -70,7 +70,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { railwayTools, UNBOUND_ARGUMENTS } from './tools.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ import { railwayTools, UNBOUND_ARGUMENTS } from './tools.ts';
  * An id Railway issues (project, environment, service, deployment — UUIDs) :
  * letters, digits, `_` and `-`, bounded. No dot, no separator, no escape :
  * the value is safe in a slice segment and names one object wherever the
- * provider places it. Anything else is refused rather than escaped.
+ * service places it. Anything else is refused rather than escaped.
  */
 export const RAILWAY_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -385,7 +385,7 @@ function locateProject(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): Resource | Denial {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
 
   if (args.projectId !== undefined) {
     const explicit = railwayId(args.projectId);
@@ -669,5 +669,5 @@ function wildOne(): SliceSegment {
 }
 
 function slice(path: SliceSegment[], action: Slice['action']): Slice {
-  return { provider: PROVIDER_ID, path, action };
+  return { service: SERVICE_ID, path, action };
 }

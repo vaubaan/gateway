@@ -9,8 +9,8 @@ import type { MockRoute, RecordedCall } from '@vaubaan/plugin-sdk/testing';
 import { VERCEL_API_BASE, VERCEL_MCP_URL } from '../../src/index.ts';
 
 export const TEAM = 'team_abc';
-export const app: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'app' };
-export const site: Resource = { provider: 'vercel', ref: 'prj_site', displayName: 'site' };
+export const app: Resource = { service: 'vercel', ref: 'prj_abc', displayName: 'app' };
+export const site: Resource = { service: 'vercel', ref: 'prj_site', displayName: 'site' };
 
 export const credential = {
   kind: 'api-key' as const,

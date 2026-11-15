@@ -15,7 +15,7 @@
  *   - a legacy set mixing environments (migration 0033) takes any environment and keeps
  *     what is relabelled; a stopped mission moves nothing;
  *   - the hourly discovery runs on the accounts a running future set depends on, one
- *     run at a time, and logs a failure without the provider's words;
+ *     run at a time, and logs a failure without the service's words;
  *   - "check now" is the creator's or an owner's, says what joined, and the mission page
  *     reads when the account was last checked.
  */
@@ -44,7 +44,7 @@ const SPACES: readonly SeedSpace[] = [
 ];
 
 const space = (ref: string, env?: string): Resource => ({
-  provider: DEPOT,
+  service: DEPOT,
   ref,
   displayName: ref,
   ...(env ? { env } : {}),
@@ -90,7 +90,7 @@ describe('future resources', () => {
         ? [{ user: e.user_id, mission: e.object.id, after: e.after }]
         : [],
     );
-  /** A discovery the owner runs, the provider answering `listed`. */
+  /** A discovery the owner runs, the service answering `listed`. */
   const discover = async (listed: readonly Resource[]) => {
     instance.depot.scriptDiscovery(async () => [...listed]);
     return instance.root.accounts.service.discover(
@@ -228,7 +228,7 @@ describe('future resources', () => {
         'UPDATE mission_resource_sets SET future = 1, env = NULL, mixed_env = 1 WHERE id = ?',
       )
       .run(set!.id);
-    // The provider says nothing of the known spaces' environments: their owner's labels stay.
+    // The service says nothing of the known spaces' environments: their owner's labels stay.
     await discover([space('app-staging'), space('app-prod'), space('new-dev', 'dev')]);
     expect((await setsOf(mission))[0]?.resourceIds).toContain(await idOf('new-dev'));
 
@@ -304,7 +304,7 @@ describe('future resources', () => {
       expect(await listOf(future, 'prod')).toContain(await idOf('hourly'));
       expect((await moves('mission-resource-joined'))[0]?.user).toBe(DISCOVERY_ACTOR_ID);
 
-      // A failure is recorded and logged by account only, never the provider's words.
+      // A failure is recorded and logged by account only, never the service's words.
       instance.depot.scriptDiscovery(async () => {
         throw new Error('upstream said: secret-token-123 is wrong');
       });

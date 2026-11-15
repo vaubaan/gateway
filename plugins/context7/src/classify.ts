@@ -1,9 +1,9 @@
 /**
- * Classifier of the `context7` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `context7` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/context7.md.
+ * Handbook : docs/handbook/services/context7.md.
  *
  * Pure : no IO, no credential, no clock. Both tools read : they send the
  * agent's question to Context7 and read documentation back.
@@ -31,7 +31,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { INDEX_REF, PROVIDER_ID, TOOL, UPSTREAM_TOOL } from './identity.ts';
+import { INDEX_REF, SERVICE_ID, TOOL, UPSTREAM_TOOL } from './identity.ts';
 import { context7Tools } from './tools.ts';
 
 /** Context7's own limit on `libraryId`, `query` and the other texts of `GET /v2/context` (REST reference). */
@@ -142,7 +142,7 @@ export function readCall(
 export function resolveIndex(
   resources: readonly Resource[],
 ): { readonly ref: string } | { readonly denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (own.length === 0) return { denied: NO_CONTEXT7_INDEX };
   if (own.length > 1) {
     return { denied: `the mission holds ${own.length} Context7 resources — one is expected` };
@@ -169,7 +169,7 @@ export function classifyContext7(
 
 function readSlice(ref: string, library: SliceSegment): Slice {
   return {
-    provider: PROVIDER_ID,
+    service: SERVICE_ID,
     path: [
       { kind: 'name', value: 'index' },
       { kind: 'ident', value: ref },

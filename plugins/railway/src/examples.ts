@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `railway` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `railway` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -9,7 +9,7 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 export const EXAMPLE_PROJECT_STAGING = '00000000-0000-4000-8000-000000000001';
 export const EXAMPLE_PROJECT_PROD = '00000000-0000-4000-8000-000000000002';
@@ -19,7 +19,7 @@ export const EXAMPLE_ENV_PROD = '00000000-0000-4000-8000-0000000000e2';
 
 /** A staging project, with the service and environment discovery stored. */
 export const EXAMPLE_STAGING: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: EXAMPLE_PROJECT_STAGING,
   env: 'staging',
   displayName: 'api (staging)',
@@ -31,7 +31,7 @@ export const EXAMPLE_STAGING: Resource = {
 
 /** The prod project of the same service. */
 export const EXAMPLE_PROD: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: EXAMPLE_PROJECT_PROD,
   env: 'prod',
   displayName: 'api (prod)',

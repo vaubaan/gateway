@@ -1,5 +1,5 @@
 /**
- * Identity of the `vaubaan` provider — the gateway's own management tools — the
+ * Identity of the `vaubaan` service — the gateway's own management tools — the
  * one place its ids are written.
  *
  * The tool names are the ones the management door published before it was
@@ -13,10 +13,10 @@
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'vaubaan';
+/** The service id. */
+export const SERVICE_ID = 'vaubaan';
 
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** The acts, by the name the management door gave them. */
 export const ACT = {

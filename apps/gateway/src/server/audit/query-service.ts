@@ -62,7 +62,7 @@ export interface AuditMissionRef {
 export interface AuditAccountRef {
   readonly id: string;
   readonly display_name: string | null;
-  readonly provider: string | null;
+  readonly service: string | null;
 }
 
 /** The token a call presented and who it belongs to (spec §8). */
@@ -288,7 +288,7 @@ export class AuditQueryService {
       missions: missions.map((m) => ({ id: m.id, name: m.name })).reverse(),
       accounts: accounts.map((c) => ({
         id: c.id,
-        label: `${c.provider} — ${c.displayName}`,
+        label: `${c.service} — ${c.displayName}`,
       })),
     };
   }
@@ -417,7 +417,7 @@ class NameCache {
       return {
         id,
         display_name: account?.displayName ?? null,
-        provider: account?.provider ?? null,
+        service: account?.service ?? null,
       };
     });
   }
@@ -632,7 +632,7 @@ async function objectLabel(
     case 'oauth-client':
     case 'delegation':
     case 'instance-config':
-      // The id is the name: `idp`, `telemetry`, `bootstrap`; `provider-app:<id>` in entries of earlier builds.
+      // The id is the name: `idp`, `telemetry`, `bootstrap`; `provider-app:<id>` in entries of earlier builds (the OAuth clients per service, retired).
       return null;
   }
 }

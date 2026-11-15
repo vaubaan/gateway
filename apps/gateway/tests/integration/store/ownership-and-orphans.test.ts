@@ -44,7 +44,7 @@ describe('ownership and orphan states in the store', () => {
   afterEach(() => store.close());
 
   const connect = (owner: Principal, credential: string | null = 'secret') =>
-    store.accounts.create({ provider: 'github', owner, displayName: 'GitHub', credential });
+    store.accounts.create({ service: 'github', owner, displayName: 'GitHub', credential });
   const statusOf = async (c: AccountRecord) => (await store.accounts.getById(c.id))?.status;
   const byGroup: Principal = { kind: 'group', id: '' };
 

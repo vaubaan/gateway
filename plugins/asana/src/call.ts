@@ -2,7 +2,7 @@
  * The one reader of an `asana` call, shared by `classify` and `execute`
  * (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  *
- * Handbook : docs/handbook/providers/asana.md.
+ * Handbook : docs/handbook/services/asana.md.
  *
  * `readCall` turns the arguments into a typed call — the project resolved
  * against the mission, every identifier and value through its grammar — or
@@ -26,7 +26,7 @@ import {
   longText,
   offsetToken,
 } from './ids.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** Page size sent when the agent gives none. */
 export const DEFAULT_LIMIT = 50;
@@ -121,7 +121,7 @@ export function resolveProject(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ResolvedProject | { readonly denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER_ID);
+  const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.project !== undefined) {
     const explicit = asanaGid(args.project);
     if (!explicit) return { denied: malformed('project', GID_WORDS) };
@@ -146,7 +146,7 @@ export function resolveProject(
 
 /** The mission's projects whose ref is a gid : what `list_projects` answers. */
 export function projectsOf(resources: readonly Resource[]): Resource[] {
-  return resources.filter((r) => r.provider === PROVIDER_ID && asanaGid(r.ref) !== null);
+  return resources.filter((r) => r.service === SERVICE_ID && asanaGid(r.ref) !== null);
 }
 
 /** An optional value : absent is `null`, present must pass `read`. */

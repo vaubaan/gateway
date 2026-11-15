@@ -78,7 +78,7 @@ function resolveVersion(): string {
 /**
  * Every `@vaubaan/*` workspace this app depends on, read from its own
  * package.json: one source for the packages Next must transpile (they are
- * imported as TypeScript source), never a second provider list.
+ * imported as TypeScript source), never a second service list.
  */
 function workspaceDependencies(): string[] {
   const deps = readPackageJson(resolve(__dirname, 'package.json')).dependencies;
@@ -99,13 +99,13 @@ const NEVER_SHIPPED = [
 /**
  * The paths the interface had before its words changed (ADR
  * interface-redesign-vocabulary-and-design-system): connection → account,
- * request → waiting for you, audit → activity, provider → reference. Every old
+ * request → waiting for you, audit → activity, service → reference. Every old
  * path answers with a permanent redirect (308: the method and the body of a
  * form post are kept, the query string too), so bookmarks, links in tickets and
  * the address an agent was handed keep working.
  *
- * One path is NOT redirected: `/connections/callback/<provider>`. It is
- * registered at the provider as the callback of the company's app — part of
+ * One path is NOT redirected: `/connections/callback/<service>`. It is
+ * registered at the service as the callback of the company's app — part of
  * the protocol, like `/r/<id>`, `/mcp` and `/api/**`, which keep their names.
  *
  * `tests/unit/app/legacy-redirects.test.ts` holds each rule to a page or a
@@ -125,8 +125,8 @@ export const LEGACY_REDIRECTS: readonly {
   { source: '/requests', destination: '/waiting' },
   { source: '/requests/:path*', destination: '/waiting/:path*' },
   { source: '/audit', destination: '/activity/record' },
-  { source: '/providers', destination: '/reference' },
-  { source: '/providers/:path*', destination: '/reference/:path*' },
+  { source: '/services', destination: '/reference' },
+  { source: '/services/:path*', destination: '/reference/:path*' },
   // What a colleague gave access to is the second region of Accounts ("Shared with you").
   { source: '/shares', destination: '/accounts' },
   // Connected apps ("delegations") were retired with the management door (ADR

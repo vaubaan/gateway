@@ -104,10 +104,12 @@ export default async function LoginPage({ searchParams }: Props) {
   const failed = errorCode !== null && isLoginErrorCode(errorCode);
   // Signed in: the home, not a card about being signed in.
   if (principal?.kind === 'user' && !failed) redirect(ROUTES.home);
-  // A provider switched off is not offered: the page never shows a button that does not work.
-  const providers = (await root.auth.providers.views()).filter((provider) => provider.enabled);
-  const local = providers.find((provider) => provider.kind === 'local') ?? null;
-  const redirecting = providers.filter((provider) => provider.kind !== 'local');
+  // A sign-in provider switched off is not offered: the page never shows a button that does not work.
+  const signInProviders = (await root.auth.signInProviders.views()).filter(
+    (signInProvider) => signInProvider.enabled,
+  );
+  const local = signInProviders.find((signInProvider) => signInProvider.kind === 'local') ?? null;
+  const redirecting = signInProviders.filter((signInProvider) => signInProvider.kind !== 'local');
   const resetDone = first(params[RESET_DONE_PARAM]) === 'done';
   const bootstrap = await root.auth.bootstrap.state();
   const instance = await root.instance.name.identity();
@@ -122,12 +124,12 @@ export default async function LoginPage({ searchParams }: Props) {
             ? 'The attempt below failed; the session you already had is still open.'
             : 'This session sets the gateway up; it is not a person’s.'
           : local && redirecting.length > 0
-            ? 'With your email address and password, or through a provider you already have an account at.'
+            ? 'With your email address and password, or through a sign-in provider you already have an account at.'
             : local
               ? 'With the email address and the password of your account on this gateway.'
-              : providers.length > 1
+              : signInProviders.length > 1
                 ? 'Choose how you sign in. Nobody has a password here.'
-                : 'This gateway signs you in through a provider you already have an account at. Nobody has a password here.'}
+                : 'This gateway signs you in through a sign-in provider you already have an account at. Nobody has a password here.'}
       </AuthHeading>
 
       {resetDone && !principal && (
@@ -148,7 +150,7 @@ export default async function LoginPage({ searchParams }: Props) {
 
       {principal ? (
         <SignedIn principal={principal} />
-      ) : providers.length > 0 ? (
+      ) : signInProviders.length > 0 ? (
         <>
           {local && (
             <PasswordSignInForm
@@ -158,24 +160,27 @@ export default async function LoginPage({ searchParams }: Props) {
             />
           )}
           <div className={styles.act} data-testid="sign-in-providers">
-            {redirecting.map((provider, index) => {
-              const elsewhere = setUpElsewhere(provider, root.config.publicUrl);
+            {redirecting.map((signInProvider, index) => {
+              const elsewhere = setUpElsewhere(signInProvider, root.config.publicUrl);
               return (
-                <div key={provider.id} className={styles.act}>
+                <div key={signInProvider.id} className={styles.act}>
                   <ButtonLink
-                    href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
+                    href={`${signInStartPath(signInProvider.id)}?return_to=${encodeURIComponent(returnTo)}`}
                     variant={index === 0 && !local ? 'primary' : 'secondary'}
                     size="lg"
                     // A plain link: a prefetch of /auth/login would start a sign-in.
                     external
                   >
-                    Continue with {provider.name}
+                    Continue with {signInProvider.name}
                   </ButtonLink>
-                  {/* A restore on another host: the provider's callback is registered for the old one. */}
+                  {/* A restore on another host: the sign-in provider's callback is registered for the old one. */}
                   {elsewhere && (
-                    <p className={styles.muted} data-testid={`set-up-elsewhere-${provider.id}`}>
-                      {provider.name} was set up for {elsewhere}. It signs you in here once an
-                      administrator has registered this address at {provider.name}
+                    <p
+                      className={styles.muted}
+                      data-testid={`set-up-elsewhere-${signInProvider.id}`}
+                    >
+                      {signInProvider.name} was set up for {elsewhere}. It signs you in here once an
+                      administrator has registered this address at {signInProvider.name}
                       {local ? '; meanwhile, use your email address and password' : ''}.
                     </p>
                   )}

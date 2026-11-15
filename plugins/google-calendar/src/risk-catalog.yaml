@@ -3,7 +3,7 @@
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
 # ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
-# Handbook : docs/handbook/providers/google-calendar.md.
+# Handbook : docs/handbook/services/google-calendar.md.
 #
 # 10 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
 # instead). A calendar has no environment: no risk is env-scoped.
@@ -31,7 +31,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 6 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: google-calendar
+service: google-calendar
 catalog_version: 6
 catalog_date: 2026-11-13
 

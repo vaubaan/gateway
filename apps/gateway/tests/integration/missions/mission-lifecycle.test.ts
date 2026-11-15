@@ -173,7 +173,7 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('reaches nothing on an account that had no resource at issuance, even once discovery finds some', async () => {
     const empty = await seedAccount(root.store, {
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: seeded.bob.id },
       displayName: 'empty-org',
       resources: [],
@@ -544,7 +544,7 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('issues a three-account mission with one partition per account', async () => {
     const result = await issued({
-      name: 'Three providers',
+      name: 'Three services',
       accounts: [
         {
           account_id: seeded.github.account.id,
@@ -560,18 +560,18 @@ describe('missions: issue, rotate, revoke', () => {
       period: DAILY,
       expires_at: null,
     });
-    const providers = result.mission.policy.map((e) => e.riskId.split(/[.[]/)[0]);
-    expect(new Set(providers)).toEqual(new Set(['github', 'supabase', 'vercel']));
-    // One partition per account: each holds its own provider's lines, all of them.
+    const services = result.mission.policy.map((e) => e.riskId.split(/[.[]/)[0]);
+    expect(new Set(services)).toEqual(new Set(['github', 'supabase', 'vercel']));
+    // One partition per account: each holds its own service's lines, all of them.
     expect(result.preview.accounts.map((c) => c.passes.length)).toEqual(
-      ['github', 'supabase', 'vercel'].map((p) => providers.filter((q) => q === p).length),
+      ['github', 'supabase', 'vercel'].map((p) => services.filter((q) => q === p).length),
     );
-    for (const [index, provider] of ['github', 'supabase', 'vercel'].entries()) {
+    for (const [index, service] of ['github', 'supabase', 'vercel'].entries()) {
       const passes = result.preview.accounts[index]?.passes ?? [];
-      expect(passes.length, provider).toBeGreaterThan(0);
+      expect(passes.length, service).toBeGreaterThan(0);
       expect(
-        passes.every((e) => e.risk_id.startsWith(provider)),
-        provider,
+        passes.every((e) => e.risk_id.startsWith(service)),
+        service,
       ).toBe(true);
     }
     // Careful on Read: the global search, in row 2, asks first.
@@ -753,7 +753,7 @@ describe('missions: issue, rotate, revoke', () => {
     if (!detail) throw new Error('detail missing');
     expect(detail.state.kind).toBe('active');
     expect(detail.policy.every((r) => r.label !== r.risk_id && r.remaining === r.quota)).toBe(true);
-    expect(detail.accounts[0]).toMatchObject({ provider: 'github', display_name: 'acme-org' });
+    expect(detail.accounts[0]).toMatchObject({ service: 'github', display_name: 'acme-org' });
     expect(detail.kit?.reveals_secret).toBe(false);
     expect(detail.kit?.env).toContain(`vbn_live_${token.prefix}_…`);
     expect(JSON.stringify(detail)).not.toContain(token.secret);
@@ -840,13 +840,13 @@ describe('missions: issuance context', () => {
 
   it('carries resources, catalog, authority and macro-actions; flags env-deriving plugins', async () => {
     const context = await root.missions.service.issuanceContext(seeded.ada);
-    const byProvider = new Map(context.map((c) => [c.provider, c]));
-    expect([...byProvider.keys()].sort()).toEqual(['github', 'gmail', 'supabase', 'vercel']);
-    expect(byProvider.get('gmail')).not.toHaveProperty('experimental');
-    expect(byProvider.get('vercel')?.derives_env).toBe(true);
-    expect(byProvider.get('supabase')?.derives_env).toBe(false);
+    const byService = new Map(context.map((c) => [c.service, c]));
+    expect([...byService.keys()].sort()).toEqual(['github', 'gmail', 'supabase', 'vercel']);
+    expect(byService.get('gmail')).not.toHaveProperty('experimental');
+    expect(byService.get('vercel')?.derives_env).toBe(true);
+    expect(byService.get('supabase')?.derives_env).toBe(false);
     for (const account of context) {
-      const registered = root.registry.get(account.provider);
+      const registered = root.registry.get(account.service);
       expect(account.macro_actions).toEqual(
         registered ? macroActionsOf(registered.plugin.catalog) : undefined,
       );
@@ -856,7 +856,7 @@ describe('missions: issuance context', () => {
       expect(account.authority.every((id) => !/[*?]/.test(id))).toBe(true);
     }
     expect(
-      byProvider
+      byService
         .get('supabase')
         ?.resources.map((r) => r.env)
         .sort(),
@@ -868,8 +868,8 @@ describe('missions: issuance context', () => {
     await root.store.accounts.revoke(seeded.vercel.account.id);
     expect(await root.store.accounts.markExpired(seeded.github.account.id)).toBe(true);
     const context = await service.issuanceContext(seeded.ada);
-    expect(context.some((c) => c.provider === 'vercel')).toBe(false);
-    expect(context.find((c) => c.provider === 'github')?.status).toBe('expired');
+    expect(context.some((c) => c.service === 'vercel')).toBe(false);
+    expect(context.find((c) => c.service === 'github')?.status).toBe('expired');
     const preview = await service.preview(seeded.ada, {
       name: 'On an expired account',
       accounts: [{ account_id: seeded.github.account.id, trust_levels: { read: 'careful' } }],
@@ -883,7 +883,7 @@ describe('missions: issuance context', () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     const { account } = await seedAccount(root.store, {
-      provider: 'supabase',
+      service: 'supabase',
       owner,
       displayName: 'supabase (bob)',
       resources: [{ ref: 'unlabelled' }, { ref: 'stg', env: 'staging' }],
@@ -931,7 +931,7 @@ describe('missions: issuance context', () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     const { account } = await seedAccount(root.store, {
-      provider: 'supabase',
+      service: 'supabase',
       owner,
       displayName: 'supabase staging org (bob)',
       resources: [
@@ -977,23 +977,25 @@ describe('missions: issuance context', () => {
   });
 
   it('issues every macro-action of every registered plugin at every trust level cleanly for an owner with labelled resources', async () => {
-    const { service } = root.missions;
+    const { service: missions } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     let composed = 0;
-    for (const provider of root.registry.ids) {
-      const envs = catalogEnvs(root.registry, provider);
+    for (const service of root.registry.ids) {
+      const envs = catalogEnvs(root.registry, service);
       const { account } = await seedAccount(root.store, {
-        provider,
+        service,
         owner,
-        displayName: `${provider} (bob)`,
+        displayName: `${service} (bob)`,
         resources: [{ ref: 'unlabelled' }, ...envs.map((env) => ({ ref: `res-${env}`, env }))],
       });
-      const issuance = (await service.issuanceContext(seeded.bob)).find((c) => c.id === account.id);
+      const issuance = (await missions.issuanceContext(seeded.bob)).find(
+        (c) => c.id === account.id,
+      );
       const known = new Set(issuance?.risks.map((r) => r.risk_id));
       for (const action of issuance?.macro_actions ?? []) {
         for (const trustLevel of TRUST_LEVELS) {
-          const where = `${provider}/${action.id}@${trustLevel}`;
-          const preview = await service.preview(seeded.bob, {
+          const where = `${service}/${action.id}@${trustLevel}`;
+          const preview = await missions.preview(seeded.bob, {
             name: where,
             accounts: [{ account_id: account.id, trust_levels: { [action.id]: trustLevel } }],
             period: DAILY,
@@ -1048,36 +1050,38 @@ describe('missions: issuance context', () => {
   });
 
   it('issues "Everything I hold" on every registered plugin: the explicit list of the authority, within every ceiling', async () => {
-    const { service } = root.missions;
+    const { service: missions } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
-    for (const provider of root.registry.ids) {
-      const registered = root.registry.get(provider);
+    for (const service of root.registry.ids) {
+      const registered = root.registry.get(service);
       expect(
         registered ? macroActionsOf(registered.plugin.catalog).map((a) => a.id) : [],
-        `${provider} must not ship the built-in id`,
+        `${service} must not ship the built-in id`,
       ).not.toContain('everything-i-hold');
-      const envs = catalogEnvs(root.registry, provider);
+      const envs = catalogEnvs(root.registry, service);
       const { account } = await seedAccount(root.store, {
-        provider,
+        service,
         owner,
-        displayName: `${provider} (everything)`,
+        displayName: `${service} (everything)`,
         resources: [{ ref: 'unlabelled' }, ...envs.map((env) => ({ ref: `res-${env}`, env }))],
       });
       const draft = {
-        name: `${provider} wide`,
+        name: `${service} wide`,
         accounts: [{ account_id: account.id, everything_i_hold: true }],
         period: DAILY,
         expires_at: null,
       };
-      const preview = await service.preview(seeded.bob, draft);
-      expect(preview.issues, provider).toEqual([]);
-      const issuance = (await service.issuanceContext(seeded.bob)).find((c) => c.id === account.id);
+      const preview = await missions.preview(seeded.bob, draft);
+      expect(preview.issues, service).toEqual([]);
+      const issuance = (await missions.issuanceContext(seeded.bob)).find(
+        (c) => c.id === account.id,
+      );
       // Every non-deprecated id of the owner's authority: every env is labelled here.
       const expected = (issuance?.risks ?? [])
         .filter((r) => !r.deprecated && issuance?.authority.includes(r.risk_id))
         .map((r) => r.risk_id);
       // One set per environment: a risk of several sets is listed once here.
-      expect([...new Set(preview.policy.map((e) => e.risk_id))].sort(), provider).toEqual(
+      expect([...new Set(preview.policy.map((e) => e.risk_id))].sort(), service).toEqual(
         [...expected].sort(),
       );
       const fallback = issuance?.risks.filter((r) => r.fallback).map((r) => r.risk_id) ?? [];
@@ -1085,9 +1089,9 @@ describe('missions: issuance context', () => {
       const noticed = preview.notices
         .filter((n) => n.code === 'everything-i-hold-expanded')
         .flatMap((n) => n.risk_ids);
-      for (const id of fallback) expect(noticed, provider).toContain(id);
-      const issued = await service.issue(seeded.bob, draft);
-      expect(issued.ok, provider).toBe(true);
+      for (const id of fallback) expect(noticed, service).toContain(id);
+      const issued = await missions.issue(seeded.bob, draft);
+      expect(issued.ok, service).toBe(true);
       if (!issued.ok) continue;
       expect(JSON.stringify(issued.mission)).not.toContain('everything');
     }

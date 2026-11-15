@@ -19,7 +19,7 @@ const registry = createRegistry([flyPlugin]);
 function account(publicFields?: Record<string, string>): MissionAccount {
   return {
     id: 'conn-fly',
-    provider: 'fly',
+    service: 'fly',
     display_name: 'Fly (vaubaan)',
     status: 'active',
     owner: { kind: 'user', id: 'u1', display: 'ada@example.com' },

@@ -4,7 +4,7 @@
  * the docs root the instance is configured with (`docs.url`). Pure and
  * browser-safe.
  */
-import { providerPath } from './providers/links';
+import { servicePath } from './services/links';
 import type { DocTarget } from './vocabulary';
 
 /** The address of a target under the docs root (`docs.url`; a trailing slash is optional). */
@@ -22,7 +22,7 @@ export function docHref(docsRoot: string, target: Pick<DocTarget, 'path'>): stri
 export function docsSiteHref(docsRoot: string, path: string): string {
   if (!path.startsWith('/')) return path;
   const service = /^\/plugins\/([a-z0-9-]+)(#.*)?$/.exec(path);
-  if (service) return `${providerPath(service[1]!)}${service[2] ?? ''}`;
+  if (service) return `${servicePath(service[1]!)}${service[2] ?? ''}`;
   const doc = /^\/docs\/(.*)$/.exec(path);
   return docHref(docsRoot, { path: doc ? doc[1]! : `..${path}` });
 }

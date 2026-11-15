@@ -1,7 +1,7 @@
 /**
  * Redaction of env-var values on the encrypted read of `list_env_vars`.
  *
- * Handbook : docs/handbook/providers/vercel.md (env vars).
+ * Handbook : docs/handbook/services/vercel.md (env vars).
  *
  * `vercel.read-env-var` (`data: metadata`, in the `watch` macro-action) prices the
  * listing of env-var **keys** ; reading values is `vercel.read-env-var-plaintext`

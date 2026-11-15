@@ -80,24 +80,24 @@ export interface GroupRecord {
    * The sign-in provider that claims an IdP-sourced group (its id); `null` for a local
    * group. A group of provider A never counts for a user of provider B (migration 0014).
    */
-  readonly provider: string | null;
+  readonly signInProvider: string | null;
   readonly createdAt: Iso;
 }
 
 // --- accounts, resources, shares -------------------------------------------------
 
 /**
- * What became of the grant at the provider when an account was revoked.
- * `revoked`: the provider confirmed the withdrawal. `manual`: the gateway
- * cannot withdraw it for this provider. `failed`: it asked and was refused or
+ * What became of the grant at the service when an account was revoked.
+ * `revoked`: the service confirmed the withdrawal. `manual`: the gateway
+ * cannot withdraw it for this service. `failed`: it asked and was refused or
  * not answered. In the last two cases the person removes the grant by hand.
  */
-export const PROVIDER_GRANT_OUTCOMES = ['revoked', 'manual', 'failed'] as const;
-export type ProviderGrantOutcome = (typeof PROVIDER_GRANT_OUTCOMES)[number];
+export const SERVICE_GRANT_OUTCOMES = ['revoked', 'manual', 'failed'] as const;
+export type ServiceGrantOutcome = (typeof SERVICE_GRANT_OUTCOMES)[number];
 
 export interface AccountRecord {
   readonly id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly owner: Principal;
   readonly displayName: string;
   readonly status: AccountStatus;
@@ -110,9 +110,9 @@ export interface AccountRecord {
   readonly revokedAt: Iso | null;
   /**
    * Null for an account that is not revoked, and for one revoked before the
-   * gateway asked providers anything (nothing is known: remove it by hand).
+   * gateway asked services anything (nothing is known: remove it by hand).
    */
-  readonly providerGrant: ProviderGrantOutcome | null;
+  readonly serviceGrant: ServiceGrantOutcome | null;
   /**
    * The environment label its owner chose for the resources that carry none of
    * their own (migration 0017); `null` when none was chosen. Resources read
@@ -139,7 +139,7 @@ export interface AccountResourceRecord {
    * own). An unlabelled resource on an account without a default reads `owner`.
    */
   readonly envSource: ResourceEnvSource;
-  /** Effective metadata: the provider facts of the last discovery overlaid by the owner's edits. */
+  /** Effective metadata: the service facts of the last discovery overlaid by the owner's edits. */
   readonly metadata: Record<string, unknown> | null;
   /** The owner's edits alone (keys that override the discovered metadata). */
   readonly ownerMetadata: Record<string, unknown> | null;
@@ -167,7 +167,7 @@ export interface DiscoveredResource {
   readonly displayName: string;
   /** Environment label; omitted keeps the label an owner already set. */
   readonly env?: string | null;
-  /** Provider-specific, non-secret facts (`Resource.metadata`); only `syncDiscoveredResources` stores them. */
+  /** Service-specific, non-secret facts (`Resource.metadata`); only `syncDiscoveredResources` stores them. */
   readonly metadata?: Readonly<Record<string, unknown>> | null;
   /** The plugin's hint (`Resource.hiddenByDefault`); applied only while the owner never chose. */
   readonly hidden?: boolean;
@@ -291,7 +291,7 @@ export interface MissionResourceSetInput {
 /**
  * One account as a writer gives it: its sets, each with its lines, or — the shape of
  * a mission with one set per account — the selection directly, the lines then given
- * once for the whole mission (`CreateMissionInput.policy`) and placed by provider.
+ * once for the whole mission (`CreateMissionInput.policy`) and placed by service.
  */
 export type MissionAccountInput =
   | { readonly accountId: string; readonly resourceSets: readonly MissionResourceSetInput[] }

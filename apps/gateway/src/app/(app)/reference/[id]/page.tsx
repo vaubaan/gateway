@@ -11,7 +11,7 @@
  * The page's links are paths of the documentation site, resolved under the
  * instance's `docs.url` (`docsSiteHref`); every permission and every
  * macro-action keeps its anchor (`#risk-<id>`, `#macro-<id>`), which the other
- * pages link to through `lib/providers/links.ts`.
+ * pages link to through `lib/services/links.ts`.
  */
 import { notFound } from 'next/navigation';
 
@@ -22,7 +22,7 @@ import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import { DocHint, Mono } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { docsSiteHref } from '@/lib/docs-links';
-import { providerCards } from '@/lib/providers/reference';
+import { serviceCards } from '@/lib/services/reference';
 import { REFERENCE_WORDS, serviceDoc } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
 import { servicePageInfo } from '@/server/plugins/service-page';
@@ -48,7 +48,7 @@ export default async function ServiceReferencePage({ params }: Props) {
   const docsRoot = root.config.docs.url.href;
 
   return (
-    <ReferenceFrame cards={providerCards(root.registry)}>
+    <ReferenceFrame cards={serviceCards(root.registry)}>
       <div className={styles.strip} data-testid="instance-strip">
         <span className={styles.inline} data-testid="service-version">
           {REFERENCE_WORDS.runs} <Mono>{`plugin ${plugin.version}`}</Mono>

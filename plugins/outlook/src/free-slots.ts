@@ -3,7 +3,7 @@
  * (`scheduleItems[]` that are not `free`, each `start` inclusive, `end`
  * exclusive). Pure: no clock, no network.
  *
- * Handbook : docs/handbook/providers/outlook.md (`suggest_time`).
+ * Handbook : docs/handbook/services/outlook.md (`suggest_time`).
  */
 
 /** A span of time, in milliseconds since the epoch, `start` inclusive, `end` exclusive. */

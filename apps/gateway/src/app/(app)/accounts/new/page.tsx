@@ -17,7 +17,7 @@ import {
   type PageSearchParams,
 } from '@/lib/accounts/session';
 import { DOC_PAGES, ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
-import { PROVIDERS_PATH } from '@/lib/providers/links';
+import { SERVICES_PATH } from '@/lib/services/links';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +31,7 @@ export default async function ConnectAccountPage({
   const { root, principal } = session;
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const providers = await root.accounts.service.providers();
+  const services = await root.accounts.service.services();
 
   return (
     <>
@@ -46,10 +46,10 @@ export default async function ConnectAccountPage({
       />
       <NoticeBanner notice={notice} />
       <Section first>
-        <ServicePicker providers={providers} returnTo={firstParam(params.return_to)} />
+        <ServicePicker services={services} returnTo={firstParam(params.return_to)} />
         <Hint>
           What an agent can then do on each service, permission by permission, is in the{' '}
-          <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link>.
+          <Link href={SERVICES_PATH}>{PAGES.reference.title}</Link>.
         </Hint>
       </Section>
     </>

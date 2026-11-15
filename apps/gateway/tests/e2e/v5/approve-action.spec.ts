@@ -13,7 +13,7 @@
  *   the call is refused with the approval request's URL → someone else opens
  *   it (403, nothing) → the creator reads the tool, the arguments in clear,
  *   the slices and the budget, and approves → the identical replay reaches the
- *   provider → the same call again asks again → the creator opens the gate for
+ *   service → the same call again asks again → the creator opens the gate for
  *   the rest of the period → then closes that opening on the mission page.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
@@ -101,7 +101,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   expect(refusal.hint).toContain(approvalUrl);
   expect(refusal.hint).toContain('exactly the same arguments');
   expect(JSON.stringify(refusal)).not.toContain(MARKER);
-  // Nothing was executed and nothing is held: the provider saw no write.
+  // Nothing was executed and nothing is held: the service saw no write.
   expect(await workflowWrites()).toHaveLength(writesBefore);
   // A replay before the decision points to the same request.
   expect(approvalRequired(await write()).approval_url).toBe(approvalUrl);

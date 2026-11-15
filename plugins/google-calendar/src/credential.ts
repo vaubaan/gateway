@@ -5,7 +5,7 @@
  * offers neither a key a person can make for Calendar nor dynamic client
  * registration; the broker owns one verified client with one redirect URI.
  *
- * Handbook : docs/handbook/providers/google-calendar.md.
+ * Handbook : docs/handbook/services/google-calendar.md.
  *
  * The host runs the flow and refreshes through the broker; this plugin
  * receives an access token and never sees the refresh token or the broker key.

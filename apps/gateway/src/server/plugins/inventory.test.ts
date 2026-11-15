@@ -2,7 +2,7 @@
  * The composition of bundled plugins, pins and `plugins.enabled`, and the accounts
  * check (ADR plugins-bundled-or-pinned-by-the-operator). Pure: the plugins are stubs.
  */
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError } from '../config';
@@ -10,12 +10,12 @@ import {
   bundledInventory,
   checkAccountsServed,
   composePlugins,
-  unservedProviders,
+  unservedServices,
 } from './inventory';
 import type { PinnedPlugin } from './loader';
 
-function plugin(id: string, version: string): ProviderPlugin {
-  return { id, version, displayName: id.toUpperCase() } as unknown as ProviderPlugin;
+function plugin(id: string, version: string): ServicePlugin {
+  return { id, version, displayName: id.toUpperCase() } as unknown as ServicePlugin;
 }
 
 function pinOf(id: string, version: string, path = `/plugins/${id}`): PinnedPlugin {
@@ -133,20 +133,20 @@ describe('the accounts check', () => {
   const set = composePlugins({ bundled: BUNDLED, pinned: [], enabled: ['github'] });
   const registered = new Set(set.plugins.map((p) => p.id));
 
-  it('passes when every provider with accounts is registered', () => {
-    expect(unservedProviders({ github: 3 }, registered, set.inventory)).toEqual([]);
+  it('passes when every service with accounts is registered', () => {
+    expect(unservedServices({ github: 3 }, registered, set.inventory)).toEqual([]);
     expect(() => checkAccountsServed([])).not.toThrow();
   });
 
   it('names a disabled plugin and a missing one, with their counts', () => {
-    const unserved = unservedProviders(
+    const unserved = unservedServices(
       { github: 2, notion: 1, railway: 4, miro: 0 },
       registered,
       set.inventory,
     );
     expect(unserved).toEqual([
-      { provider: 'notion', accounts: 1, cause: 'disabled' },
-      { provider: 'railway', accounts: 4, cause: 'missing' },
+      { service: 'notion', accounts: 1, cause: 'disabled' },
+      { service: 'railway', accounts: 4, cause: 'missing' },
     ]);
     const message = messageOf(() => checkAccountsServed(unserved));
     expect(message).toContain(`the store holds 1 account of 'notion'`);

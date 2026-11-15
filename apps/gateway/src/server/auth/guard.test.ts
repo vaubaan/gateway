@@ -20,7 +20,7 @@ function userPrincipal(isOperator: boolean): UserPrincipal {
     user,
     groups: [],
     isOperator,
-    providerId: 'idp',
+    signInProviderId: 'idp',
     login: { email: user.email, groups: [] },
   };
 }

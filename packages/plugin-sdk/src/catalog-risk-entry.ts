@@ -175,19 +175,19 @@ function capsFrom(raw: unknown, ctx: ParseContext): ScopeCaps | undefined {
 
 // ── One risk ─────────────────────────────────────────────────────────────────
 
-function riskIdFrom(raw: Rec, ctx: ParseContext, provider: string | null): RiskId | undefined {
+function riskIdFrom(raw: Rec, ctx: ParseContext, service: string | null): RiskId | undefined {
   const id = requireString(raw, 'id', ctx);
   if (id === undefined) return undefined;
   const parsed = parseRiskId(id);
   if (!parsed) {
     ctx.issues.push(
-      `${ctx.at}.id '${id}' does not match '<provider>.<name>' or '<provider>[<env>].<name>'`,
+      `${ctx.at}.id '${id}' does not match '<service>.<name>' or '<service>[<env>].<name>'`,
     );
     return undefined;
   }
-  if (provider && parsed.provider !== provider) {
+  if (service && parsed.service !== service) {
     ctx.issues.push(
-      `${ctx.at}.id '${id}' belongs to provider '${parsed.provider}', not '${provider}'`,
+      `${ctx.at}.id '${id}' belongs to service '${parsed.service}', not '${service}'`,
     );
     return undefined;
   }
@@ -240,12 +240,12 @@ function replacedByFrom(raw: Rec, ctx: ParseContext): RiskId | undefined {
 export function riskFrom(
   raw: unknown,
   ctx: ParseContext,
-  provider: string | null,
+  service: string | null,
 ): RiskEntry | undefined {
   if (!isRecord(raw)) return notAMapping(ctx);
   const own = scoped(ctx);
   unknownKeys(raw, RISK_KEYS, own);
-  const id = riskIdFrom(raw, own, provider);
+  const id = riskIdFrom(raw, own, service);
   const label = requireString(raw, 'label', own);
   const reason = requireString(raw, 'reason', own);
   const matches = matchesFrom(raw, own);

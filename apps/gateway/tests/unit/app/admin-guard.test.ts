@@ -18,7 +18,7 @@ import { loadInstanceConfig } from '@/server/config';
 import { validEnv } from '../../support/config/testing';
 
 import { appDir, outcomeOf, renderPage, surfaceFiles } from './guard-harness';
-import { saveTestOidcProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));
@@ -75,7 +75,7 @@ describe('the Administration surface authorizes in every page and route', () => 
   }
 
   async function configureIdp(): Promise<void> {
-    await saveTestOidcProvider(root.store.config, {
+    await saveTestOidcSignInProvider(root.store.config, {
       issuer: ISSUER,
       clientId: CLIENT_ID,
       clientSecret: 'admin-guard-client-secret',
@@ -148,7 +148,7 @@ describe('the Administration surface authorizes in every page and route', () => 
     expect(ROUTES.length).toBeGreaterThan(0);
   });
 
-  /** The params a page with a dynamic segment renders for: the provider `idp` saved by `configureIdp`. */
+  /** The params a page with a dynamic segment renders for: the sign-in provider `idp` saved by `configureIdp`. */
   const PAGE_PARAMS: Readonly<Record<string, Record<string, string>>> = {
     'identity-provider/[id]/page.tsx': { id: 'idp' },
     'identity-provider/[id]/test/page.tsx': { id: 'idp' },
@@ -194,9 +194,9 @@ describe('the Administration surface authorizes in every page and route', () => 
     request: Request,
     context: { params: Promise<Record<string, string>> },
   ) => Promise<Response>;
-  const PARAMS = { provider: 'acme', id: 'no-such-id', userId: 'no-such-user' };
+  const PARAMS = { signInProvider: 'acme', id: 'no-such-id', userId: 'no-such-user' };
 
-  // Every route of Administration answers POST: none is a provider's redirect back any more.
+  // Every route of Administration answers POST: none is a sign-in provider's redirect back any more.
   const POSTS = ROUTES;
 
   describe.each(POSTS)('route $name', ({ path }) => {

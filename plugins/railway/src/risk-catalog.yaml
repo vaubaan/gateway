@@ -1,13 +1,13 @@
-# Risk catalog of the `railway` provider.
+# Risk catalog of the `railway` service.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # ADR  : docs/decisions/rewrap-official-mcps.md ; docs/decisions/plugin-contract-and-credential-spec.md.
-# Handbook : docs/handbook/providers/railway.md.
+# Handbook : docs/handbook/services/railway.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; this file is the only
-# catalog artefact. Rules the loader enforces : `provider` is the plugin id,
+# catalog artefact. Rules the loader enforces : `service` is the plugin id,
 # every risk id starts with it, every `matches` pattern parses as a slice of
-# this provider, a `railway.uncategorized-*` fallback exists, every other
+# this service, a `railway.uncategorized-*` fallback exists, every other
 # live risk in exactly one macro-action with a numeric base quota and rate
 # limit — never a wildcard.
 #
@@ -30,7 +30,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 8 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: railway
+service: railway
 catalog_version: 8
 catalog_date: 2026-11-13
 

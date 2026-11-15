@@ -1,7 +1,7 @@
 /**
  * The project a successful `railway__create-project` created, read from the
  * answer of Railway's MCP server (ADR created-resources-join-the-mission).
- * Handbook : docs/handbook/providers/railway.md.
+ * Handbook : docs/handbook/services/railway.md.
  *
  * ⚠ Railway does not document what `create-project` answers. The plugin
  * forwards the answer as is, so the hook reads it defensively : a JSON answer
@@ -24,7 +24,7 @@ import {
 
 import { railwayId } from './classify.ts';
 import { nodesOf } from './graphql.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 /** How deep the answer is searched for the project. */
 const MAX_DEPTH = 6;
 
@@ -33,7 +33,7 @@ interface Named {
   readonly name: string;
 }
 
-/** `ProviderPlugin.createdResources` : the project `create-project` made, or `[]`. */
+/** `ServicePlugin.createdResources` : the project `create-project` made, or `[]`. */
 export function createdRailwayResources(
   tool: string,
   args: Readonly<Record<string, unknown>>,
@@ -59,7 +59,7 @@ export function createdRailwayResources(
   if (id === undefined || project === undefined) return [];
   return [
     {
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref: id,
       displayName: wanted,
       metadata: {

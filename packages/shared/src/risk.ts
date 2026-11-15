@@ -9,7 +9,7 @@
  * A mission does not carry capabilities ; it carries a policy keyed by
  * *accepted risks* (`RiskId`), each with a budget and a gate. The plugin's
  * `classify(tool, args, resources)` returns the `Slice` values a call
- * touches ; the provider's risk catalog (YAML, loaded at boot) maps slice
+ * touches ; the service's risk catalog (YAML, loaded at boot) maps slice
  * patterns to `RiskEntry` entries. The runtime intersects the executed
  * slices with the catalog, derives the touched `RiskId[]`, and authorizes
  * only if that set is a subset of the mission's accepted risks — the budget
@@ -28,7 +28,7 @@ import type { RefusalCode } from './refusal.ts';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A slice = a path on the provider's data-model + an action.
+ * A slice = a path on the service's data-model + an action.
  *
  * Path segments can be :
  *   - `ident`  : an exact identifier (e.g. `main`, `feature/auth-bug`,
@@ -36,7 +36,7 @@ import type { RefusalCode } from './refusal.ts';
  *   - `list`   : a finite list of identifiers (e.g. `[main,develop]`)
  *   - `wild`   : `*` (one segment) or `**` (recursive zero-or-more)
  *
- * The first segment is always the provider id (`github`, `vercel`, ...).
+ * The first segment is always the service id (`github`, `vercel`, ...).
  *
  * Example serializations (wire form, used in catalog YAML and audit logs) :
  *   - `github.repo[sbw-vaubaan/gateway].branch[main].W`
@@ -44,8 +44,8 @@ import type { RefusalCode } from './refusal.ts';
  *   - `vercel.project[gateway].env[prod].env-var[NEXT_PUBLIC_*].W`
  *
  * Grammar :
- *   slice    ::= provider '.' segment ('.' segment)* '.' action
- *   provider ::= ident
+ *   slice    ::= service '.' segment ('.' segment)* '.' action
+ *   service ::= ident
  *   segment  ::= ident | '[' inner ']'
  *   inner    ::= '*' | '**' | ident (',' ident)*
  *   ident    ::= [a-zA-Z0-9_./~-]+ (allows '/' for refs like 'owner/repo',
@@ -57,9 +57,9 @@ import type { RefusalCode } from './refusal.ts';
  * `[**]` matches zero or more segments. No regex.
  */
 export interface Slice {
-  /** Provider id (first path segment). Examples : 'github', 'vercel'. */
-  readonly provider: string;
-  /** Path segments after the provider. Each is a name, list, or wildcard.
+  /** Service id (first path segment). Examples : 'github', 'vercel'. */
+  readonly service: string;
+  /** Path segments after the service. Each is a name, list, or wildcard.
    *  See {@link SliceSegment}. */
   readonly path: readonly SliceSegment[];
   /** Read or Write. Discriminates the action on the leaf of the path. */
@@ -117,16 +117,16 @@ export type RiskVector = {
  * Stable, version-controlled identifier for a risk.
  *
  * Format (cf. ADR `pivot-to-risk-based-model` §D2, parser in `risk-id.ts`) :
- *   - Env-scoped     : `<provider>[<env>].<name>`
+ *   - Env-scoped     : `<service>[<env>].<name>`
  *     ex: `supabase[staging].bulk-row-write`, `vercel[prod].env-var-write`
- *   - Account-scoped : `<provider>.<name>`
+ *   - Account-scoped : `<service>.<name>`
  *     ex: `github.mint-install-token`, `vercel.deploy`
  */
 export type RiskId = string;
 
 /**
- * One entry in a provider's risk catalog (declared in
- * `plugins/<provider>/src/risk-catalog.yaml`, loaded at boot).
+ * One entry in a service's risk catalog (declared in
+ * `plugins/<service>/src/risk-catalog.yaml`, loaded at boot).
  *
  * Each entry represents a named business intent ("write env vars on prod",
  * "merge to a protected branch", ...). The `matches` pattern is a slice
@@ -173,11 +173,11 @@ export interface RiskEntry {
   /** Hard infra ceilings — never overrideable by a share or a mission.
    *  Optional — absent ≡ no hard ceiling. Cf. ADR scope-caps §D2. */
   readonly infra_limits?: InfraLimits;
-  /** Marks the catalog's catch-all entry (`<provider>.uncategorized-write`).
+  /** Marks the catalog's catch-all entry (`<service>.uncategorized-write`).
    *  The fallback is touched only when no other entry of the catalog matches
    *  the slice (ADR fallback-risk-only-when-uncategorized). Exactly one per
    *  catalog ; when the flag is absent the engine detects the fallback by
-   *  its catch-all pattern (`<provider>.**.W`) or its `uncategorized-` id. */
+   *  its catch-all pattern (`<service>.**.W`) or its `uncategorized-` id. */
   readonly fallback?: boolean;
   /** When true, the entry is kept for backward compatibility but should not
    *  be offered in new missions. UI displays a "deprecated" badge. */
@@ -203,7 +203,7 @@ export interface RiskEntry {
 export interface ScopeCaps {
   /** Temporal window in days : the agent can only reach items created /
    *  modified within the last N days. The plugin injects the constraint
-   *  upstream when the provider supports it (`q: newer_than:Nd`,
+   *  upstream when the service supports it (`q: newer_than:Nd`,
    *  `?since=...`), otherwise the call is refused. */
   readonly temporal_window_days?: number;
   /** Items per call ceiling — the agent cannot demand / touch more than N
@@ -223,7 +223,7 @@ export interface ScopeCaps {
 
 /**
  * Hard infra ceilings — imposed by the plugin maintainer for technical or
- * operational reasons (memory budget, upstream provider hard caps).
+ * operational reasons (memory budget, upstream service hard caps).
  * **Never overrideable** at any level (share, mission). Same shape as
  * `ScopeCaps` ; the distinction is in *who can modify* them.
  */
@@ -271,9 +271,9 @@ export interface MacroAction {
 // Catalog
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A provider's full risk catalog. */
+/** A service's full risk catalog. */
 export interface RiskCatalog {
-  readonly provider: string;
+  readonly service: string;
   readonly risks: readonly RiskEntry[];
   /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-levels-prefill-the-policy). */
   readonly macro_actions?: readonly MacroAction[];

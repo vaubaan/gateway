@@ -4,7 +4,7 @@
  * `q-parser` idea, closed: a token outside the grammar refuses the call,
  * since the plugin could not translate it and would not know what it reads.
  *
- * Handbook : docs/handbook/providers/outlook.md ("search_messages").
+ * Handbook : docs/handbook/services/outlook.md ("search_messages").
  *
  *   from:<address>     the sender is exactly this address
  *   to:<address>       this address is a To recipient

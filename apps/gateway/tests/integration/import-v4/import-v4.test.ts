@@ -3,10 +3,10 @@
  * docs/handbook/import-from-v4.md): the exporter's bundle builder on a fake
  * v4 database read (secrets sealed with the exact v4 scheme), the JSON piped
  * into the importer's command, the REAL composition root on a `:memory:`
- * store with the real encryptor and the real plugins. Providers are a fake
+ * store with the real encryptor and the real plugins. Services are a fake
  * `fetch`, the SSH host a fake transport: no network.
  *
- *   dry run (nothing written, no provider contacted) → apply (accounts
+ *   dry run (nothing written, no service contacted) → apply (accounts
  *   checked and sealed, labels carried, a mission issued, a deferred one, the
  *   key on stdout only, every entry marked) → GitHub connected by hand → rerun
  *   completes the deferred mission, duplicates nothing → a third run is a no-op.
@@ -55,7 +55,7 @@ interface V4BundleLike {
 const OPS_TOKEN_ID = '0b6a1a3e-0000-4000-8000-0000000000c2';
 const FINGERPRINT = `SHA256:${randomBytes(32).toString('base64').replace(/=+$/, '')}`;
 
-/** The v4 sealing (provider-secrets.ts at v4-final), written again here on purpose. */
+/** The v4 sealing (service-secrets.ts at v4-final), written again here on purpose. */
 async function sealV4(orgId: string, plaintext: string): Promise<string> {
   await sodium.ready;
   const master = new Uint8Array(Buffer.from(V4_MASTER_KEY, 'base64'));
@@ -83,7 +83,7 @@ async function fakeV4Read(sshKeyPem: string) {
     accounts: [
       {
         id: '0b6a1a3e-0000-4000-8000-0000000000b1',
-        provider: 'github',
+        service: 'github',
         status: 'connected',
         team_id: null,
         installation_id: '4242',
@@ -91,7 +91,7 @@ async function fakeV4Read(sshKeyPem: string) {
       },
       {
         id: '0b6a1a3e-0000-4000-8000-0000000000b2',
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         status: 'connected',
         team_id: null,
         installation_id: null,
@@ -99,7 +99,7 @@ async function fakeV4Read(sshKeyPem: string) {
       },
       {
         id: '0b6a1a3e-0000-4000-8000-0000000000b3',
-        provider: 'vercel',
+        service: 'vercel',
         status: 'connected',
         team_id: 'team_acme01',
         installation_id: null,
@@ -109,28 +109,28 @@ async function fakeV4Read(sshKeyPem: string) {
     bindings: [
       {
         project_id: PROJECT_WEB,
-        provider: 'github',
+        service: 'github',
         resource_ref: 'acme/web',
         display_name: 'web',
         environment: null,
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'vercel',
+        service: 'vercel',
         resource_ref: 'prj_web',
         display_name: 'web',
         environment: 'prod',
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'vercel',
+        service: 'vercel',
         resource_ref: 'prj_web',
         display_name: 'web',
         environment: 'prod',
       },
       {
         project_id: PROJECT_WEB,
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         resource_ref: 'zone_web',
         display_name: 'acme.example',
         environment: 'web',
@@ -313,7 +313,7 @@ describe('import of a v4 organization', () => {
       rootDeps: {
         buildRegistry: async () => registry,
         openStore: async () => shared,
-        providerFetch: fakeFetch,
+        serviceFetch: fakeFetch,
       },
       ...overrides,
     };
@@ -375,7 +375,7 @@ describe('import of a v4 organization', () => {
 
   async function connectGithubByHand(): Promise<void> {
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: await ownerId() },
       displayName: 'GitHub',
       credential: serializeSecret({
@@ -390,7 +390,7 @@ describe('import of a v4 organization', () => {
     ]);
   }
 
-  it('a dry run prints the plan, writes nothing and contacts no provider', async () => {
+  it('a dry run prints the plan, writes nothing and contacts no service', async () => {
     const before = databaseText();
     const { code, stdout, stderr } = await run(['--owner', OWNER]);
 
@@ -421,7 +421,7 @@ describe('import of a v4 organization', () => {
     expect(code).toBe(0);
 
     const accounts = await store.accounts.list();
-    expect(accounts.map((c) => c.provider).sort()).toEqual([
+    expect(accounts.map((c) => c.service).sort()).toEqual([
       'cloudflare-dns',
       'ssh',
       'stripe',
@@ -432,10 +432,10 @@ describe('import of a v4 organization', () => {
     expect(sshProbes).toBe(1);
 
     // The Vercel project carried its `prod` label; the Cloudflare zone's `web` is not a v5 label.
-    const vercel = accounts.find((c) => c.provider === 'vercel')!;
+    const vercel = accounts.find((c) => c.service === 'vercel')!;
     const [project] = await store.accounts.listResources(vercel.id);
     expect(project).toMatchObject({ ref: 'prj_web', env: 'prod', envSource: 'owner' });
-    const cloudflare = accounts.find((c) => c.provider === 'cloudflare-dns')!;
+    const cloudflare = accounts.find((c) => c.service === 'cloudflare-dns')!;
     expect((await store.accounts.listResources(cloudflare.id))[0]?.env).toBeNull();
     expect(stderr).toContain('zone_web: left unlabelled');
 
@@ -500,7 +500,7 @@ describe('import of a v4 organization', () => {
     const second = await run(['--owner', OWNER, '--apply']);
     if (process.env.SHOW_IMPORT_REPORT) process.stderr.write(second.stderr);
     expect(second.code).toBe(0);
-    expect(calls.length).toBe(callsBefore); // nothing created again: no provider asked
+    expect(calls.length).toBe(callsBefore); // nothing created again: no service asked
     expect(second.stderr).toContain('already imported by an earlier run');
     expect(second.stderr).toContain('"ops" (v4 token ops-agent): already exists');
     expect(second.stderr).toContain('"web" (v4 token web-agent): issued');
@@ -511,10 +511,10 @@ describe('import of a v4 organization', () => {
     const missions = await store.missions.listForCreator(owner);
     expect(missions.map((m) => m.name).sort()).toEqual(['ops', 'web']);
     const web = missions.find((m) => m.name === 'web')!;
-    const providers = await Promise.all(
-      web.accounts.map(async (c) => (await store.accounts.getById(c.accountId))?.provider),
+    const services = await Promise.all(
+      web.accounts.map(async (c) => (await store.accounts.getById(c.accountId))?.service),
     );
-    expect(providers.sort()).toEqual(['cloudflare-dns', 'github', 'stripe', 'vercel']);
+    expect(services.sort()).toEqual(['cloudflare-dns', 'github', 'stripe', 'vercel']);
     expect(web.policy.map((p) => p.riskId).sort()).toEqual(
       [
         'cloudflare-dns.read-zone-metadata',
@@ -544,8 +544,8 @@ describe('import of a v4 organization', () => {
     expect(code).toBe(1);
     expect(stderr).toMatch(/cloudflare-dns ".*": refused, nothing stored — credential-rejected/);
     expect(stderr).not.toContain(CLOUDFLARE_TOKEN);
-    const providers = (await store.accounts.list()).map((c) => c.provider).sort();
-    expect(providers).toEqual(['ssh', 'stripe', 'vercel']);
+    const services = (await store.accounts.list()).map((c) => c.service).sort();
+    expect(services).toEqual(['ssh', 'stripe', 'vercel']);
   });
 
   it('refuses an owner who never signed in, before writing anything', async () => {
@@ -598,7 +598,7 @@ describe('import of a v4 organization', () => {
     const { code, stderr } = await run(['--owner', OWNER, '--apply'], { stdin });
     expect(code).toBe(0);
     expect(stderr).not.toContain(liveKey);
-    const stripe = (await store.accounts.list()).find((c) => c.provider === 'stripe')!;
+    const stripe = (await store.accounts.list()).find((c) => c.service === 'stripe')!;
     const refs = (await store.accounts.listResources(stripe.id)).map((r) => r.ref).sort();
     expect(refs).toEqual(['acct_1Acme/live', 'acct_1Acme/test']);
     const policy = (await missionPolicy('web')()) ?? [];
@@ -617,7 +617,7 @@ describe('import of a v4 organization', () => {
     // The owner renames the imported mission, and makes one by hand named like
     // the v4 project still waiting for GitHub.
     store.db.prepare('UPDATE missions SET name = ? WHERE id = ?').run('ops (renamed)', ops.id);
-    const vercel = (await store.accounts.list()).find((c) => c.provider === 'vercel')!;
+    const vercel = (await store.accounts.list()).find((c) => c.service === 'vercel')!;
     const handMade = await store.missions.create({
       name: 'web',
       creatorUserId: owner,
@@ -770,7 +770,7 @@ describe('import of a v4 organization', () => {
     await run(['--owner', OWNER, '--apply']);
     await connectGithubByHand();
     const supabase = await store.accounts.create({
-      provider: 'supabase',
+      service: 'supabase',
       owner: { kind: 'user', id: await ownerId() },
       displayName: 'Supabase',
       credential: serializeSecret({
@@ -789,7 +789,7 @@ describe('import of a v4 organization', () => {
     };
     bundle.bindings.push({
       project_id: PROJECT_WEB,
-      provider: 'supabase',
+      service: 'supabase',
       resource_ref: 'sbref01',
       display_name: 'web-db',
       environment: 'prod',

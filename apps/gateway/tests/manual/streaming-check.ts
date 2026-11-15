@@ -9,9 +9,9 @@
  * front of it — frame by frame, or is it held until the end?
  *
  *   serve   One process: the real composition root on the `:memory:` store,
- *           with the door tests' fixture provider (`depot`), whose `execute`
+ *           with the door tests' fixture service (`depot`), whose `execute`
  *           reads a slow chunked HTTP response from a local stand-in upstream
- *           (never a real provider) and forwards it with the SDK's
+ *           (never a real service) and forwards it with the SDK's
  *           `streamToolResult(ctx, textParts(body))`. The root is published
  *           where production code looks for it, then the standalone
  *           `server.js` is started in this process — so the HTTP server, the
@@ -105,7 +105,7 @@ async function serve(): Promise<void> {
   const upstream = await standInUpstream();
   const upstreamUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
 
-  const instance = await executionInstance({ deps: { providerFetch: fetch } });
+  const instance = await executionInstance({ deps: { serviceFetch: fetch } });
   instance.depot.script(async (ctx, _tool, args) => {
     const path = args.item === 'break' ? '/break' : '/ok';
     const response = await ctx.fetch(`${upstreamUrl}${path}`);

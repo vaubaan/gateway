@@ -299,7 +299,7 @@ describe('limits.users', () => {
       logger: silentLogger,
       ceilings: root.limits,
     };
-    const context = { providerId: 'idp', administrators: root.auth.administrators };
+    const context = { signInProviderId: 'idp', administrators: root.auth.administrators };
     await completeLogin(deps, identity('ada'), context);
     await completeLogin(deps, identity('bob'), context);
 
@@ -361,7 +361,7 @@ describe('limits.users — an invitation link of a sign-in account', () => {
   it('is refused at the ceiling before it is spent, and works once a place is free', async () => {
     const root = await buildTestRoot({ env: { VAUBAAN_LIMITS_USERS: '1' } });
     roots.push(root);
-    await root.auth.providers.save(
+    await root.auth.signInProviders.save(
       {
         id: 'local',
         kind: 'local',
@@ -377,7 +377,7 @@ describe('limits.users — an invitation link of a sign-in account', () => {
     await root.users.invitations.invite('bootstrap', 'ada@example.com');
     const link = await root.auth.signInAccounts.createLink({
       kind: 'invite',
-      providerId: 'local',
+      signInProviderId: 'local',
       email: 'ada@example.com',
       createdBy: 'bootstrap',
     });

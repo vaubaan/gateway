@@ -74,21 +74,21 @@ The interface speaks to people; the protocol — MCP tool names, refusal codes,
 ids, the API, the database, the configuration, and the specification of the
 domain — keeps the names it had. The same things, under both:
 
-| In the interface                            | In the protocol, the code and the spec                |
-| ------------------------------------------- | ----------------------------------------------------- |
-| access (Give access)                        | share                                                 |
-| permission                                  | risk, by its `RiskId` (`github.merge-protected`)      |
-| limits (per day, per minute)                | budget: quota and rate limit                          |
-| runs freely / ask me first                  | gate: `auto` / `approval`                             |
-| key, machine key                            | mission token: member token, named token              |
-| Replace key                                 | rotate                                                |
-| Waiting for you                             | request: a claim (limit reached), an approval request |
-| Vaubaan account                             | the account of the `vaubaan` plugin (host account)    |
-| Activity                                    | audit, session                                        |
-| teammate, team                              | mission member, group                                 |
-| administrator                               | operator                                              |
-| service, OAuth client, Reference            | provider, provider app, the provider pages            |
-| account, mission, macro-action, trust level | the same                                              |
+| In the interface                                             | In the protocol, the code and the spec                 |
+| ------------------------------------------------------------ | ------------------------------------------------------ |
+| access (Give access)                                         | share                                                  |
+| permission                                                   | risk, by its `RiskId` (`github.merge-protected`)       |
+| limits (per day, per minute)                                 | budget: quota and rate limit                           |
+| runs freely / ask me first                                   | gate: `auto` / `approval`                              |
+| key, machine key                                             | mission token: member token, named token               |
+| Replace key                                                  | rotate                                                 |
+| Waiting for you                                              | request: a claim (limit reached), an approval request  |
+| Vaubaan account                                              | the account of the `vaubaan` plugin (host account)     |
+| Activity                                                     | audit, session                                         |
+| teammate, team                                               | mission member, group                                  |
+| administrator                                                | operator                                               |
+| OAuth client, Reference                                      | the client registered at a service, the plugins' pages |
+| account, service, plugin, mission, macro-action, trust level | the same                                               |
 
 ## Status
 
@@ -154,7 +154,7 @@ packages/plugin-sdk/     the plugin contract, catalog loader, registry, test kit
 packages/telemetry/      opt-in, anonymous plugin reports (off by default)
 packages/oauth-providers/ the OAuth provider table the gateway and the broker share
 packages/plugin-page/    a service's page from its plugin, drawn by the site and the gateway's Reference
-plugins/<provider>/      one plugin per service; plugins/_template to start one
+plugins/<service>/      one plugin per service; plugins/_template to start one
 deploy/                  Dockerfile, Compose file, example configuration
 docs/                    spec, decisions, handbook, tests, workflow
 ```

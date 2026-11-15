@@ -1,6 +1,6 @@
 /**
- * Representative calls of every tool of the `upstash-redis` provider
- * (`ProviderPlugin.examples`) : the samples the plugin's tests run through the
+ * Representative calls of every tool of the `upstash-redis` service
+ * (`ServicePlugin.examples`) : the samples the plugin's tests run through the
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
@@ -10,11 +10,11 @@
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** The one database the samples run on, labelled staging. */
 export const EXAMPLE_DATABASE: Resource = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   ref: 'db-abc-123',
   env: 'staging',
   displayName: 'app-cache',

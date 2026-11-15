@@ -26,7 +26,7 @@ function callEntry(ts: string, decision: 'allowed' | 'refused' = 'allowed'): Cal
     arguments_hash: 'abc123def4567890',
     slices_executed: [
       {
-        provider: 'github',
+        service: 'github',
         path: [
           { kind: 'name', value: 'repo' },
           { kind: 'ident', value: 'acme/repo' },

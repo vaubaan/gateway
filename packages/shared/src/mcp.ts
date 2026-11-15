@@ -8,32 +8,32 @@
 import { brandError, hasErrorBrand } from './brand.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tool naming — `<provider_id_with_underscores>__<local_name>`
+// Tool naming — `<service_id_with_underscores>__<local_name>`
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Separator between the provider prefix and the local tool name. */
+/** Separator between the service prefix and the local tool name. */
 export const TOOL_NAME_SEPARATOR = '__';
 
 /**
- * MCP tool-name prefix for a provider id : `cloudflare-dns` → `cloudflare_dns__`.
- * Provider ids never contain `_` (see `PROVIDER_ID_PATTERN` in risk-id.ts),
+ * MCP tool-name prefix for a service id : `cloudflare-dns` → `cloudflare_dns__`.
+ * Service ids never contain `_` (see `SERVICE_ID_PATTERN` in risk-id.ts),
  * so the mapping `-` → `_` is reversible.
  */
-export function toolPrefixFor(providerId: string): string {
-  return `${providerId.replaceAll('-', '_')}${TOOL_NAME_SEPARATOR}`;
+export function toolPrefixFor(serviceId: string): string {
+  return `${serviceId.replaceAll('-', '_')}${TOOL_NAME_SEPARATOR}`;
 }
 
 /** The two halves of a tool name, or `null` when the name carries no prefix. */
 export interface SplitToolName {
-  /** Provider id recovered from the prefix (`cloudflare_dns` → `cloudflare-dns`). */
-  readonly providerId: string;
+  /** Service id recovered from the prefix (`cloudflare_dns` → `cloudflare-dns`). */
+  readonly serviceId: string;
   /** Local tool name, after the separator (`list_branches`). */
   readonly localName: string;
 }
 
 /**
- * Split a tool name into its provider id and local name. Pure string work ;
- * the caller (the plugin registry) decides whether the provider exists.
+ * Split a tool name into its service id and local name. Pure string work ;
+ * the caller (the plugin registry) decides whether the service exists.
  */
 export function splitToolName(toolName: string): SplitToolName | null {
   const at = toolName.indexOf(TOOL_NAME_SEPARATOR);
@@ -41,7 +41,7 @@ export function splitToolName(toolName: string): SplitToolName | null {
   const prefix = toolName.slice(0, at);
   const localName = toolName.slice(at + TOOL_NAME_SEPARATOR.length);
   if (localName.length === 0 || !/^[a-z][a-z0-9_]*$/.test(prefix)) return null;
-  return { providerId: prefix.replaceAll('_', '-'), localName };
+  return { serviceId: prefix.replaceAll('_', '-'), localName };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ export interface McpToolResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Upstream errors (thrown by plugins: 401/403 from the provider, any other failed status)
+// Upstream errors (thrown by plugins: 401/403 from the service, any other failed status)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class UpstreamAuthError extends Error {
@@ -105,7 +105,7 @@ export function isUpstreamAuthError(x: unknown): x is UpstreamAuthError {
 /**
  * A credential refused for a reason the PLUGIN states in its own words: a
  * pasted token that lacks a scope, reaches another organisation, or is not
- * the kind of token the plugin needs; a provider that answers "this account
+ * the kind of token the plugin needs; a service that answers "this account
  * may not use this service" in a way the plugin recognises. Unlike any other
  * error, its message may be shown to the person who connects the account
  * (ADR provider-error-text-stays-with-the-agent, amendment of 2026-10-21):
@@ -114,8 +114,8 @@ export function isUpstreamAuthError(x: unknown): x is UpstreamAuthError {
  *
  * Rule for the plugin: the message is a sentence the plugin wrote, with at
  * most values the person typed or identifiers the plugin checked (a scope
- * name, an organisation slug). Never text the provider sent, never a part
- * of the credential. Anything quoted from the provider goes in an
+ * name, an organisation slug). Never text the service sent, never a part
+ * of the credential. Anything quoted from the service goes in an
  * `UpstreamAuthError` instead, which the gateway reduces to its status.
  *
  * It is an `UpstreamAuthError`: everything that treats a rejected credential
@@ -135,7 +135,7 @@ export function isCredentialRefusal(x: unknown): x is CredentialRefusal {
 }
 
 /**
- * Thrown by a plugin when the provider answered with an HTTP status that is
+ * Thrown by a plugin when the service answered with an HTTP status that is
  * not a credential problem (a 4xx other than 401/403, a 5xx). The host reads
  * `status` for the audit summary and for the telemetry error class; the
  * message is for the agent only.

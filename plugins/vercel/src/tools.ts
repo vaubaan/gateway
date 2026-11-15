@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `vercel` provider — rewrap of the official Vercel MCP
+ * MCP tools of the `vercel` service — rewrap of the official Vercel MCP
  * server at mcp.vercel.com (18 tools, frozen in `upstream-tools.json`), plus
  * 14 custom REST-backed tools (`custom-tools.ts`).
  *

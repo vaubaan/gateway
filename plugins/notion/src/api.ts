@@ -1,7 +1,7 @@
 /**
  * Requests to Notion's API, through the SDK's `httpJson`.
  *
- * Handbook : docs/handbook/providers/notion.md ; Notion's status codes
+ * Handbook : docs/handbook/services/notion.md ; Notion's status codes
  *            and request limits pages.
  *
  *   - `ctx.fetch` only ; the token narrowed with `expectCredentialKind`,
@@ -25,7 +25,7 @@ import {
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
-import { API_TOKEN_FIELD, PROVIDER_ID } from './identity.ts';
+import { API_TOKEN_FIELD, SERVICE_ID } from './identity.ts';
 
 export const NOTION_API_BASE = 'https://api.notion.com/v1';
 /** Latest Notion API version on 2026-10-16 (versioning page). */
@@ -39,9 +39,9 @@ export interface RequestOptions {
 }
 
 function tokenOf(ctx: AccountContext): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const token = secret.fields[API_TOKEN_FIELD];
-  if (!token) throw new Error(`${PROVIDER_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
+  if (!token) throw new Error(`${SERVICE_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
   return token;
 }
 

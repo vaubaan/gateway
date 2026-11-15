@@ -1,7 +1,7 @@
 /**
  * Requests to Asana's REST API, through the SDK's `httpJson`.
  *
- * Handbook : docs/handbook/providers/asana.md ; Asana's rate limits and
+ * Handbook : docs/handbook/services/asana.md ; Asana's rate limits and
  *            pagination pages.
  *
  *   - `ctx.fetch` only ; the token narrowed with `expectCredentialKind`,
@@ -25,7 +25,7 @@ import {
   type Guard,
 } from '@vaubaan/plugin-sdk';
 
-import { PAT_FIELD, PROVIDER_ID } from './identity.ts';
+import { PAT_FIELD, SERVICE_ID } from './identity.ts';
 
 export const ASANA_API_BASE = 'https://app.asana.com/api/1.0';
 
@@ -69,9 +69,9 @@ export interface RequestOptions {
 }
 
 function tokenOf(ctx: AccountContext): string {
-  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
   const token = secret.fields[PAT_FIELD];
-  if (!token) throw new Error(`${PROVIDER_ID}: the credential has no '${PAT_FIELD}' field`);
+  if (!token) throw new Error(`${SERVICE_ID}: the credential has no '${PAT_FIELD}' field`);
   return token;
 }
 
@@ -104,7 +104,7 @@ export async function request<T>(
         method,
         headers: { authorization: `Bearer ${tokenOf(ctx)}` },
         ...(options.body !== undefined ? { body: { data: options.body } } : {}),
-        what: `${PROVIDER_ID} ${method} ${path}`,
+        what: `${SERVICE_ID} ${method} ${path}`,
       },
       guard,
     );

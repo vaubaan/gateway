@@ -1,6 +1,6 @@
 /**
  * What each `miro` tool does, in a few words a person reads at a glance
- * (`ProviderPlugin.toolTitles`) : the head of an approval request, before the
+ * (`ServicePlugin.toolTitles`) : the head of an approval request, before the
  * board the call resolves to ("Update what is drawn · Retro board"). For
  * people only : never part of `tools/list`.
  */

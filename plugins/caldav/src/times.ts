@@ -1,7 +1,7 @@
 /**
  * The times a tool takes and the times an event carries.
  *
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  * Pure : no clock. Three spellings an agent may write, each read strictly
  * (a value that does not match is refused, never guessed) :

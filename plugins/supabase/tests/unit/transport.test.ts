@@ -20,7 +20,7 @@ import {
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
-  PROVIDER_ID,
+  SERVICE_ID,
   SUPABASE_API_BASE,
   TOOL,
   projectUrl,
@@ -34,7 +34,7 @@ const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
 const DATA = projectUrl(REF);
 
-const project: Resource = { provider: PROVIDER_ID, ref: REF, env: 'staging', displayName: 'app' };
+const project: Resource = { service: SERVICE_ID, ref: REF, env: 'staging', displayName: 'app' };
 
 function connCtx(fetch: typeof globalThis.fetch): AccountContext {
   return {
@@ -70,19 +70,19 @@ describe('the tool names are declared once', () => {
     expect(Object.values(TOOL)).toHaveLength(44);
   });
 
-  test('the plugin id is the provider id', () => {
-    expect(supabasePlugin.id).toBe(PROVIDER_ID);
+  test('the plugin id is the service id', () => {
+    expect(supabasePlugin.id).toBe(SERVICE_ID);
   });
 });
 
 describe('what the executor declines is an isError result, and no request leaves', () => {
   test('an unknown tool', async () => {
     const fetch = mockFetch([]);
-    const result = await supabasePlugin.execute(execCtx(fetch), `${PROVIDER_ID}__drop_everything`, {
+    const result = await supabasePlugin.execute(execCtx(fetch), `${SERVICE_ID}__drop_everything`, {
       project_ref: REF,
     });
     expect(result.isError).toBe(true);
-    expect(resultText(result)).toBe(`unknown tool '${PROVIDER_ID}__drop_everything'`);
+    expect(resultText(result)).toBe(`unknown tool '${SERVICE_ID}__drop_everything'`);
     expect(fetch.calls).toHaveLength(0);
   });
 });
@@ -263,7 +263,7 @@ describe('discovery and the check at paste', () => {
     ]);
     expect(await supabasePlugin.discoverResources(connCtx(fetch))).toEqual([
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: REF,
         displayName: `o / ${REF}`,
         metadata: { organization: 'o', organization_name: 'o' },

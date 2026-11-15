@@ -1,6 +1,6 @@
 /**
  * The app a successful `fly__create_app` created, read from the call
- * (ADR created-resources-join-the-mission). Handbook : docs/handbook/providers/fly.md.
+ * (ADR created-resources-join-the-mission). Handbook : docs/handbook/services/fly.md.
  *
  * Fly's `POST /apps` answers the new app's id and its creation time
  * (`{"id":"z4k69dxd8r31p5mx","created_at":1708631799000}`), not its name : the
@@ -17,12 +17,12 @@ import { jsonObjectsOf, type McpToolResult, type Resource } from '@vaubaan/plugi
 
 import { META } from './call.ts';
 import { appName } from './identifiers.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** A Fly app id as the Machines API writes it (`z4k69dxd8r31p5mx`). */
 const APP_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** `ProviderPlugin.createdResources` : the app `create_app` made, or `[]`. */
+/** `ServicePlugin.createdResources` : the app `create_app` made, or `[]`. */
 export function createdFlyResources(
   tool: string,
   args: Readonly<Record<string, unknown>>,
@@ -35,7 +35,7 @@ export function createdFlyResources(
   if (!answer || (answer.name !== undefined && answer.name !== name)) return [];
   return [
     {
-      provider: PROVIDER_ID,
+      service: SERVICE_ID,
       ref: name,
       displayName: name,
       metadata: {

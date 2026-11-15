@@ -1,18 +1,18 @@
 /**
- * Identity of the `context7` provider — the one place its ids are written.
+ * Identity of the `context7` service — the one place its ids are written.
  *
- * The plugin id, the data-model provider, the tool names, the resource
+ * The plugin id, the data-model service, the tool names, the resource
  * `discoverResources` returns and the credential field are derived from this
- * module, so a classifier can never emit slices under one provider while the
- * executor reads resources under another. `provider:` and the ids of
+ * module, so a classifier can never emit slices under one service while the
+ * executor reads resources under another. `service:` and the ids of
  * `risk-catalog.yaml`, and the package name in `package.json`, are the other
  * places the id is written.
  */
 
 import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'context7';
+/** The service id. */
+export const SERVICE_ID = 'context7';
 
 /** Sent on every request, to the MCP server and to the REST API alike. */
 export const CONTEXT7_USER_AGENT = 'vaubaan-gateway';
@@ -38,7 +38,7 @@ export const CONTEXT7_MCP_SERVER: UpstreamMcpServer = {
 export const API_KEY_FIELD = 'api_key';
 
 /** `context7__` : prepended to the upstream tool names. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * The upstream tool names, as `tools/list` of `mcp.context7.com` answers

@@ -1,22 +1,22 @@
 /**
- * Identity of the `miro` provider — the one place its ids and Miro's own
+ * Identity of the `miro` service — the one place its ids and Miro's own
  * names are written.
  *
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns — is derived from this module.
  */
 
 import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'miro';
+/** The service id. */
+export const SERVICE_ID = 'miro';
 
 /** `miro__` : prepended to the upstream tool names. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /**
  * Miro's official MCP server (Streamable HTTP). Its OAuth protected-resource

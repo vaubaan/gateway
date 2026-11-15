@@ -2,7 +2,7 @@
 
 /**
  * Everything a person does to a mission from its page (spec §7.8, §7.9 bis),
- * and the dialogs those acts open. One provider around the page holds the
+ * and the dialogs those acts open. One service around the page holds the
  * dialogs, so that the header, the "···" menu and the rows of "People and
  * keys" open the same ones:
  *

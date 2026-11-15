@@ -68,7 +68,7 @@ export type Door = 'execution';
  * door is the `wrong-credential-kind` refusal.
  *
  * Not to be confused with `CredentialKind` in `@vaubaan/shared`, which is
- * how a *account* authenticates to its provider (`api-key`, `oauth2`,
+ * how a *account* authenticates to its service (`api-key`, `oauth2`,
  * `ssh-key`) and belongs to the plugin contract.
  */
 export type BearerKind = 'mission-token' | 'human-session';
@@ -91,7 +91,7 @@ export type AccountOwner = Principal & { readonly display: string };
 export const ACCOUNT_LOSSES = ['account-revoked', 'access-withdrawn'] as const;
 export type AccountLoss = (typeof ACCOUNT_LOSSES)[number];
 
-export type MissionAccount = Pick<Account, 'id' | 'provider' | 'display_name' | 'status'> & {
+export type MissionAccount = Pick<Account, 'id' | 'service' | 'display_name' | 'status'> & {
   readonly owner: AccountOwner;
   /** Set when this account's part of the mission is lost: every call through it is
    *  refused `account-revoked`, and its tools leave `tools/list`. Absent: it serves. */

@@ -140,7 +140,7 @@ export const ANYTHING_ELSE_BASE_BUDGET: Budget = {
  * management door and the public site list them.
  */
 export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
-  const fallbacks = catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.provider));
+  const fallbacks = catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.service));
   const own = [...(catalog.macro_actions ?? [])];
   if (fallbacks.length === 0) return own;
   return [

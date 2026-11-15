@@ -111,8 +111,8 @@ success and otherwise a fixed keyword (`network`, `timeout`,
   as `instance_id`.
 
 Never sent, and impossible to store here: the arguments of a call or a hash
-of them, payloads, provider answers or error text, resource references,
-environment labels, mission, user or connection identifiers, emails, account
+of them, payloads, service answers or error text, resource references,
+environment labels, mission, user or account identifiers, emails, account
 names, host names, URLs, an identifier of the instance on a call, a network
 address. Every column is constrained to a closed vocabulary, a bounded shape
 or a bucket (`CHECK` constraints in `schema.sql`), so a client that tried to
@@ -150,10 +150,10 @@ Both numbers and the window live in one SQL function,
 two), then apply the file again.
 
 The success rate is `successes / (reports - credential_rejections)`: a call
-refused because the provider rejected the credential (`credential_rejected`)
+refused because the service rejected the credential (`credential_rejected`)
 is left out, since a revoked or expired token is the user's configuration,
 not the plugin. Every other outcome that is not `success` counts against the
-rate, including a provider answering 404 to a call the agent got wrong: the
+rate, including a service answering 404 to a call the agent got wrong: the
 rate measures calls that worked, not the plugin's code alone. The threshold
 is set with that in mind.
 

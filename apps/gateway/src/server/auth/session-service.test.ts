@@ -153,7 +153,7 @@ describe('SessionService', () => {
   it('keeps pending logins apart from sessions, single-use, with a short TTL', async () => {
     const { clock, service: s } = service();
     const pending = await s.createPending({
-      providerId: 'idp',
+      signInProviderId: 'idp',
       state: 's',
       nonce: 'n',
       codeVerifier: 'v',
@@ -168,7 +168,7 @@ describe('SessionService', () => {
     expect(await s.takePending(headers)).toBeNull();
 
     const again = await s.createPending({
-      providerId: 'idp',
+      signInProviderId: 'idp',
       state: 's2',
       nonce: 'n',
       codeVerifier: 'v',

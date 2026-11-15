@@ -1,7 +1,7 @@
 /**
  * The one reader of a `miro` call, for `classify` and `execute` alike.
  *
- * Handbook : docs/handbook/providers/miro.md.
+ * Handbook : docs/handbook/services/miro.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  *
  * `readMiroCall(tool, args, resources)` checks the tool, the closed argument
@@ -22,7 +22,7 @@ import {
   BOARD_ARGUMENT,
   ITEM_ARGUMENT,
   LOCATOR,
-  PROVIDER_ID,
+  SERVICE_ID,
   TOOL,
   TOOL_PREFIX,
   locatorArgumentOf,
@@ -73,7 +73,7 @@ export const NO_MIRO_BOARD = 'no Miro board in this mission';
 
 /** The mission's Miro boards, in mission order. */
 function boardsOf(resources: readonly Resource[]): Resource[] {
-  return resources.filter((r) => r.provider === PROVIDER_ID);
+  return resources.filter((r) => r.service === SERVICE_ID);
 }
 
 /** The board a `board` argument names, when it is one of the mission's ; the refusal otherwise. */

@@ -22,7 +22,7 @@ describe('fly createdResources', () => {
       ),
     ).toEqual([
       {
-        provider: 'fly',
+        service: 'fly',
         ref: 'beta-gw',
         displayName: 'beta-gw',
         metadata: { app_id: 'z4k69dxd8r31p5mx', network: 'beta-net' },

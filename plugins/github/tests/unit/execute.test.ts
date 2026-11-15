@@ -336,14 +336,14 @@ describe('discoverResources — the repositories the token reaches, paged', () =
     const resources = await githubPlugin.discoverResources(accountCtx(fetch));
     expect(resources).toEqual([
       {
-        provider: 'github',
+        service: 'github',
         ref: 'acme/repo-1',
         displayName: 'acme/repo-1',
         metadata: { default_branch: 'main', private: false, archived: false },
         // Public, under a fine-grained token: its grant cannot be read, listed hidden.
         hiddenByDefault: true,
       },
-      { provider: 'github', ref: 'acme/bare', displayName: 'acme/bare', metadata: {} },
+      { service: 'github', ref: 'acme/bare', displayName: 'acme/bare', metadata: {} },
     ]);
     expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${PAT}`);
     expect(fetch.calls).toHaveLength(1);
@@ -433,7 +433,7 @@ describe('discoverResources — the repositories the token reaches, paged', () =
       },
     ]);
     expect(await githubPlugin.discoverResources(accountCtx(fetch))).toEqual([
-      { provider: 'github', ref: 'acme/app', displayName: 'acme/app', metadata: {} },
+      { service: 'github', ref: 'acme/app', displayName: 'acme/app', metadata: {} },
     ]);
   });
 

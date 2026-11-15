@@ -2,9 +2,9 @@
  * `@vaubaan/plugin-resend` — outbound email (Resend) on the v5 Plugin SDK.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7 ;
- *        docs/spec/resend.md (modelling of the provider).
+ *        docs/spec/resend.md (modelling of the service).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
- * Handbook : docs/handbook/providers/resend.md ; guide : plugins/resend/README.md.
+ * Handbook : docs/handbook/services/resend.md ; guide : plugins/resend/README.md.
  *
  * Credential : `api-key`, one secret field (`api_key`, `re_…`), Full access
  * (`credential.ts`). Resources :
@@ -22,7 +22,7 @@ import { resendDataModel } from './data-model.ts';
 import { resendExamples } from './examples.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { RESEND_ICON, RESEND_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { resendToolTitles } from './tool-titles.ts';
 import { resendTools } from './tools.ts';
 
@@ -31,7 +31,7 @@ import { resendTools } from './tools.ts';
 export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const resendPlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Resend',
   icon: RESEND_ICON,
   iconColor: RESEND_ICON_COLOR,
@@ -43,7 +43,7 @@ export const resendPlugin = definePlugin({
   summary:
     'One account is one Resend API key; resources are its sending domains and its contact segments. Sends are told apart by who the email goes to (internal, allow-listed, anyone), and the owner of the account labels each domain and segment with an environment so that staging and production are held separately.',
   manualRevocation: 'Delete the API key in the Resend dashboard, under API Keys.',
-  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/resend.md',
+  docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/resend.md',
   tools: resendTools,
   toolTitles: resendToolTitles,
   examples: resendExamples,
@@ -64,7 +64,7 @@ export const resendPlugin = definePlugin({
 export default resendPlugin;
 
 export { classifyResend, resendDataModel, resendTools };
-export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { BATCH_MAX_EMAILS } from './classify.ts';
 export { RESEND_API_KEYS_PAGE, resendCredential, verifyResendKey } from './credential.ts';
 export {

@@ -1,7 +1,7 @@
 /**
  * The domain or the segment a successful `resend__create_domain` /
  * `resend__create_segment` created, read from Resend's answer (ADR
- * created-resources-join-the-mission). Handbook : docs/handbook/providers/resend.md.
+ * created-resources-join-the-mission). Handbook : docs/handbook/services/resend.md.
  *
  * The plugin builds the answer itself : the JSON of Resend's `POST /domains`
  * (`{ id, name, status, region, records, … }`) or `POST /segments`
@@ -14,10 +14,10 @@
 
 import { jsonObjectsOf, type McpToolResult, type Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { domainName, pathIdent } from './resources.ts';
 
-/** `ProviderPlugin.createdResources` : the domain or segment the call made, or `[]`. */
+/** `ServicePlugin.createdResources` : the domain or segment the call made, or `[]`. */
 export function createdResendResources(
   tool: string,
   _args: Readonly<Record<string, unknown>>,
@@ -35,7 +35,7 @@ export function createdResendResources(
     const region = typeof answer.region === 'string' && answer.region ? answer.region : null;
     return [
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref,
         displayName: status === 'verified' || status === null ? name : `${name} (${status})`,
         metadata: {
@@ -54,7 +54,7 @@ export function createdResendResources(
     const name = typeof answer.name === 'string' && answer.name.trim() ? answer.name : id;
     return [
       {
-        provider: PROVIDER_ID,
+        service: SERVICE_ID,
         ref: id,
         displayName: name,
         metadata: { kind: 'segment', segment_id: id },

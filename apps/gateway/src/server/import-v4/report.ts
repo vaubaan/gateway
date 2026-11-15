@@ -22,7 +22,7 @@ const ACCOUNT_WORDS: Record<AccountStatus, string> = {
   'already-imported': 'already imported by an earlier run',
   'already-connected': 'already connected by hand with the same settings: kept',
   failed: 'refused, nothing stored',
-  'provider-not-shipped': 'not imported: this instance ships no plugin for it',
+  'service-not-shipped': 'not imported: this instance ships no plugin for it',
   'revoked-in-v4': 'not imported: revoked in v4',
 };
 
@@ -68,7 +68,7 @@ export function renderReport(report: ImportReport): string {
   for (const c of report.accounts) {
     const id = c.accountId ? ` [${c.accountId}]` : '';
     const detail = c.detail ? ` — ${c.detail}` : '';
-    lines.push(`  - ${c.provider} "${c.displayName}": ${ACCOUNT_WORDS[c.status]}${id}${detail}`);
+    lines.push(`  - ${c.service} "${c.displayName}": ${ACCOUNT_WORDS[c.status]}${id}${detail}`);
   }
   lines.push('');
 
@@ -83,7 +83,7 @@ export function renderReport(report: ImportReport): string {
           : b.status === 'revoked-in-v4'
             ? 'revoked in v4: skipped'
             : 'no plugin on this instance: skipped';
-    lines.push(`  - ${b.provider}: ${state} (${b.reason})`);
+    lines.push(`  - ${b.service}: ${state} (${b.reason})`);
   }
   lines.push('');
 
@@ -92,7 +92,7 @@ export function renderReport(report: ImportReport): string {
     for (const r of report.resources) {
       const env = r.env ? ` → ${r.env}` : '';
       lines.push(
-        `  - ${r.provider} ${r.ref}: ${LABEL_WORDS[r.status]}${env} (v4: ${r.v4Labels.join(', ')})`,
+        `  - ${r.service} ${r.ref}: ${LABEL_WORDS[r.status]}${env} (v4: ${r.v4Labels.join(', ')})`,
       );
     }
     lines.push('');
@@ -102,7 +102,7 @@ export function renderReport(report: ImportReport): string {
     lines.push(
       'v4 resources found on no account of the owner (connect the account, or refresh its discovery):',
     );
-    for (const u of report.unmatched) lines.push(`  - ${u.provider} ${u.ref}`);
+    for (const u of report.unmatched) lines.push(`  - ${u.service} ${u.ref}`);
     lines.push('');
   }
 
@@ -115,7 +115,7 @@ export function renderReport(report: ImportReport): string {
   const skipped = [
     s.project_env_vars > 0 ? `${s.project_env_vars} project variable(s) (no v5 counterpart)` : null,
     s.child_tokens > 0 ? `${s.child_tokens} delegated token(s) (no sub-mission in v5)` : null,
-    s.bash_bindings > 0 ? `${s.bash_bindings} bash binding(s) (no bash provider in v5)` : null,
+    s.bash_bindings > 0 ? `${s.bash_bindings} bash binding(s) (no bash service in v5)` : null,
     s.ssh_hosts_not_exported.length > 0
       ? `SSH hosts not asked with --ssh-host: ${s.ssh_hosts_not_exported.join(', ')}`
       : null,
@@ -144,7 +144,7 @@ function missionLines(m: MissionOutcome): string[] {
   if (m.previous) lines.push(`      ! ${previousLine(m.previous)}`);
   for (const c of m.accounts) {
     lines.push(
-      `      ${c.provider} [${c.accountId}] on ${c.refs.join(', ')}: ${c.riskIds.length} risk(s)`,
+      `      ${c.service} [${c.accountId}] on ${c.refs.join(', ')}: ${c.riskIds.length} risk(s)`,
     );
   }
   for (const reason of m.reasons) lines.push(`      ! ${reason}`);

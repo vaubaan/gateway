@@ -4,7 +4,7 @@
 # outlook-through-the-oauth-broker-microsoft-provider).
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 ; §4.6 (macro-actions).
-# Handbook : docs/handbook/providers/outlook.md.
+# Handbook : docs/handbook/services/outlook.md.
 #
 # 27 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
 # instead). A mailbox has no environment: no risk is env-scoped.
@@ -22,7 +22,7 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
-provider: outlook
+service: outlook
 catalog_version: 3
 catalog_date: 2026-11-13
 

@@ -1,7 +1,7 @@
 /**
  * Next.js prints the errors of route handlers and server components itself, with
  * `console.error`, outside `createLogger`: the message of such an error can quote a
- * provider's answer (and a credential the provider echoed) or a configured secret.
+ * service's answer (and a credential the service echoed) or a configured secret.
  * `guardConsole` replaces `console.error` and `console.warn` so that what they print
  * goes through the redactor, and an `Error` argument is printed as its class and its
  * stack frames — never its message (ADR provider-error-text-stays-with-the-agent).

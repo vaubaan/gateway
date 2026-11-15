@@ -19,7 +19,7 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { API_KEY_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { API_KEY_FIELD, SERVICE_ID, TOOL } from '../../src/identity.ts';
 import defaultExport, { axonautCatalog, axonautPlugin } from '../../src/index.ts';
 import { KEY, SAMPLES, account } from './fixtures.ts';
 
@@ -65,14 +65,14 @@ describe('axonaut plugin — structural kit', () => {
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
     expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
-    expect(axonautCatalog.catalog.provider).toBe(PROVIDER_ID);
+    expect(axonautCatalog.catalog.service).toBe(SERVICE_ID);
     expect(axonautCatalog.catalog.risks.find((r) => r.fallback)?.id).toBe(
-      `${PROVIDER_ID}.uncategorized-write`,
+      `${SERVICE_ID}.uncategorized-write`,
     );
   });
 
-  test('tool names are derived from the provider id, once, and each has a title', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
+  test('tool names are derived from the service id, once, and each has a title', () => {
+    const prefix = toolPrefixFor(SERVICE_ID);
     expect(axonautPlugin.tools.map((t) => t.name)).toEqual(Object.values(TOOL));
     expect(Object.values(TOOL).every((name) => name.startsWith(prefix))).toBe(true);
     expect(Object.keys(axonautPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());
@@ -131,7 +131,7 @@ describe('axonaut macro-actions', () => {
     });
     expect(Object.keys(gates)).not.toContain('axonaut.invoice-create');
     expect(Object.keys(gates)).not.toContain('axonaut.delete-record');
-    expect(Object.keys(gates)).not.toContain(`${PROVIDER_ID}.uncategorized-write`);
+    expect(Object.keys(gates)).not.toContain(`${SERVICE_ID}.uncategorized-write`);
   });
 
   test('at Autonomous only the irreversible asks first : invoices and deletions', () => {

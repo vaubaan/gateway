@@ -1,7 +1,7 @@
 /**
  * The Fly account : an organization token pasted by hand (`api-key`).
  *
- * Handbook : docs/handbook/providers/fly.md.
+ * Handbook : docs/handbook/services/fly.md.
  *
  * Fly offers OAuth to extension partners only, with a `read` scope : a
  * token is the only way to create and deploy. The guide asks for an
@@ -35,10 +35,10 @@ import {
   DEFAULT_IMAGE_PREFIXES,
   IMAGE_PREFIXES_FIELD,
   ORG_SLUG_FIELD,
-  PROVIDER_ID,
+  SERVICE_ID,
 } from './identity.ts';
 
-/** The Machines API. A fact about the provider, not configuration. */
+/** The Machines API. A fact about the service, not configuration. */
 export const FLY_API_BASE = 'https://api.machines.dev/v1';
 
 /** The host of the logs endpoint `fly logs` uses. */
@@ -118,26 +118,25 @@ export const flyCredential: ApiKeyCredentialSpec = {
 
 /** The `Authorization` header of an account. */
 export function authorizationOf(credential: CredentialSecret): string {
-  const token = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[API_TOKEN_FIELD];
+  const token = expectCredentialKind(SERVICE_ID, credential, 'api-key').fields[API_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error(`${PROVIDER_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
+    throw new Error(`${SERVICE_ID}: the credential has no '${API_TOKEN_FIELD}' field`);
   }
   return token.startsWith(FLYV1) ? token : `${FLYV1}${token}`;
 }
 
 /** The organization slug of an account, as its form recorded it. */
 export function orgSlugOf(credential: CredentialSecret): string {
-  const value = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[ORG_SLUG_FIELD];
+  const value = expectCredentialKind(SERVICE_ID, credential, 'api-key').fields[ORG_SLUG_FIELD];
   const org = slug(value);
-  if (!org)
-    throw new Error(`${PROVIDER_ID}: the credential has no valid '${ORG_SLUG_FIELD}' field`);
+  if (!org) throw new Error(`${SERVICE_ID}: the credential has no valid '${ORG_SLUG_FIELD}' field`);
   return org;
 }
 
 /** The image prefixes of an account ; `null` when the field is malformed. */
 export function imagePrefixesOfCredential(credential: CredentialSecret): readonly string[] | null {
   return imagePrefixesOf(
-    expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[IMAGE_PREFIXES_FIELD],
+    expectCredentialKind(SERVICE_ID, credential, 'api-key').fields[IMAGE_PREFIXES_FIELD],
   );
 }
 
@@ -150,7 +149,7 @@ export async function verifyFlyToken(ctx: AccountContext): Promise<CredentialChe
   const org = orgSlugOf(ctx.credential);
   if (!imagePrefixesOfCredential(ctx.credential)) {
     throw new CredentialRefusal(
-      `${PROVIDER_ID}: '${IMAGE_PREFIXES_FIELD}' must list repository prefixes such as ghcr.io/acme/app`,
+      `${SERVICE_ID}: '${IMAGE_PREFIXES_FIELD}' must list repository prefixes such as ghcr.io/acme/app`,
       401,
     );
   }

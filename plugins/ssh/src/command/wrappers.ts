@@ -3,7 +3,7 @@
  * assignments, wrappers.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7.
- * Handbook : docs/handbook/providers/ssh.md.
+ * Handbook : docs/handbook/services/ssh.md.
  *
  * Pure. Before the detectors run, the command that finally runs is found :
  * grouping and keywords stripped (`{ …; }`, `then`, `do`), assignments

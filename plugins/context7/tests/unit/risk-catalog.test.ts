@@ -9,22 +9,22 @@ import { matches, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import { parseSlice } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, context7Catalog } from '../../src/index.ts';
+import { SERVICE_ID, context7Catalog } from '../../src/index.ts';
 
 const { catalog, indexed } = context7Catalog;
 
 describe('context7 risk-catalog — YAML structural validation', () => {
   test('one named risk and the fallback, at catalog version 5', () => {
-    expect(catalog.provider).toBe(PROVIDER_ID);
+    expect(catalog.service).toBe(SERVICE_ID);
     expect(catalog.catalog_version).toBe(5);
     expect(catalog.risks.map((r) => [r.id, r.fallback === true])).toEqual([
-      [`${PROVIDER_ID}.query-docs`, false],
-      [`${PROVIDER_ID}.uncategorized-write`, true],
+      [`${SERVICE_ID}.query-docs`, false],
+      [`${SERVICE_ID}.uncategorized-write`, true],
     ]);
   });
 
   test('the vector of a documentation read (corrected 2026-11-13); the disclosure is in the reason', () => {
-    const risk = catalog.risks.find((r) => r.id === `${PROVIDER_ID}.query-docs`)!;
+    const risk = catalog.risks.find((r) => r.id === `${SERVICE_ID}.query-docs`)!;
     expect(risk.vector).toEqual({
       reversibility: 'reversible',
       blast: 'single',
@@ -35,11 +35,11 @@ describe('context7 risk-catalog — YAML structural validation', () => {
     expect(risk.reason).toMatch(/sent to Context7/);
   });
 
-  test('every pattern parses as a slice of this provider', () => {
+  test('every pattern parses as a slice of this service', () => {
     for (const risk of catalog.risks) {
       const patterns: readonly string[] =
         typeof risk.matches === 'string' ? [risk.matches] : risk.matches;
-      for (const pattern of patterns) expect(parseSlice(pattern).provider).toBe(PROVIDER_ID);
+      for (const pattern of patterns) expect(parseSlice(pattern).service).toBe(SERVICE_ID);
     }
   });
 });
@@ -52,14 +52,14 @@ describe('context7 risk-catalog — slice → risk resolution', () => {
       'context7.index[docs].library[/vercel/next.js/v14.3.0].R',
     ]) {
       expect(risksTouchedBy(parseSlice(slice), indexed), slice).toEqual([
-        `${PROVIDER_ID}.query-docs`,
+        `${SERVICE_ID}.query-docs`,
       ]);
     }
   });
 
   test('a write no tool emits lands on the fallback alone', () => {
     const write = parseSlice('context7.index[docs].library[/a/b].W');
-    expect(risksTouchedBy(write, indexed)).toEqual([`${PROVIDER_ID}.uncategorized-write`]);
+    expect(risksTouchedBy(write, indexed)).toEqual([`${SERVICE_ID}.uncategorized-write`]);
     expect(matches(parseSlice('context7.index[**].library[**].R'), write)).toBe(false);
   });
 });

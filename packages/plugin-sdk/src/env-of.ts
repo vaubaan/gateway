@@ -1,8 +1,8 @@
 /**
- * Helpers for `ProviderPlugin.envOf` — deriving a slice's environment from
+ * Helpers for `ServicePlugin.envOf` — deriving a slice's environment from
  * the slice itself.
  *
- * Spec : docs/spec/vaubaan-gateway.md §0 "Resource" ("for providers where
+ * Spec : docs/spec/vaubaan-gateway.md §0 "Resource" ("for services where
  *        the environment lives in the arguments, the plugin derives it").
  * ADR  : docs/decisions/fallback-risk-only-when-uncategorized.md
  *        (§ environment resolution).
@@ -20,7 +20,7 @@ import type { Resource, Slice } from '@vaubaan/shared';
 export { NO_SINGLE_ENV };
 
 /**
- * The shape of `ProviderPlugin.envOf`, usable standalone :
+ * The shape of `ServicePlugin.envOf`, usable standalone :
  *
  *   a label            the one environment the slice touches ;
  *   `undefined`        the slice says nothing about its environment — the

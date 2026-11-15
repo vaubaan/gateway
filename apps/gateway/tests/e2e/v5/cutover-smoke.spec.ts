@@ -9,7 +9,7 @@
  *   quota runs out → the refusal's claim URL → the creator grants → the replay
  *   passes → the calls show on the Audit page and on the mission's session.
  *
- * What it is not: no real identity provider, no real provider, no Claude Code.
+ * What it is not: no real identity provider, no real service, no Claude Code.
  * Those three are the manual scenario's.
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -158,7 +158,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   const first = await listBranches();
   if (first.outcome !== 'allowed') throw new Error(`refused: ${first.refusal.code}`);
   expect(JSON.parse(first.text)).toEqual(MOCK_GITHUB.branches);
-  // The gateway called the provider with a credential of its own, which the agent never saw.
+  // The gateway called the service with a credential of its own, which the agent never saw.
   const upstream = await upstreamLog(request);
   const branchCalls = upstream.calls.filter((call) =>
     call.url.includes(`/repos/${REPOSITORY}/branches`),
@@ -201,7 +201,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   const claimUrl = String(exhausted.refusal.claim_url);
   expect(claimUrl).toMatch(new RegExp(`^${PUBLIC_URL}/r/[0-9a-f-]{36}$`));
   expect(exhausted.refusal.hint).toContain(claimUrl);
-  // A refused call never reaches the provider.
+  // A refused call never reaches the service.
   const afterRefusal = await upstreamLog(request);
   expect(
     afterRefusal.calls.filter((call) => call.url.includes(`/repos/${REPOSITORY}/branches`)),
@@ -250,7 +250,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // The fingerprint of the arguments is in the detail of a line, for who answers for the call.
   await calls.first().getByTestId('entry-detail-link').click();
   await expect(page.getByTestId('arguments-hash')).toHaveText(/^[0-9a-f]{64}$/);
-  // Neither the mission token nor the provider's credential is on the page.
+  // Neither the mission token nor the service's credential is on the page.
   const auditHtml = await page.content();
   expect(auditHtml).not.toContain(token);
   expect(auditHtml).not.toContain(upstream.account_token);

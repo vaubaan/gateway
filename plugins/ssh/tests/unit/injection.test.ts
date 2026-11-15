@@ -49,7 +49,7 @@ const HOSTILE: readonly string[] = [
   'a?x=1#y',
 ];
 
-const resource = (ref: string): Resource => ({ provider: 'ssh', ref, displayName: ref });
+const resource = (ref: string): Resource => ({ service: 'ssh', ref, displayName: ref });
 
 const credentialFor = (host: string) => ({
   kind: 'ssh-key' as const,

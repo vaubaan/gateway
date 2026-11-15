@@ -218,7 +218,7 @@ describe('push', () => {
       updates: [{ ref: 'refs/heads/feature/rewrite', kind: 'force', new: rewritten }],
     });
     // The person who answers reads the rewrite at GitHub: the commits wait under the temporary ref.
-    const pages = viewed.view.call.provider_pages;
+    const pages = viewed.view.call.service_pages;
     expect(pages.map((p) => p.label)).toEqual(['refs/heads/feature/rewrite']);
     expect(pages[0]?.url).toMatch(
       new RegExp(`^https://github\\.com/${REPOSITORY}/compare/[0-9a-f]{40}\\.\\.\\.${rewritten}$`),
@@ -408,14 +408,14 @@ describe('keys', () => {
   });
 });
 
-describe('the provider segment', () => {
+describe('the service segment', () => {
   const doorPath = (path: string) => new URL(`/git/${path}`, rig.remoteBase).href;
 
-  it('answers 404 to a provider that is unknown, or serves no git remote, before any key', async () => {
+  it('answers 404 to a service that is unknown, or serves no git remote, before any key', async () => {
     const unknown = await fetch(doorPath('acme/app.git/info/refs?service=git-upload-pack'));
     expect(unknown.status).toBe(404);
     const unknownText = await unknown.text();
-    expect(unknownText).toContain("'acme' is not a provider of this instance");
+    expect(unknownText).toContain("'acme' is not a service of this instance");
     expect(unknownText).toContain('Git remotes here: /git/github/');
     expect(unknownText).toContain('Take the setup kit of your mission again');
 
@@ -427,7 +427,7 @@ describe('the provider segment', () => {
     expect(bare.status).toBe(404);
   });
 
-  it('refuses, and audits, a mission that holds no account on the provider the path names', async () => {
+  it('refuses, and audits, a mission that holds no account on the service the path names', async () => {
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'No GitHub',
       accounts: [

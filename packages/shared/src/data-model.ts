@@ -1,9 +1,9 @@
 /**
- * DataModel — declarative graph of entities for a provider's plane(s).
+ * DataModel — declarative graph of entities for a service's plane(s).
  *
  * Spec : docs/spec/gateway-risk-model.md §2.
  *
- * Each provider declares its planes (1+), each plane lists the entities
+ * Each service declares its planes (1+), each plane lists the entities
  * (`row`, `branch`, `env-var`, ...) with their cardinalities and parent
  * (containment graph). The DataModel serves three purposes :
  *
@@ -21,7 +21,7 @@
  */
 
 export interface DataModel {
-  readonly provider: string;
+  readonly service: string;
   readonly planes: readonly DataModelPlane[];
 }
 
@@ -45,9 +45,9 @@ export interface DataModelPlane {
  *                         finite list / glob ; `unbounded` = wildcard.
  *   - `description`     : one-liner shown in tooltips / handbook diagrams.
  *   - `envScopable`     : when true, this entity is the carrier of the
- *                         provider's "env" layer (risk-model spec §2.3 + §4 : env is a
+ *                         service's "env" layer (risk-model spec §2.3 + §4 : env is a
  *                         per-datum layer, not an orthogonal axis). The exact
- *                         convention is provider-specific :
+ *                         convention is service-specific :
  *                           - github : `branch` carries the env layer ;
  *                           - vercel : `env` entity ({prod, preview, dev}) ;
  *                           - supabase : `project` (one project_ref per env) ;
@@ -75,7 +75,7 @@ export type DataModelCardinality = 'one' | 'bounded' | 'unbounded';
  * The TS type `parent: string | null`
  * does not enforce referential integrity. A typo silently turns the
  * mermaid renderer into a graph with orphan nodes. This function lets the
- * provider unit tests assert the invariant in CI.
+ * service unit tests assert the invariant in CI.
  */
 export function validateDataModel(model: DataModel): readonly string[] {
   const errors: string[] = [];
@@ -85,7 +85,7 @@ export function validateDataModel(model: DataModel): readonly string[] {
       if (entity.parent === null) continue;
       if (!names.has(entity.parent)) {
         errors.push(
-          `provider '${model.provider}' plane '${plane.slug}': entity '${entity.name}' ` +
+          `service '${model.service}' plane '${plane.slug}': entity '${entity.name}' ` +
             `has parent '${entity.parent}' which is not declared in this plane.`,
         );
       }

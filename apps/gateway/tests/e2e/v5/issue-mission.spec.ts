@@ -343,7 +343,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
       name: 'Review the pricing PR',
       accounts: [
         {
-          provider: 'github',
+          service: 'github',
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
           policy: [
             {
@@ -359,7 +359,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
           ],
         },
         {
-          provider: 'supabase',
+          service: 'supabase',
           policy: [
             {
               risk_id: 'supabase.read-data',
@@ -429,19 +429,19 @@ test('the reference shows each service’s page, the site’s, for the version t
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   // One line per shipped plugin, from the registry; none is tagged experimental.
-  await expect(page.getByTestId('provider-github')).toContainText(
+  await expect(page.getByTestId('service-github')).toContainText(
     `${GITHUB.permissions} permissions`,
   );
-  await expect(page.getByTestId('provider-github')).toContainText(
+  await expect(page.getByTestId('service-github')).toContainText(
     `${GITHUB.macroActions} macro-actions`,
   );
-  await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
+  await expect(page.getByTestId('service-github')).toContainText(`${GITHUB.tools} tools`);
   // Each line names its plugin's version; a bundled plugin carries no "pinned" tag.
-  await expect(page.getByTestId('provider-github').getByTestId('provider-version')).toHaveText(
+  await expect(page.getByTestId('service-github').getByTestId('service-version')).toHaveText(
     `plugin ${githubPlugin.version}`,
   );
   await expect(page.getByTestId('services').getByTestId('plugin-pinned')).toHaveCount(0);
-  await expect(page.getByTestId('provider-gmail')).not.toContainText('experimental');
+  await expect(page.getByTestId('service-gmail')).not.toContainText('experimental');
   // The services are a local navigation beside the content.
   const services = page.getByRole('navigation', { name: 'Services' });
   await expect(services.getByRole('link', { name: 'All services' })).toHaveAttribute(
@@ -462,9 +462,9 @@ test('the reference shows each service’s page, the site’s, for the version t
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
-  await snap(page, 'providers-index');
+  await snap(page, 'services-index');
 
-  await page.getByTestId('provider-supabase').getByRole('link', { name: 'Supabase' }).click();
+  await page.getByTestId('service-supabase').getByRole('link', { name: 'Supabase' }).click();
   // The place keeps its title; the service's page is under it, its name the heading.
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^Supabase/, level: 2 })).toBeVisible();
@@ -489,7 +489,7 @@ test('the reference shows each service’s page, the site’s, for the version t
     /^7 · Retired permissions/,
     /^8 · Connecting an account/,
   ]);
-  await snap(page, 'provider-model');
+  await snap(page, 'service-model');
 
   // The map: Careful by default, the trust level and the environment switch without a script.
   const map = page.locator('section#map');
@@ -501,7 +501,7 @@ test('the reference shows each service’s page, the site’s, for the version t
   await expect(map.locator('li[data-risk-id="supabase.bulk-row-write"]:visible')).not.toHaveCount(
     0,
   );
-  await snap(page, 'provider-map');
+  await snap(page, 'service-map');
 
   // An anchor of a permission lands on its chip in the map.
   await page.goto('/reference/supabase#risk-supabase.bulk-row-write');
@@ -522,8 +522,8 @@ test('the reference shows each service’s page, the site’s, for the version t
   await expect(page.locator('.plugin-page a[href^="/docs/"]')).toHaveCount(0);
   // The page does not scroll sideways at this width: the map scrolls inside its own box.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
-  await snap(page, 'provider-tools');
+  await snap(page, 'service-tools');
   // An unknown service is not found.
-  const missing = await page.goto('/reference/no-such-provider');
+  const missing = await page.goto('/reference/no-such-service');
   expect(missing?.status()).toBe(404);
 });

@@ -156,7 +156,7 @@ export async function exchangeCode(
     redirect_uri: exchange.redirectUri,
   });
   if (spec.pkce) {
-    // The same rule as the authorization request: never rely on the provider to notice.
+    // The same rule as the authorization request: never rely on the service to notice.
     if (!exchange.codeVerifier) {
       throw new Error('oauth2: PKCE is required but the flow has no verifier');
     }
@@ -174,7 +174,7 @@ export async function exchangeCode(
 }
 
 /**
- * The standard `refresh_token` grant. The provider may rotate the refresh
+ * The standard `refresh_token` grant. The service may rotate the refresh
  * token (Supabase, Railway): the new one replaces the old; when the response
  * carries none, the current one stays valid (RFC 6749 §6).
  */
@@ -289,9 +289,9 @@ export const REGISTRATION_REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * A registration endpoint refused to register the client, or could not be
- * reached. `rejected` separates a refusal (the provider will not register
+ * reached. `rejected` separates a refusal (the service will not register
  * this client as asked) from a transient failure. The message never quotes
- * the provider: only the status and the protocol error code.
+ * the service: only the status and the protocol error code.
  */
 export class OAuth2RegistrationError extends Error {
   constructor(
@@ -308,7 +308,7 @@ export class OAuth2RegistrationError extends Error {
 
 export interface ClientRegistrationRequest {
   readonly redirectUri: string;
-  /** Shown by the provider on its consent page and in the person's list of apps. */
+  /** Shown by the service on its consent page and in the person's list of apps. */
   readonly clientName: string;
 }
 
@@ -316,7 +316,7 @@ export interface ClientRegistrationRequest {
 const PROTOCOL_CODE = /^[a-z_]{1,40}$/;
 
 /**
- * Registers a client at the provider (RFC 7591 §3.1): the authorization-code
+ * Registers a client at the service (RFC 7591 §3.1): the authorization-code
  * and refresh-token grants, the spec's scopes, `redirectUri` as the only
  * redirect URI, the spec's `clientAuthMethod`. The answer must carry a
  * `client_id`, a `client_secret` unless the client is public, and no other
@@ -380,7 +380,7 @@ export async function registerClient(
   const method = payload?.token_endpoint_auth_method;
   if (method !== undefined && method !== spec.clientAuthMethod) {
     throw new OAuth2RegistrationError(
-      'the provider registered the client with another authentication method than the one asked for',
+      'the service registered the client with another authentication method than the one asked for',
       response.status,
       null,
       true,
@@ -399,11 +399,11 @@ export async function registerClient(
   return { clientId, clientSecret: secret };
 }
 
-/** A provider that does not answer a revocation within this delay did not confirm it. */
+/** A service that does not answer a revocation within this delay did not confirm it. */
 export const REVOCATION_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
- * What the provider answered to a revocation request. `no-token`: the stored
+ * What the service answered to a revocation request. `no-token`: the stored
  * credential holds nothing this endpoint accepts (no refresh token for a
  * `client-credentials-json` endpoint), so nothing was sent.
  */
@@ -414,8 +414,8 @@ export type RevocationAttempt =
   | { readonly outcome: 'failed'; readonly status: number; readonly detail: string };
 
 /**
- * Asks the provider to withdraw the grant of `secret`, in the shape
- * `revocation` declares (`OAuth2Revocation`). Never throws: a provider that
+ * Asks the service to withdraw the grant of `secret`, in the shape
+ * `revocation` declares (`OAuth2Revocation`). Never throws: a service that
  * refuses, does not answer or redirects is a `failed` attempt. The detail
  * never carries a token or the client secret — only the status.
  */
@@ -510,7 +510,7 @@ function expiryFrom(expiresIn: unknown, now: Date): string | null {
   return new Date(now.getTime() + seconds * MS_PER_SECOND).toISOString();
 }
 
-/** `scope` is space-delimited by the RFC; some providers answer comma-delimited. */
+/** `scope` is space-delimited by the RFC; some services answer comma-delimited. */
 function scopesFrom(scope: unknown): string[] | null {
   if (typeof scope !== 'string') return null;
   const scopes = scope.split(/[\s,]+/).filter((s) => s.length > 0);

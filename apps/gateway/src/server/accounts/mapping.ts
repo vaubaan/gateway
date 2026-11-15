@@ -12,7 +12,7 @@ import type { AccountRecord, Principal } from '../store/types';
 /** The identity of an account as every snake_case view carries it. */
 export interface AccountSummary {
   readonly id: string;
-  readonly provider: string;
+  readonly service: string;
   readonly display_name: string;
   readonly status: AccountStatus;
 }
@@ -20,7 +20,7 @@ export interface AccountSummary {
 export function accountSummaryOf(record: AccountRecord): AccountSummary {
   return {
     id: record.id,
-    provider: record.provider,
+    service: record.service,
     display_name: record.displayName,
     status: record.status,
   };
@@ -93,8 +93,8 @@ export function isRetiredWay(
 }
 
 /** The one sentence a retired way is refused with: by a call, by a discovery. */
-export function retiredWayReason(providerLabel: string, storedKind: StoredCredentialKind): string {
-  return `this account was connected a way ${providerLabel} no longer offers on this gateway (${storedKind}); its owner reconnects it from Accounts.`;
+export function retiredWayReason(serviceLabel: string, storedKind: StoredCredentialKind): string {
+  return `this account was connected a way ${serviceLabel} no longer offers on this gateway (${storedKind}); its owner reconnects it from Accounts.`;
 }
 
 /**

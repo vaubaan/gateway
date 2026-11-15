@@ -3,7 +3,7 @@
   "version": "5.1.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for GitHub — repositories a fine-grained token reaches, risk catalog and macro-actions",
+  "description": "Vaubaan Gateway plugin for GitHub — repositories a fine-grained token reaches, risk catalog and macro-actions",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"

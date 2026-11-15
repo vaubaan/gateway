@@ -1,19 +1,19 @@
 /**
  * Structural test (ADR plugin-contract-and-credential-spec, amendment of
- * 2026-10-31): a plugin reads its provider's answers through the SDK's
+ * 2026-10-31): a plugin reads its service's answers through the SDK's
  * transport (`httpJson`, `readBounded`, `readShape`, the upstream MCP
  * client), never by calling `.json()` or `.text()` on a response itself, and
- * never casts what it read into a provider type. The transport is where the
+ * never casts what it read into a service type. The transport is where the
  * size bound, the 401 / 403 rule and the guard of an untrusted answer are
  * written once; a plugin's own read skips all three, and a cast turns a shape
- * change at the provider into a `TypeError` deep in `execute` instead of the
- * provider's failure.
+ * change at the service into a `TypeError` deep in `execute` instead of the
+ * service's failure.
  *
  * Read with the TypeScript parser over every source file of every plugin
  * folder, the template included:
  *   - a zero-argument call of a member named `json` or `text`;
  *   - a type assertion (`x as FooDto`, `<FooDto>x`) to a type whose name ends
- *     in `Dto`, the plugins' name for the shape of a provider's answer.
+ *     in `Dto`, the plugins' name for the shape of a service's answer.
  */
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -59,7 +59,7 @@ function findingsIn(folder: string, found: Finder): string[] {
   return lines;
 }
 
-describe('plugins read their provider through the SDK transport', () => {
+describe('plugins read their service through the SDK transport', () => {
   it('finds the plugin folders, the template among them', () => {
     expect(PLUGIN_FOLDERS).toContain('_template');
     expect(PLUGIN_FOLDERS.length).toBeGreaterThan(1);
@@ -87,7 +87,7 @@ describe('plugins read their provider through the SDK transport', () => {
     expect(findingsIn(folder, (_source, node) => isBodyRead(node))).toEqual([]);
   });
 
-  it.each(PLUGIN_FOLDERS)("%s casts no provider's answer to a DTO", (folder) => {
+  it.each(PLUGIN_FOLDERS)("%s casts no service's answer to a DTO", (folder) => {
     expect(findingsIn(folder, isDtoCast)).toEqual([]);
   });
 });

@@ -12,15 +12,15 @@ last_reviewed: 2026-11-02
 
 # Git remote — handbook
 
-`/git/<provider>/<owner>/<repo>.git`, the second door of the execution surface:
+`/git/<service>/<owner>/<repo>.git`, the second door of the execution surface:
 plain git with a mission key. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md)
 §2.4, §4.1 ter; ADRs [gateway-as-git-remote](../decisions/gateway-as-git-remote.md),
 [protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md);
-plugin: [providers/github](providers/github.md).
+plugin: [services/github](services/github.md).
 
 ## Start here
 
-- [`git/door.ts`](../../apps/gateway/src/server/git/door.ts) — path, provider, Basic key, admission, dispatch.
+- [`git/door.ts`](../../apps/gateway/src/server/git/door.ts) — path, service, Basic key, admission, dispatch.
 - [`git/push.ts`](../../apps/gateway/src/server/git/push.ts) — the push steps, in order.
 - [`plugin-sdk/src/git/`](../../packages/plugin-sdk/src/git/) — pkt-line, advertisement, bounded pack reader.
 - [`github/src/git-review.ts`](../../plugins/github/src/git-review.ts), [`git-moves.ts`](../../plugins/github/src/git-moves.ts) — what GitHub is asked.
@@ -28,7 +28,7 @@ plugin: [providers/github](providers/github.md).
 ## Invariants
 
 - Nothing is stored but rows of temporary refs: the fetch pack is streamed,
-  the provider credential lives in memory for the request, the mission key is
+  the service credential lives in memory for the request, the mission key is
   never logged nor sent upstream.
 - A push is decided before any byte leaves: `pushRisk` before a write
   credential exists, then the budget preflight and the pack inspection, before
@@ -44,9 +44,9 @@ plugin: [providers/github](providers/github.md).
   `mcp:mission:<id>`.
 - The door is the host's; any number of plugins declare `gitRemote`, each
   reached only under its own id (`PluginRegistry.gitRemoteOf`). An unknown
-  `<provider>`, or one without `gitRemote`, is a `404` before the key is read;
+  `<service>`, or one without `gitRemote`, is a `404` before the key is read;
   a mission without an account on it is refused by the resource stage,
-  audited like any call. `repositoryOf` receives the path after the provider
+  audited like any call. `repositoryOf` receives the path after the service
   segment, `.git` removed.
 
 ## Traps
@@ -54,8 +54,8 @@ plugin: [providers/github](providers/github.md).
 - The Next proxy's matcher excludes `/git/`: it would buffer and cut packs.
 - Every URL the instance gives (catalog `git_remote`, kit, mission page,
   Reference) comes from `gitRemoteBase` / `gitRemoteUrl` in `git/paths.ts`;
-  the kit's `insteadOf` maps the plugin's prefix to `<instance>/git/<provider>/`.
-  A kit taken before the provider segment (2026-11-02) points at
+  the kit's `insteadOf` maps the plugin's prefix to `<instance>/git/<service>/`.
+  A kit taken before the service segment (2026-11-02) points at
   `/git/<owner>/…` and gets a `404` naming the remotes served: take the kit
   again.
 - A POST whose body is a lone flush packet is git's credential probe: `200`
@@ -89,6 +89,6 @@ plugin: [providers/github](providers/github.md).
 - `GIT_TRACE_CURL=1 GIT_TRACE_PACKET=1` shows what the door answered; the key
   appears as a Basic header — never paste such a trace.
 - Instance logs: `git push` / `git fetch` (mission, token prefix, outcome,
-  refusal code), `temporary refs not deleted at the provider`.
+  refusal code), `temporary refs not deleted at the service`.
 - Leftover `refs/vaubaan/*` → rows and deadlines in `git_pending_refs`;
   `root.git.sweeper.runOnce()` sweeps now.

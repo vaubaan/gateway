@@ -5,11 +5,11 @@
  * emitted slices.
  *
  * Spec     : docs/spec/gateway-risk-model.md §4, §14.
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * The lint fails the build (CI gate) on :
  *   - a catalog the SDK loader refuses (malformed YAML, unknown keys, bad
- *     ids, patterns of another provider, missing fallback, invalid macro-actions)
+ *     ids, patterns of another service, missing fallback, invalid macro-actions)
  *   - a `matches` pattern that does not parse via `parseSlice`
  *   - any tool whose emitted slices are only covered by the fallback risk
  *     (signals a hole in the catalog).
@@ -27,7 +27,7 @@ import { gmailCatalog } from '../../src/index.ts';
 const parsedCatalog = gmailCatalog.catalog;
 
 const mailbox: Resource = {
-  provider: 'gmail',
+  service: 'gmail',
   ref: 'me@myorg.com',
   displayName: 'me@myorg.com',
   metadata: {
@@ -46,7 +46,7 @@ const RISK_ID_REGEX =
 
 describe('gmail risk-catalog — structural validation of the loaded catalog', () => {
   test('the loaded catalog has the expected shape', () => {
-    expect(parsedCatalog.provider).toBe('gmail');
+    expect(parsedCatalog.service).toBe('gmail');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
     // Expect 20 named risks + 1 fallback = 21 (5 added gmail.label-create, 8 the four sends).
     expect(parsedCatalog.risks.length).toBe(21);
@@ -148,7 +148,7 @@ describe('gmail risk-catalog — every `matches` pattern parses via parseSlice',
         typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
       for (const raw of raws) {
         const parsed = parseSlice(raw);
-        expect(parsed.provider).toBe('gmail');
+        expect(parsed.service).toBe('gmail');
       }
     });
   }
@@ -157,7 +157,7 @@ describe('gmail risk-catalog — every `matches` pattern parses via parseSlice',
 describe('gmail risk-catalog — prepareCatalog roundtrips OK', () => {
   test('prepareCatalog accepts the loaded catalog and the SDK indexed it identically', () => {
     const indexed = prepareCatalog(parsedCatalog);
-    expect(indexed.provider).toBe('gmail');
+    expect(indexed.service).toBe('gmail');
     expect(indexed.entries.length).toBe(parsedCatalog.risks.length);
     expect(gmailCatalog.indexed.entries.length).toBe(indexed.entries.length);
   });

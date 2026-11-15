@@ -175,7 +175,7 @@ describe('git door path — properties', () => {
           const path = parseGitPath(url);
           if (path !== null) {
             expect(typeof path.repositoryPath).toBe('string');
-            expect(path.provider).not.toContain('/');
+            expect(path.service).not.toContain('/');
           }
         },
       ),

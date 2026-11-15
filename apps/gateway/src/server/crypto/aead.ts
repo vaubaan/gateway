@@ -1,6 +1,6 @@
 /**
  * AEAD core — XChaCha20-Poly1305 (libsodium), moved from the v4
- * `web/lib/crypto/provider-secrets.ts` and adapted to v5 (spec §6):
+ * `web/lib/crypto/service-secrets.ts` and adapted to v5 (spec §6):
  *
  * - the key is derived **per account** from a master key with a keyed
  *   BLAKE2b hash of the account id (`crypto_generichash`), so two

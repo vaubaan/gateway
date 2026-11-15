@@ -20,7 +20,7 @@ const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
 const DATA = `https://${REF}.supabase.co`;
 
 const project: Resource = {
-  provider: 'supabase',
+  service: 'supabase',
   ref: REF,
   env: 'staging',
   displayName: 'Acme / app-staging',
@@ -448,7 +448,7 @@ describe('executeSupabase — the body is built from declared arguments only', (
     `${name}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
 
   test.each<[string, Record<string, unknown>, string]>([
-    // Real fields of the provider's API that no rule of the classifier reads.
+    // Real fields of the service's API that no rule of the classifier reads.
     [
       'supabase__deploy_function',
       { slug: 'api', entrypoint_path: 'index.ts', static_patterns: ['*'] },

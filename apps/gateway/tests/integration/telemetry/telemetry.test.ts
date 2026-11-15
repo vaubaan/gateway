@@ -169,7 +169,7 @@ describe('community telemetry', () => {
         await instance.call(mission, 'depot__read_item', { space: 'scratch', item: `i${i}` });
       }
       instance.depot.script(async () => {
-        throw new Error('provider down');
+        throw new Error('service down');
       });
       await instance.call(mission, 'depot__read_item', { space: 'scratch' });
       await instance.root.telemetry.flush();
@@ -419,7 +419,7 @@ describe('community telemetry', () => {
       }
     });
 
-    it('a provider failure a plugin throws with its status is an upstream error, in the report and in the audit', async () => {
+    it('a service failure a plugin throws with its status is an upstream error, in the report and in the audit', async () => {
       const { r, mission } = await enabled();
       const { instance } = r;
       // What the shipped plugins throw for a failed status that is not 401/403.
@@ -440,7 +440,7 @@ describe('community telemetry', () => {
       const [entry] = await instance.root.store.audit.list({ missionId: mission.mission.id });
       expect(entry).toMatchObject({
         decision: 'allowed',
-        // Host-built: the status and the class, never the provider's sentence.
+        // Host-built: the status and the class, never the service's sentence.
         upstream_error: 'depot answered HTTP 500 (UpstreamHttpError)',
       });
     });
@@ -467,7 +467,7 @@ describe('community telemetry', () => {
       expect(r.reports().map((report) => report.outcome)).toEqual(['success']);
     });
 
-    it('a credential the provider refuses for good is an upstream error, with no provider text', async () => {
+    it('a credential the service refuses for good is an upstream error, with no service text', async () => {
       const { r, mission } = await enabled();
       const { instance } = r;
       instance.depot.script(async () => {
@@ -634,14 +634,14 @@ describe('community telemetry', () => {
       );
       const { stats } = r.instance.root.telemetry;
 
-      expect(await stats.statusFor(r.instance.account.provider)).toBeNull();
+      expect(await stats.statusFor(r.instance.account.service)).toBeNull();
       await stats.refresh();
-      expect(await stats.statusFor(r.instance.account.provider)).toEqual({
+      expect(await stats.statusFor(r.instance.account.service)).toEqual({
         validated: true,
         reports: 640,
         successRate: 0.962,
       });
-      await stats.statusFor(r.instance.account.provider);
+      await stats.statusFor(r.instance.account.service);
       expect(r.collector).toHaveBeenCalledTimes(1);
     });
 

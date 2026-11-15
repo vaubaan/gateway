@@ -1,7 +1,7 @@
 # Security policy
 
-Vaubaan Gateway sits between coding agents and cloud providers and holds
-provider credentials on behalf of its users. A flaw in it can expose those
+Vaubaan Gateway sits between coding agents and cloud services and holds
+service credentials on behalf of its users. A flaw in it can expose those
 credentials or let an agent do more than it was allowed. Security reports are
 handled privately and take priority over other work.
 
@@ -34,7 +34,7 @@ Include what lets us reproduce it:
   network access to the instance, nothing);
 - the steps, or a failing test, and what you observed;
 - the impact you believe it has;
-- for a plugin: the provider, the tool, the arguments, and the slice or risk
+- for a plugin: the service, the tool, the arguments, and the slice or risk
   you expected.
 
 Remove real credentials and tokens from the report. A token prefix is enough.
@@ -63,7 +63,7 @@ In scope — anything that breaks what the gateway promises:
   a risk that should be touched and is not;
 - going past a budget, a rate limit or an approval gate; replaying or forging
   an approval or a request;
-- an agent, or a plugin's result, reading or exfiltrating a provider
+- an agent, or a plugin's result, reading or exfiltrating a service
   credential, the master key or another secret;
 - one credential opening a surface that is not its own (a mission token on
   the interface or granting a request, a session on the execution door);
@@ -75,19 +75,19 @@ In scope — anything that breaks what the gateway promises:
 - changing or deleting audit entries from the application;
 - a secret or call arguments written in clear to logs, or a telemetry report
   carrying anything other than what the specification lists;
-- flaws in sign-in, sessions, the OAuth authorization server, or the provider
+- flaws in sign-in, sessions, the OAuth authorization server, or the service
   connect flows (replay, redirect, installation not bound to its user).
 
 Out of scope:
 
-- vulnerabilities of the providers themselves, of your identity provider, or
+- vulnerabilities of the services themselves, of your identity provider, or
   of an MCP client;
 - what the trust model below accepts: the operator of an instance, or
   anybody with access to its host, memory, master key or database file;
 - an instance deployed against the documentation: without TLS in front,
   exposed without a reverse proxy, or with the demo (`npm run demo`) made
   reachable from a network — the demo has no authentication by design;
-- a provider credential created broader than the plugin's documentation asks:
+- a service credential created broader than the plugin's documentation asks:
   the gateway limits what an agent does with a credential, not the credential
   itself;
 - denial of service that needs an authenticated user of the same company;
@@ -109,7 +109,7 @@ and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow
 - **Code**: static analysis (Semgrep, community security rules at a pinned
   commit plus rules of this codebase) on every pull request and weekly on
   the default branch. The codebase's rules include: every HTTP call of a
-  plugin states its redirect policy (`redirect: 'error'` unless a provider
+  plugin states its redirect policy (`redirect: 'error'` unless a service
   redirects on purpose), so a credential header never follows a redirect to
   another origin; TLS certificate verification is off in one reviewed place
   only (the attested OAuth broker channel, which compares the key with its
@@ -146,7 +146,7 @@ findings without a demonstrated impact are out of scope).
    process. The gateway does not defend against its own operator.
 2. **An agent never holds an account's stored credential.** It holds a
    mission token; the gateway decrypts the credential for the duration of one
-   call and returns only the result. No tool hands a provider token to the
+   call and returns only the result. No tool hands a service token to the
    agent: the plugin SDK has no way to declare one.
 3. **The gateway decides from the plugin's classification.** A call is
    allowed when every risk it touches was accepted by the mission, within its
@@ -168,7 +168,7 @@ How each of these is implemented is described in the handbooks under
 [`docs/handbook/`](docs/handbook/): [authentication](docs/handbook/authentication.md),
 [accounts](docs/handbook/accounts.md),
 [execution-door](docs/handbook/execution-door.md),
-[providers/vaubaan](docs/handbook/providers/vaubaan.md) and
+[services/vaubaan](docs/handbook/services/vaubaan.md) and
 [audit](docs/handbook/audit.md). Who can attempt what on each surface, the
 control that answers it, the test that proves it and the risks that are
 accepted are in the [threat model](docs/handbook/threat-model.md).

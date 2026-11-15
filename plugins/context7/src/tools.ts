@@ -1,10 +1,10 @@
 /**
- * MCP tools of the `context7` provider — rewrap of the official Context7 MCP
+ * MCP tools of the `context7` service — rewrap of the official Context7 MCP
  * server at https://mcp.context7.com/mcp.
  *
  * ADR      : docs/decisions/rewrap-official-mcps.md (the shape) ;
  *            docs/decisions/rewrap-official-mcps.md.
- * Handbook : docs/handbook/providers/context7.md.
+ * Handbook : docs/handbook/services/context7.md.
  *
  * `upstream-tools.json` is the `tools` array of `tools/list`, captured
  * verbatim from `mcp.context7.com` on 2026-10-16 : names, titles,
@@ -22,7 +22,7 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, TOOL, TOOL_PREFIX, UPSTREAM_TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL, TOOL_PREFIX, UPSTREAM_TOOL } from './identity.ts';
 import upstream from './upstream-tools.json' with { type: 'json' };
 
 /** One tool as `tools/list` declares it, reduced to what the gateway forwards. */
@@ -54,12 +54,12 @@ function isUpstreamTool(x: unknown): x is UpstreamTool {
 
 function declarationsOf(list: unknown): readonly McpToolDeclaration[] {
   if (!Array.isArray(list) || !list.every(isUpstreamTool)) {
-    throw new Error(`${PROVIDER_ID}: upstream-tools.json is not a list of MCP tool declarations`);
+    throw new Error(`${SERVICE_ID}: upstream-tools.json is not a list of MCP tool declarations`);
   }
   const known = new Set<string>(Object.values(UPSTREAM_TOOL));
   return list.map((tool) => {
     if (!known.has(tool.name)) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' is not modelled`);
+      throw new Error(`${SERVICE_ID}: upstream tool '${tool.name}' is not modelled`);
     }
     return {
       name: `${TOOL_PREFIX}${tool.name}`,
@@ -77,7 +77,7 @@ export const context7Tools: readonly McpToolDeclaration[] = declarationsOf(upstr
 
 /**
  * What each tool does, in a few words a person reads at a glance
- * (`ProviderPlugin.toolTitles`) : the head of an approval request in the web
+ * (`ServicePlugin.toolTitles`) : the head of an approval request in the web
  * interface, before the resource the call resolves to. For people only :
  * never part of `tools/list`.
  */

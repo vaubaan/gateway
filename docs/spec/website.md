@@ -24,7 +24,7 @@ status: draft
 ## 1. Vision
 
 A visitor, without signing up, can answer: what does it do and is it for me; how do I install it;
-can I trust it with my cloud credentials; does the plugin for my provider work.
+can I trust it with my cloud credentials; does the plugin for my service work.
 
 - Readers, by priority: the **evaluator** (pitch, a five-minute demo), the **operator** (commands
   that work as written), the **security reviewer** (threat model, what is not covered, exact
@@ -46,13 +46,13 @@ can I trust it with my cloud credentials; does the plugin for my provider work.
 ### 2.1 Landing — `/`
 
 The pitch for a reader new to MCP gateways: the problem, missions as the answer, the shape (on-prem,
-your identity provider), supported providers from the plugin list, the licence, two calls to action
+your identity provider), supported services from the plugin list, the licence, two calls to action
 (**try the demo**, **install**), links to the trust center and the repository.
 
 ### 2.2 User docs — `/docs`
 
 In English; every command works on the released image. Concepts in the interface's words, quick look
-(the demo), the interface page by page, install, configuration (every key of gateway §4.3), connecting a provider (the three
+(the demo), the interface page by page, install, configuration (every key of gateway §4.3), connecting a service (the three
 ways; each service's guide is on its plugin page, §2.3 item 9, and the former per-service pages
 redirect there), missions and agents (clients, platform management, git remote), operations (backup, key rotation,
 upgrade, retention, telemetry), accounts, administration, known limitations. Every page of the
@@ -77,7 +77,7 @@ section opens with a numbered kicker ("3 · The map"), in order:
    model only" when the catalog names none), entities no classified example touches dashed,
    each entity's description behind an (i); a legend; then the **Account**, **Resource** and
    **Environment** callouts (the summary's sentences; the environment's rule as the gateway's
-   provider reference says it — read from each call, the label on the resource, or none —, the
+   service reference says it — read from each call, the label on the resource, or none —, the
    known environments, what carries them).
 3. **Macro-actions** — "What an agent does at <Service>: <N> macro-actions", a fixed sentence,
    one card per macro-action in catalog order: number, label, description, narrative
@@ -114,14 +114,14 @@ section opens with a numbered kicker ("3 · The map"), in order:
    creates at <service> and pastes once"; the reach (what, how wide, why); when the key has
    **alternatives** (two to four shapes), a toggle like the trust level's, "Choose one", each
    shape showing its help line and one numbered list — its own steps, then the shared steps;
-   each step with the **application path** at the service (the provider's own menu labels,
+   each step with the **application path** at the service (the service's own menu labels,
    highlighted), its page, its command, and a **screenshot** under the step whose screen is the
    hard part, when declared, with its provenance line ("GitHub docs, 2026-11 · from
    docs.github.com (CC BY 4.0)", or taken by the Vaubaan team); the grants as "Permission at
    <service> · Access"; then where, the expiry, what the connect page asks, the service's
    documentation and how to disconnect. A brokered way starts with an administrator's block,
-   **Before anyone connects**: the instance must be enrolled with an OAuth broker serving that
-   provider, the provider and the exact scopes asked, the two ways to get one (enrol with a
+   **Before anyone connects**: the instance must be enrolled with an OAuth broker serving its
+   OAuth provider, that OAuth provider and the exact scopes asked, the two ways to get one (enrol with a
    broker someone else operates, or run the published image with one's own client,
    [oauth-broker](./oauth-broker.md)), and that the gateway's pages tell whether the broker is
    attested; then what the person does. A brokered way is never described as a client the
@@ -184,7 +184,7 @@ request, no payload.
 ### 2.5 Trust center — `/trust`
 
 Each claim in the reader's words, linked to the document or code behind it: the trust proposition
-(the agent never holds a provider credential), the controls, the supply chain, **what leaves an
+(the agent never holds a service credential), the controls, the supply chain, **what leaves an
 instance** (nothing by default; with telemetry, the exact fields per level, what is never sent, how
 the collector handles addresses), what is not covered, how to report a vulnerability. Only what the
 code does today; a planned control is marked planned.

@@ -3,7 +3,7 @@
  * one-place-to-authorize-services-token-first): what the connect page offers,
  * the check of a pasted token, what is stored, reconnecting an account made
  * a way the plugin no longer offers, and what refresh and revocation do with
- * a token. `mockFetch` only: no provider is called.
+ * a token. `mockFetch` only: no service is called.
  */
 import { describe, expect, it } from 'vitest';
 import type { ApiKeyCredentialSpec, CredentialCheck } from '@vaubaan/plugin-sdk';
@@ -27,14 +27,14 @@ function tokenSpec(verify = NO_ACCOUNT_SAID): ApiKeyCredentialSpec {
   return {
     kind: 'api-key',
     label: 'personal access token',
-    createUrl: 'https://provider.example.com/tokens',
+    createUrl: 'https://service.example.com/tokens',
     fields: [{ name: 'token', label: 'Personal access token', secret: true }],
     guide: {
       steps: [{ do: 'Create a token.' }],
       reach: { what: 'Things', grant: 'All things', why: 'Each mission narrows it.' },
       permissions: [{ name: 'Things', access: 'read', tools: ['dual__list_things'] }],
       expiry: { kind: 'person-types', recommendedDays: 90 },
-      docsUrl: 'https://provider.example.com/docs/tokens',
+      docsUrl: 'https://service.example.com/docs/tokens',
     },
     verify,
   };
@@ -49,7 +49,7 @@ function dualHarness(verify = NO_ACCOUNT_SAID): AccountsHarness {
         credential: tokenSpec(verify),
         toolTitles: { dual__list_things: 'List things' },
         manualRevocation: BY_HAND,
-        discoverResources: async () => [{ provider: 'dual', ref: 'space-1', displayName: 'One' }],
+        discoverResources: async () => [{ service: 'dual', ref: 'space-1', displayName: 'One' }],
       }),
     ],
   });
@@ -67,15 +67,15 @@ const IN_A_YEAR = '2027-10-14T00:00:00.000Z';
 describe('a service connected with a pasted token', () => {
   it('is offered at once, with the guide the plugin declares', async () => {
     const h = dualHarness();
-    const provider = await h.service.provider('dual');
-    expect(provider).toMatchObject({
+    const service = await h.service.service('dual');
+    expect(service).toMatchObject({
       kind: 'api-key',
       redirects: false,
       label: 'personal access token',
-      createUrl: 'https://provider.example.com/tokens',
+      createUrl: 'https://service.example.com/tokens',
     });
     // By name and access only: the tools stay in the declaration, not on the connect page.
-    expect(provider?.guide?.permissions).toEqual([{ name: 'Things', access: 'read' }]);
+    expect(service?.guide?.permissions).toEqual([{ name: 'Things', access: 'read' }]);
   });
 
   it('a pasted token is checked first; who it acts as and its expiry are kept, never the token', async () => {
@@ -94,11 +94,11 @@ describe('a service connected with a pasted token', () => {
     expect(view.credential_kind).toBe('api-key');
     expect(view.token_account).toBe('bot-account');
     expect(view.token_expires_at).toBe(IN_A_YEAR);
-    expect(view.provider_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
+    expect(view.service_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
     expect(JSON.stringify(view)).not.toContain(TOKEN);
   });
 
-  it('a token the provider rejects, or one already expired, stores nothing', async () => {
+  it('a token the service rejects, or one already expired, stores nothing', async () => {
     const rejected = dualHarness(async () => {
       throw new UpstreamAuthError('Bad credentials', 401);
     });
@@ -200,7 +200,7 @@ describe('a service connected with a pasted token', () => {
     const h = dualHarness(async () => ({ account: 'bot', expiresAt: null }));
     const alice = await h.actor('alice@example.com');
     const existing = await h.store.accounts.create({
-      provider: 'dual',
+      service: 'dual',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'Dual',
       credential: serializeSecret({
@@ -218,7 +218,7 @@ describe('a service connected with a pasted token', () => {
     expect(before.credential_kind).toBe('oauth2');
     expect(before.token_account).toBeNull();
     // The gateway withdraws nothing for a way it no longer runs: the person does, by hand.
-    expect(before.provider_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
+    expect(before.service_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
 
     const again = await h.service.start(alice, 'dual', {
       reconnectId: existing.id,
@@ -251,7 +251,7 @@ describe('a service connected with a pasted token', () => {
     });
     const alice = await h.actor('alice@example.com');
     const existing = await h.store.accounts.create({
-      provider: 'dual',
+      service: 'dual',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'Dual (OAuth)',
       credential: serializeSecret({
@@ -280,8 +280,8 @@ describe('a service connected with a pasted token', () => {
     ).toMatchObject({ record: { ok: false, error: reason }, added: 0 });
     expect(discoveries).toBe(0);
     expect(h.fetch.calls).toHaveLength(0);
-    // Nothing is withdrawn at the provider for a way the gateway no longer runs.
-    expect((await h.service.revoke(alice, existing.id)).providerGrant).toBe('manual');
+    // Nothing is withdrawn at the service for a way the gateway no longer runs.
+    expect((await h.service.revoke(alice, existing.id)).serviceGrant).toBe('manual');
 
     // An account made the plugin's way is not retired.
     const done = await h.service.start(alice, 'dual', { fields: { token: TOKEN } });
@@ -295,7 +295,7 @@ describe('a service connected with a pasted token', () => {
     const h = dualHarness(async () => ({ account: 'bot', expiresAt: null }));
     const alice = await h.actor('alice@example.com');
     const existing = await h.store.accounts.create({
-      provider: 'dual',
+      service: 'dual',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'Dual (app)',
       credential: '{"kind":"app-install","installationId":"1","metadata":{}}',
@@ -326,14 +326,14 @@ describe('a service connected with a pasted token', () => {
     expect(h.fetch.calls).toHaveLength(0);
   });
 
-  it('revoking a token account asks the provider nothing and says where to delete it', async () => {
+  it('revoking a token account asks the service nothing and says where to delete it', async () => {
     const h = dualHarness();
     const alice = await h.actor('alice@example.com');
     const done = await h.service.start(alice, 'dual', { fields: { token: TOKEN } });
     if (done.kind !== 'connected') throw new Error('expected an account');
     const revoked = await h.service.revoke(alice, done.account.id);
-    expect(revoked.providerGrant).toBe('manual');
+    expect(revoked.serviceGrant).toBe('manual');
     expect(h.fetch.calls).toHaveLength(0);
-    expect(h.service.providerGrantOf(revoked).grant.byHand).toBe(BY_HAND);
+    expect(h.service.serviceGrantOf(revoked).grant.byHand).toBe(BY_HAND);
   });
 });

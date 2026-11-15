@@ -40,13 +40,13 @@ export const ADMINISTRATORS_OBJECT_ID = 'administrators';
 /** `instance_config`: the rule the boot applied, canonical JSON. */
 export const SEEDED_RULE_KEY = 'administrators.seeded_rule';
 
-/** The designations against the providers configured now. */
+/** The designations against the sign-in providers configured now. */
 export interface ResolvedAdministrators {
   readonly designations: readonly Designation[];
   /** Users with a `user` designation. */
   readonly userIds: ReadonlySet<string>;
-  /** Pending addresses: `provider` null for any provider. */
-  readonly emails: readonly { readonly email: string; readonly provider: string | null }[];
+  /** Pending addresses: `provider` null for any sign-in provider. */
+  readonly emails: readonly { readonly email: string; readonly signInProvider: string | null }[];
   /** The groups of `group` designations that resolve to a configured provider. */
   readonly groups: readonly AdminGroup[];
 }
@@ -56,39 +56,39 @@ export interface AdministratorSubject {
   readonly id: string;
   /** For a pending address not consumed yet (the person has not signed in since it was named). */
   readonly email: string;
-  /** The provider the user signs in through, when known: a pending address may name one. */
-  readonly providerId?: string | null;
+  /** The sign-in provider the user signs in through, when known: a pending address may name one. */
+  readonly signInProviderId?: string | null;
   /** The user's groups now; only the IdP-sourced ones of a designated group's provider count. */
-  readonly groups: readonly Pick<GroupRecord, 'name' | 'source' | 'provider'>[];
+  readonly groups: readonly Pick<GroupRecord, 'name' | 'source' | 'signInProvider'>[];
 }
 
 /** Whether a group designation resolves, against these provider ids, and to what. */
 export function resolveGroupDesignation(
-  designation: Pick<GroupDesignation, 'groupName' | 'provider'>,
-  providerIds: readonly string[],
+  designation: Pick<GroupDesignation, 'groupName' | 'signInProvider'>,
+  signInProviderIds: readonly string[],
 ): AdminGroup | null {
-  if (designation.provider === null) {
+  if (designation.signInProvider === null) {
     // A bare `admin.group` carried over from the configuration: resolved as it always
-    // was (the one provider; `<provider>:<group>` for a configured provider).
-    return resolveAdminGroup(designation.groupName, providerIds);
+    // was (the one sign-in provider; `<sign-in provider>:<group>` for a configured provider).
+    return resolveAdminGroup(designation.groupName, signInProviderIds);
   }
-  return providerIds.includes(designation.provider)
-    ? { provider: designation.provider, name: designation.groupName }
+  return signInProviderIds.includes(designation.signInProvider)
+    ? { signInProvider: designation.signInProvider, name: designation.groupName }
     : null;
 }
 
 export function resolveAdministrators(
   designations: readonly Designation[],
-  providerIds: readonly string[],
+  signInProviderIds: readonly string[],
 ): ResolvedAdministrators {
   const userIds = new Set<string>();
-  const emails: { email: string; provider: string | null }[] = [];
+  const emails: { email: string; signInProvider: string | null }[] = [];
   const groups: AdminGroup[] = [];
   for (const d of designations) {
     if (d.kind === 'user') userIds.add(d.userId);
-    else if (d.kind === 'email') emails.push({ email: d.email, provider: d.provider });
+    else if (d.kind === 'email') emails.push({ email: d.email, signInProvider: d.signInProvider });
     else {
-      const group = resolveGroupDesignation(d, providerIds);
+      const group = resolveGroupDesignation(d, signInProviderIds);
       if (group) groups.push(group);
     }
   }
@@ -96,7 +96,7 @@ export function resolveAdministrators(
 }
 
 /**
- * Whether the subject administers: a `user` designation, a designated group its provider
+ * Whether the subject administers: a `user` designation, a designated group its sign-in provider
  * claims, or a pending address that names it and that its next sign-in will consume.
  */
 export function isOperator(
@@ -109,7 +109,8 @@ export function isOperator(
     administrators.emails.some(
       (e) =>
         e.email === email &&
-        (e.provider === null || (subject.providerId != null && e.provider === subject.providerId)),
+        (e.signInProvider === null ||
+          (subject.signInProviderId != null && e.signInProvider === subject.signInProviderId)),
     )
   ) {
     return true;
@@ -117,27 +118,28 @@ export function isOperator(
   return subject.groups.some(
     (g) =>
       g.source === 'idp' &&
-      administrators.groups.some((a) => a.provider === g.provider && a.name === g.name),
+      administrators.groups.some((a) => a.signInProvider === g.signInProvider && a.name === g.name),
   );
 }
 
-/** The designated groups a provider claims: what a GitHub sign-in reads the teams of. */
-export function groupsOfProvider(
+/** The designated groups a sign-in provider claims: what a GitHub sign-in reads the teams of. */
+export function groupsOfSignInProvider(
   administrators: ResolvedAdministrators,
-  providerId: string,
+  signInProviderId: string,
 ): AdminGroup[] {
-  return administrators.groups.filter((g) => g.provider === providerId);
+  return administrators.groups.filter((g) => g.signInProvider === signInProviderId);
 }
 
-/** Whether a pending address names this email for this provider. */
+/** Whether a pending address names this email for this sign-in provider. */
 export function pendingEmailNames(
   administrators: ResolvedAdministrators,
   email: string,
-  providerId: string,
+  signInProviderId: string,
 ): boolean {
   const lower = email.toLowerCase();
   return administrators.emails.some(
-    (e) => e.email === lower && (e.provider === null || e.provider === providerId),
+    (e) =>
+      e.email === lower && (e.signInProvider === null || e.signInProvider === signInProviderId),
   );
 }
 
@@ -145,8 +147,8 @@ export function pendingEmailNames(
 export function designationView(d: Designation): Record<string, unknown> {
   const base = { id: d.id, kind: d.kind, origin: d.origin, granted_by: d.grantedBy };
   if (d.kind === 'user') return { ...base, user_id: d.userId };
-  if (d.kind === 'email') return { ...base, email: d.email, provider: d.provider };
-  return { ...base, group: d.groupName, provider: d.provider };
+  if (d.kind === 'email') return { ...base, email: d.email, sign_in_provider: d.signInProvider };
+  return { ...base, group: d.groupName, sign_in_provider: d.signInProvider };
 }
 
 export const ADMINISTRATORS_ERROR_CODES = [
@@ -181,17 +183,17 @@ export class AdministratorsError extends Error {
 export interface LockoutChange {
   readonly withoutDesignation?: string;
   readonly withoutUser?: string;
-  readonly withoutProvider?: string;
-  /** Every active administrator, whether or not a provider lets them in now. */
+  readonly withoutSignInProvider?: string;
+  /** Every active administrator, whether or not a sign-in provider lets them in now. */
   readonly anyWay?: boolean;
 }
 
-/** A provider as the way-in check reads it. */
-export interface WayInProvider {
+/** A sign-in provider as the way-in check reads it. */
+export interface WayInSignInProvider {
   readonly id: string;
   readonly kind: string;
   readonly issuer: URL;
-  /** A provider switched off is no way in (ADR, §5). */
+  /** A sign-in provider switched off is no way in (ADR, §5). */
   readonly enabled?: boolean;
 }
 
@@ -200,8 +202,8 @@ export interface AdministratorsDeps {
     Store,
     'administrators' | 'users' | 'groups' | 'config' | 'signInAccounts' | 'auditWriter'
   >;
-  /** The providers configured now (`SignInProvidersService.views`). */
-  readonly providers: () => Promise<readonly WayInProvider[]>;
+  /** The sign-in providers configured now (`SignInProvidersService.views`). */
+  readonly signInProviders: () => Promise<readonly WayInSignInProvider[]>;
   /** The configuration's rule: the seed. */
   readonly rule: AdminRule;
   readonly audit: AuditWriter;
@@ -244,15 +246,15 @@ export class AdministratorsService {
     this.clock = deps.clock ?? systemClock;
   }
 
-  /** The designations against the providers configured now. */
+  /** The designations against the sign-in providers configured now. */
   async current(): Promise<ResolvedAdministrators> {
-    const [designations, providers] = await Promise.all([
+    const [designations, signInProviders] = await Promise.all([
       this.deps.store.administrators.list(),
-      this.deps.providers(),
+      this.deps.signInProviders(),
     ]);
     return resolveAdministrators(
       designations,
-      providers.map((p) => p.id),
+      signInProviders.map((p) => p.id),
     );
   }
 
@@ -265,22 +267,27 @@ export class AdministratorsService {
     if (user.status !== 'active') return false;
     const groups = await this.deps.store.groups.groupsOf(user.id);
     return isOperator(
-      { id: user.id, email: user.email, providerId: await this.providerIdOf(user), groups },
+      {
+        id: user.id,
+        email: user.email,
+        signInProviderId: await this.signInProviderIdOf(user),
+        groups,
+      },
       await this.current(),
     );
   }
 
-  /** The id of the provider a user signs in through (by their issuer), or `null`. */
-  async providerIdOf(user: Pick<UserRecord, 'issuer'>): Promise<string | null> {
+  /** The id of the sign-in provider a user signs in through (by their issuer), or `null`. */
+  async signInProviderIdOf(user: Pick<UserRecord, 'issuer'>): Promise<string | null> {
     if (user.issuer === null) return null;
     const key = issuerKey(user.issuer);
-    return (await this.deps.providers()).find((p) => issuerKey(p.issuer) === key)?.id ?? null;
+    return (await this.deps.signInProviders()).find((p) => issuerKey(p.issuer) === key)?.id ?? null;
   }
 
   /**
    * Whether an identity about to sign in administers, or will once signed in: a user
-   * designation of its (issuer, subject), a pending address for its provider, or a
-   * designated group its provider claims it a member of. What admission reads.
+   * designation of its (issuer, subject), a pending address for its sign-in provider, or a
+   * designated group its sign-in provider claims it a member of. What admission reads.
    */
   async admits(
     identity: {
@@ -289,12 +296,14 @@ export class AdministratorsService {
       readonly email: string;
       readonly groups: readonly string[];
     },
-    providerId: string,
+    signInProviderId: string,
   ): Promise<boolean> {
     const administrators = await this.current();
-    if (pendingEmailNames(administrators, identity.email, providerId)) return true;
+    if (pendingEmailNames(administrators, identity.email, signInProviderId)) return true;
     if (
-      groupsOfProvider(administrators, providerId).some((g) => identity.groups.includes(g.name))
+      groupsOfSignInProvider(administrators, signInProviderId).some((g) =>
+        identity.groups.includes(g.name),
+      )
     ) {
       return true;
     }
@@ -306,11 +315,11 @@ export class AdministratorsService {
    * At a sign-in, after the user's row: the pending addresses that name them become
    * their `user` designation. Audited in the name of who named the address.
    */
-  async consumeAtSignIn(user: UserRecord, providerId: string): Promise<boolean> {
+  async consumeAtSignIn(user: UserRecord, signInProviderId: string): Promise<boolean> {
     const consumed = await this.deps.store.administrators.consumeEmail(
       user.id,
       user.email,
-      providerId,
+      signInProviderId,
     );
     const first = consumed[0];
     if (!first) return false;
@@ -318,13 +327,13 @@ export class AdministratorsService {
       kind: 'user',
       user_id: user.id,
       email: user.email,
-      provider: providerId,
+      sign_in_provider: signInProviderId,
       origin: first.origin,
       from: consumed.map((d) => designationView(d)),
     });
     this.deps.logger.info('a pending administrator address signed in: now an administrator', {
       user_id: user.id,
-      provider: providerId,
+      sign_in_provider: signInProviderId,
     });
     return true;
   }
@@ -346,14 +355,14 @@ export class AdministratorsService {
     return row;
   }
 
-  /** Names an address, for one provider or any, administrator at its first sign-in. */
+  /** Names an address, for one sign-in provider or any, administrator at its first sign-in. */
   async grantEmail(
     email: string,
-    provider: string | null,
+    signInProvider: string | null,
     actor: string,
     origin: AdministratorOrigin = 'granted',
   ): Promise<EmailDesignation | null> {
-    const row = await this.deps.store.administrators.addEmail(email, provider, {
+    const row = await this.deps.store.administrators.addEmail(email, signInProvider, {
       grantedBy: actor,
       origin,
     });
@@ -364,18 +373,18 @@ export class AdministratorsService {
 
   /** Names a group of a configured provider. */
   async grantGroup(
-    provider: string,
+    signInProvider: string,
     groupName: string,
     actor: string,
     origin: AdministratorOrigin = 'granted',
   ): Promise<GroupDesignation | null> {
     const name = groupName.trim();
-    const providers = await this.deps.providers();
-    const target = providers.find((p) => p.id === provider);
+    const signInProviders = await this.deps.signInProviders();
+    const target = signInProviders.find((p) => p.id === signInProvider);
     if (!target || target.kind === 'local' || name.length === 0) {
-      throw new AdministratorsError('group-invalid', `${provider}:${name}`);
+      throw new AdministratorsError('group-invalid', `${signInProvider}:${name}`);
     }
-    const row = await this.deps.store.administrators.addGroup(name, provider, {
+    const row = await this.deps.store.administrators.addGroup(name, signInProvider, {
       grantedBy: actor,
       origin,
     });
@@ -402,19 +411,19 @@ export class AdministratorsService {
 
   /**
    * The administrators who have a way in: active users, administrators by a `user`
-   * designation or a designated group's membership, whose provider (found by their
+   * designation or a designated group's membership, whose sign-in provider (found by their
    * issuer) is configured and enabled — and, for sign-in accounts, whose account exists.
    */
   async withAWayIn(change: LockoutChange = {}): Promise<UserRecord[]> {
-    const providers = (await this.deps.providers()).filter(
-      (p) => p.enabled !== false && p.id !== change.withoutProvider,
+    const signInProviders = (await this.deps.signInProviders()).filter(
+      (p) => p.enabled !== false && p.id !== change.withoutSignInProvider,
     );
     const designations = (await this.deps.store.administrators.list()).filter(
       (d) => d.id !== change.withoutDesignation,
     );
     const administrators = resolveAdministrators(
       designations,
-      (await this.deps.providers()).map((p) => p.id),
+      (await this.deps.signInProviders()).map((p) => p.id),
     );
     const candidates = new Map<string, UserRecord>();
     for (const userId of administrators.userIds) {
@@ -423,14 +432,18 @@ export class AdministratorsService {
     }
     for (const pending of administrators.emails) {
       for (const user of await this.deps.store.users.findByEmail(pending.email)) {
-        if (pending.provider === null || (await this.providerIdOf(user)) === pending.provider) {
+        if (
+          pending.signInProvider === null ||
+          (await this.signInProviderIdOf(user)) === pending.signInProvider
+        ) {
           candidates.set(user.id, user);
         }
       }
     }
     for (const group of administrators.groups) {
       const record = await this.deps.store.groups.getByName(group.name);
-      if (!record || record.source !== 'idp' || record.provider !== group.provider) continue;
+      if (!record || record.source !== 'idp' || record.signInProvider !== group.signInProvider)
+        continue;
       for (const member of await this.deps.store.groups.listMembers(record.id)) {
         candidates.set(member.id, member);
       }
@@ -444,9 +457,11 @@ export class AdministratorsService {
     for (const user of candidates.values()) {
       if (user.status !== 'active' || user.id === change.withoutUser) continue;
       if (user.issuer === null) continue;
-      const provider = providers.find((p) => issuerKey(p.issuer) === issuerKey(user.issuer ?? ''));
-      if (!provider) continue;
-      if (provider.kind === 'local') {
+      const signInProvider = signInProviders.find(
+        (p) => issuerKey(p.issuer) === issuerKey(user.issuer ?? ''),
+      );
+      if (!signInProvider) continue;
+      if (signInProvider.kind === 'local') {
         const account = await this.deps.store.signInAccounts.getById(user.subject);
         if (!account) continue;
       }
@@ -467,7 +482,7 @@ export class AdministratorsService {
 
   /**
    * Applies the configuration's rule while the store names nobody: every address
-   * becomes a pending designation for any provider, and every active user already
+   * becomes a pending designation for any sign-in provider, and every active user already
    * known by it a `user` designation; the group a `group` designation as written.
    * Recorded (`administrators.seeded_rule`) and audited once. Returns whether it applied.
    */
@@ -493,18 +508,18 @@ export class AdministratorsService {
       return false;
     }
     const users: string[] = [];
-    const pending: { email: string; provider: string | null }[] = [];
+    const pending: { email: string; signInProvider: string | null }[] = [];
     for (const email of emails) {
       const known = (await this.deps.store.users.findByEmail(email)).filter(
         (u) => u.status === 'active',
       );
       users.push(...known.map((u) => u.id));
-      // Still pending for the provider nobody signed in through yet: as before the
-      // upgrade, the address is an administrator through any provider until its
+      // Still pending for the sign-in provider nobody signed in through yet: as before the
+      // upgrade, the address is an administrator through any sign-in provider until its
       // first sign-in consumes it.
-      if (known.length === 0) pending.push({ email, provider: null });
+      if (known.length === 0) pending.push({ email, signInProvider: null });
     }
-    const groups = groupsWritten.map((groupName) => ({ groupName, provider: null }));
+    const groups = groupsWritten.map((groupName) => ({ groupName, signInProvider: null }));
     const written = await this.deps.store.administrators.addMany(users, pending, groups, {
       grantedBy: CONFIGURATION_ACTOR_ID,
       origin: 'configuration',

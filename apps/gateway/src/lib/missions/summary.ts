@@ -83,7 +83,7 @@ function canLine(account: IssuanceAccount, preview: AccountPreview): string | nu
       ? `the account${later}`
       : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}${later}`;
   const upTo = top ? `, up to "${shortLabel(top.label)}" (${rowPhrase(top)})` : '';
-  return `${account.provider_label} "${account.display_name}": ${plural(
+  return `${account.service_label} "${account.display_name}": ${plural(
     accepted.length,
     'risk',
   )} on ${where}${upTo}`;
@@ -106,7 +106,7 @@ function cannotLine(account: IssuanceAccount, preview: AccountPreview): string {
   }
   const leftOut = preview.resources_total - preview.resources.length;
   if (leftOut > 0) parts.push(`${plural(leftOut, 'resource')} left out`);
-  return `${account.provider_label}: ${parts.join('; ')}`;
+  return `${account.service_label}: ${parts.join('; ')}`;
 }
 
 function quantitiesLine(input: SummaryInput): string {

@@ -1,7 +1,7 @@
 /**
  * From a `plugin.execute` outcome to a telemetry report (spec §9).
  *
- * The outcome carries the provider's result or the thrown error; both can
+ * The outcome carries the service's result or the thrown error; both can
  * echo the call's arguments, a resource ref, a token. This module is the
  * reduction to the closed vocabulary of `@vaubaan/telemetry`: it never copies
  * a string out of a result or an error. It reads only
@@ -21,10 +21,10 @@
  *                         declined a call its own classifier had let through
  *                         (unknown tool, a target or an argument the executor
  *                         rejects, a tool that is not implemented)
- *                         → `executor_refused`. A provider failure is never
+ *                         → `executor_refused`. A service failure is never
  *                         returned this way: plugins throw it (handbook
  *                         plugin-sdk, The contract)
- *   upstream-error        the provider, or the way to it, failed
+ *   upstream-error        the service, or the way to it, failed
  *                         → `http_<status>`, `network`, `timeout`,
  *                           `credential_rejected` (the account's credential
  *                           was refused and could not be refreshed),
@@ -58,7 +58,7 @@ interface Classified {
   readonly error_class: ErrorClass | null;
 }
 
-/** `code` values of Node and undici that mean the provider could not be reached. */
+/** `code` values of Node and undici that mean the service could not be reached. */
 const NETWORK_CODES: ReadonlySet<string> = new Set([
   'ECONNREFUSED',
   'ECONNRESET',
@@ -126,7 +126,7 @@ function statusClass(thrown: object): ErrorClass | null {
 function classifyThrown(thrown: unknown): Classified {
   if (typeof thrown !== 'object' || thrown === null) return execution('non_error_throw');
   // The account's credential was refused for good (or the account was
-  // revoked meanwhile): the plugin ran, the provider said no.
+  // revoked meanwhile): the plugin ran, the service said no.
   if (isUpstreamRefusalError(thrown)) return upstream('credential_rejected');
   const status = statusClass(thrown);
   if (status !== null) return upstream(status);
@@ -137,7 +137,7 @@ function classifyThrown(thrown: unknown): Classified {
   if (thrown instanceof ReferenceError) return execution('reference_error');
   if (thrown instanceof SyntaxError) return execution('syntax_error');
   if (!(thrown instanceof Error)) return execution('non_error_throw');
-  // A provider failure that carries no status (a JSON-RPC error frame, an
+  // A service failure that carries no status (a JSON-RPC error frame, an
   // unusable answer): plugins throw a plain `Error` for it.
   return upstream('unspecified');
 }

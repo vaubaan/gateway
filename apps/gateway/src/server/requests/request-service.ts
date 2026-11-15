@@ -21,7 +21,7 @@ import type { MissionService } from '../missions/mission-service';
  * `decideApproval`; `decide()` dispatches on the kind of the request.
  */
 import { maskSecretArguments } from './masked-arguments';
-import { providerPagesOf, type ProviderPage } from './provider-pages';
+import { servicePagesOf, type ServicePage } from './service-pages';
 import type { AdminAct } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { serializeSlice } from '@vaubaan/policy-engine';
@@ -88,7 +88,7 @@ import {
   type ClaimProblem,
   type ClaimSituation,
 } from './claim';
-import { toolTitleOf } from '../providers/tool-titles';
+import { toolTitleOf } from '../services/tool-titles';
 import { askedBy, REFUSED_CALL_KIND } from './asker';
 import { eventLineOf, type SessionEventLine } from './events';
 import { effectiveState } from './state';
@@ -110,7 +110,7 @@ export interface RequestServiceDeps {
   readonly grounds: Pick<MissionGrounds, 'derive'>;
   /** `approvals.expiry` of the configuration: how long a granted approval stays usable. */
   readonly approvalValiditySeconds: number;
-  /** Risk labels come from the plugins' catalogs, the single provider list. */
+  /** Risk labels come from the plugins' catalogs, the single service list. */
   readonly registry: Pick<PluginRegistry, 'get'>;
   /** `InstanceConfig.publicUrl` — the origin of every request URL. */
   readonly publicUrl: URL;
@@ -163,7 +163,7 @@ export interface RequestSummary {
 /** The call of an approval request, from what the gateway already knows of it. */
 export interface RequestCall {
   readonly tool: string;
-  /** `ProviderPlugin.toolTitles`: "Merge a pull request"; `null` when the plugin gives none. */
+  /** `ServicePlugin.toolTitles`: "Merge a pull request"; `null` when the plugin gives none. */
   readonly title: string | null;
   /**
    * The resource the refused call resolved to, as the audit recorded it
@@ -271,8 +271,8 @@ export interface ApprovalCall {
   readonly slices: readonly string[] | null;
   /** Every risk the call counts against, the gated one included. */
   readonly risks: readonly TouchedRiskLine[];
-  /** Pages of the provider showing what the call would do (a push's comparison); empty once erased. */
-  readonly provider_pages: readonly ProviderPage[];
+  /** Pages of the service showing what the call would do (a push's comparison); empty once erased. */
+  readonly service_pages: readonly ServicePage[];
 }
 
 /** The gate of one risk an approval request covers, as the mission holds it now. */
@@ -899,7 +899,7 @@ export class RequestService {
         arguments_erased: !open,
         slices: audited ? audited.slices_executed.map(serializeSlice) : null,
         risks,
-        provider_pages: providerPagesOf(this.deps.registry, tool, openArguments),
+        service_pages: servicePagesOf(this.deps.registry, tool, openArguments),
       },
       gate: { policy: firstGate.policy, open_until: firstGate.open_until },
       gates,
@@ -1057,17 +1057,17 @@ export class RequestService {
 
   /** The catalog label of a risk; its id when the plugin or the entry is gone. */
   private labelOf(riskId: RiskId): string {
-    const provider = providerOf(riskId);
-    if (!provider) return riskId;
-    let labels = this.labels.get(provider);
+    const service = serviceOf(riskId);
+    if (!service) return riskId;
+    let labels = this.labels.get(service);
     if (!labels) {
-      const registered = this.deps.registry.get(provider);
+      const registered = this.deps.registry.get(service);
       labels = new Map(
         registered
           ? enumerateCatalog(registered.plugin.catalog).map((risk) => [risk.risk_id, risk.label])
           : [],
       );
-      this.labels.set(provider, labels);
+      this.labels.set(service, labels);
     }
     return labels.get(riskId) ?? riskId;
   }
@@ -1078,8 +1078,8 @@ function closedAt(summary: RequestSummary): Iso8601 {
   return summary.decided_at ?? summary.expires_at;
 }
 
-function providerOf(riskId: RiskId): string | null {
-  return parseRiskId(riskId)?.provider ?? null;
+function serviceOf(riskId: RiskId): string | null {
+  return parseRiskId(riskId)?.service ?? null;
 }
 
 /**

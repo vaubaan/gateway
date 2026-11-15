@@ -42,17 +42,17 @@ minutes.
 ## Agents
 
 - [execution-door](execution-door.md) — `/mcp`: the call pipeline, agent label, streaming, catalog.
-- [git-remote](git-remote.md) — `/git/<provider>/<owner>/<repo>.git`: fetch relayed, push decided ref by ref.
-- [providers/vaubaan](providers/vaubaan.md) — the gateway's own management tools: an agent prepares missions through a mission on a Vaubaan account.
+- [git-remote](git-remote.md) — `/git/<service>/<owner>/<repo>.git`: fetch relayed, push decided ref by ref.
+- [services/vaubaan](services/vaubaan.md) — the gateway's own management tools: an agent prepares missions through a mission on a Vaubaan account.
 - [budget-and-sessions](budget-and-sessions.md) — how an allowed call is counted against its budget.
 
 ## Engine and plugins
 
 - [gateway-core](gateway-core.md) — the decision core: refusals, audit entry, mission context, pipeline.
 - [policy-engine](policy-engine.md) — pure modules around slices and risk catalogs.
-- [plugin-sdk](plugin-sdk.md) — what a provider plugin is written against; the one list of providers.
+- [plugin-sdk](plugin-sdk.md) — what a plugin is written against; the one list of services.
 - [plugin-loading](plugin-loading.md) — bundled and pinned plugins, `plugins.enabled`, the boot refusals, the versions check, plugin bundles and images.
 - [telemetry](telemetry.md) — community telemetry, off at installation.
-- [providers/README](providers/README.md) — index of the per-provider handbooks.
+- [services/README](services/README.md) — index of the per-service handbooks.
 
 The v4 handbooks are gone from the tree; the tag `v4-final` keeps them.

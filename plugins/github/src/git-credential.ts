@@ -16,7 +16,7 @@ import { githubTokenOf } from './credential.ts';
 /** The user name GitHub expects with a token over HTTP. */
 const TOKEN_USER = 'x-access-token';
 
-/** `owner/repo` of a `/git/github/<owner>/<repo>` path (provider segment and `.git` already removed). */
+/** `owner/repo` of a `/git/github/<owner>/<repo>` path (service segment and `.git` already removed). */
 export function repositoryOf(path: string): string | null {
   return repoFullName(path)?.ref ?? null;
 }

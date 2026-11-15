@@ -16,7 +16,7 @@
  *            set, change and reason, with the refs.
  *
  * Never throws: a failure is logged (account, error class) and the write that caused
- * it stands. Nothing here reads a provider.
+ * it stands. Nothing here reads a service.
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
@@ -31,7 +31,7 @@ export type ResourceSnapshot = ReadonlyMap<string, string | null>;
 export interface FutureResourcesDeps {
   readonly store: Pick<Store, 'accounts' | 'missions'>;
   readonly audit: AuditWriter;
-  readonly selfResources: readonly Pick<SelfResource, 'provider' | 'ref'>[];
+  readonly selfResources: readonly Pick<SelfResource, 'service' | 'ref'>[];
   readonly logger: Logger;
   readonly clock: Clock;
 }
@@ -67,7 +67,7 @@ export class FutureResources {
       }
       if (changes.length === 0) return [];
       const neverJoin = rows
-        .filter((r) => isSelfResource(this.deps.selfResources, account.provider, r.ref))
+        .filter((r) => isSelfResource(this.deps.selfResources, account.service, r.ref))
         .map((r) => r.id);
       const moves = await this.deps.store.missions.applyResourceChanges(
         accountId,

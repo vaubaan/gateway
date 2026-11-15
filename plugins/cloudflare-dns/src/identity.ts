@@ -1,23 +1,23 @@
 /**
- * Identity of the `cloudflare-dns` provider — the one place its ids are written.
+ * Identity of the `cloudflare-dns` service — the one place its ids are written.
  *
- * Handbook : docs/handbook/providers/cloudflare-dns.md.
+ * Handbook : docs/handbook/services/cloudflare-dns.md.
  *
- * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
+ * `SERVICE_ID` is also written as `service:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the
- * plugin id, the data-model provider, the tool names, the resources
+ * plugin id, the data-model service, the tool names, the resources
  * discovery returns — is derived from this module.
  */
 
 import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 
-/** The provider id. */
-export const PROVIDER_ID = 'cloudflare-dns';
+/** The service id. */
+export const SERVICE_ID = 'cloudflare-dns';
 
 /** `cloudflare_dns__` : prepended to every tool name. */
-export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
+export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
-/** Public API of the provider — a fact about Cloudflare, not instance configuration. */
+/** Public API of the service — a fact about Cloudflare, not instance configuration. */
 export const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
 
 /** Credential field holding the API token. */

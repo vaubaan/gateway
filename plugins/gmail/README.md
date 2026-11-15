@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-gmail`
 
-Vaubaan Gateway provider plugin for Gmail. The plugin
+Vaubaan Gateway plugin for Gmail. The plugin
 models the risks of reading, drafting, sending and labelling in a mailbox,
 and executes its fourteen tools over **IMAP** (`imap.gmail.com:993`, implicit
 TLS) — the two sends over **SMTP** (`smtp.gmail.com:465`, implicit TLS) —
@@ -9,7 +9,7 @@ signed in with the mailbox's **app password**. Written against
 [`nodemailer`](https://nodemailer.com) (MIT-0) and
 [`html-to-text`](https://github.com/html-to-text/node-html-to-text) (MIT).
 Maintainer handbook:
-[`docs/handbook/providers/gmail.md`](../../docs/handbook/providers/gmail.md).
+[`docs/handbook/services/gmail.md`](../../docs/handbook/services/gmail.md).
 Decision: ADR
 [`gmail-over-imap-with-an-app-password`](../../docs/decisions/gmail-over-imap-with-an-app-password.md).
 

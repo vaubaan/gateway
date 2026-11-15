@@ -131,8 +131,8 @@ describe('CredentialFieldInputs', () => {
   it('keeps ids unique when two lists with the same field names share a page', () => {
     const html = renderToStaticMarkup(
       <>
-        <CredentialFieldInputs idPrefix="provider-app-a" fields={FIELDS} />
-        <CredentialFieldInputs idPrefix="provider-app-b" fields={FIELDS} />
+        <CredentialFieldInputs idPrefix="service-app-a" fields={FIELDS} />
+        <CredentialFieldInputs idPrefix="service-app-b" fields={FIELDS} />
       </>,
     );
     const { labels, controls } = bindings(html);

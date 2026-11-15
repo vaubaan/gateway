@@ -73,7 +73,7 @@ describe('DecisionReport', () => {
 
   it.each([
     ['risk with its environment label', { risks: ['supabase[prod].migration-write'] }],
-    ['risk of another provider', { risks: ['github.git-push'] }],
+    ['risk of another service', { risks: ['github.git-push'] }],
     ['risk that is a pattern', { risks: ['supabase.*'] }],
     ['risk that is free text', { risks: ['drop table users'] }],
     ['unknown decision', { decision: 'maybe' }],

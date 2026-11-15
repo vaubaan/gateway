@@ -1,8 +1,8 @@
 /**
- * The provider side of the git remote, as the host drives it (spec §4.1 ter,
+ * The service side of the git remote, as the host drives it (spec §4.1 ter,
  * §2.4): the account's credential decrypted in memory, handed to the
- * plugin's `gitRemote.upstream`, presented to the provider, released. The
- * agent's key never goes upstream; the provider's credential never goes back.
+ * plugin's `gitRemote.upstream`, presented to the service, released. The
+ * agent's key never goes upstream; the service's credential never goes back.
  *
  * Also the relay stage of the git pipeline: the pipeline decides a fetch like
  * a tool call, and its upstream stage is where the bytes start to flow —
@@ -18,7 +18,7 @@ import {
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
 import { isExecutorRefusal, refusalResult } from '@vaubaan/plugin-sdk';
-import type { ExecuteContext, PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ExecuteContext, PluginRegistry, ServicePlugin } from '@vaubaan/plugin-sdk';
 import type { GitAccess, GitRemoteCapability, GitUpstream } from '@vaubaan/plugin-sdk/git';
 
 import type { CredentialBroker } from '../accounts';
@@ -27,9 +27,9 @@ import type { Logger } from '../logging';
 
 /** The repository a git request is about, and who serves it. */
 export interface GitTarget {
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   readonly remote: GitRemoteCapability;
-  /** The mission's account to the plugin's provider. */
+  /** The mission's account to the plugin's service. */
   readonly account: MissionAccount;
   /** The resource ref (`owner/repo`). */
   readonly repository: string;
@@ -56,7 +56,7 @@ export async function executeContextFor(
   };
 }
 
-/** Request headers git sends that the provider must see as they are. */
+/** Request headers git sends that the service must see as they are. */
 const FORWARDED_REQUEST_HEADERS = [
   'content-type',
   'accept',
@@ -65,7 +65,7 @@ const FORWARDED_REQUEST_HEADERS = [
   'user-agent',
 ] as const;
 
-/** Response headers of the provider git must see. */
+/** Response headers of the service git must see. */
 const FORWARDED_RESPONSE_HEADERS = ['content-type'] as const;
 
 export interface UpstreamRequest {
@@ -77,7 +77,7 @@ export interface UpstreamRequest {
   readonly signal?: AbortSignal;
 }
 
-/** One request to the provider's git endpoint, the body streamed as it comes. */
+/** One request to the service's git endpoint, the body streamed as it comes. */
 export async function callUpstream(
   ctx: ExecuteContext,
   upstream: GitUpstream,
@@ -97,7 +97,7 @@ export async function callUpstream(
   return ctx.fetch(`${upstream.url}${request.suffix}`, init);
 }
 
-/** The provider's answer as git receives it: its status, its type, its body untouched. */
+/** The service's answer as git receives it: its status, its type, its body untouched. */
 export function relayedResponse(
   upstream: Response,
   body: ReadableStream<Uint8Array> | null,
@@ -110,7 +110,7 @@ export function relayedResponse(
   return new Response(body, { status: upstream.status, headers });
 }
 
-/** The caller hung up while the provider's answer was being relayed. */
+/** The caller hung up while the service's answer was being relayed. */
 export class GitCallerGoneError extends Error {
   constructor() {
     super('the git client went away; the relay was stopped.');
@@ -120,7 +120,7 @@ export class GitCallerGoneError extends Error {
 
 /**
  * A stream that hands on `body` and tells when it ended: `done` resolves with
- * the byte count at the end, rejects when the provider's stream broke or the
+ * the byte count at the end, rejects when the service's stream broke or the
  * client went away.
  */
 export function observed(body: ReadableStream<Uint8Array>): {
@@ -170,7 +170,7 @@ export interface RelayJob {
   readonly access: GitAccess;
   readonly request: Omit<UpstreamRequest, 'signal'>;
   readonly signal: AbortSignal;
-  /** Called once, with the response git receives, as soon as the provider answered. */
+  /** Called once, with the response git receives, as soon as the service answered. */
   readonly respond: (response: Response) => void;
 }
 
@@ -211,10 +211,10 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
     async execute(ctx, call, target) {
       const job = deps.jobs.of(call);
       if (!job) return deps.plugins.execute(ctx, call, target);
-      const provider = target.account.provider;
-      const plugin = deps.registry.get(provider)?.plugin;
+      const service = target.account.service;
+      const plugin = deps.registry.get(service)?.plugin;
       const remote = plugin?.gitRemote;
-      if (!plugin || !remote) throw new Error(`git relay: '${provider}' declares no git remote`);
+      if (!plugin || !remote) throw new Error(`git relay: '${service}' declares no git remote`);
       const gitTarget: GitTarget = {
         plugin,
         remote,
@@ -234,12 +234,12 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
       if (!answer.ok || !answer.body) {
         await answer.body?.cancel();
         if (answer.status === HTTP_UNAUTHORIZED) {
-          // A cached token the provider no longer takes: the next request mints anew.
+          // A cached token the service no longer takes: the next request mints anew.
           await deps.credentialCache.drop(target.account.id);
         }
         throw new UpstreamFailureError({
-          summary: `${provider} git answered HTTP ${answer.status}`,
-          detail: `${provider} answered HTTP ${answer.status} to the fetch; try again, and tell the human if it persists`,
+          summary: `${service} git answered HTTP ${answer.status}`,
+          detail: `${service} answered HTTP ${answer.status} to the fetch; try again, and tell the human if it persists`,
           status: answer.status,
         });
       }
@@ -251,8 +251,8 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
         throw new UpstreamFailureError({
           summary:
             err instanceof GitCallerGoneError
-              ? `${provider} git stream stopped: the git client was gone`
-              : `${provider} git stream broke (${err instanceof Error ? err.name : 'Error'})`,
+              ? `${service} git stream stopped: the git client was gone`
+              : `${service} git stream broke (${err instanceof Error ? err.name : 'Error'})`,
           detail: err instanceof Error ? err.message : String(err),
           status: null,
           cause: err,

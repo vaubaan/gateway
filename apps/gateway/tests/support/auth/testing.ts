@@ -6,10 +6,10 @@ import type { Store } from '../../../src/server/store';
 import type { ConfigRepo } from '../../../src/server/store/repositories/config';
 import { ENROL_PAGE, SECOND_FACTOR_PAGE } from '../../../src/server/auth/local-handlers';
 import type { SessionService } from '../../../src/server/auth/session-service';
-import { storedProviderWrites } from '../../../src/server/auth/sign-in-providers';
+import { storedSignInProviderWrites } from '../../../src/server/auth/sign-in-providers';
 
 /**
- * Switches a provider saved in Settings on without a test beside the session: the
+ * Switches a sign-in provider saved in Settings on without a test beside the session: the
  * state a passed test then "Switch on" leaves (ADR administrators-live-in-the-instance,
  * §5), for tests whose subject is not the switch.
  */
@@ -25,8 +25,8 @@ export async function switchOnForTests(
   );
 }
 
-/** What a test gives of the OpenID Connect provider it signs people in through. */
-export interface TestOidcProvider {
+/** What a test gives of the OpenID Connect sign-in provider it signs people in through. */
+export interface TestOidcSignInProvider {
   readonly issuer: string;
   readonly clientId: string;
   readonly clientSecret: string;
@@ -38,27 +38,27 @@ export interface TestOidcProvider {
 }
 
 /**
- * Stores an OpenID Connect provider as Settings would and switches it on — without
+ * Stores an OpenID Connect sign-in provider as Settings would and switches it on — without
  * the form's checks, so a test needs no reachable issuer; returns its id.
  */
-export async function saveTestOidcProvider(
+export async function saveTestOidcSignInProvider(
   config: Pick<ConfigRepo, 'apply' | 'set' | 'get'>,
-  provider: TestOidcProvider,
+  signInProvider: TestOidcSignInProvider,
 ): Promise<string> {
-  const id = provider.id ?? 'idp';
-  const issuer = new URL(provider.issuer);
+  const id = signInProvider.id ?? 'idp';
+  const issuer = new URL(signInProvider.issuer);
   await config.apply(
-    storedProviderWrites(
+    storedSignInProviderWrites(
       {
         kind: 'oidc',
         id,
         name: issuer.hostname,
         issuer,
-        clientId: provider.clientId,
-        clientSecret: provider.clientSecret,
-        claims: provider.claims ?? { sub: 'sub', email: 'email', groups: 'groups' },
-        allowedEmailDomains: provider.allowedEmailDomains ?? [],
-        invitationOnly: provider.invitationOnly ?? false,
+        clientId: signInProvider.clientId,
+        clientSecret: signInProvider.clientSecret,
+        claims: signInProvider.claims ?? { sub: 'sub', email: 'email', groups: 'groups' },
+        allowedEmailDomains: signInProvider.allowedEmailDomains ?? [],
+        invitationOnly: signInProvider.invitationOnly ?? false,
       },
       new Date().toISOString(),
     ),

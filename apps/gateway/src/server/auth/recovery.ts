@@ -1,6 +1,6 @@
 /**
  * Recovery by the master key, loudly (spec §6; ADR administrators-live-in-the-instance,
- * §9). For an instance nobody can administer any more — the provider misconfigured,
+ * §9). For an instance nobody can administer any more — the sign-in provider misconfigured,
  * the last administrator's factor and recovery codes lost, a restore on a host whose
  * providers are gone —, its master key is the way back, and the only one.
  *
@@ -59,8 +59,8 @@ export interface RecoveryRecord {
 
 export type NameRequest =
   | { readonly kind: 'user'; readonly userId: string }
-  | { readonly kind: 'email'; readonly email: string; readonly provider: string }
-  | { readonly kind: 'group'; readonly provider: string; readonly group: string };
+  | { readonly kind: 'email'; readonly email: string; readonly signInProvider: string }
+  | { readonly kind: 'group'; readonly signInProvider: string; readonly group: string };
 
 export interface RecoveryDeps {
   readonly publicUrl: URL;
@@ -159,23 +159,23 @@ export class RecoveryService {
     } else if (request.kind === 'email') {
       const row = await administrators.grantEmail(
         request.email,
-        request.provider,
+        request.signInProvider,
         RECOVERY_ACTOR_ID,
         'recovered',
       );
       named = row
         ? designationView(row)
-        : { kind: 'email', email: request.email, provider: request.provider };
+        : { kind: 'email', email: request.email, sign_in_provider: request.signInProvider };
     } else {
       const row = await administrators.grantGroup(
-        request.provider,
+        request.signInProvider,
         request.group,
         RECOVERY_ACTOR_ID,
         'recovered',
       );
       named = row
         ? designationView(row)
-        : { kind: 'group', group: request.group, provider: request.provider };
+        : { kind: 'group', group: request.group, sign_in_provider: request.signInProvider };
     }
     const at = toIso(this.deps.clock.now());
     await this.deps.audit.write({

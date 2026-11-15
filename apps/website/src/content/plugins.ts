@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { pluginInfo, type PluginInfo } from '@vaubaan/plugin-page/info';
 import { discoverPluginDirs, importPlugin } from '@vaubaan/plugin-page/load';
 import { allSteps } from '@vaubaan/plugin-page/page-data';
-import { GUIDE_SCREENSHOT_DIR, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { GUIDE_SCREENSHOT_DIR, type ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import { siteDir } from './outputs';
 
@@ -51,7 +51,7 @@ export function connectFigureFiles(
 
 /** The plain data of one plugin of the repository, as the site shows it. */
 export function sitePluginInfo(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   dir: string,
   packageName: string,
   examplesSource: string | null = null,

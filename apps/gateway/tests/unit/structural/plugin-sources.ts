@@ -64,8 +64,8 @@ export function packageJsonOf(folder: string): Readonly<Record<string, unknown>>
   return manifest;
 }
 
-/** The provider id a plugin folder holds: its package is `@vaubaan/plugin-<id>`. */
-export function providerIdOf(folder: string): string {
+/** The service id a plugin folder holds: its package is `@vaubaan/plugin-<id>`. */
+export function serviceIdOf(folder: string): string {
   const name = packageJsonOf(folder).name;
   const prefix = '@vaubaan/plugin-';
   if (typeof name !== 'string' || !name.startsWith(prefix)) {

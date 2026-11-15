@@ -21,7 +21,7 @@ import type {
   ClassifyOutcome,
   AccountContext,
   ExecuteContext,
-  ProviderPlugin,
+  ServicePlugin,
 } from '../../../src/plugin.ts';
 
 export const ACME_API = 'https://api.acme.test/v1';
@@ -29,7 +29,7 @@ export const ACME_API = 'https://api.acme.test/v1';
 export const acmeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const acmeDataModel: DataModel = {
-  provider: 'acme',
+  service: 'acme',
   planes: [
     {
       slug: 'space',
@@ -121,11 +121,11 @@ async function acmeRequest(
   return await res.json();
 }
 
-export const acmePlugin: ProviderPlugin = definePlugin({
+export const acmePlugin: ServicePlugin = definePlugin({
   id: 'acme',
   displayName: 'Acme',
   version: '1.2.3',
-  description: 'Fixture provider.',
+  description: 'Fixture service.',
   tools: acmeTools,
   dataModel: acmeDataModel,
   catalog: acmeCatalog.catalog,
@@ -146,6 +146,6 @@ export const acmePlugin: ProviderPlugin = definePlugin({
       id: string;
       name: string;
     }>;
-    return spaces.map((s) => ({ provider: 'acme', ref: s.id, displayName: s.name }));
+    return spaces.map((s) => ({ service: 'acme', ref: s.id, displayName: s.name }));
   },
 });

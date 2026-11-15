@@ -71,12 +71,12 @@ import {
 import { TIMELINE_PARAMS } from '@/server/audit';
 import { enumerateCatalog } from '@/lib/missions/catalog-view';
 import { macroActionsOf } from '@/lib/missions/macro-actions';
-import { riskPlanesOf } from '@/lib/providers/planes';
+import { riskPlanesOf } from '@/lib/services/planes';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 import { missionGitViews } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
 import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
-import { toolTitleOf } from '@/server/providers/tool-titles';
+import { toolTitleOf } from '@/server/services/tool-titles';
 import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
 
@@ -181,8 +181,8 @@ export default async function MissionPage({ params, searchParams }: Props) {
   });
   const missionPath = `${ROUTES.missions}/${mission.id}`;
   // The creation screen, frozen: one card per resource set, with the use of the period.
-  const cards = detailCards(detail, context, (provider) => {
-    const plugin = root.registry.get(provider)?.plugin;
+  const cards = detailCards(detail, context, (service) => {
+    const plugin = root.registry.get(service)?.plugin;
     return plugin
       ? {
           risks: enumerateCatalog(plugin.catalog),
@@ -191,8 +191,8 @@ export default async function MissionPage({ params, searchParams }: Props) {
         }
       : null;
   });
-  const serviceOf = (provider: string) => {
-    const plugin = root.registry.get(provider)?.plugin;
+  const serviceOf = (service: string) => {
+    const plugin = root.registry.get(service)?.plugin;
     return {
       icon: (plugin ? serviceIconOf(plugin) : null) satisfies ServiceMarkIcon | null,
       planes: plugin ? riskPlanesOf(plugin.dataModel, plugin.catalog) : null,
@@ -304,7 +304,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
               .map((account) => (
                 <span key={account.id} data-testid={`account-lost-${account.id}`}>
                   {' · '}
-                  {account.provider_label} {account.display_name} (no longer serves)
+                  {account.service_label} {account.display_name} (no longer serves)
                 </span>
               ))}
             {' · '}
@@ -461,7 +461,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
       </div>
       <div className={[cardStyles.cards, styles.block].join(' ')} data-testid="mission-cards">
         {cards.map(({ account, card, used, openUntil, lastCheckedAt }) => {
-          const service = serviceOf(account.provider);
+          const service = serviceOf(account.service);
           return (
             <MissionCard
               key={card.key}
@@ -525,10 +525,10 @@ export default async function MissionPage({ params, searchParams }: Props) {
           testId="mission-git"
         >
           {gitViews.map((git) => (
-            <div key={git.provider} className={styles.wrapAnywhere}>
+            <div key={git.service} className={styles.wrapAnywhere}>
               {gitViews.length > 1 && (
                 <p>
-                  <strong>{git.provider}</strong>
+                  <strong>{git.service}</strong>
                 </p>
               )}
               <p>

@@ -36,7 +36,7 @@ const key = fc.constantFrom(
   'issuer',
   'sign_in',
   'github',
-  'providers',
+  'services',
   'oauth',
   'telemetry',
   'enabled',

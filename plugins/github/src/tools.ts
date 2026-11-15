@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `github` provider — the subset of the official GitHub
+ * MCP tools of the `github` service — the subset of the official GitHub
  * MCP server a coding agent needs, synthesised over the REST API.
  *
  * Naming : `github__<verb>_<noun>`, as the official server. Every

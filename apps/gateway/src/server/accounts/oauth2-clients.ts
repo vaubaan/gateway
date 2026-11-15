@@ -2,21 +2,21 @@
  * The OAuth client of an `oauth2` service — the one place the connect flows
  * (`AccountService`) and the credential broker (refresh, revocation) get
  * it from. There is one origin: the spec declares `clientRegistration`
- * (RFC 7591), and this instance registers its own client at the provider the
+ * (RFC 7591), and this instance registers its own client at the service the
  * first time someone connects, keeps it, and reuses it for every account
  * (Miro's MCP server). No administrator declares a client (ADRs
  * oauth-client-registered-by-the-gateway, gmail-over-imap-with-an-app-password).
  *
- * The client lives in `instance_config` under `oauth_clients.<provider>.*`:
+ * The client lives in `instance_config` under `oauth_clients.<service>.*`:
  * `client_id`, `redirect_uri` and `registered_at` as values, `client_secret`
  * sealed by the store's encryptor. It is registered again when there is none,
  * when the instance's callback address is no longer the one it was registered
- * with (the public URL changed), and after the provider rejected it
+ * with (the public URL changed), and after the service rejected it
  * (`invalid_client`): `rejected` forgets it. Registrations are single-flight
- * per provider inside this process, so two people connecting at once share
+ * per service inside this process, so two people connecting at once share
  * one client.
  */
-import type { OAuth2RegisteredClientSpec, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { OAuth2RegisteredClientSpec, ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
 import type { ConfigRepo } from '../store/repositories/config';
@@ -25,38 +25,38 @@ import { registerClient, type OAuth2Client } from './oauth2';
 
 export const OAUTH_CLIENT_KEY_PREFIX = 'oauth_clients';
 
-/** The keys of one provider's registered client in `instance_config`. */
+/** The keys of one service's registered client in `instance_config`. */
 export function registeredClientKey(
-  providerId: string,
+  serviceId: string,
   field: 'client_id' | 'client_secret' | 'redirect_uri' | 'registered_at',
 ): string {
-  return `${OAUTH_CLIENT_KEY_PREFIX}.${providerId}.${field}`;
+  return `${OAUTH_CLIENT_KEY_PREFIX}.${serviceId}.${field}`;
 }
 
-/** The name the provider shows on its consent page and in the person's list of apps. */
+/** The name the service shows on its consent page and in the person's list of apps. */
 export const REGISTERED_CLIENT_NAME = 'Vaubaan Gateway';
 
 /** No registered client is kept for the service (never registered, or forgotten after a rejection). */
 export class OAuth2ClientMissing extends Error {
-  constructor(readonly providerId: string) {
-    super(`provider '${providerId}': no OAuth client is registered`);
+  constructor(readonly serviceId: string) {
+    super(`service '${serviceId}': no OAuth client is registered`);
     this.name = 'OAuth2ClientMissing';
   }
 }
 
 export interface OAuth2ClientsDeps {
   readonly config: Pick<ConfigRepo, 'get' | 'getSecret' | 'apply'>;
-  /** The instance's public URL: its host names the client at the provider. */
+  /** The instance's public URL: its host names the client at the service. */
   readonly publicUrl: URL;
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
 }
 
-type ProviderOf = Pick<ProviderPlugin, 'id'>;
+type ServiceOf = Pick<ServicePlugin, 'id'>;
 
 export class OAuth2Clients {
-  // single-process only — one registration at a time per provider inside this process.
+  // single-process only — one registration at a time per service inside this process.
   private readonly registering = new Map<string, Promise<OAuth2Client>>();
 
   constructor(private readonly deps: OAuth2ClientsDeps) {}
@@ -67,7 +67,7 @@ export class OAuth2Clients {
    * registered for another callback address. Throws `OAuth2RegistrationError`.
    */
   async forAuthorization(
-    plugin: ProviderOf,
+    plugin: ServiceOf,
     spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
@@ -82,7 +82,7 @@ export class OAuth2Clients {
    * that obtained it. Throws `OAuth2ClientMissing`.
    */
   async forTokenRequest(
-    plugin: ProviderOf,
+    plugin: ServiceOf,
     spec: OAuth2RegisteredClientSpec,
   ): Promise<OAuth2Client> {
     const stored = await this.stored(plugin.id, spec);
@@ -91,12 +91,12 @@ export class OAuth2Clients {
   }
 
   /**
-   * The provider answered `invalid_client` for `clientId`: the registered
+   * The service answered `invalid_client` for `clientId`: the registered
    * client is forgotten (when it is still that one), so the next account
    * registers again.
    */
   async rejected(
-    plugin: ProviderOf,
+    plugin: ServiceOf,
     _spec: OAuth2RegisteredClientSpec,
     clientId: string,
   ): Promise<void> {
@@ -108,46 +108,46 @@ export class OAuth2Clients {
         key: registeredClientKey(plugin.id, field),
       })),
     );
-    this.deps.logger.warn('registered OAuth client rejected by the provider; forgotten', {
-      provider: plugin.id,
+    this.deps.logger.warn('registered OAuth client rejected by the service; forgotten', {
+      service: plugin.id,
     });
   }
 
   private async stored(
-    providerId: string,
+    serviceId: string,
     spec: OAuth2RegisteredClientSpec,
   ): Promise<{ readonly client: OAuth2Client; readonly redirectUri: string | null } | null> {
     const { config } = this.deps;
-    const clientId = await config.get(registeredClientKey(providerId, 'client_id'));
+    const clientId = await config.get(registeredClientKey(serviceId, 'client_id'));
     if (!clientId) return null;
     const isPublic = spec.clientAuthMethod === 'none';
     const clientSecret = isPublic
       ? null
-      : await config.getSecret(registeredClientKey(providerId, 'client_secret'));
+      : await config.getSecret(registeredClientKey(serviceId, 'client_secret'));
     // A confidential client without its secret cannot be used: register again.
     if (!isPublic && !clientSecret) return null;
     return {
       client: { clientId, clientSecret },
-      redirectUri: await config.get(registeredClientKey(providerId, 'redirect_uri')),
+      redirectUri: await config.get(registeredClientKey(serviceId, 'redirect_uri')),
     };
   }
 
   private register(
-    providerId: string,
+    serviceId: string,
     spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
-    const inFlight = this.registering.get(providerId);
+    const inFlight = this.registering.get(serviceId);
     if (inFlight) return inFlight;
-    const pending = this.registerNow(providerId, spec, redirectUri).finally(() => {
-      this.registering.delete(providerId);
+    const pending = this.registerNow(serviceId, spec, redirectUri).finally(() => {
+      this.registering.delete(serviceId);
     });
-    this.registering.set(providerId, pending);
+    this.registering.set(serviceId, pending);
     return pending;
   }
 
   private async registerNow(
-    providerId: string,
+    serviceId: string,
     spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
@@ -158,23 +158,23 @@ export class OAuth2Clients {
       { fetch: this.deps.fetch },
     );
     await this.deps.config.apply([
-      { kind: 'value', key: registeredClientKey(providerId, 'client_id'), value: client.clientId },
+      { kind: 'value', key: registeredClientKey(serviceId, 'client_id'), value: client.clientId },
       client.clientSecret === null
-        ? { kind: 'delete', key: registeredClientKey(providerId, 'client_secret') }
+        ? { kind: 'delete', key: registeredClientKey(serviceId, 'client_secret') }
         : {
             kind: 'secret',
-            key: registeredClientKey(providerId, 'client_secret'),
+            key: registeredClientKey(serviceId, 'client_secret'),
             plain: client.clientSecret,
           },
-      { kind: 'value', key: registeredClientKey(providerId, 'redirect_uri'), value: redirectUri },
+      { kind: 'value', key: registeredClientKey(serviceId, 'redirect_uri'), value: redirectUri },
       {
         kind: 'value',
-        key: registeredClientKey(providerId, 'registered_at'),
+        key: registeredClientKey(serviceId, 'registered_at'),
         value: toIso(this.deps.clock.now()),
       },
     ]);
-    this.deps.logger.info('OAuth client registered at the provider', {
-      provider: providerId,
+    this.deps.logger.info('OAuth client registered at the service', {
+      service: serviceId,
       client_id: client.clientId,
     });
     return client;

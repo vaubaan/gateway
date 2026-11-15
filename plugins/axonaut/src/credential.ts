@@ -1,5 +1,5 @@
 /**
- * Credential of the `axonaut` provider : the API key of an Axonaut user,
+ * Credential of the `axonaut` service : the API key of an Axonaut user,
  * pasted by hand (`api-key`), the one way of connecting.
  *
  * ADR : one-place-to-authorize-services-token-first (amended 2026-10-31 : the

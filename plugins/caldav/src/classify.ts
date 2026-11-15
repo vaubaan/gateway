@@ -1,9 +1,9 @@
 /**
- * Classifier of the `caldav` provider : `(tool, args, resources) → slices`.
+ * Classifier of the `caldav` service : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/caldav.md.
+ * Handbook : docs/handbook/services/caldav.md.
  *
  * Pure : no IO, no credential, no clock. Every slice is rooted at the
  * calendar the call names, one of the mission's resources. Rules :
@@ -299,7 +299,7 @@ export function statedPeople(
 
 /** The calendars of the mission. */
 export const ownCalendars = (resources: readonly Resource[]): Resource[] =>
-  resources.filter((r) => r.provider === CALDAV_PLUGIN_ID);
+  resources.filter((r) => r.service === CALDAV_PLUGIN_ID);
 
 /**
  * The calendar a call targets, for `classify` and `execute` alike : the one
@@ -332,7 +332,7 @@ const name = (value: string): SliceSegment => ({ kind: 'name', value });
 
 function slice(action: 'R' | 'W', calendar: string, rest: readonly SliceSegment[]): Slice {
   return {
-    provider: CALDAV_PLUGIN_ID,
+    service: CALDAV_PLUGIN_ID,
     path: [name('calendar'), identSegment(calendar), ...rest],
     action,
   };

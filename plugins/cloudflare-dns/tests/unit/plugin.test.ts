@@ -38,24 +38,24 @@ import {
 const BASE = CLOUDFLARE_API_BASE;
 
 const exampleCom: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: 'z1',
   displayName: 'example.com',
   metadata: { account_id: 'acct1', zone_name: 'example.com' },
 };
 const exampleOrg: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: 'z2',
   displayName: 'example.org',
   metadata: { account_id: 'acct1', zone_name: 'example.org' },
 };
 const otherNet: Resource = {
-  provider: 'cloudflare-dns',
+  service: 'cloudflare-dns',
   ref: 'z3',
   displayName: 'other.net',
   metadata: { account_id: 'acct2', zone_name: 'other.net' },
 };
-const github: Resource = { provider: 'github', ref: 'acme/app', displayName: 'app' };
+const github: Resource = { service: 'github', ref: 'acme/app', displayName: 'app' };
 
 const slices = (
   tool: string,
@@ -155,8 +155,8 @@ describe('classifyCloudflareDns — zone resolution', () => {
     expect(denied('cloudflare_dns__get_zone', { zone_id: 42 })).toBe('zone_id: malformed zone id');
   });
 
-  test('ignores resources of other providers ; account[*] when the metadata lacks it', () => {
-    const bare: Resource = { provider: 'cloudflare-dns', ref: 'z7', displayName: 'bare.io' };
+  test('ignores resources of other services ; account[*] when the metadata lacks it', () => {
+    const bare: Resource = { service: 'cloudflare-dns', ref: 'z7', displayName: 'bare.io' };
     expect(slices('cloudflare_dns__get_zone', {}, [github, bare])).toEqual([
       'cloudflare-dns.account[*].zone[z7].R',
     ]);
@@ -228,7 +228,7 @@ describe('classifyCloudflareDns — record writes', () => {
       'cloudflare-dns.account[acct1].zone[z1].record[r1].W',
       'cloudflare-dns.account[acct1].zone[z1].record[r1].critical.W',
     ]);
-    const nameless: Resource = { provider: 'cloudflare-dns', ref: 'z8', displayName: '' };
+    const nameless: Resource = { service: 'cloudflare-dns', ref: 'z8', displayName: '' };
     expect(
       slices(
         'cloudflare_dns__create_record',
@@ -272,7 +272,7 @@ describe('classifyCloudflareDns — record writes', () => {
       'cloudflare-dns.account[acct1].zone[z1].record[r1].delete.W',
       'cloudflare-dns.account[acct1].zone[z1].record[r1].critical.W',
     ]);
-    const nameless: Resource = { provider: 'cloudflare-dns', ref: 'z8', displayName: '' };
+    const nameless: Resource = { service: 'cloudflare-dns', ref: 'z8', displayName: '' };
     expect(
       slices(
         'cloudflare_dns__delete_record',
@@ -465,7 +465,7 @@ describe('executeCloudflareDns with mockFetch', () => {
 
   test.each<[string, Record<string, unknown>, string]>([
     // The body of a write is built from the arguments: a field the tool does not declare
-    // (here real fields of the provider's API) would have been sent as given.
+    // (here real fields of the service's API) would have been sent as given.
     [
       'cloudflare_dns__create_record',
       {
@@ -863,7 +863,7 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
     const resources = await cloudflareDnsPlugin.discoverResources(ctx(fetch));
     expect(resources).toEqual([
       {
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         ref: 'z1',
         displayName: 'zone1.example',
         metadata: {
@@ -874,7 +874,7 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
         },
       },
       {
-        provider: 'cloudflare-dns',
+        service: 'cloudflare-dns',
         ref: 'z2',
         displayName: 'zone2.example',
         metadata: {

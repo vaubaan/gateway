@@ -61,7 +61,7 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
     const owners = await groups.service.create(rig.operator.id, 'owners');
     await groups.service.addMember(rig.operator.id, owners.id, 'ops@example.com');
     const second = await store.accounts.create({
-      provider: rig.account.provider,
+      service: rig.account.service,
       owner: { kind: 'group', id: owners.id },
       displayName: 'Depot of the group',
       credential: await store.accounts.getCredential(rig.account.id),

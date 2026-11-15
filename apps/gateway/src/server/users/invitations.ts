@@ -35,7 +35,7 @@ export interface InvitationView {
   /** The administrator's display name or email, "Bootstrap token" for the install token, or `null` when unknown. */
   readonly invitedBy: string | null;
   readonly createdAt: Iso;
-  /** Somebody has signed in with this address (through any provider). */
+  /** Somebody has signed in with this address (through any sign-in provider). */
   readonly signedIn: boolean;
 }
 

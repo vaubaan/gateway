@@ -1,6 +1,6 @@
 /**
  * @vaubaan/gateway-core — the v5 decision core, refusal model, audit shape
- * and pipeline skeleton. No transport, no store, no provider: those are the
+ * and pipeline skeleton. No transport, no store, no service: those are the
  * execution door (`apps/gateway/src/server/execution`), the embedded store and the plugins.
  */
 

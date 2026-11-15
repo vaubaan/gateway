@@ -1,11 +1,11 @@
 /**
- * SMTP transport of the `gmail` provider : one connection per send to
+ * SMTP transport of the `gmail` service : one connection per send to
  * `smtp.gmail.com:465` (implicit TLS), signed in with the same app password
  * as IMAP, through `nodemailer`.
  *
  * ADR  : docs/decisions/gmail-over-imap-with-an-app-password.md ;
  *        docs/decisions/provider-error-text-stays-with-the-agent.md.
- * Handbook : docs/handbook/providers/gmail.md.
+ * Handbook : docs/handbook/services/gmail.md.
  *
  * The transport is an interface so `execute` is tested without a network :
  * `createGmailPlugin({ smtp })` takes a fake. Rules of the real one :

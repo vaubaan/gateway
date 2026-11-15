@@ -1,8 +1,8 @@
 /**
- * Data model of the `notion` provider.
+ * Data model of the `notion` service.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/notion.md.
+ * Handbook : docs/handbook/services/notion.md.
  *
  * One plane, `content`. Notion's tree is recursive (pages hold blocks, blocks
  * hold blocks and sub-pages, to any depth) and a slice cannot say "any depth
@@ -18,7 +18,7 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID } from './identity.ts';
+import { SERVICE_ID } from './identity.ts';
 
 const leaf = (name: string, parent: string, description: string) => ({
   name,
@@ -28,7 +28,7 @@ const leaf = (name: string, parent: string, description: string) => ({
 });
 
 export const notionDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'content',

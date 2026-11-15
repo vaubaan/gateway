@@ -1,14 +1,14 @@
-# Provider plugins — the plugin kit
+# Plugins — the plugin kit
 
-A **provider plugin** teaches the gateway one provider (GitHub, Stripe, a DNS
-host…). It is one folder, `plugins/<provider>`, named
-`@vaubaan/plugin-<provider>`, and it does six things:
+A **plugin** teaches the gateway one service (GitHub, Stripe, a DNS
+host…). It is one folder, `plugins/<service>`, named
+`@vaubaan/plugin-<service>`, and it does six things:
 
-1. describes the provider's **data model** (what exists there);
+1. describes the service's **data model** (what exists there);
 2. ships a **risk catalog** (`risk-catalog.yaml`): the named risks an agent's
    call can carry, grouped into **macro-actions**;
 3. **classifies** each tool call into the part of the data model it touches;
-4. declares the **credential**: how an account at the provider is plugged in;
+4. declares the **credential**: how an account at the service is plugged in;
 5. **discovers the resources** an account can reach;
 6. **executes** the call with the credential the gateway hands it.
 
@@ -21,9 +21,9 @@ check to run after each file.
 - Shipped plugins: every folder of `plugins/` but `_template`, registered in
   [`shipped-plugins.ts`](../apps/gateway/src/server/compose/shipped-plugins.ts).
   Their modelling notes are indexed in
-  [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
+  [`docs/handbook/services/README.md`](../docs/handbook/services/README.md).
 - The scaffold: [`_template`](./_template/README.md), a complete plugin for an
-  imaginary provider.
+  imaginary service.
 - The contract: `@vaubaan/plugin-sdk` (`packages/plugin-sdk`), described in
   the handbook [`plugin-sdk`](../docs/handbook/plugin-sdk.md) and decided in
   the ADR
@@ -41,21 +41,21 @@ you are about to write are what those pages show.
 
 Five words used on every line below:
 
-| Word             | Meaning                                                                                                                                                                                                                                            |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Resource**     | One thing an account reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                    |
-| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                        |
-| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.                 |
-| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Careful, Trusting, Autonomous), which writes the explicit lines; the mission stores those lines. |
-| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                   |
+| Word             | Meaning                                                                                                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resource**     | One thing an account reaches at the service and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                    |
+| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                       |
+| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.                |
+| **Macro-action** | One thing to do with the service, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Careful, Trusting, Autonomous), which writes the explicit lines; the mission stores those lines. |
+| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                  |
 
-The interface shows these to people under other words: a provider is a
-**service**, an account an **account**, a risk a **permission**, a gate
+The interface shows some of these to people under other words: a risk is a
+**permission**, a gate
 **runs freely** (`auto`) or **ask me first** (`approval`), a quota and a rate
 limit **limits**. The contract — this guide, the YAML, the SDK — keeps the
 names above.
 
-A slice is written `<provider>.<entity>[<id>].<entity>[<id>]….<R|W>`:
+A slice is written `<service>.<entity>[<id>].<entity>[<id>]….<R|W>`:
 
 | Form                                        | Meaning                                                                               |
 | ------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -78,13 +78,13 @@ Open a **plugin request** issue
 code. The risk catalog is the part reviewers argue about; agreeing on the
 tools and the dangerous operations first saves a rewrite.
 
-Read the provider's API documentation from its source. Never write a
+Read the service's API documentation from its source. Never write a
 classifier from memory: a tool that writes while the classifier says it reads
 is a security hole.
 
 ## Step 1 — Scaffold
 
-Pick the provider id: a lowercase slug (`acme`, `cloudflare-dns`). It is the
+Pick the service id: a lowercase slug (`acme`, `cloudflare-dns`). It is the
 folder name, the first segment of every slice and risk id, and the tool
 prefix with `-` turned into `_` (`cloudflare_dns__`).
 
@@ -95,16 +95,16 @@ cp -r plugins/_template plugins/acme
 Then give the copy its identity. Inside the plugin folder the id is written
 in **three** places and derived everywhere else:
 
-| Where                                | Change                                                                                                                      |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `plugins/acme/package.json`          | `"name": "@vaubaan/plugin-acme"`, the `description`.                                                                        |
-| `plugins/acme/src/identity.ts`       | `PROVIDER_ID = 'acme'`.                                                                                                     |
-| `plugins/acme/src/icon.ts`           | The service's mark: a Simple Icons path (CC0 1.0; name the slug in the comment) or one drawn by hand on the 24 grid.        |
-| `plugins/acme/src/risk-catalog.yaml` | `provider: acme`, and the `template` prefix of every risk id, pattern and macro-action entry (`template.` and `template[`). |
+| Where                                | Change                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/acme/package.json`          | `"name": "@vaubaan/plugin-acme"`, the `description`.                                                                       |
+| `plugins/acme/src/identity.ts`       | `SERVICE_ID = 'acme'`.                                                                                                     |
+| `plugins/acme/src/icon.ts`           | The service's mark: a Simple Icons path (CC0 1.0; name the slug in the comment) or one drawn by hand on the 24 grid.       |
+| `plugins/acme/src/risk-catalog.yaml` | `service: acme`, and the `template` prefix of every risk id, pattern and macro-action entry (`template.` and `template[`). |
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
-and set `displayName`, `description`, `summary` (the paragraph the interface shows on the provider's page under Reference,
+and set `displayName`, `description`, `summary` (the paragraph the interface shows on the service's page under Reference,
 in the interface's words: what one account is, what one resource is, where
 the environment comes from), `icon` (the `d` of one SVG path on a 24×24 grid,
 shown monochrome beside the name wherever the interface marks the service —
@@ -112,7 +112,7 @@ shown monochrome beside the name wherever the interface marks the service —
 the string in `src/icon.ts` with a comment naming the slug, never a runtime
 dependency on the package; the structural test `plugin-icons.test.ts` holds
 every shipped plugin to declaring one) and the API base URL. **Change nothing
-else yet**: the workspaces and widgets of the imaginary provider stay until
+else yet**: the workspaces and widgets of the imaginary service stay until
 you replace them file by file in steps 2 to 8. This lists what is left of
 the scaffold; it must print nothing by the end of step 9:
 
@@ -133,9 +133,9 @@ lines naming your plugin). It also prints an audit summary of the existing
 dependencies; ignore it, and do not run `npm audit fix`, which would rewrite
 the lockfile.
 
-In the code, never write the provider id or a tool name as a string literal
+In the code, never write the service id or a tool name as a string literal
 outside `identity.ts`, `tools.ts` and the YAML: every other file imports
-`PROVIDER_ID` and `TOOL`, and keys its tables with `[TOOL.x]`
+`SERVICE_ID` and `TOOL`, and keys its tables with `[TOOL.x]`
 (`plugin-names-declared-once.test.ts` refuses such a literal, with its file
 and line). (The id also appears, later, in your two documents and in the
 registration of step 10.)
@@ -143,16 +143,16 @@ registration of step 10.)
 ## Step 2 — Data model (`src/data-model.ts`)
 
 List the entities a call can touch and how they contain each other. One
-**plane** per independent area of the provider (Supabase has `db`, `storage`,
-`auth`, `functions`; most providers have one).
+**plane** per independent area of the service (Supabase has `db`, `storage`,
+`auth`, `functions`; most services have one).
 
 ```ts
 export const acmeDataModel: DataModel = {
-  provider: PROVIDER_ID,
+  service: SERVICE_ID,
   planes: [
     {
       slug: 'workspace',
-      description: 'A workspace of the provider and the widgets it holds.',
+      description: 'A workspace of the service and the widgets it holds.',
       entities: [
         {
           name: 'workspace',
@@ -185,7 +185,7 @@ export const acmeDataModel: DataModel = {
   `…widget[<id>].delete.W` from the classifier, and match it in the catalog.
   The template does this for `delete_widget`.
 - Mark at most the entities that carry an environment with `envScopable`.
-  Leave it out when the provider has no notion of environment (DNS).
+  Leave it out when the service has no notion of environment (DNS).
 - Every slice of the classifier and every `matches` pattern of the catalog
   is a path of these entities: rooted at a declared entity (usually the
   resource), each name a child of the one before (any descendant after
@@ -208,7 +208,7 @@ first. Write one entry per **intent that deserves its own decision**: not one
 per tool, not one per endpoint.
 
 ```yaml
-provider: acme
+service: acme
 catalog_version: 1 # bump on every reviewed change of the content
 catalog_date: 2026-10-13
 
@@ -273,7 +273,7 @@ macro_actions:
 
 Rules, all enforced when the file is loaded (at gateway boot and in tests):
 
-- **Ids.** `<provider>.<name>`, lowercase with dashes. An id is never renamed
+- **Ids.** `<service>.<name>`, lowercase with dashes. An id is never renamed
   and never deleted, because missions store it: mark the entry
   `deprecated: true` with `replaced_by: <id>` instead.
 - **Words people read.** `label`, `reason` and a macro-action's `description` are
@@ -281,10 +281,10 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   is called a permission, a gate "runs freely" or "ask me first", and a
   budget "limits". A sentence that addresses the reader about the product
   uses those words ("a mission must hold this permission too", "production
-  writes ask first"); a sentence that describes the provider keeps the
-  provider's. Ids, keys and structure keep the contract's names.
+  writes ask first"); a sentence that describes the service keeps the
+  service's. Ids, keys and structure keep the contract's names.
 - **Narrative.** A macro-action may carry a `narrative`: two to four sentences
-  in the provider's words, at most 600 characters, saying what an agent does
+  in the service's words, at most 600 characters, saying what an agent does
   under this verb and why its permissions are cut the way they are ("two acts
   are kept apart because they destroy work"). The plugin's public page shows
   it; the runtime never reads it. Every catalog shipped with the gateway has
@@ -298,8 +298,8 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   how to assert which risks a slice touches.
 - **Reads need an entry too.** A slice no entry matches is refused at
   runtime, and the fallback only catches writes.
-- **The fallback.** Exactly one entry named `<provider>.uncategorized-…`,
-  matching `<provider>.**.W`, flagged `fallback: true`. It is touched only by
+- **The fallback.** Exactly one entry named `<service>.uncategorized-…`,
+  matching `<service>.**.W`, flagged `fallback: true`. It is touched only by
   a write no other entry covers. Seeing it in an audit log means the catalog
   misses an entry; no macro-action may contain it
   ([ADR](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
@@ -310,7 +310,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   cost → 3 "Repairable, at a price"; `secret` or `pii` data, `account` or
   `bulk` blast, `moderate` cost, or `public` visibility → 2 "Repairable,
   worth a look"; otherwise 1 "Harmless". Fill each fact for what the act does
-  at the provider, not for whether it writes: a read that spends a paid quota
+  at the service, not for whether it writes: a read that spends a paid quota
   is `moderate`, a read that changes nothing is `reversible` even when the
   question leaves the company (say that in the `reason`). There is no sixth
   axis: a `persistence` key does not load (SDK 0.9).
@@ -319,7 +319,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   in the name. In a mission it appears qualified,
   `acme[prod].widget-write`. A call on a resource its owner has not labelled
   cannot touch an env-scoped risk: it is refused.
-- **Macro-actions.** 3 to 6, named in the provider's words ("Read", "Ship",
+- **Macro-actions.** 3 to 6, named in the service's words ("Read", "Ship",
   "Move money out"), independent of each other: every entry but the fallback
   and deprecated ones belongs to **exactly one**, unqualified, with a base
   budget and no gate. A creator ticks them at a trust level; the gate follows
@@ -329,7 +329,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **No presets.** Presets were retired: a catalog with a `presets` key does
   not load ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
-- **No tool hands a token.** No tool returns a provider token to the agent;
+- **No tool hands a token.** No tool returns a service token to the agent;
   a plugin that declares `tokenHandouts` does not load: route the work through
   the gateway, as git does through its remote.
 - **Limits.** The only limit the gateway enforces is
@@ -337,7 +337,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   limit a mission can be issued with. Do not declare `caps` or another
   `infra_limits` key
   ([ADR](../docs/decisions/scope-caps-amplification-axis.md)); a limit the
-  provider needs is refused by your classifier.
+  service needs is refused by your classifier.
 - Unknown keys are refused, so a typo never silently disables a rule.
 
 Check the file alone, before writing the classifier (the filter is the title
@@ -355,7 +355,7 @@ your tools really do is checked in step 8, by `assertCatalogCoverage`.
 ## Step 4 — Tools and classifier (`src/tools.ts`, `src/classify.ts`)
 
 **Tools.** Declare the tool names once in `identity.ts` (`TOOL`), built with
-`toolPrefixFor(PROVIDER_ID)` as `<prefix><verb>_<noun>`; `tools.ts` gives each
+`toolPrefixFor(SERVICE_ID)` as `<prefix><verb>_<noun>`; `tools.ts` gives each
 a description and a JSON input schema. Every tool that acts on a resource
 takes the resource's `ref` (the identifier `discoverResources` returns,
 step 6) as an explicit argument. The one exception is a rewrapped upstream
@@ -389,7 +389,7 @@ call through.
 case TOOL.updateWidget: {
   const id = pathIdent(args.widget_id);
   if (!id) return { denied: MALFORMED_WIDGET_ID };
-  return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].W`)] };
+  return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[${id}].W`)] };
 }
 ```
 
@@ -408,7 +408,7 @@ The rules the template already applies and a plugin must keep:
   `execute`; refuse, never repair**
   ([ADR](../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
   Every identifier a call carries — an argument, a resource ref, account
-  metadata, a value the provider answered — is read by the grammar function
+  metadata, a value the service answered — is read by the grammar function
   of its kind, which returns the value or `null` (`pathIdent` in the
   template). A value outside its grammar is `denied` here and refused in
   `execute` before any request: it is never trimmed, escaped, replaced or
@@ -422,7 +422,7 @@ The rules the template already applies and a plugin must keep:
   dot-only segments, backslashes and control characters, and bounds the
   length. A query is built with `URLSearchParams`; a GraphQL value is a
   variable, never part of the document; an SQL identifier has a closed
-  grammar, no quoting; a string the provider could split (a recipient) is
+  grammar, no quoting; a string the service could split (a recipient) is
   one value.
 - **An identifier the slice grammar cannot carry is written as "any".** A
   slice identifier holds `[a-zA-Z0-9_./~-]` only, and your grammar may
@@ -433,7 +433,7 @@ The rules the template already applies and a plugin must keep:
   mission whose pattern covers them all accepts it. Never drop the
   identifier (the slice would match a narrower pattern than the call
   deserves) and never escape or repair it (the slice would no longer be the
-  name an owner writes). The value sent to the provider is unchanged.
+  name an owner writes). The value sent to the service is unchanged.
   `plugin-identifier-helpers.test.ts` refuses an `ANY_IDENT` of your own and
   a `.replace` of the characters an identifier may not hold.
 - **No glob inside an executed identifier.** A slice your classifier emits
@@ -456,7 +456,7 @@ The rules the template already applies and a plugin must keep:
   ([ADR](../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)):
   - `execute` **forwards the arguments it was given** — a JSON body or a
     query string built from `args`, a rewrapped upstream tool that receives
-    them whole: an undeclared argument would reach the provider unseen. Call
+    them whole: an undeclared argument would reach the service unseen. Call
     `undeclaredArgumentDenial(declared, tool, args, routing?)` of the SDK
     **in `classify` and in `execute`**, with
     `declared = declaredArgumentsOf(tools)` built once. In `classify` the
@@ -479,8 +479,8 @@ You declare **how** an account is obtained; the gateway runs the flow,
 stores the result encrypted and hands the decrypted secret to `execute` for
 the duration of one call. A plugin writes no route, never reads the
 environment and never sees an OAuth client secret. One `CredentialSpec` per
-plugin — the one way of connecting, the simplest the provider offers: a key a
-person makes by hand whenever the provider has one, `oauth2` only where it
+plugin — the one way of connecting, the simplest the service offers: a key a
+person makes by hand whenever the service has one, `oauth2` only where it
 has none (ADR
 [one-place-to-authorize-services-token-first](../docs/decisions/one-place-to-authorize-services-token-first.md)) —
 of one of three kinds:
@@ -488,7 +488,7 @@ of one of three kinds:
 | Kind      | When                                         | You declare                                                                                                                                      | `execute` receives                                           |
 | --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `label`, `createUrl`, `guide`, `verify` — in `src/credential.ts`                                         | `{ fields, metadata }`                                       |
-| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… — or `broker: { provider }`, `scopes` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `oauth2`  | The user consents on the service's page.     | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… — or `broker: { provider }`, `scopes` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
 | `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                              | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 **`api-key`: the guide is part of the contract.** `definePlugin` refuses an
@@ -501,31 +501,31 @@ amended 2026-10-31). The template's
 
 | Part                | What it says                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`             | What the person creates, in the provider's words, lower case (`fine-grained personal access token`).                                                                                                                                                                                                                                                                                                                             |
+| `label`             | What the person creates, in the service's words, lower case (`fine-grained personal access token`).                                                                                                                                                                                                                                                                                                                              |
 | `createUrl`         | The token page itself, not the dashboard: one visit.                                                                                                                                                                                                                                                                                                                                                                             |
-| `guide.steps`       | `GuideStep { do, path?, url?, code?, screenshot? }`: one imperative sentence each, in order, the last one at the paste. The menus to follow go in `path`, in the provider's own labels (1–8, ≤ 40 characters each; the page draws them as highlighted chips, and the sentence never repeats them); a page in `url`, a command in `code` (rendered copyable).                                                                     |
+| `guide.steps`       | `GuideStep { do, path?, url?, code?, screenshot? }`: one imperative sentence each, in order, the last one at the paste. The menus to follow go in `path`, in the service's own labels (1–8, ≤ 40 characters each; the page draws them as highlighted chips, and the sentence never repeats them); a page in `url`, a command in `code` (rendered copyable).                                                                      |
 | `guide.screenshots` | Optional: one picture of the hard screen, `{ '<file>.webp': { source, licence, taken, alt } }`, the file in `docs/connect/` of the plugin folder (PNG or WebP, ≤ 300 KB, ≤ 1600 px wide) and named by one step's `screenshot`. `source` is the https page it comes from or `ours`; `licence` is `CC-BY-4.0`, `MIT`, `Apache-2.0` or `ours` — never NonCommercial or NoDerivatives. No e-mail, avatar or real token in the image. |
-| `guide.reach`       | `{ what, grant, why }`: what the token reaches, in the provider's words; the **widest** grant there (`All zones`, `Full access`; GitHub asks for the repositories the missions will use; a key with `alternatives` lists the narrowest first); why: each mission narrows it.                                                                                                                                                     |
-| `guide.permissions` | The permissions to tick, as the provider's page names them, each with the tools it serves (every tool served by one); empty when the token carries no choice, and `reach` says what it opens.                                                                                                                                                                                                                                    |
-| `guide.expiry`      | `provider-reports` (`verify` reads it), `person-types` with `recommendedDays` (the provider never says it back), or `none` with a `reason` (how the person ends the token).                                                                                                                                                                                                                                                      |
-| `guide.docsUrl`     | The provider's documentation of this kind of token.                                                                                                                                                                                                                                                                                                                                                                              |
-| `verify(ctx)`       | Asked before anything is stored: who the token acts as and, when the provider says it, its expiry. A cause you can name is a `CredentialRefusal` in your words; a rejected token an `UpstreamAuthError`.                                                                                                                                                                                                                         |
+| `guide.reach`       | `{ what, grant, why }`: what the token reaches, in the service's words; the **widest** grant there (`All zones`, `Full access`; GitHub asks for the repositories the missions will use; a key with `alternatives` lists the narrowest first); why: each mission narrows it.                                                                                                                                                      |
+| `guide.permissions` | The permissions to tick, as the service's page names them, each with the tools it serves (every tool served by one); empty when the token carries no choice, and `reach` says what it opens.                                                                                                                                                                                                                                     |
+| `guide.expiry`      | `service-reports` (`verify` reads it), `person-types` with `recommendedDays` (the service never says it back), or `none` with a `reason` (how the person ends the token).                                                                                                                                                                                                                                                        |
+| `guide.docsUrl`     | The service's documentation of this kind of token.                                                                                                                                                                                                                                                                                                                                                                               |
+| `verify(ctx)`       | Asked before anything is stored: who the token acts as and, when the service says it, its expiry. A cause you can name is a `CredentialRefusal` in your words; a rejected token an `UpstreamAuthError`.                                                                                                                                                                                                                          |
 
-Ask for the widest grant the provider offers for what the account connects,
+Ask for the widest grant the service offers for what the account connects,
 and say why: the person grants once, and the gateway narrows what each
 mission may do, call by call. A guide that asks for the narrowest permissions
-sends the person back to the provider each time a mission needs a little more. Where the key itself
+sends the person back to the service each time a mission needs a little more. Where the key itself
 can be wide or confined (`alternatives`: a whole team, or one project), list
 the narrowest one that fits the missions first and the wide one after it, and
 say why in `reach.why`: a key per project keeps a leak or a mistake inside
 that project; one key for everything makes every mission depend on it.
 Never ask the person to create an integration, an OAuth app or a service
 account when a key pasted once does the job. Write the guide from the
-provider's documentation (Context7), never from memory. The worked example is
+service's documentation (Context7), never from memory. The worked example is
 [`plugins/github/src/credential.ts`](./github/src/credential.ts), with its
 permissions in [`permissions.ts`](./github/src/permissions.ts).
 
-**`oauth2`.** Only for a provider that offers no key a person can make,
+**`oauth2`.** Only for a service that offers no key a person can make,
 **and** that accepts dynamic client registration (RFC 7591): declare its
 `clientRegistration.registrationUrl`, and the gateway registers its own
 client there the first time someone connects (ADR
@@ -533,7 +533,7 @@ client there the first time someone connects (ADR
 `definePlugin` refuses an `oauth2` spec without it: nobody declares an OAuth
 client by hand (ADR
 [gmail-over-imap-with-an-app-password](../docs/decisions/gmail-over-imap-with-an-app-password.md)).
-A provider with neither a key nor dynamic registration can take its client
+A service with neither a key nor dynamic registration can take its client
 from an **OAuth broker** the instance is enrolled with: declare `broker: {
 provider }` and the `scopes`, nothing else (ADR
 [google-calendar-through-an-oauth-broker](../docs/decisions/google-calendar-through-an-oauth-broker.md);
@@ -543,7 +543,7 @@ protocol a person can open with a key (Gmail: IMAP with an app password,
 [`plugins/gmail/src/credential.ts`](./gmail/src/credential.ts)). Set
 `refreshable: true` when the token endpoint issues refresh tokens: the
 gateway performs the standard `refresh_token` grant itself. Write
-`refresh()` on the plugin only when the provider's refresh is not the
+`refresh()` on the plugin only when the service's refresh is not the
 standard one.
 
 ## Step 6 — Resources (`discoverResources` in `src/execute.ts`)
@@ -552,23 +552,23 @@ standard one.
 owner refreshes it. It returns what the credential reaches:
 
 ```ts
-return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w.name }));
+return workspaces.map((w) => ({ service: SERVICE_ID, ref: w.id, displayName: w.name }));
 ```
 
 - `ref` is the identifier your tools take as their resource argument, and the
-  one your classifier compares with. Use the provider's stable id, not a name
+  one your classifier compares with. Use the service's stable id, not a name
   that can be changed.
 - `metadata` (optional, strings) carries non-secret facts the classifier
   needs later, such as an account id or a zone name.
-- Do not set `env` unless the provider itself tells production from test
+- Do not set `env` unless the service itself tells production from test
   (Stripe's live and test modes): the environment is the owner's label.
-- **The provider's answer is untrusted.** Read it through a type guard,
+- **The service's answer is untrusted.** Read it through a type guard,
   never a cast (`plugin-transport.test.ts` refuses an `as …Dto`): `httpJson`'s third argument, or `readShape(value, guard,
 what)` for a value you hold already. A payload the guard refuses is the
-  provider's failure (`UpstreamProtocolError`, naming the request), never a
+  service's failure (`UpstreamProtocolError`, naming the request), never a
   `TypeError` deep in your code. Pass every id it carries through the grammar
   of its kind before it becomes a `ref`.
-- Follow the provider's pagination up to a ceiling, a named constant of the
+- Follow the service's pagination up to a ceiling, a named constant of the
   plugin that the README states ("at most 500 zones"). When the endpoint is
   not paginated, say so in the README.
 
@@ -577,11 +577,11 @@ what)` for a value you hold already. A payload the guard refuses is the
 `execute(ctx, tool, args)` performs the call and returns an `McpToolResult`.
 It runs only after the gateway allowed the call and counted it.
 
-- **Call the provider through the SDK's transport**, the one way the
+- **Call the service through the SDK's transport**, the one way the
   contract allows: `httpJson(ctx, { url, method, headers, body }, guard)` for
   an API that answers JSON, the upstream MCP client
   (`callUpstreamTool(ctx, server, token, name, args)`, `mcpRequest`) for a
-  provider's own MCP server. It takes `fetch` and the caller's `signal` from
+  service's own MCP server. It takes `fetch` and the caller's `signal` from
   the context (tests inject `mockFetch`, the gateway its own), bounds the
   answer (`maxBytes`, 10 MB by default), reads it through your guard, and
   throws every failure typed. The template's `request` wraps it with the
@@ -593,13 +593,13 @@ It runs only after the gateway allowed the call and counted it.
 - The transport **refuses redirects** (`redirect: 'error'`): a redirect to
   another origin would carry the plugin's custom headers (`apikey`,
   `x-api-key`) with it. A raw `ctx.fetch` you still write states its policy
-  at the call, `'manual'` or `'follow'` only for a provider known to redirect
+  at the call, `'manual'` or `'follow'` only for a service known to redirect
   on purpose, with the reason beside it; Semgrep refuses a call without one
   (`vaubaan-plugin-fetch-without-redirect-policy`).
-- Take the secret with `expectCredentialKind(PROVIDER_ID, ctx.credential, '<kind>')`.
+- Take the secret with `expectCredentialKind(SERVICE_ID, ctx.credential, '<kind>')`.
   Never log it, never put it in a result or an error message.
 - Resolve the target with the **classifier's functions** (step 4).
-- **A provider failure is thrown, never returned**, and the transport throws
+- **A service failure is thrown, never returned**, and the transport throws
   it for you: `UpstreamAuthError` on 401 or 403, `UpstreamHttpError` on any
   other failed status, `UpstreamProtocolError` (HTTP 502 for the gateway)
   for an answer the protocol does not allow — a JSON-RPC error frame, a body
@@ -610,10 +610,10 @@ It runs only after the gateway allowed the call and counted it.
 - **`isError: true` is for what your executor declines itself**, before any
   request: an unknown tool, an argument it cannot read, an undeclared
   argument, a target outside the mission, a guard that does not hold. Never
-  catch a provider failure into an `isError` result: the audit would say the
+  catch a service failure into an `isError` result: the audit would say the
   call went through.
 - **Decline with `ExecutorRefusal`, never with a plain `Error`.** A refusal
-  thrown as an `Error` is read as a provider failure: the audit records an
+  thrown as an `Error` is read as a service failure: the audit records an
   upstream error although no request left, and the agent gets a transport
   error instead of a sentence it can act on. Return
   `refusalResult(message)` where the refusal is decided at the entry point,
@@ -632,8 +632,8 @@ It runs only after the gateway allowed the call and counted it.
   }
   ```
 
-- The provider's base URL is a constant of the plugin: it is a fact about the
-  provider, not configuration of the instance.
+- The service's base URL is a constant of the plugin: it is a fact about the
+  service, not configuration of the instance.
 - A success without content (a 204 after a `DELETE`) reads as `null`
   through `httpJson` (guard `anyJson`): return a confirmation of your own, as
   the template does. `jsonResult(payload)` and `textResult(text)` build the
@@ -642,7 +642,7 @@ It runs only after the gateway allowed the call and counted it.
 The full table is in the SDK handbook,
 ["The contract"](../docs/handbook/plugin-sdk.md#the-contract).
 
-**Optional: streamed results (`ctx.emitPart`).** For a tool whose provider
+**Optional: streamed results (`ctx.emitPart`).** For a tool whose service
 answers progressively (logs, a long export). `execute` still returns the
 complete result; each part handed to `emitPart` also leaves for the caller at
 once.
@@ -655,14 +655,14 @@ if (!response.ok || !response.body) throw await upstreamFailure(response, 'acme 
 - The transport **refuses redirects** (`redirect: 'error'`): a redirect to
   another origin would carry the plugin's custom headers (`apikey`,
   `x-api-key`) with it. A raw `ctx.fetch` you still write states its policy
-  at the call, `'manual'` or `'follow'` only for a provider known to redirect
+  at the call, `'manual'` or `'follow'` only for a service known to redirect
   on purpose, with the reason beside it; Semgrep refuses a call without one
   (`vaubaan-plugin-fetch-without-redirect-policy`).
 return streamToolResult(ctx, textParts(response.body));
 ```
 
-Open the provider's response before the first part, let `streamToolResult`
-await every part, and throw when the provider's stream breaks. A plugin that
+Open the service's response before the first part, let `streamToolResult`
+await every part, and throw when the service's stream breaks. A plugin that
 never streams ignores `emitPart`; no shipped plugin uses it yet
 (handbook, ["The contract"](../docs/handbook/plugin-sdk.md#the-contract)).
 
@@ -672,11 +672,11 @@ than a label on the resource (Vercel's `env[prod]` segment), declare
 your own. Otherwise declare nothing. An `envOf` has three answers, and the
 gateway reads them differently:
 
-| `envOf` returns | When                                                                                                                | The gateway                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| a label         | the slice touches that one environment                                                                              | qualifies the touched risks with it                                                |
-| `undefined`     | the slice says nothing about its environment                                                                        | falls back to the owner's label on the resource                                    |
-| `NO_SINGLE_ENV` | the slice names its environment but not exactly one: a wildcard, a list, a glob, a label the provider does not have | resolves no environment, never the label: every env-scoped risk touched is refused |
+| `envOf` returns | When                                                                                                               | The gateway                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| a label         | the slice touches that one environment                                                                             | qualifies the touched risks with it                                                |
+| `undefined`     | the slice says nothing about its environment                                                                       | falls back to the owner's label on the resource                                    |
+| `NO_SINGLE_ENV` | the slice names its environment but not exactly one: a wildcard, a list, a glob, a label the service does not have | resolves no environment, never the label: every env-scoped risk touched is refused |
 
 Never answer `undefined` for the third case: the owner's label would price a
 call that reaches production as whatever the resource happens to be
@@ -691,7 +691,7 @@ labelled. `envFromSliceSegment` already answers `NO_SINGLE_ENV` there
 export const acmeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const acmePlugin = definePlugin({
-  id: PROVIDER_ID,
+  id: SERVICE_ID,
   displayName: 'Acme',
   version: '0.1.0', // equal to the version in package.json
   tools: acmeTools,
@@ -775,7 +775,7 @@ const policy = policyFromMacroActions(
 
 A test about one rule may still pass its own samples
 (`assertCatalogCoverage(plugin, { ...SAMPLES, … })`); the plugin's
-`examples` stay the realistic set. A tool of the provider you leave out on
+`examples` stay the realistic set. A tool of the service you leave out on
 purpose is named in `excludedTools` with one sentence (shown on the public
 page; never a declared tool, and your `classify` refuses the name).
 
@@ -831,7 +831,7 @@ Then write, in the same folder:
 - **Classifier tests: one case per branch of `classify.ts`**, every refusal
   included (unknown tool, resource outside the mission, ambiguous resource,
   malformed identifier, undeclared argument). Build the cases from the
-  provider's public documentation or recorded answers. This is where review
+  service's public documentation or recorded answers. This is where review
   time goes.
 - **Hostile identifiers, fed to both sides**: `..`, `.`, `a/../b`, `%2e%2e`,
   `%2f`, an empty value, an overlong value, a line break and `?x=1#y`, in
@@ -845,12 +845,12 @@ Then write, in the same folder:
   `isError` refusals with no request sent, a payload discovery must refuse.
   An unmatched request fails the test. `refusalText(execute(...))` of the
   kit awaits the call, requires an `isError` result and returns its text; a
-  refusal that is thrown fails the test as the provider failure it would be.
+  refusal that is thrown fails the test as the service failure it would be.
   In a table that feeds one argument object to several tools,
   `declaredOnly(plugin, tool, args)` keeps the entries each tool declares,
   so the undeclared-argument rule does not hide the rule under test.
 
-**No test ever calls a real provider**, and none needs a credential.
+**No test ever calls a real service**, and none needs a credential.
 
 The plugin's `package.json` declares what its sources import at run time in
 `dependencies` (`@vaubaan/plugin-sdk` and any third-party library) and the
@@ -875,7 +875,7 @@ states no version, neither the plugin's nor the catalog's: they are in
 `package.json` and `catalog_version`, and a third copy drifts
 (`plugin-versions.test.ts` refuses one).
 
-**`docs/handbook/providers/<id>.md`** — for the reviewer and the next
+**`docs/handbook/services/<id>.md`** — for the reviewer and the next
 maintainer: the model and the reasons behind it. Start it with this
 frontmatter and cover these six subjects (the shipped handbooks do, under
 headings of their own), plus an "Identifiers" paragraph that lists each
@@ -884,7 +884,7 @@ refuses undeclared arguments or builds its requests field by field:
 
 ```markdown
 ---
-title: Acme provider plugin
+title: Acme plugin
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
@@ -893,7 +893,7 @@ tracks:
   - plugins/acme/tests/unit/
 ---
 
-# Acme provider plugin
+# Acme plugin
 
 ## 1. Data model
 
@@ -916,25 +916,25 @@ handbook describes; the project's drift check compares the two.
 `tracks:` may list folders, as above, or individual files.
 
 Add your plugin's row to the index table in
-[`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md),
+[`docs/handbook/services/README.md`](../docs/handbook/services/README.md),
 in alphabetical order, with its seven columns (plugin, handbook, planes,
 number of risks "+ fallback", macro-actions, credential kind, notes), and correct
 the count of plugins in the sentence above the table. Optionally set
 `docsUrl` in `definePlugin` to the handbook's address in the repository,
-`https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/<id>.md`.
+`https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/<id>.md`.
 
 Hand-written Markdown tables rarely pass the format check; let Prettier
 align them, then check that nothing is left of the scaffold:
 
 ```bash
-npx prettier --write plugins/acme docs/handbook/providers
+npx prettier --write plugins/acme docs/handbook/services
 grep -rniE 'template|widget|example\.com' plugins/acme
 ```
 
 ## Step 10 — Register the plugin
 
 A plugin under `plugins/` is tested by `npm run ci` but is not part of the
-gateway until it is registered. One list holds the providers; everything else
+gateway until it is registered. One list holds the services; everything else
 ("Connect an account", the setup checklist, Reference, the tool list)
 derives from it.
 
@@ -944,7 +944,7 @@ derives from it.
    default export, placed in alphabetical order of the package names, and
    one entry at the end of `SHIPPED_PLUGINS`.
 
-Add the provider to no other list; if a test or a page needs the provider
+Add the service to no other list; if a test or a page needs the service
 list, it reads the registry. Every registered plugin is offered in the
 connect and issuance flows and lists its tools to agents: there is no
 "experimental" state (docs/handbook/plugin-sdk.md); a young plugin says so
@@ -996,7 +996,7 @@ Plugins have no changelog of their own.
 
 **Pull request** — one plugin per pull request, with the
 [template checklist](../.github/PULL_REQUEST_TEMPLATE.md) answered. In the
-description, link the plugin request issue and state which provider
+description, link the plugin request issue and state which service
 documentation the classifier was written from. Expect the review to
 concentrate on the catalog, the classifier's refusals and the handbook's
 Traps.
@@ -1059,6 +1059,6 @@ More cases: SDK handbook,
 
 ## Working with a coding agent
 
-[`docs/skills/provider-modeler.md`](../docs/skills/provider-modeler.md) is the
+[`docs/skills/service-modeler.md`](../docs/skills/service-modeler.md) is the
 same process written as instructions for a coding agent: it stops for a human
 review of the model before any code is written.
