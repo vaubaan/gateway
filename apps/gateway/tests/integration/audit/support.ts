@@ -6,7 +6,7 @@
  * session, counters and events, then the store's audit writer for the entry —
  * the two halves `CallPipeline` runs for every call.
  */
-import { fingerprintArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
+import { fingerprintArguments, jsonBytes, type CallAuditEntry } from '@vaubaan/gateway-core';
 import type { RiskId, TokenAttribution } from '@vaubaan/shared';
 
 import {
@@ -107,7 +107,17 @@ export interface SeedCall {
   readonly accountId?: string | null;
   readonly resourceRef?: string | null;
   readonly upstreamError?: string | null;
+  /**
+   * The bytes the forwarded call carried, as the pipeline's meter counts them: by
+   * default its arguments up and `SEEDED_RESPONSE_BYTES` down when allowed, nothing
+   * when refused (nothing went to the service).
+   */
+  readonly requestBytes?: number | null;
+  readonly responseBytes?: number | null;
 }
+
+/** What a seeded allowed call received, unless the seed says otherwise. */
+export const SEEDED_RESPONSE_BYTES = 2_048;
 
 export interface SeededCall {
   readonly result: RecordCallResult;
@@ -163,6 +173,14 @@ export async function seedCall(
     agent_label: agentLabel,
     upstream_latency_ms: allowed ? 12 : null,
     upstream_error: allowed ? (call.upstreamError ?? null) : null,
+    request_bytes:
+      call.requestBytes !== undefined ? call.requestBytes : allowed ? jsonBytes(args) : null,
+    response_bytes:
+      call.responseBytes !== undefined
+        ? call.responseBytes
+        : allowed
+          ? SEEDED_RESPONSE_BYTES
+          : null,
     client_ip: '203.0.113.7',
     client_user_agent: 'claude-code/test',
   };

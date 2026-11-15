@@ -9,9 +9,16 @@
  * after the decision and the budget decrement, never before. The audit entry
  * is written when the relayed stream ends, so its latency covers the
  * transfer and a stream that broke is an upstream error.
+ *
+ * Bytes (spec §4.2 "Activity", Overview): a relayed fetch resolves with what
+ * it sent and relayed (`RelayResult`), and the git pipeline's meter
+ * (`gitMeter`) writes those on the entry; the push tool's pack is the door's
+ * own count (`CallRequest.payload_bytes`).
  */
 import {
+  jsonMeter,
   UpstreamFailureError,
+  type CallMeter,
   type CallRequest,
   type MissionAccount,
   type MissionContext,
@@ -108,6 +115,52 @@ export function relayedResponse(
     if (value !== null) headers.set(name, value);
   }
   return new Response(body, { status: upstream.status, headers });
+}
+
+/** What a relayed fetch resolves with: the bytes git sent up and the service's answer down. */
+export interface RelayResult {
+  readonly sent_bytes: number;
+  readonly relayed_bytes: number;
+}
+
+function isRelayResult(value: unknown): value is RelayResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Partial<Record<keyof RelayResult, unknown>>;
+  return typeof v.sent_bytes === 'number' && typeof v.relayed_bytes === 'number';
+}
+
+/**
+ * The git pipeline's meter: a relayed fetch counts what went through the
+ * relay; the push tool, the pack the door read (`payload_bytes`) up and its
+ * result down, like any tool.
+ */
+export const gitMeter: CallMeter = {
+  measure(call, outcome) {
+    if ('result' in outcome && isRelayResult(outcome.result)) {
+      return {
+        request_bytes: outcome.result.sent_bytes,
+        response_bytes: outcome.result.relayed_bytes,
+      };
+    }
+    return jsonMeter.measure(call, outcome);
+  },
+};
+
+/** A stream that hands on `body` and counts what went through it. */
+export function counted(body: ReadableStream<Uint8Array>): {
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly bytes: () => number;
+} {
+  let bytes = 0;
+  const stream = body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytes += chunk.length;
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return { stream, bytes: () => bytes };
 }
 
 /** The caller hung up while the service's answer was being relayed. */
@@ -230,7 +283,12 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
         if (isExecutorRefusal(err)) return refusalResult(err.message);
         throw err;
       }
-      const answer = await callUpstream(execCtx, upstream, { ...job.request, signal: job.signal });
+      const sent = job.request.body ? counted(job.request.body) : null;
+      const answer = await callUpstream(execCtx, upstream, {
+        ...job.request,
+        body: sent?.stream ?? null,
+        signal: job.signal,
+      });
       if (!answer.ok || !answer.body) {
         await answer.body?.cancel();
         if (answer.status === HTTP_UNAUTHORIZED) {
@@ -246,7 +304,8 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
       const { stream, done } = observed(answer.body);
       job.respond(relayedResponse(answer, stream));
       try {
-        return { relayed_bytes: await done };
+        const relayed = await done;
+        return { sent_bytes: sent?.bytes() ?? 0, relayed_bytes: relayed } satisfies RelayResult;
       } catch (err) {
         throw new UpstreamFailureError({
           summary:

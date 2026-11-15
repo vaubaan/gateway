@@ -132,15 +132,15 @@ describe('the side navigation', () => {
     );
   });
 
-  it('gives Activity its tabs, Record then Timeline, each a page under Activity', () => {
+  it('gives Activity its tabs, Overview then Record then Timeline, each a page under Activity', () => {
     const items = activityNav().flatMap((group) => group.items);
-    expect(items.map((item) => item.label)).toEqual(['Record', 'Timeline']);
+    expect(items.map((item) => item.label)).toEqual(['Overview', 'Record', 'Timeline']);
     for (const item of items) {
       expect(served(item.href), item.href).toBe(true);
       expect(sectionOf(item.href), item.href).toBe('activity');
     }
-    // `/activity` itself is served: it leads to the first tab.
-    expect(served(ROUTES.activity)).toBe(true);
+    // The Overview is `/activity` itself: current only there, not under the other tabs.
+    expect(items[0]).toMatchObject({ href: ROUTES.activity, exact: true });
   });
 });
 

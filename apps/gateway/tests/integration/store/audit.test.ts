@@ -48,6 +48,8 @@ function callEntry(ts: string, decision: 'allowed' | 'refused' = 'allowed'): Cal
     agent_label: 'orchestrator',
     upstream_latency_ms: 120,
     upstream_error: null,
+    request_bytes: 120,
+    response_bytes: 4_000,
     client_ip: '10.0.0.1',
     client_user_agent: 'mcp-client/1.0',
   };

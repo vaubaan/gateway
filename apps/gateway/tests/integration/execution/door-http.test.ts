@@ -15,6 +15,7 @@
 import { Client, ProtocolError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { githubPlugin } from '@vaubaan/plugin-github';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
+import { jsonBytes } from '@vaubaan/gateway-core';
 import { digestApiKey } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -181,7 +182,12 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
         account_id: instance.github.id,
         resource_ref: 'acme/app',
         decision: 'allowed',
+        // The bytes of the call (Activity's Overview): its arguments up, its result down.
+        request_bytes: jsonBytes({ owner: 'acme', repo: 'app' }),
       });
+      expect(entry?.kind === 'call' && entry.response_bytes).toBeGreaterThan(
+        JSON.stringify(BRANCHES).length,
+      );
       await client.close();
     });
   }

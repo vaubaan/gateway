@@ -5,6 +5,8 @@
  * Handbook: docs/handbook/audit.md.
  */
 import { SessionHistoryRetention } from '../budget/retention';
+import type { CredentialKind } from '@vaubaan/shared';
+
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import type { MissionService } from '../missions';
@@ -13,19 +15,23 @@ import { systemClock, type Clock } from '../store/clock';
 import { AuditQueryService } from './query-service';
 import { AuditRetentionSweeper, type SweepTimers } from './retention';
 import { MissionSessionService } from './session-view';
+import { ActivityOverviewService } from './overview';
 import { ActivityTimelineService } from './timeline';
 
 export interface AuditModule {
   readonly query: AuditQueryService;
   readonly sessions: MissionSessionService;
   readonly timeline: ActivityTimelineService;
+  readonly overview: ActivityOverviewService;
   readonly retention: AuditRetentionSweeper;
 }
 
 export interface AuditModuleDeps {
   readonly config: Pick<InstanceConfig, 'retentionDays'>;
   readonly store: Store;
-  readonly missions: Pick<MissionService, 'get'>;
+  readonly missions: Pick<MissionService, 'get' | 'standing'>;
+  /** The kind of credential a service's plugin takes first (Overview: a pasted key's expiry). */
+  readonly credentialKindOf: (service: string) => CredentialKind | null;
   readonly logger: Logger;
   readonly clock?: Clock;
   readonly sweepIntervalMs?: number;
@@ -42,6 +48,12 @@ export function createAuditModule(deps: AuditModuleDeps): AuditModule {
       clock,
     }),
     timeline: new ActivityTimelineService({ store: deps.store, clock }),
+    overview: new ActivityOverviewService({
+      store: deps.store,
+      missions: deps.missions,
+      credentialKindOf: deps.credentialKindOf,
+      clock,
+    }),
     retention: new AuditRetentionSweeper({
       audit: deps.store.audit,
       sessionHistory: new SessionHistoryRetention({
@@ -118,6 +130,25 @@ export {
   type TimelineOpenRequest,
   type TimelinePage,
 } from './timeline';
+export {
+  ActivityOverviewService,
+  DEFAULT_OVERVIEW_PERIOD,
+  EXPIRING_SOON_DAYS,
+  OVERVIEW_PARAMS,
+  OVERVIEW_PERIODS,
+  parseOverviewPeriod,
+  sinceOf,
+  totalsByMission,
+  type ActivityOverview,
+  type ActivityOverviewDeps,
+  type OverviewAccount,
+  type OverviewCounts,
+  type OverviewExpiry,
+  type OverviewHolder,
+  type OverviewLine,
+  type OverviewMission,
+  type OverviewPeriod,
+} from './overview';
 export {
   AuditRetentionSweeper,
   RETENTION_SWEEP_INTERVAL_MS,

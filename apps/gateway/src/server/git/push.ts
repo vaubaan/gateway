@@ -152,10 +152,11 @@ export class Push {
       await this.admit(refs, inspected);
       await refs.store(pack, list);
       const review = withInspection(await this.review(refs, list), inspected);
-      const outcome = await this.deps.pipeline.execute(
-        ctx,
-        this.call({ repository: target.repository, updates: [...review] }),
-      );
+      const outcome = await this.deps.pipeline.execute(ctx, {
+        ...this.call({ repository: target.repository, updates: [...review] }),
+        // What the push carried up: its pack, stored at the service before the decision.
+        payload_bytes: pack.length,
+      });
       if (outcome.kind === 'refused' && outcome.refusal.code === 'approval-required') {
         await refs.keepForApproval(outcome.refusal.expires_at);
       } else {

@@ -6,7 +6,7 @@ tracks:
   - packages/shared/src/domain.ts
   - packages/shared/src/refusal.ts
   - packages/shared/src/risk.ts
-last_reviewed: 2026-11-01
+last_reviewed: 2026-11-15
 ---
 
 # Gateway core — handbook
@@ -45,6 +45,11 @@ and the call pipeline whose stages the application fills
   them.
 - `rejected()` requires the stored text: a reason a plugin or stage wrote goes
   through `auditReason`; only `HOST_BUILT` reasons are stored as they are.
+- Bytes (`bytes.ts`) are counted only in `forward`: `request_bytes` and
+  `response_bytes` on an allowed call's entry, `request_bytes` alone on a
+  `failed` one, nothing on a refused or rejected one. The door's `CallMeter`
+  decides what a byte is (`jsonMeter` by default: arguments and result as
+  JSON, UTF-8); a meter that throws counts nothing and never fails the call.
 
 ## Traps
 
@@ -73,5 +78,9 @@ and the call pipeline whose stages the application fills
   number (`NaN` would never expire). It is single-process.
 - `precheck` (the git remote's listings) records, counts and executes
   nothing; `execute` decides again in full.
+- `request_bytes` / `response_bytes` are optional on `CallAuditEntry`: an
+  entry built elsewhere (the permission tool, a test) may omit them, and the
+  store writes `NULL`. A byte count is a fact for Activity's Overview, never a
+  limit.
 - The `permissionRefusal` hook stores evidence for a
   [permission request](requests.md) and changes no decision.
