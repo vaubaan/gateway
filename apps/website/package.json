@@ -11,6 +11,7 @@
     "type-check": "npm run generate && tsc --noEmit"
   },
   "dependencies": {
+    "@vaubaan/plugin-page": "*",
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",

@@ -17,7 +17,6 @@ import {
   rateWords,
 } from './health';
 import { code, markdownTable, text } from './markdown';
-import type { TokenExpiry } from '@vaubaan/plugin-sdk';
 import {
   GATE_WORDS,
   REASON_WORDS,
@@ -30,8 +29,7 @@ import {
   type TrustLevel,
 } from '@vaubaan/policy-engine';
 
-import { twinPathOf } from './outputs';
-import type { ExampleInfo } from './plugin-examples';
+import { connectGuidePath, siteDir, twinPathOf } from './outputs';
 import {
   ALTERNATIVES_LEGEND,
   anythingElseSentence,
@@ -44,13 +42,14 @@ import {
   cellWords,
   CARDINALITY_MARKS,
   CARDINALITY_WORDS,
-  connectGuidePath,
   connectKindBadge,
   connectKindCode,
   connectSentences,
   countsOf,
   DAY_NOTE,
+  expiryText,
   GATE_SHORT,
+  GIT_REMOTE_SENTENCE,
   grantsHeading,
   LEFT_OUT_SENTENCE,
   ledeOf,
@@ -68,8 +67,14 @@ import {
   toolsIntro,
   type MapChip,
   type ModelNode,
-} from './plugin-page';
-import type { ConnectStepInfo, CredentialInfo, LevelBudgets, PluginInfo } from './plugins';
+} from '@vaubaan/plugin-page/page-data';
+import type {
+  ConnectStepInfo,
+  CredentialInfo,
+  ExampleInfo,
+  LevelBudgets,
+  PluginInfo,
+} from '@vaubaan/plugin-page/info';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
@@ -123,9 +128,9 @@ export function pluginLinks(
     ...(plugin.docsUrl ? [{ label: `How ${plugin.name} is modelled`, href: plugin.docsUrl }] : []),
     {
       label: 'The catalog, as code',
-      href: githubBlob(`${plugin.dir}/src/risk-catalog.yaml`),
+      href: githubBlob(`${siteDir(plugin)}/src/risk-catalog.yaml`),
     },
-    { label: 'The plugin source', href: githubTree(plugin.dir) },
+    { label: 'The plugin source', href: githubTree(siteDir(plugin)) },
     { label: 'This page as Markdown', href: twinPathOf(`/plugins/${plugin.id}`) },
   ];
 }
@@ -321,7 +326,7 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
       `**${BROKER_ADMIN_TITLE}** (an administrator, once):`,
       '',
       ...brokerAdminSentences(c, plugin.name).map((s) => `- ${s}`),
-      `- Service ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
+      `- OAuth provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
       '',
     );
   }
@@ -353,7 +358,7 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
     );
   }
   if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
-  if (c.expiry) lines.push(`Expiry: ${expiryText(c.expiry)}`, '');
+  if (c.expiry) lines.push(`Expiry: ${expiryText(c.expiry, text)}`, '');
   if (c.fields.length > 0) {
     lines.push(
       `The connect page asks: ${c.fields.map((f) => `${text(f.label)}${f.secret ? ' (secret)' : ''}`).join(', ')}.`,
@@ -456,9 +461,6 @@ export function pluginPageMarkdown(
   return lines.join('\n').trimEnd() + '\n';
 }
 
-export const GIT_REMOTE_SENTENCE =
-  "The instance is also the agents' git remote for this service: `git clone` and `git push` go through the gateway with the mission key, every pushed ref decided like a tool call ([git remote](/docs/missions/git-remote)).";
-
 export function validatedSentence(thresholds: ValidationThresholds): string {
   return `A version is marked validated by the community with ${thresholdsSentence(thresholds)}; a gateway shows that mark on the accounts of this service. The figures are refreshed at most hourly ([what they mean](/plugins/health)). It is a community signal, not a security guarantee.`;
 }
@@ -483,18 +485,6 @@ function stepMarkdown(step: ConnectStepInfo, n: number): string[] {
     );
   }
   return lines;
-}
-
-/** The expiry of a pasted key, after "Expiry:"; `escape` is `text` for Markdown, none for HTML. */
-export function expiryText(expiry: TokenExpiry, escape: (value: string) => string = text): string {
-  switch (expiry.kind) {
-    case 'service-reports':
-      return 'the service tells the gateway the date, and the account page warns before it.';
-    case 'person-types':
-      return `about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
-    case 'none':
-      return escape(expiry.reason);
-  }
 }
 
 /** The figures of a line, in the columns Gateways | Calls | Success. */

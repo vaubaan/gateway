@@ -1,0 +1,1470 @@
+/*
+ * The page of a service (website spec §2.3, the "Atlas" layout; gateway spec
+ * §4.2), the style sheet of `ServicePage.tsx` and `marks.tsx`, for the public
+ * site and the gateway's Reference alike.
+ *
+ * Every rule is scoped under `.plugin-page`, and every colour, size and space
+ * is a `--pp-*` custom property: the sheet declares none. Each app maps them
+ * to its own tokens on an ancestor of the page (the site in `globals.css`, the
+ * gateway in `reference.module.css`), light and dark; a near-black service
+ * mark takes the ink on dark paper, by the system's scheme or `data-theme`.
+ *
+ * Static HTML: the trust level, the environment and the shape of the key are
+ * radio groups placed before what they switch; the rules below show one state
+ * with `:checked ~`. The environments and the alternatives are numbered
+ * (`env-0`…, `alt-0`…): ENV_TOGGLE_MAX (6) and CREDENTIAL_ALTERNATIVES_MAX (4)
+ * of them are written. A permission's or a macro-action's anchor (`#risk-…`,
+ * `#macro-…`), when it is the target of the address, is outlined.
+ */
+
+/* What the page's own elements look like, whatever the app's base styles. */
+.plugin-page :is(h1, h2, h3, h4) {
+  line-height: var(--pp-leading-tight);
+  font-weight: var(--pp-weight-strong);
+  scroll-margin-top: var(--pp-space-6);
+}
+
+.plugin-page h3 {
+  font-size: var(--pp-text-lg);
+  margin: var(--pp-space-8) 0 var(--pp-space-2);
+}
+
+.plugin-page h4 {
+  font-size: var(--pp-text-base);
+  margin: var(--pp-space-6) 0 var(--pp-space-2);
+}
+
+.plugin-page :is(p, ul, ol) {
+  margin: 0 0 var(--pp-space-4);
+}
+
+.plugin-page li + li {
+  margin-top: var(--pp-space-1);
+}
+
+.plugin-page a {
+  color: var(--pp-accent-ink);
+  text-underline-offset: 2px;
+}
+
+.plugin-page a:focus-visible {
+  outline: none;
+  box-shadow: var(--pp-focus-ring);
+  border-radius: var(--pp-radius-sm);
+}
+
+.plugin-page code {
+  font-family: var(--pp-font-mono);
+  font-size: 0.875em;
+  background: var(--pp-fill);
+  border-radius: var(--pp-radius-sm);
+  padding: 0.1em 0.3em;
+  /* An identifier wraps between its words, never inside one (style guide §5). */
+  overflow-wrap: break-word;
+}
+
+.plugin-page td code {
+  white-space: nowrap;
+}
+
+.plugin-page .table-wrap {
+  overflow-x: auto;
+  margin: 0 0 var(--pp-space-4);
+}
+
+.plugin-page table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page :is(th, td) {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--pp-space-2) var(--pp-space-3) var(--pp-space-2) 0;
+  border-bottom: 1px solid var(--pp-line);
+}
+
+.plugin-page th {
+  font-weight: var(--pp-weight-strong);
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page .lede {
+  font-size: var(--pp-text-lg);
+  color: var(--pp-ink-2);
+}
+
+.plugin-page :is([id^='risk-'], [id^='macro-']) {
+  scroll-margin-top: var(--pp-space-12);
+}
+
+.plugin-page :is([id^='risk-'], [id^='macro-']):target {
+  outline: 2px solid var(--pp-accent);
+  outline-offset: 2px;
+}
+
+.plugin-page .id {
+  background: none;
+  padding: 0;
+  color: var(--pp-ink-2);
+}
+
+.plugin-page .id.quiet {
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page td code.id {
+  white-space: normal;
+}
+
+.plugin-page article {
+  min-width: 0;
+}
+
+.plugin-page .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  margin: 0;
+}
+
+.plugin-page .crumbs {
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-sm);
+  margin-bottom: var(--pp-space-2);
+}
+
+.plugin-page .version {
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-regular);
+  color: var(--pp-ink-2);
+  border: 1px solid var(--pp-line-strong);
+  border-radius: 999px;
+  padding: 2px 10px;
+  vertical-align: middle;
+}
+
+/* The header */
+.plugin-page .pp-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-3);
+  padding-bottom: var(--pp-space-10);
+  border-bottom: 1px solid var(--pp-line);
+}
+
+.plugin-page .pp-hero .lede {
+  max-width: 62ch;
+  margin: 0;
+}
+
+.plugin-page .pp-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-4);
+}
+
+.plugin-page .pp-title :is(h1, h2) {
+  margin: 0;
+  font-size: var(--pp-text-hero);
+}
+
+.plugin-page .pp-svc {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--pp-fill);
+  color: var(--mark-color, var(--pp-ink));
+}
+/* Beside a service's name in a list (the plugin list). */
+.plugin-page .pp-svc-sm {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+@media (prefers-color-scheme: dark) {
+  /* A near-black brand would vanish on the dark paper: the ink instead (serviceMarkColors). */
+  :root:not([data-theme='light']) .plugin-page .pp-svc {
+    color: var(--mark-color-dark, var(--pp-ink));
+  }
+}
+:root[data-theme='dark'] .plugin-page .pp-svc {
+  color: var(--mark-color-dark, var(--pp-ink));
+}
+
+.plugin-page .pp-meta {
+  margin: 0;
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-sm);
+}
+
+/* Sections */
+.plugin-page .pp-s {
+  padding-top: var(--pp-space-12);
+}
+
+.plugin-page .pp-s > :is(h2, h3) {
+  margin: 0;
+  font-size: var(--pp-text-section);
+}
+
+.plugin-page .pp-k {
+  margin: 0 0 6px;
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-strong);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.plugin-page .pp-intro {
+  max-width: 72ch;
+  margin: var(--pp-space-3) 0 var(--pp-space-6);
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-lg);
+}
+
+.plugin-page .pp-s > p:not(.pp-intro, .pp-k, .pp-sum, .pp-foot, .pp-legend, .pp-dtree, .pp-tcount) {
+  max-width: var(--pp-measure);
+}
+
+.plugin-page .pp-plain {
+  margin: var(--pp-space-2) 0 0;
+  padding-left: 20px;
+}
+
+/* The (i) and its tooltip */
+.plugin-page .pp-info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 2px;
+  vertical-align: -6px;
+  border-radius: 50%;
+  color: var(--pp-ink-3);
+  cursor: help;
+}
+
+.plugin-page .pp-ic {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.plugin-page .pp-info:hover,
+.plugin-page .pp-info:focus-visible {
+  color: var(--pp-accent-ink);
+}
+
+.plugin-page .pp-info:focus-visible {
+  outline: none;
+  box-shadow: var(--pp-focus-ring);
+}
+
+.plugin-page .pp-tip {
+  display: none;
+  position: absolute;
+  z-index: 6;
+  right: -6px;
+  bottom: calc(100% + 6px);
+  width: max-content;
+  max-width: min(320px, 80vw);
+  padding: var(--pp-space-2) 10px;
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-tip-bg);
+  color: var(--pp-tip-ink);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-regular);
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.plugin-page .pp-tip code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.plugin-page .pp-info:hover .pp-tip,
+.plugin-page .pp-info:focus-visible .pp-tip {
+  display: block;
+}
+
+/* 1 · The model */
+.plugin-page .pp-acct {
+  padding: var(--pp-space-4) 18px 20px;
+  border: 1.5px solid var(--pp-ink);
+  border-radius: 14px;
+}
+
+.plugin-page .pp-tagline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 var(--pp-space-3);
+}
+
+.plugin-page .pp-tagline b,
+.plugin-page .pp-ptag b {
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.plugin-page .pp-tagline span,
+.plugin-page .pp-ptag span {
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-planes {
+  display: grid;
+  gap: var(--pp-space-3);
+}
+
+.plugin-page .pp-planes.p2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plugin-page .pp-planes.p3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.plugin-page .pp-planes.p4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.plugin-page .pp-plane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: var(--pp-space-3) 14px 14px;
+  border: 1px dashed var(--pp-line-strong);
+  border-radius: 12px;
+  background: var(--pp-paper-side);
+}
+
+.plugin-page .pp-ptag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.plugin-page .pp-ptag b {
+  color: var(--pp-ink-3);
+}
+
+.plugin-page .pp-ptag b code {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.plugin-page .pp-roots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--pp-space-3);
+}
+
+.plugin-page .pp-root {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.plugin-page .pp-root.main {
+  flex: 4 1 420px;
+}
+
+.plugin-page .pp-planes.p3 .pp-root.main,
+.plugin-page .pp-planes.p4 .pp-root.main {
+  flex-basis: 100%;
+}
+
+.plugin-page .pp-bx {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  min-width: 0;
+  padding: var(--pp-space-2) 10px 10px;
+  border: 1px solid var(--pp-line-strong);
+  border-radius: 9px;
+  background: var(--pp-paper);
+}
+
+.plugin-page .pp-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+.plugin-page .pp-hd b {
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-cm {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.plugin-page .pp-cm i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid var(--pp-line-strong);
+  border-radius: var(--pp-radius-sm);
+  color: var(--pp-ink-2);
+  font-family: var(--pp-font-mono);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.plugin-page .pp-bx.res {
+  border: 2px solid var(--pp-accent);
+}
+
+.plugin-page .pp-lbl {
+  padding: 1px 7px;
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-accent-soft);
+  color: var(--pp-accent-ink);
+  font-size: 12px;
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .pp-kids {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+  align-items: start;
+  gap: var(--pp-space-2);
+}
+
+.plugin-page .pp-planes.p3 .pp-kids,
+.plugin-page .pp-planes.p4 .pp-kids {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.plugin-page .pp-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plugin-page .pp-lf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 7px;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-paper-side);
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page .pp-bx.carrier,
+.plugin-page .pp-lf.carrier {
+  border: 2px solid var(--pp-env-ink);
+}
+
+.plugin-page .pp-bx.envlike,
+.plugin-page .pp-lf.envlike {
+  outline: 2px dashed var(--pp-ink-3);
+  outline-offset: 2px;
+}
+
+.plugin-page .pp-bx.ghost,
+.plugin-page .pp-lf.ghost {
+  border-style: dashed;
+  background: transparent;
+}
+
+.plugin-page .pp-envs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.plugin-page .pp-env {
+  padding: 0 6px;
+  border: 1px solid var(--pp-env-line);
+  border-radius: var(--pp-radius-sm);
+  background: var(--pp-env-bg);
+  color: var(--pp-env-ink);
+  font-family: var(--pp-font-mono);
+  font-size: 12px;
+  font-weight: var(--pp-weight-strong);
+  line-height: 18px;
+}
+
+.plugin-page .pp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pp-space-2) 18px;
+  margin: 14px 0 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page .pp-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plugin-page .pp-sw {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--pp-radius-sm);
+}
+
+.plugin-page .pp-sw.res {
+  border: 2px solid var(--pp-accent);
+}
+
+.plugin-page .pp-sw.env {
+  border: 2px solid var(--pp-env-ink);
+}
+
+.plugin-page .pp-sw.env.none {
+  border: 2px dashed var(--pp-ink-3);
+}
+
+.plugin-page .pp-sw.ghost {
+  border: 1px dashed var(--pp-ink-3);
+}
+
+.plugin-page .pp-defs {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: 14px;
+  margin-top: var(--pp-space-4);
+}
+
+.plugin-page .pp-def {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px var(--pp-space-4);
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-lg);
+}
+
+.plugin-page .pp-def :is(h3, h4) {
+  margin: 0;
+  font-size: var(--pp-text-base);
+}
+
+.plugin-page .pp-def p,
+.plugin-page .pp-def dd {
+  margin: 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-def dl {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 6px var(--pp-space-3);
+  margin: 6px 0 0;
+}
+
+.plugin-page .pp-def dt {
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-strong);
+}
+
+/* 2 · Macro-actions */
+.plugin-page .pp-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--pp-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plugin-page .pp-strip.n1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.plugin-page .pp-strip.n2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plugin-page .pp-strip.n3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.plugin-page .pp-strip.n5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.plugin-page .pp-vc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  padding: var(--pp-space-4) var(--pp-space-4) 18px;
+  border: 1px solid var(--pp-line-strong);
+  border-radius: 12px;
+}
+
+.plugin-page li.pp-vc + li.pp-vc {
+  margin-top: 0;
+}
+
+.plugin-page .pp-vc :is(h3, h4) {
+  margin: 0;
+  font-size: var(--pp-text-card);
+}
+
+.plugin-page .pp-vc p {
+  margin: 0;
+}
+
+.plugin-page .pp-n {
+  color: var(--pp-ink-3);
+  font-family: var(--pp-font-mono);
+  font-size: 12px;
+}
+
+.plugin-page .pp-ds {
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .pp-nv {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.plugin-page .pp-ct {
+  margin-top: auto !important;
+  padding-top: 6px;
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+}
+
+/* 3 · The map: the bar, the toggles, the grid */
+.plugin-page .pp-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pp-space-3) var(--pp-space-6);
+  margin-bottom: var(--pp-space-4);
+  padding: var(--pp-space-3) 0;
+  border-top: 1px solid var(--pp-line);
+  border-bottom: 1px solid var(--pp-line);
+  background: var(--pp-paper);
+}
+
+.plugin-page .pp-bar fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.plugin-page .pp-bar legend {
+  float: left;
+  margin-right: 10px;
+  padding: 0;
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .pp-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--pp-line-strong);
+  border-radius: 999px;
+  color: var(--pp-ink);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.plugin-page .pp-bar label::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--pp-ink-3);
+  border-radius: 50%;
+}
+
+.plugin-page .pp-envf label::before {
+  border-color: var(--pp-env-ink);
+}
+
+.plugin-page .pp-bar label small {
+  color: var(--pp-ink-3);
+  font-family: var(--pp-font-mono);
+  font-size: 12px;
+}
+
+.plugin-page .pp-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 0 0 auto;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page .pp-lvdesc {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-dtree {
+  max-width: 110ch;
+  margin: 0 0 14px;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+  line-height: 1.5;
+}
+
+/* The checked label: ink on paper reversed, both themes. */
+.plugin-page #lvl-c:checked ~ * label[for='lvl-c'],
+.plugin-page #lvl-t:checked ~ * label[for='lvl-t'],
+.plugin-page #lvl-a:checked ~ * label[for='lvl-a'],
+.plugin-page #alt-0:checked ~ * label[for='alt-0'],
+.plugin-page #alt-1:checked ~ * label[for='alt-1'],
+.plugin-page #alt-2:checked ~ * label[for='alt-2'],
+.plugin-page #alt-3:checked ~ * label[for='alt-3'] {
+  border-color: var(--pp-ink);
+  background: var(--pp-ink);
+  color: var(--pp-paper);
+}
+
+.plugin-page #lvl-c:checked ~ * label[for='lvl-c'] small,
+.plugin-page #lvl-t:checked ~ * label[for='lvl-t'] small,
+.plugin-page #lvl-a:checked ~ * label[for='lvl-a'] small {
+  color: var(--pp-paper);
+}
+
+.plugin-page #lvl-c:checked ~ * label[for='lvl-c']::before,
+.plugin-page #lvl-t:checked ~ * label[for='lvl-t']::before,
+.plugin-page #lvl-a:checked ~ * label[for='lvl-a']::before,
+.plugin-page #alt-0:checked ~ * label[for='alt-0']::before,
+.plugin-page #alt-1:checked ~ * label[for='alt-1']::before,
+.plugin-page #alt-2:checked ~ * label[for='alt-2']::before,
+.plugin-page #alt-3:checked ~ * label[for='alt-3']::before,
+.plugin-page #env-0:checked ~ * label[for='env-0']::before,
+.plugin-page #env-1:checked ~ * label[for='env-1']::before,
+.plugin-page #env-2:checked ~ * label[for='env-2']::before,
+.plugin-page #env-3:checked ~ * label[for='env-3']::before,
+.plugin-page #env-4:checked ~ * label[for='env-4']::before,
+.plugin-page #env-5:checked ~ * label[for='env-5']::before {
+  border: 4px solid var(--pp-paper);
+}
+
+.plugin-page #env-0:checked ~ * label[for='env-0'],
+.plugin-page #env-1:checked ~ * label[for='env-1'],
+.plugin-page #env-2:checked ~ * label[for='env-2'],
+.plugin-page #env-3:checked ~ * label[for='env-3'],
+.plugin-page #env-4:checked ~ * label[for='env-4'],
+.plugin-page #env-5:checked ~ * label[for='env-5'] {
+  border-color: var(--pp-env-ink);
+  background: var(--pp-env-ink);
+  color: var(--pp-paper);
+}
+
+.plugin-page #lvl-c:focus-visible ~ * label[for='lvl-c'],
+.plugin-page #lvl-t:focus-visible ~ * label[for='lvl-t'],
+.plugin-page #lvl-a:focus-visible ~ * label[for='lvl-a'],
+.plugin-page #env-0:focus-visible ~ * label[for='env-0'],
+.plugin-page #env-1:focus-visible ~ * label[for='env-1'],
+.plugin-page #env-2:focus-visible ~ * label[for='env-2'],
+.plugin-page #env-3:focus-visible ~ * label[for='env-3'],
+.plugin-page #env-4:focus-visible ~ * label[for='env-4'],
+.plugin-page #env-5:focus-visible ~ * label[for='env-5'],
+.plugin-page #alt-0:focus-visible ~ * label[for='alt-0'],
+.plugin-page #alt-1:focus-visible ~ * label[for='alt-1'],
+.plugin-page #alt-2:focus-visible ~ * label[for='alt-2'],
+.plugin-page #alt-3:focus-visible ~ * label[for='alt-3'] {
+  box-shadow: var(--pp-focus-ring);
+}
+
+/* One state shown: the values of the chosen level (and environment). */
+.plugin-page .q,
+.plugin-page .qe,
+.plugin-page .eo,
+.plugin-page .et {
+  display: none;
+}
+
+.plugin-page #lvl-c:checked ~ * .q.l-c,
+.plugin-page #lvl-t:checked ~ * .q.l-t,
+.plugin-page #lvl-a:checked ~ * .q.l-a,
+.plugin-page #lvl-c:checked ~ #env-0:checked ~ * .qe.l-c.e-0,
+.plugin-page #lvl-t:checked ~ #env-0:checked ~ * .qe.l-t.e-0,
+.plugin-page #lvl-a:checked ~ #env-0:checked ~ * .qe.l-a.e-0,
+.plugin-page #lvl-c:checked ~ #env-1:checked ~ * .qe.l-c.e-1,
+.plugin-page #lvl-t:checked ~ #env-1:checked ~ * .qe.l-t.e-1,
+.plugin-page #lvl-a:checked ~ #env-1:checked ~ * .qe.l-a.e-1,
+.plugin-page #lvl-c:checked ~ #env-2:checked ~ * .qe.l-c.e-2,
+.plugin-page #lvl-t:checked ~ #env-2:checked ~ * .qe.l-t.e-2,
+.plugin-page #lvl-a:checked ~ #env-2:checked ~ * .qe.l-a.e-2,
+.plugin-page #lvl-c:checked ~ #env-3:checked ~ * .qe.l-c.e-3,
+.plugin-page #lvl-t:checked ~ #env-3:checked ~ * .qe.l-t.e-3,
+.plugin-page #lvl-a:checked ~ #env-3:checked ~ * .qe.l-a.e-3,
+.plugin-page #lvl-c:checked ~ #env-4:checked ~ * .qe.l-c.e-4,
+.plugin-page #lvl-t:checked ~ #env-4:checked ~ * .qe.l-t.e-4,
+.plugin-page #lvl-a:checked ~ #env-4:checked ~ * .qe.l-a.e-4,
+.plugin-page #lvl-c:checked ~ #env-5:checked ~ * .qe.l-c.e-5,
+.plugin-page #lvl-t:checked ~ #env-5:checked ~ * .qe.l-t.e-5,
+.plugin-page #lvl-a:checked ~ #env-5:checked ~ * .qe.l-a.e-5,
+.plugin-page #env-0:checked ~ * .et.e-0,
+.plugin-page #env-1:checked ~ * .et.e-1,
+.plugin-page #env-2:checked ~ * .et.e-2,
+.plugin-page #env-3:checked ~ * .et.e-3,
+.plugin-page #env-4:checked ~ * .et.e-4,
+.plugin-page #env-5:checked ~ * .et.e-5 {
+  display: inline;
+}
+
+.plugin-page #env-0:checked ~ * .eo.e-0,
+.plugin-page #env-1:checked ~ * .eo.e-1,
+.plugin-page #env-2:checked ~ * .eo.e-2,
+.plugin-page #env-3:checked ~ * .eo.e-3,
+.plugin-page #env-4:checked ~ * .eo.e-4,
+.plugin-page #env-5:checked ~ * .eo.e-5 {
+  display: flex;
+}
+
+/* A permission the catalog does not accept on the chosen environment: dashed. */
+.plugin-page #env-0:checked ~ * .pp-ch.pref.e-0,
+.plugin-page #env-1:checked ~ * .pp-ch.pref.e-1,
+.plugin-page #env-2:checked ~ * .pp-ch.pref.e-2,
+.plugin-page #env-3:checked ~ * .pp-ch.pref.e-3,
+.plugin-page #env-4:checked ~ * .pp-ch.pref.e-4,
+.plugin-page #env-5:checked ~ * .pp-ch.pref.e-5 {
+  border-style: dashed;
+  border-color: var(--pp-ink-3);
+  background: transparent;
+}
+
+.plugin-page .pp-gridwrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.plugin-page .pp-gridwrap:focus-visible {
+  outline: none;
+  box-shadow: var(--pp-focus-ring);
+}
+
+.plugin-page table.pp-grid {
+  width: calc(100% + 12px);
+  margin: 0 -6px;
+  border-collapse: separate;
+  border-spacing: 6px;
+  table-layout: fixed;
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-grid th,
+.plugin-page .pp-grid td {
+  border-bottom: 0;
+}
+
+.plugin-page .pp-grid thead th {
+  padding: 0 var(--pp-space-2) 4px;
+  vertical-align: bottom;
+  color: var(--pp-ink);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-grid thead th:first-child {
+  width: 190px;
+  color: var(--pp-ink-3);
+}
+
+.plugin-page .pp-grid thead th b {
+  display: block;
+  font-size: var(--pp-text-column);
+}
+
+.plugin-page .pp-grid thead th span {
+  display: block;
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-regular);
+  line-height: 1.35;
+}
+
+.plugin-page .pp-grid tbody th {
+  padding: var(--pp-space-3);
+  border-radius: var(--pp-radius-lg);
+  vertical-align: top;
+  font-size: var(--pp-text-base);
+}
+
+.plugin-page .pp-rw {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-2);
+}
+
+.plugin-page .pp-grid tbody th p {
+  margin: 6px 0 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-regular);
+  line-height: 1.45;
+}
+
+.plugin-page .pp-grid td {
+  padding: var(--pp-space-2);
+  border-radius: var(--pp-radius-lg);
+  vertical-align: top;
+}
+
+.plugin-page .pp-gl {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The rows of the tree, tinted; worst first. */
+.plugin-page .r-4 th,
+.plugin-page .r-4 td,
+.plugin-page .pp-rowtag.r-4 {
+  background: var(--pp-row4-bg);
+}
+
+.plugin-page .r-4 th,
+.plugin-page .pp-rowtag.r-4 {
+  color: var(--pp-row4-ink);
+}
+
+.plugin-page .r-3 th,
+.plugin-page .r-3 td,
+.plugin-page .pp-rowtag.r-3 {
+  background: var(--pp-row3-bg);
+}
+
+.plugin-page .r-3 th,
+.plugin-page .pp-rowtag.r-3 {
+  color: var(--pp-row3-ink);
+}
+
+.plugin-page .r-2 th,
+.plugin-page .r-2 td,
+.plugin-page .pp-rowtag.r-2 {
+  background: var(--pp-row2-bg);
+}
+
+.plugin-page .r-2 th,
+.plugin-page .pp-rowtag.r-2 {
+  color: var(--pp-row2-ink);
+}
+
+.plugin-page .r-1 th,
+.plugin-page .r-1 td,
+.plugin-page .pp-rowtag.r-1 {
+  background: var(--pp-row1-bg);
+}
+
+.plugin-page .r-1 th,
+.plugin-page .pp-rowtag.r-1 {
+  color: var(--pp-row1-ink);
+}
+
+.plugin-page .pp-rowtag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--pp-space-2);
+  border-radius: var(--pp-radius-md);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-strong);
+  white-space: nowrap;
+}
+
+.plugin-page .pp-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plugin-page .pp-ch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--pp-space-2) 10px;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-paper);
+}
+
+.plugin-page li.pp-ch + li.pp-ch {
+  margin-top: 0;
+}
+
+.plugin-page .pp-cl {
+  margin: 0;
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-strong);
+  line-height: 1.35;
+}
+
+.plugin-page .pp-cv {
+  margin: 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.plugin-page .pp-why {
+  margin-left: 2px;
+  color: var(--pp-ink-3);
+  font-size: 12px;
+  font-weight: var(--pp-weight-regular);
+  white-space: nowrap;
+}
+
+.plugin-page .pp-empty {
+  margin: 0;
+  padding: 6px 4px;
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+}
+
+/* The gate in one word: yes, ask me, no. */
+.plugin-page .pp-g {
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--pp-radius-sm);
+  font-size: var(--pp-text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plugin-page .pp-g.g-free {
+  border-color: var(--pp-yes-line);
+  background: var(--pp-yes-bg);
+  color: var(--pp-ok);
+}
+
+.plugin-page .pp-g.g-ask {
+  border-color: var(--pp-ask-line);
+  background: var(--pp-ask-bg);
+  color: var(--pp-row3-ink);
+}
+
+.plugin-page .pp-g.g-off {
+  border-color: var(--pp-bad-line);
+  background: transparent;
+  color: var(--pp-bad);
+}
+
+.plugin-page .pp-sum,
+.plugin-page .pp-foot {
+  max-width: 110ch;
+  margin: 14px 0 0;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+/* 4–7 · Tables */
+.plugin-page table.pp-tbl {
+  margin-top: 6px;
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-tbl th,
+.plugin-page .pp-tbl td {
+  padding: var(--pp-space-2) 10px;
+}
+
+.plugin-page .pp-tbl.ex td:first-child {
+  width: 34%;
+}
+
+.plugin-page .pp-tcount {
+  margin: 0 0 6px;
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-tscroll {
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-lg);
+}
+
+.plugin-page .pp-tscroll:focus-visible {
+  outline: none;
+  box-shadow: var(--pp-focus-ring);
+}
+
+.plugin-page .pp-tscroll table.pp-tbl {
+  margin-top: 0;
+}
+
+.plugin-page .pp-tscroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pp-paper);
+}
+
+.plugin-page .pp-tbl.tools td:first-child {
+  white-space: nowrap;
+}
+
+.plugin-page .note {
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+}
+
+.plugin-page .plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plugin-page .quiet {
+  color: var(--pp-ink-3);
+}
+
+.plugin-page .facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--pp-space-2) var(--pp-space-4);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .facts dt {
+  color: var(--pp-ink-3);
+}
+
+.plugin-page .facts dd,
+.plugin-page .scopes {
+  margin: 0;
+}
+
+.plugin-page .scopes {
+  list-style: none;
+  padding: 0;
+}
+
+/* 8 · Connecting an account: the kind, the administrator's block, the reach, the
+   shapes of the key, the steps with their path chips and screenshots, the facts. */
+.plugin-page .connect-kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pp-space-1) var(--pp-space-2);
+  margin-top: var(--pp-space-4);
+}
+
+.plugin-page .connect-badge {
+  padding: 3px var(--pp-space-3);
+  border: 1px solid var(--pp-ink);
+  border-radius: 999px;
+  color: var(--pp-ink);
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .connect-kind small {
+  color: var(--pp-ink-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .connect-admin {
+  max-width: var(--pp-measure);
+  margin: var(--pp-space-4) 0;
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-warn-line);
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-warn-soft);
+}
+
+.plugin-page .connect-admin :is(h3, h4) {
+  margin-top: 0;
+  font-size: var(--pp-text-base);
+}
+
+.plugin-page .pp-reach {
+  max-width: 90ch;
+  margin: 6px 0 18px;
+  padding: var(--pp-space-3) var(--pp-space-4);
+  border: 1px solid var(--pp-line-strong);
+  border-radius: var(--pp-radius-lg);
+}
+
+.plugin-page .pp-reach b {
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-xs);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.plugin-page .pp-reach p {
+  margin: 4px 0 0;
+}
+
+.plugin-page .pp-altbar {
+  position: static;
+  margin: 4px 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.plugin-page .pp-altpanel {
+  display: none;
+}
+
+.plugin-page #alt-0:checked ~ .pp-altpanels .alt-0,
+.plugin-page #alt-1:checked ~ .pp-altpanels .alt-1,
+.plugin-page #alt-2:checked ~ .pp-altpanels .alt-2,
+.plugin-page #alt-3:checked ~ .pp-altpanels .alt-3 {
+  display: block;
+}
+
+.plugin-page .pp-althelp {
+  margin: 0 0 var(--pp-space-3);
+  color: var(--pp-ink-2);
+}
+
+.plugin-page .connect .steps {
+  max-width: 90ch;
+  padding-left: 24px;
+}
+
+.plugin-page .connect .steps > li + li {
+  margin-top: 10px;
+}
+
+.plugin-page .connect .path {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-right: var(--pp-space-2);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .connect .path-seg {
+  padding: 0 var(--pp-space-2);
+  border: 1px solid var(--pp-path-line);
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-path-bg);
+  color: var(--pp-path-ink);
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .connect .shot {
+  margin: var(--pp-space-3) 0 6px;
+  max-width: 100%;
+}
+
+.plugin-page .connect .shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-md);
+}
+
+.plugin-page .connect .shot figcaption {
+  margin-top: var(--pp-space-1);
+  color: var(--pp-ink-3);
+  font-size: var(--pp-text-sm);
+}
+
+.plugin-page .pp-facts {
+  grid-template-columns: 220px minmax(0, 1fr);
+  margin: 18px 0 0;
+  font-size: 0.9375rem;
+}
+
+.plugin-page .pp-facts dt {
+  color: var(--pp-ink);
+  font-weight: var(--pp-weight-strong);
+}
+
+.plugin-page .pp-facts dd {
+  color: var(--pp-ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* A narrower page: the planes and cards stack, the map scrolls sideways with its rows pinned. */
+@media (max-width: 1100px) {
+  .plugin-page .pp-planes.p3,
+  .plugin-page .pp-planes.p4,
+  .plugin-page .pp-strip.n4,
+  .plugin-page .pp-strip.n5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .plugin-page .pp-defs {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plugin-page .pp-def.wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .plugin-page .pp-title :is(h1, h2) {
+    font-size: var(--pp-text-title);
+  }
+
+  .plugin-page .pp-planes.p2,
+  .plugin-page .pp-planes.p3,
+  .plugin-page .pp-planes.p4,
+  .plugin-page .pp-strip,
+  .plugin-page .pp-strip.n2,
+  .plugin-page .pp-strip.n3,
+  .plugin-page .pp-strip.n4,
+  .plugin-page .pp-strip.n5,
+  .plugin-page .pp-defs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plugin-page .pp-def.wide {
+    grid-column: auto;
+  }
+
+  .plugin-page .pp-root.main {
+    flex-basis: 100%;
+  }
+
+  .plugin-page .pp-kids {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plugin-page .pp-bar fieldset {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .plugin-page .pp-bar legend {
+    float: none;
+    grid-column: 1 / -1;
+    margin-bottom: 4px;
+  }
+
+  .plugin-page .pp-bar label {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    min-height: 44px;
+    padding: 2px var(--pp-space-1);
+    border-radius: var(--pp-radius-lg);
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .plugin-page .pp-bar label::before {
+    display: none;
+  }
+
+  .plugin-page .pp-key {
+    margin-left: 0;
+  }
+
+  .plugin-page .pp-gridwrap {
+    margin: 0 calc(-1 * var(--pp-space-4));
+    padding: 0 var(--pp-space-4) var(--pp-space-2);
+  }
+
+  .plugin-page table.pp-grid {
+    width: 900px;
+    margin: 0;
+    border-spacing: 4px;
+  }
+
+  .plugin-page .pp-grid thead th:first-child {
+    width: 120px;
+  }
+
+  .plugin-page .pp-grid thead th:first-child,
+  .plugin-page .pp-grid tbody th {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+
+  .plugin-page .pp-grid thead th:first-child {
+    background: var(--pp-paper);
+  }
+
+  .plugin-page .pp-grid tbody th {
+    font-size: var(--pp-text-sm);
+  }
+
+  .plugin-page .pp-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .plugin-page .pp-facts dd {
+    margin-bottom: var(--pp-space-2);
+  }
+
+  .plugin-page .pp-tip {
+    right: auto;
+    left: -80px;
+  }
+}

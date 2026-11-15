@@ -23,15 +23,16 @@ import {
   WHY_VALUES,
 } from '@vaubaan/policy-engine';
 
-import { ExampleError } from '../../../src/content/plugin-examples';
-import { screenshotCredits } from '../../../src/content/plugin-page';
+import { screenshotCredits } from '@vaubaan/plugin-page/page-data';
+import { ExampleError } from '@vaubaan/plugin-page/info';
+
 import { connectSectionMarkdown } from '../../../src/content/plugin-pages';
 import {
   connectFigureFiles,
   discoverPluginDirs,
   importPlugin,
   loadPlugins,
-  pluginInfo,
+  sitePluginInfo,
   type PluginInfo,
 } from '../../../src/content/plugins';
 import { REPO_ROOT } from '../../../src/content/repo';
@@ -291,15 +292,17 @@ describe('the plugin catalog of the site', () => {
       examples: { github__list_branches: [{ args: {} }] },
       classify: () => ({ slices: [parseSlice('github.nowhere[x].W')] }),
     } satisfies ServicePlugin;
-    expect(() => pluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(ExampleError);
-    expect(() => pluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(/only on the fallback/);
+    expect(() => sitePluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(ExampleError);
+    expect(() => sitePluginInfo(fallbackOnly, 'plugins/github', 'x')).toThrow(
+      /only on the fallback/,
+    );
 
     const refused = {
       ...github,
       examples: { github__list_branches: [{ args: {} }] },
       classify: () => ({ denied: 'no' }),
     } satisfies ServicePlugin;
-    expect(() => pluginInfo(refused, 'plugins/github', 'x')).toThrow(/classify refused it/);
+    expect(() => sitePluginInfo(refused, 'plugins/github', 'x')).toThrow(/classify refused it/);
   });
 
   it('names the plugin, the tool and the sample when the build fails', () => {
@@ -313,7 +316,7 @@ describe('the plugin catalog of the site', () => {
           ? { slices: [parseSlice('github.nowhere[x].W')] }
           : github.classify('github__list_branches', { owner: 'o', repo: 'r' }, []),
     } satisfies ServicePlugin;
-    expect(() => pluginInfo(second, 'plugins/github', 'x')).toThrow(
+    expect(() => sitePluginInfo(second, 'plugins/github', 'x')).toThrow(
       /plugin 'github'[\s\S]*'github__list_branches' sample #2 slice #1: 'github\.nowhere\[x\]\.W' lands only on the fallback/,
     );
   });

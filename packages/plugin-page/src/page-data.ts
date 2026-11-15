@@ -1,8 +1,8 @@
 /**
- * What a plugin page shows, section by section (website spec §2.3, the
- * "Atlas" layout, sections 1–10), as plain data both renderings read: the
- * HTML page (`components/plugin/PluginPage.tsx`) and its Markdown twin
- * (`pluginPageMarkdown` in `plugin-pages.ts`). Every sentence is a fixed
+ * What a service's page shows, section by section (website spec §2.3, the
+ * "Atlas" layout, sections 1–10), as plain data every rendering reads: the
+ * HTML page (`ServicePage.tsx`, on the site and in the gateway's Reference)
+ * and the site's Markdown twin (`pluginPageMarkdown`). Every sentence is a fixed
  * template over a plugin field: the words of the risk model come from
  * `@vaubaan/policy-engine` — the rows, their reasons and gate sentences, the
  * gates, the trust levels —; this module only places, counts and joins them.
@@ -20,19 +20,20 @@ import {
   type Row,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
+import type { TokenExpiry } from '@vaubaan/plugin-sdk';
 import type { DataModelCardinality } from '@vaubaan/shared';
 
-import type { CarefulOutcome, ExampleInfo } from './plugin-examples';
-import {
-  allSteps,
-  type CredentialInfo,
-  type EnvironmentSource,
-  type LevelBudgets,
-  type MacroActionEntryInfo,
-  type ModelEntityInfo,
-  type PluginInfo,
-  type RiskInfo,
-} from './plugins';
+import type { CarefulOutcome, ExampleInfo } from './examples';
+import type {
+  ConnectStepInfo,
+  CredentialInfo,
+  EnvironmentSource,
+  LevelBudgets,
+  MacroActionEntryInfo,
+  ModelEntityInfo,
+  PluginInfo,
+  RiskInfo,
+} from './info';
 
 // ---------------------------------------------------------------------------
 // Small words
@@ -73,9 +74,16 @@ export function levelHeading(level: TrustLevel): string {
   return `${TRUST_LEVEL_LABELS[level]} ×${TRUST_LEVEL_BUDGET_FACTOR[level]}`;
 }
 
-/** The section numbers of the page, in order; retired permissions only when there are some. */
-export function sectionNumbers(plugin: PluginInfo): Readonly<Record<SectionId, number>> {
-  const order: SectionId[] = [
+/**
+ * The section numbers of the page, in order; retired permissions only when there
+ * are some. `extras` are an app's own sections after connecting an account (the
+ * site's health and links), numbered on.
+ */
+export function sectionNumbers<E extends string = never>(
+  plugin: PluginInfo,
+  extras: readonly E[] = [],
+): Readonly<Record<SectionId | E, number>> {
+  const order: (SectionId | E)[] = [
     'model',
     'macro-actions',
     'map',
@@ -84,13 +92,13 @@ export function sectionNumbers(plugin: PluginInfo): Readonly<Record<SectionId, n
     'tools',
     ...(plugin.retired.length > 0 ? (['retired'] as const) : []),
     'connect',
-    'health',
-    'links',
+    ...extras,
   ];
   const numbers = Object.fromEntries(order.map((id, i) => [id, i + 1]));
-  return { retired: 0, ...numbers } as Record<SectionId, number>;
+  return { retired: 0, ...numbers } as Record<SectionId | E, number>;
 }
 
+/** The sections every rendering of the page draws, in order (`retired` only when some). */
 export type SectionId =
   | 'model'
   | 'macro-actions'
@@ -99,9 +107,7 @@ export type SectionId =
   | 'anything-else'
   | 'tools'
   | 'retired'
-  | 'connect'
-  | 'health'
-  | 'links';
+  | 'connect';
 
 // ---------------------------------------------------------------------------
 // The header
@@ -682,15 +688,39 @@ export function retiredOf(plugin: PluginInfo): RetiredItem[] {
 // 8 · Connecting an account
 // ---------------------------------------------------------------------------
 
+/**
+ * The docs page of the OAuth broker, as a path of the documentation site: each
+ * app resolves it (`ServicePage`'s `href`), the site as it is, the gateway under
+ * its `docs.url`.
+ */
 export const BROKER_DOC = '/docs/operations/oauth-broker';
 
-/** The section's anchor on `/plugins/<id>`: where a service's connect guide lives. */
+/** The section's anchor on a service's page: where its connect guide lives. */
 export const CONNECT_ANCHOR = 'connect';
 
-/** The address of a service's connect guide (the former `/docs/providers/<id>` redirects here). */
-export function connectGuidePath(pluginId: string): string {
-  return `/plugins/${pluginId}#${CONNECT_ANCHOR}`;
+/** Every step of a way of connecting: each alternative's, then the shared ones. */
+export function allSteps(c: Pick<CredentialInfo, 'steps' | 'alternatives'>): ConnectStepInfo[] {
+  return [...c.alternatives.flatMap((alt) => alt.steps), ...c.steps];
 }
+
+/** The expiry of a pasted key, after "Expiry:"; `escape` is the twin's Markdown escape, none for HTML. */
+export function expiryText(
+  expiry: TokenExpiry,
+  escape: (value: string) => string = (value) => value,
+): string {
+  switch (expiry.kind) {
+    case 'service-reports':
+      return 'the service tells the gateway the date, and the account page warns before it.';
+    case 'person-types':
+      return `about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
+    case 'none':
+      return escape(expiry.reason);
+  }
+}
+
+/** Under the tools of a service the gateway is also the git remote of; its link is a path of the documentation site. */
+export const GIT_REMOTE_SENTENCE =
+  "The instance is also the agents' git remote for this service: `git clone` and `git push` go through the gateway with the mission key, every pushed ref decided like a tool call ([git remote](/docs/missions/git-remote)).";
 
 /** Between two menu labels of a path, in the twin. */
 export const PATH_SEPARATOR = '›';

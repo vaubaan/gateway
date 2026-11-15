@@ -46,6 +46,8 @@ const SCOPE: readonly RegExp[] = [
   /^plugins\/[^/]+\/README\.md$/,
   /^plugins\/[^/]+\/src\/(risk-catalog\.yaml|tool-schemas\.json|data-model\.ts)$/,
   /^plugins\/[^/]+\/src\/(credential|index|tool-titles)\.ts$/,
+  // The service's page, drawn by the site and by the gateway's Reference.
+  /^packages\/plugin-page\/src\/.+\.(ts|tsx)$/,
 ];
 
 /** The site's prose, where "the <Name> plugin" must not stand for the service. */
@@ -202,6 +204,7 @@ describe('structural: one word per thing — account, service, plugin', () => {
         'plugins/github/src/risk-catalog.yaml',
         'plugins/github/src/credential.ts',
         'plugins/vaubaan/src/tool-schemas.json',
+        'packages/plugin-page/src/ServicePage.tsx',
       ]),
     );
   });

@@ -133,7 +133,8 @@ packages/plugin-sdk/     the plugin contract, registry and test kit    @vaubaan/
 packages/gateway-core/   call pipeline, decisions, refusals, audit     @vaubaan/gateway-core
 packages/telemetry/      opt-in telemetry report                       @vaubaan/telemetry
 packages/oauth-providers/ OAuth provider table, copied into the broker @vaubaan/oauth-providers
-plugins/<service>/       one plugin per folder                         @vaubaan/plugin-<service>
+packages/plugin-page/    a service's page (site and Reference)         @vaubaan/plugin-page
+plugins/<service>/      one service plugin per folder                @vaubaan/plugin-<service>
 plugins/_template/       the scaffold for a new plugin                 @vaubaan/plugin-template
 deploy/                  Dockerfile, Compose file, example configuration
 docs/                    specification, decisions, handbooks, test plans, workflow
