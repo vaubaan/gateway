@@ -27,6 +27,7 @@ import { REQUEST_KINDS, REQUEST_STATES, STORED_MISSION_STATUSES } from './enums.
 import { policyLineKey, type PolicyLineKey } from '@vaubaan/shared';
 
 import { createSessionPrimitives, type RiskEventQuery } from './sessions.ts';
+import { createVersionPrimitives } from './mission-versions.ts';
 
 /**
  * Approval-request arguments sealed ahead of a transaction. The request id is fixed
@@ -504,6 +505,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
   // Sessions, counters and events belong to the sessions repository: its primitives run
   // here, inside this repository's transactions.
   const sessions = createSessionPrimitives(ctx);
+  const versions = createVersionPrimitives(ctx);
   const extendMission = db.prepare<[string, string, string]>(
     `UPDATE missions SET expires_at = ?, updated_at = ?,
        status = CASE WHEN status = 'expired' THEN 'active' ELSE status END,
@@ -547,6 +549,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     request: RequestRecord,
     session: SessionRecord | null,
     now: Iso,
+    decidedByUserId: string,
   ): ClaimDecisionContext {
     const read = (periodStart: Iso): Map<PolicyLineKey, number> =>
       new Map(
@@ -576,6 +579,12 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       },
       setMissionExpiry(expiresAt) {
         extendMission.run(expiresAt, now, request.missionId);
+        // The end is configuration: the claim's answer leaves a version of the mission.
+        versions.recordSync(
+          request.missionId,
+          { cause: 'claim-granted', author: { kind: 'person', userId: decidedByUserId } },
+          now,
+        );
       },
       recordEvent(event) {
         return session ? sessions.recordEvent(session.id, event, now) : null;
@@ -687,7 +696,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
         decideOpenSync(id, 'claim', decidedByUserId, now, (request, session) =>
-          apply(claimContext(request, session, now)),
+          apply(claimContext(request, session, now, decidedByUserId)),
         ),
       );
     },

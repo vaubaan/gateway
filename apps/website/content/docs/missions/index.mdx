@@ -62,7 +62,7 @@ The kit's instructions list every code the instance can return. Stopping a missi
 
 ## The mission page
 
-Missions → a mission, in the order you need it: its state and the header's actions (**Edit mission**, the setup kit, and behind "···" stop, duplicate, replace your key); what waits for your answer on it; what it holds, card by card, with how much of each limit the period has used; the people and keys, with what each key did; and its activity. The creator and the teammates read it; each sees only the acts that are theirs (a teammate generates, replaces and revokes their own key; the creator adds people, makes machine keys, edits and stops the mission).
+Missions → a mission, in the order you need it: its state and the header's actions (**Edit mission**, the setup kit, and behind "···" stop, duplicate, replace your key); what waits for your answer on it; what it holds, card by card, with how much of each limit the period has used; the people and keys, with what each key did; its activity; and its history. The creator and the teammates read it; each sees only the acts that are theirs (a teammate generates, replaces and revokes their own key; the creator adds people, makes machine keys, edits and stops the mission).
 
 ## Resources found later
 
@@ -71,6 +71,12 @@ When you select the resources of an account, a card can also take **the resource
 ## Edit a mission
 
 The creator, and only the creator, opens **Edit mission** on the mission page: the creation form, filled in with the mission. Everything can change but the period: accounts, resources, macro-actions and trust levels, single permissions, limits, the end date. Review what is added and removed, then **Save changes**. Every person and key on the mission gets the change at once; keys, history and what the period used stay, and removing then adding a permission does not reset its use. A stopped mission is never edited: duplicate it instead.
+
+## History and restoring a version
+
+Every change of a mission's configuration — its creation, an edit, a permission request you accepted, a resource it created or one that joined it on its own, an end moved by a request you answered — is a numbered version in the mission's **History**, newest first: who made it, when, why, and what changed from the version before. Versions are kept as long as the mission; the audit's retention does not remove them.
+
+On a past version, **Restore this version** (the creator only) brings that configuration back at once, as a new version: nothing is rewritten, and restoring another version undoes it. It is checked as an edit, against what you may give today: a permission you no longer hold, an account you lost and a resource that no longer exists are left out, and the page says which. An end date already past keeps the current one. Keys, teammates and what the period used are not part of a version: a restore replaces no key and resets no limit.
 
 An agent that receives `risk-not-accepted` may ask for the missing permission through `vaubaan__request_permission`, with the refusal's `refusal_id` and a reason. Nothing reaches you until the agent asks. Under **Waiting for you**, read what it says, add the permissions, or refuse. Granting changes the mission; the agent still retries its call.
 

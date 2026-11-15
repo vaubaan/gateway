@@ -749,6 +749,24 @@ const RULES: Readonly<Record<string, Rule>> = {
     },
     writes: { act: 'mission-changed', object: 'mission', actor: 'alice' },
   },
+  'MissionService.history': READ,
+  // Restoring version 1 after a rename: an edit, audited as one.
+  'MissionService.restore': {
+    kind: 'mutation',
+    target: missions,
+    prepare: async (rig) => {
+      const mission = await rig.issue();
+      const view = await rig.root.missions.service.editView(rig.alice.user, mission.id);
+      await rig.root.missions.service.edit(rig.alice.user, mission.id, {
+        draft: { ...view?.draft, name: `${mission.name} (edited)` },
+        revision: view?.revision,
+      });
+      return mission;
+    },
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.restore(rig.alice.user, mission.id, 1),
+    writes: { act: 'mission-changed', object: 'mission', actor: 'alice' },
+  },
   'MissionService.setLimits': {
     kind: 'mutation',
     target: missions,
@@ -1738,6 +1756,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'local-link-created',
       'local-password-changed',
       'local-password-changed',
+      'mission-changed',
       'mission-changed',
       'mission-issued',
       'mission-issued',

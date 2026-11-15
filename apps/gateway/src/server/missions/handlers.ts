@@ -16,6 +16,8 @@
  *                                     issuance (creator only; ADR mission-editable-after-issuance)
  *   POST /api/missions/:id/edit/preview  the same body: what the edit would change, or why
  *                                     it would be refused (writes nothing)
+ *   POST /api/missions/:id/versions/:number/restore  a past version of the configuration
+ *                                     back, as a new version (creator only; spec §4.2 "History")
  *
  * Every one is a mutation or reveals a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). A mission always has an
@@ -49,6 +51,11 @@ export interface MissionHandlers {
   edit(request: Request, missionId: string): Promise<Response>;
   /** `POST /api/missions/:id/edit/preview` — the same body; writes nothing. */
   previewEdit(request: Request, missionId: string): Promise<Response>;
+  /**
+   * `POST /api/missions/:id/versions/:number/restore` — no body: version `number` of the
+   * configuration restored, under the creator's authority now.
+   */
+  restoreVersion(request: Request, missionId: string, number: string): Promise<Response>;
   /**
    * `POST /api/missions/:id/trust-raise/not-now` — body `{ resource_set_id,
    * macro_action_id }`: hides a trust-raise proposal until as many approvals again.
@@ -428,6 +435,44 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           return json(409, {
             error: 'mission-inactive',
             message: `The mission is ${result.state}; it is not edited.`,
+          });
+      }
+    },
+
+    async restoreVersion(request, missionId, number) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const version = /^[1-9][0-9]{0,8}$/.test(number) ? Number(number) : null;
+      if (version === null) return json(404, NOT_FOUND);
+      const result = await deps.service.restore(principal.user, missionId, version);
+      if (result.ok) {
+        return json(200, {
+          mission: { id: result.mission.id, name: result.mission.name },
+          version: result.version,
+          restored_from: result.restored_from,
+          dropped: result.dropped,
+        });
+      }
+      switch (result.reason) {
+        case 'not-found':
+          return json(404, NOT_FOUND);
+        case 'invalid-edit':
+          return json(400, { error: 'invalid-edit', problems: result.problems });
+        case 'inactive':
+          return json(409, {
+            error: 'mission-inactive',
+            message: `The mission is ${result.state}; it is not edited.`,
+          });
+        case 'conflict':
+          return json(409, CONFLICT);
+        case 'limit-reached':
+          return json(409, { error: 'limit-reached', message: result.message });
+        case 'refused':
+          return json(422, {
+            error: 'refused',
+            issues: result.issues,
+            dropped: result.dropped,
+            message: result.issues.map((issue) => issue.message).join(' '),
           });
       }
     },

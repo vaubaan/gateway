@@ -18,6 +18,7 @@ import type {
   Gate,
   GroupSource,
   Iso8601,
+  MissionChangedEventDetails,
   MissionStatus,
   MissionTokenKind,
   Principal,
@@ -27,6 +28,8 @@ import type {
   SessionEventDetails,
   ShareStatus,
 } from '@vaubaan/shared';
+
+import type { MissionVersionCause, MissionVersionConfig } from '../../lib/missions/versions.ts';
 
 export type {
   AccountStatus,
@@ -213,6 +216,39 @@ export type MissionPolicyLineInput = Omit<MissionPolicyEntry, 'resourceSetId'>;
  */
 export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit', 'future'] as const;
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
+
+/**
+ * Who wrote a version of a mission's configuration (migration 0038): a person; a
+ * mission whose key made the change through the `vaubaan` plugin, for the person it
+ * acts for; or the gateway itself (a resource the mission created, future resources).
+ */
+export type MissionVersionAuthor =
+  | { readonly kind: 'person'; readonly userId: string }
+  | { readonly kind: 'mission'; readonly missionId: string; readonly userId: string | null }
+  | { readonly kind: 'gateway' };
+
+/** What a writer says of the version its write leaves (`VersionPrimitives.recordSync`). */
+export interface MissionVersionStamp {
+  readonly cause: MissionVersionCause;
+  readonly author: MissionVersionAuthor;
+  /** A rollback's source version; given for a rollback only. */
+  readonly restoredFrom?: number;
+}
+
+/** One version of a mission's configuration: immutable, kept as long as the mission. */
+export interface MissionVersionRecord {
+  readonly missionId: string;
+  /** From 1, per mission; 1 is issuance (or the state at the upgrade, `before-versions`). */
+  readonly number: number;
+  readonly createdAt: Iso;
+  readonly cause: MissionVersionCause;
+  readonly author: MissionVersionAuthor;
+  readonly restoredFrom: number | null;
+  /** The whole configuration (snake_case JSON, like a session event's details). */
+  readonly config: MissionVersionConfig;
+  /** What moved from the previous version; `null` for version 1. */
+  readonly changes: MissionChangedEventDetails | null;
+}
 
 /**
  * The marks of one macro-action of one resource set that start the count of a

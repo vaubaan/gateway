@@ -38,6 +38,7 @@ How the record is read (Activity's Record and Timeline, the activity of one miss
 - **A change reads in words from the keys it holds**, not per act (`changeLines`): an unknown key is printed under its own name, never dropped.
 - **The server holds no sentence** for the session timeline: typed `SessionEventView` fields only (`parseEventDetails`), worded by `eventWords`; a kind from a later version prints as stored.
 - **Usage comes from counters, not the audit.** `consumed` / `remaining` read `session_counters`; a granted claim lowers a counter, so "counted" can go down.
+- **The History of a mission is not the audit.** `mission_versions` (spec §4.2 "History") is never swept: it stays as long as the mission ([missions](missions.md), [store](store.md)).
 - **The session history leaves with the audit.** One `retention_days` for both; per session, in one transaction, events of `PERIOD_STATE_EVENT_KINDS` written since the current period started and the current period's counters are kept, whatever their age.
 
 ## Traps

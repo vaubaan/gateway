@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **The History of a mission, and restoring a version** (spec §4.2 "History"). Every change
+  of a mission's configuration — issuance, edit, permission request accepted, created
+  resource joined, future resources joining or leaving, gate and limits, a claim's new end —
+  writes one immutable, numbered version (author, cause, the whole configuration, what
+  moved). The mission page lists them newest first, with what changed one click away; the
+  creator restores a past version at once, as a new version, bounded by their authority
+  today (what they no longer hold is left out and said). Keys, teammates and counters are
+  not part of a version. Versions are kept as long as the mission, never by the audit's
+  retention. Migration 0038 adds `mission_versions` and writes every existing mission's
+  version 1 from its current state. `POST /api/missions/:id/versions/:number/restore`.
+
 ### Breaking
 
 - **Provider is service, in the code, the store and the protocol; the sign-in provider says
