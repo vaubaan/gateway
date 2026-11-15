@@ -69,6 +69,7 @@ import {
   E2E_AUDIT_USER,
   E2E_GIT,
   E2E_OPERATOR,
+  E2E_REFRESH_USER,
   E2E_SHARE_OWNER,
   E2E_SHARE_TARGET,
   GITHUB_SIGN_IN_BASE,
@@ -76,6 +77,7 @@ import {
   IDP_ISSUER,
   instancePort,
   MOCK_GITHUB,
+  MOCK_GITHUB_REFRESH,
   MOCK_VERCEL_PROJECT,
   PUBLIC_URL,
 } from './instance';
@@ -193,22 +195,27 @@ function mockedGithub(): MockFetch {
       method: 'GET',
       url: `${GITHUB_API}/user`,
       // A token the mock does not know names nobody: the plugin's check refuses it.
-      respond: (call) => ({
-        login:
-          githubTokenOf(call.headers.authorization ?? null) === MOCK_GITHUB.token
-            ? MOCK_GITHUB.account
-            : null,
-      }),
+      respond: (call) => {
+        const token = githubTokenOf(call.headers.authorization ?? null);
+        if (token === MOCK_GITHUB.token) return { login: MOCK_GITHUB.account };
+        if (token === MOCK_GITHUB_REFRESH.token) return { login: MOCK_GITHUB_REFRESH.account };
+        return { login: null };
+      },
     },
     {
       method: 'GET',
       url: (url) => url.startsWith(`${GITHUB_API}/user/repos?`),
-      body: MOCK_GITHUB.repositories.map((fullName) => ({
-        full_name: fullName,
-        default_branch: 'main',
-        private: true,
-        archived: false,
-      })),
+      // The auto-refresh spec's token reaches one repository its account does not know yet.
+      respond: (call) =>
+        (githubTokenOf(call.headers.authorization ?? null) === MOCK_GITHUB_REFRESH.token
+          ? [MOCK_GITHUB_REFRESH.known, MOCK_GITHUB_REFRESH.appearing]
+          : MOCK_GITHUB.repositories
+        ).map((fullName) => ({
+          full_name: fullName,
+          default_branch: 'main',
+          private: true,
+          archived: false,
+        })),
     },
     {
       method: 'GET',
@@ -448,7 +455,14 @@ async function main(): Promise<void> {
       publicUrl: PUBLIC_URL,
       // The admin rule names the operator of the share spec. No spec reaches the
       // published versions feed: the check is off (Administration › Plugins says so).
-      env: { VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email, VAUBAAN_UPDATES_CHECK: 'false' },
+      // The hourly refresh waits half a day: no tick refreshes the seeded accounts
+      // (their credentials are not the mocked services'); a page still refreshes a
+      // stale account on open (auto-refresh.spec.ts).
+      env: {
+        VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email,
+        VAUBAAN_UPDATES_CHECK: 'false',
+        VAUBAAN_ACCOUNTS_REFRESH_INTERVAL: '24h',
+      },
       deps: {
         oidc: {
           fetch: routeFetch({
@@ -752,6 +766,42 @@ async function main(): Promise<void> {
           mission_name: issued.mission.name,
           token: issued.token.secret,
         });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/stale-account` && req.method === 'POST') {
+        // The auto-refresh spec: Katherine's GitHub account, last refreshed two hours
+        // ago, knowing one repository of the two its token now reaches.
+        const owner = await root.store.users.upsertFromIdp({
+          issuer: IDP_ISSUER,
+          subject: E2E_REFRESH_USER.sub,
+          email: E2E_REFRESH_USER.email,
+          displayName: E2E_REFRESH_USER.name,
+        });
+        const { account } = await seedAccount(root.store, {
+          service: 'github',
+          owner: { kind: 'user', id: owner.id },
+          displayName: MOCK_GITHUB_REFRESH.account,
+          resources: [{ ref: MOCK_GITHUB_REFRESH.known }],
+        });
+        await root.store.accounts.reconnect(
+          account.id,
+          serializeSecret({
+            kind: 'api-key',
+            fields: { token: MOCK_GITHUB_REFRESH.token },
+            metadata: {},
+          }),
+        );
+        await root.store.accounts.setMetadata(account.id, {
+          credential_kind: 'api-key',
+          discovery: {
+            at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            ok: true,
+            count: 1,
+            error: null,
+            afterCall: null,
+          },
+        });
+        sendJson(res, 200, { account_id: account.id });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {

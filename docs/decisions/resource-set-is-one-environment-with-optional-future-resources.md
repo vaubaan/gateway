@@ -51,3 +51,17 @@ nothing shows the creator what joined.
 
 One trust level would write lines of different severity per environment, and "free in staging,
 careful in prod" could not be read from the card.
+
+## Amendment 2026-11-15: every account refreshes itself, hourly and on open
+
+The owner wants resources and a key's rights current without pressing "Refresh". The hourly
+discovery no longer serves only the accounts a future set depends on: every `active` account (and
+any account a running future set depends on) is refreshed once per `accounts.refresh_interval`
+(default one hour, `0` off), each at its own slot of the interval — a stable hash of its id — one
+after the other, a failure backing it off one, two, four then eight intervals. A page that shows an
+account refreshed more than 15 minutes ago asks for its refresh and updates in place. The refresh
+also asks a pasted key's check again (who it acts as, until when, what it holds). It is audited
+only when it changed something (resources added or gone, rights, the key rejected), in the name of
+`discovery`. Rejected: one fixed minute for every account (a burst at every service at once);
+refreshing on every page view (rate limits of the services, a flood of no-op audit entries);
+refreshing before each call (latency on the execution path the refresh must never delay).

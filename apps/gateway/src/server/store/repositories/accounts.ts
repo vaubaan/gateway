@@ -128,6 +128,12 @@ export interface AccountsRepo {
    */
   refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
+   * When the credential stops working, as the service says it again (a pasted key's
+   * check on refresh); the credential itself is untouched. Only while the account
+   * serves calls; false when nothing was written.
+   */
+  setCredentialExpiresAt(id: string, expiresAt: Iso | null): Promise<boolean>;
+  /**
    * The service rejected the credential and the refresh failed: a serving account
    * (`active` or `unowned`) → `expired`. Conditional, so it never downgrades a `revoked`
    * account. An `unowned` account that expires stays ownerless (`listOwnerless`):
@@ -370,6 +376,10 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
   >(
     `UPDATE accounts SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
        updated_at = ? WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
+  );
+  const setExpiresAtStmt = db.prepare<[string | null, string, string, ...string[]]>(
+    `UPDATE accounts SET credential_expires_at = ?, updated_at = ?
+     WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
   );
   const markExpiredStmt = db.prepare<[string, string, ...string[]]>(
     `UPDATE accounts SET status = 'expired', updated_at = ?
@@ -635,6 +645,9 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
         ...SERVING_STATUSES,
       );
       return result.changes > 0;
+    },
+    async setCredentialExpiresAt(id, expiresAt) {
+      return setExpiresAtStmt.run(expiresAt, nowIso(ctx), id, ...SERVING_STATUSES).changes > 0;
     },
     async markExpired(id) {
       return markExpiredStmt.run(nowIso(ctx), id, ...SERVING_STATUSES).changes > 0;

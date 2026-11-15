@@ -7,6 +7,7 @@
  * itself. The header, the form and
  * what follows the creation (the key, shown once) are `MissionForm`.
  */
+import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
@@ -32,6 +33,8 @@ export default async function NewMissionPage({ searchParams }: Props) {
   const platform = typeof params.platform === 'string' ? params.platform : null;
 
   const context = await service.issuanceContext(session.user);
+  // The picker shows what is stored at once; the stale accounts refresh themselves.
+  const stale = await session.root.accounts.refresher.staleIds(context.map((c) => c.id));
   // "Start from a mission…" offers what the reader created: a mission shared with them is not theirs to copy.
   const mine = (await service.list(session.user)).filter((m) => m.role === 'creator');
 
@@ -78,14 +81,17 @@ export default async function NewMissionPage({ searchParams }: Props) {
   }
 
   return (
-    <MissionForm
-      // A copy of another mission is another form: its state starts again.
-      key={from ?? (platform ? `platform:${platform}` : 'new')}
-      context={context}
-      missions={mine.map((m) => ({ id: m.mission.id, name: m.mission.name }))}
-      initial={initial}
-      planes={planes}
-      icons={icons}
-    />
+    <>
+      <AutoRefresh accountIds={stale} quiet />
+      <MissionForm
+        // A copy of another mission is another form: its state starts again.
+        key={from ?? (platform ? `platform:${platform}` : 'new')}
+        context={context}
+        missions={mine.map((m) => ({ id: m.mission.id, name: m.mission.name }))}
+        initial={initial}
+        planes={planes}
+        icons={icons}
+      />
+    </>
   );
 }

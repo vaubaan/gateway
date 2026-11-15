@@ -14,8 +14,9 @@
  *     account's default relabels what inherits it, with the same moves;
  *   - a legacy set mixing environments (migration 0033) takes any environment and keeps
  *     what is relabelled; a stopped mission moves nothing;
- *   - the hourly discovery runs on the accounts a running future set depends on, one
- *     run at a time, and logs a failure without the service's words;
+ *   - the hourly refresh takes the accounts a running future set depends on (an
+ *     unowned one too), one run at a time, and logs a failure without the service's
+ *     words;
  *   - "check now" is the creator's or an owner's, says what joined, and the mission page
  *     reads when the account was last checked.
  */
@@ -24,7 +25,13 @@ import { DISCOVERY_ACTOR_ID } from '@vaubaan/gateway-core';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth/cookies';
-import type { ConnectError, DiscoveryTimers } from '../../../src/server/accounts';
+import {
+  AccountRefresher,
+  type ConnectError,
+  type RefreshTimers,
+} from '../../../src/server/accounts';
+import { silentLogger } from '../../../src/server/logging';
+import { ManualClock } from '../../../src/server/store/clock';
 import type { UserRecord } from '../../../src/server/store/types';
 import {
   DEPOT,
@@ -254,11 +261,11 @@ describe('future resources', () => {
     expect(await listOf(mission, 'staging')).not.toContain(await idOf('late'));
   });
 
-  describe('the hourly discovery', () => {
-    /** Timers driven by hand: what is armed, and a way to fire it. */
+  describe('the hourly refresh', () => {
+    /** Timers driven by hand: what is armed. */
     function manualTimers() {
       const armed: { fn: () => void; ms: number }[] = [];
-      const timers: DiscoveryTimers = {
+      const timers: RefreshTimers = {
         setTimeout(fn, ms) {
           armed.push({ fn, ms });
           return armed.length;
@@ -270,12 +277,12 @@ describe('future resources', () => {
       return { timers, armed };
     }
 
-    it('selects the accounts a running future set depends on, and runs once at a time', async () => {
+    it('takes the accounts a running future set depends on, and runs once at a time', async () => {
       const { timers, armed } = manualTimers();
       const logged: string[] = [];
       await open({
         deps: {
-          discoveryTimers: timers,
+          refreshTimers: timers,
           logWrite: (line: string) => {
             logged.push(line);
           },
@@ -288,16 +295,28 @@ describe('future resources', () => {
       expect(await missions.accountsWithFutureSets(now)).toEqual([]);
       const future = await both(true);
       expect(await missions.accountsWithFutureSets(now)).toEqual([instance.account.id]);
+      // An unowned account still serves its missions: the future set keeps it refreshed.
+      instance.root.store.db
+        .prepare("UPDATE accounts SET status = 'unowned' WHERE id = ?")
+        .run(instance.account.id);
 
-      // Armed at boot for one hour later; firing runs the discovery of that account.
-      expect(armed.map((a) => a.ms)).toEqual([60 * 60 * 1000]);
+      // The root's scheduler ticks every minute; two hours on, the account is due.
+      expect(armed.map((a) => a.ms)).toEqual([60 * 1000]);
+      const refresher = new AccountRefresher({
+        accounts: instance.root.store.accounts,
+        missions,
+        service: instance.root.accounts.service,
+        logger: silentLogger,
+        clock: new ManualClock(new Date(Date.now() + 2 * 60 * 60 * 1000)),
+        intervalMs: 60 * 60 * 1000,
+        timers,
+      });
       instance.depot.scriptDiscovery(async () => [
         space('app-staging', 'staging'),
         space('app-prod', 'prod'),
         space('hourly', 'prod'),
       ]);
-      const hourly = instance.root.accounts.hourlyDiscovery;
-      const [first, second] = [hourly.runOnce(), hourly.runOnce()];
+      const [first, second] = [refresher.runOnce(), refresher.runOnce()];
       expect(first).toBe(second);
       expect(await first).toEqual({ accounts: [instance.account.id], failed: [] });
       expect(instance.depot.discoveries()).toBe(1);
@@ -305,10 +324,19 @@ describe('future resources', () => {
       expect((await moves('mission-resource-joined'))[0]?.user).toBe(DISCOVERY_ACTOR_ID);
 
       // A failure is recorded and logged by account only, never the service's words.
+      const later = new AccountRefresher({
+        accounts: instance.root.store.accounts,
+        missions,
+        service: instance.root.accounts.service,
+        logger: instance.root.logger,
+        clock: new ManualClock(new Date(Date.now() + 4 * 60 * 60 * 1000)),
+        intervalMs: 60 * 60 * 1000,
+        timers,
+      });
       instance.depot.scriptDiscovery(async () => {
         throw new Error('upstream said: secret-token-123 is wrong');
       });
-      expect(await hourly.runOnce()).toEqual({
+      expect(await later.runOnce()).toEqual({
         accounts: [instance.account.id],
         failed: [instance.account.id],
       });

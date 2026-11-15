@@ -351,6 +351,12 @@ export interface InstanceConfig {
    * how long one git request may last, in seconds. Both fail closed.
    */
   readonly git: { readonly maxPackBytes: number; readonly requestTimeoutSeconds: number };
+  /**
+   * `accounts.refresh_interval`: how often every account in use refreshes its resources
+   * and its key's rights on its own, in seconds; 0 turns the automatic refresh off,
+   * hourly and on open (`server/accounts/account-refresh.ts`).
+   */
+  readonly accounts: { readonly refreshIntervalSeconds: number };
   /** Ceilings on users, accounts and active missions; each `null` when unlimited. */
   readonly limits: LimitsConfig;
   /** The counters endpoint for the operator's monitoring. */

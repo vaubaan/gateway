@@ -14,6 +14,7 @@
  */
 import Link from 'next/link';
 
+import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { CloseOrphanedMission } from '@/components/accounts/CloseOrphanedMission';
 import shared from '@/components/accounts/account.module.css';
 import { AccountState, credentialKindLabel, NoticeBanner } from '@/components/accounts/parts';
@@ -58,6 +59,7 @@ import {
   ACCOUNT_WORDS,
   ACTIONS,
   ago,
+  agoSentence,
   expiresOn,
   capitalize,
   count,
@@ -144,6 +146,11 @@ export interface AccountData {
     readonly write: boolean;
     readonly tools: readonly string[];
   }[];
+  /**
+   * Its last refresh is older than the staleness window: the page asks for one on open
+   * (`AutoRefresh`) and reads "Refreshing…" meanwhile.
+   */
+  readonly stale: boolean;
 }
 
 /** Everything the page shows. Throws the services' "not found" for anyone but an owner. */
@@ -182,6 +189,7 @@ export async function loadAccount(
       write: permission.access === 'read-write',
       tools: permission.tools.map((tool) => toolTitleOf(root.registry, tool) ?? tool),
     })),
+    stale: root.accounts.refresher.staleAmong([detail.account]).length > 0,
   };
 }
 
@@ -717,7 +725,7 @@ export function AccountView({
       people: holders.owner.people,
     }),
     `connected ${shortDate(account.createdAt, now)}`,
-    !revoked && detail.discovery ? `checked ${agoWords(detail.discovery.at, now)}` : null,
+    !revoked && detail.discovery ? `updated ${agoWords(detail.discovery.at, now)}` : null,
     // A pasted token's expiry is said ahead of it, on the first line of the page.
     !revoked && detail.token_expires_at ? expiresOn(detail.token_expires_at, now) : null,
   ]
@@ -1036,15 +1044,17 @@ export function AccountView({
             'What it reached when it was disconnected.'
           ) : (
             <>
-              <span>
+              <span data-testid="account-updated">
                 {detail.discovery
-                  ? `Found ${agoWords(detail.discovery.at, now)}${
+                  ? `${ACCOUNT_WORDS.updated(agoSentence(detail.discovery.at, now))}${
                       detail.discovery.afterCall
                         ? `, ${ACCOUNT_WORDS.afterCallOf} ${detail.discovery.afterCall.tool}`
                         : ''
                     }.`
                   : 'Nothing was looked for yet.'}
               </span>
+              <AutoRefresh accountIds={data.stale ? [account.id] : []} />
+              {/* Small, for right after a key's scope changed at the service. */}
               <form method="post" action={`${base}/discover`} className={styles.inlineForm}>
                 <button type="submit" className={styles.linkButton}>
                   {ACCOUNT_ACTIONS.refresh}

@@ -478,6 +478,7 @@ function validate(
   const callTimeoutSeconds = r.int(keySpec('execution.call_timeout_seconds'));
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
   const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
+  const refreshIntervalSeconds = readRefreshInterval(r, raw);
   const oauthBrokers = readOAuthBrokers(r);
   const level = readLogLevel(r);
 
@@ -519,6 +520,7 @@ function validate(
       maxPackBytes: gitMaxPackMb * BYTES_PER_MEGABYTE,
       requestTimeoutSeconds: gitRequestTimeout,
     },
+    accounts: { refreshIntervalSeconds },
     limits,
     ops: { token: opsToken },
     plugins,
@@ -527,6 +529,29 @@ function validate(
     oauthBrokers,
     log: { level },
   };
+}
+
+/** The shortest `accounts.refresh_interval` but 0: the services' rate limits come first. */
+export const MIN_REFRESH_INTERVAL_SECONDS = 15 * 60;
+
+/**
+ * `accounts.refresh_interval`: a duration from 15 minutes to a day, or `0` (the automatic
+ * refresh off).
+ */
+function readRefreshInterval(r: Reader, raw: RawTree): number {
+  const spec = keySpec('accounts.refresh_interval');
+  // `0` in the file is a number, in the environment a string.
+  const value = getPath(raw, spec.path);
+  if (value === 0 || (typeof value === 'string' && value.trim() === '0')) return 0;
+  const seconds = r.duration(spec);
+  if (seconds < MIN_REFRESH_INTERVAL_SECONDS || seconds > spec.maxSeconds) {
+    r.issues.add(
+      spec.path,
+      'expected 0 (off) or a duration from 15m to 24h',
+      envNamesFor(spec.path),
+    );
+  }
+  return seconds;
 }
 
 /** https, no query or fragment, trailing slash stripped (a sub-path is kept). */

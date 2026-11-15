@@ -112,8 +112,12 @@ export type AdminAct =
    *  `after.cause` says who ran it: `by-owner` ("Refresh", the actor is the
    *  owner) or `after-a-call` (the gateway, after a call that created a
    *  resource; the actor is the human behind the call's key, `after` adds
-   *  `mission_id`, `tool`, `added`, `attempts`). ADR
-   *  created-resources-join-the-mission. */
+   *  `mission_id`, `tool`, `added`, `attempts`; ADR
+   *  created-resources-join-the-mission), `check-now` (a mission card), or
+   *  `scheduled` / `on-open` (the gateway's own refresh, hourly or because a
+   *  page showed the account stale; actor `DISCOVERY_ACTOR_ID`, written only
+   *  when it changed something, `after` adds `added`, `removed`,
+   *  `rights_changed` and `expired` when the key was rejected). */
   | 'resources-discovered'
   /** The owner edited one resource (name, environment label, hidden flag,
    *  editable settings). Object: the account; `before` / `after` name the

@@ -361,6 +361,15 @@
 #   max_pack_mb: 200
 #   request_timeout: 10m
 
+# How often every account refreshes its resources and what its key may do,
+# on its own (a duration from 15m to 24h). Each account has its own slot in
+# the interval, so a service is not asked for all its accounts at once; a
+# page showing an account not refreshed for 15 minutes refreshes it too.
+# 0 turns both off: accounts then refresh only when their owner asks.
+# env: VAUBAAN_ACCOUNTS_REFRESH_INTERVAL
+# accounts:
+#   refresh_interval: 1h
+
 # Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
 # mission token secrets are redacted.
 # env: VAUBAAN_LOG_LEVEL

@@ -14,6 +14,10 @@
  *                                                    for the unlabelled resources
  *   GET  /reference/<service>/connect/<file>        a screenshot of the connect guide
  *                                                    (signed-in users; read-only)
+ *   POST /api/accounts/refresh                    JSON `{ account_ids }`: a page that
+ *                                                    shows these accounts asks to refresh
+ *                                                    the stale ones (`AccountRefresher`),
+ *                                                    answered `{ refreshed, changed }`
  *   POST /api/missions/<id>/resources/check          JSON `{ account_id }`: "check now"
  *                                                    on a mission card — discovery of that
  *                                                    account, answered as JSON with what
@@ -41,7 +45,9 @@ import {
 import { notAFormResponse, readForm, stringField } from '../http/form';
 import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
+import type { RateLimiter } from '../compose/ports';
 import type { ConnectFile } from '../plugins';
+import type { AccountRefresher } from './account-refresh';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
@@ -91,6 +97,11 @@ export interface AccountHandlerDeps {
   readonly accounts: AccountService;
   readonly notices: NoticeStore;
   readonly logger: Logger;
+  /** The automatic refresh: a page asks it for the stale accounts it shows. */
+  readonly refresher: Pick<AccountRefresher, 'refreshStale'>;
+  readonly rateLimiter: RateLimiter;
+  /** The ids of the accounts a person may use (owned or shared to them). */
+  readonly reachOf: (actor: Actor) => Promise<ReadonlySet<string>>;
   /** A screenshot of a plugin's connect guide, or `null` (`readConnectFile` of `../plugins`). */
   readonly connectFile: (serviceId: string, file: string) => Promise<ConnectFile | null>;
 }
@@ -111,12 +122,24 @@ export interface AccountHandlers {
    */
   checkMissionResources(request: Request, missionId: string): Promise<Response>;
   /**
+   * `POST /api/accounts/refresh` — body `{ account_ids }`: refreshes those the person
+   * may use whose last refresh is stale, and answers which were refreshed and which
+   * changed (the page then reads again). Others' accounts are silently left out.
+   */
+  refreshOnOpen(request: Request): Promise<Response>;
+  /**
    * `GET /reference/:service/connect/:file` — a screenshot the plugin's connect guide
    * declares, for a signed-in user (the connect page's reader); 401 without a session,
    * 403 for the bootstrap operator, 404 for anything not declared.
    */
   connectFile(request: Request, serviceId: string, file: string): Promise<Response>;
 }
+
+/** At most this many accounts in one page's refresh. */
+export const MAX_REFRESH_IDS = 100;
+/** A person's pages ask at most this many refreshes a minute. */
+export const REFRESH_ON_OPEN_RATE_LIMIT = 30;
+export const REFRESH_ON_OPEN_RATE_WINDOW_MS = 60_000;
 
 const INVALID_CHECK = {
   error: 'invalid-check',
@@ -128,6 +151,27 @@ function json(status: number, body: unknown, headers: Record<string, string> = {
     status,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers },
   });
+}
+
+const INVALID_REFRESH = {
+  error: 'invalid-refresh',
+  message: `The body is { "account_ids": string[] } with at most ${MAX_REFRESH_IDS} ids.`,
+};
+
+/** The accounts a page asks to refresh, or `null` when the body is not that. */
+async function refreshTargetsOf(request: Request): Promise<string[] | null> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const { account_ids: ids, ...extra } = raw as Record<string, unknown>;
+  if (Object.keys(extra).length > 0 || !Array.isArray(ids) || ids.length > MAX_REFRESH_IDS) {
+    return null;
+  }
+  return ids.every((id): id is string => typeof id === 'string' && id !== '') ? ids : null;
 }
 
 /** The account a "check now" names, or `null` when the body is not one. */
@@ -192,6 +236,26 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
   }
 
   return {
+    async refreshOnOpen(request) {
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
+      const ids = await refreshTargetsOf(request);
+      if (ids === null) return json(400, INVALID_REFRESH);
+      const actor = actorOf(guard.principal);
+      const decision = await deps.rateLimiter.take(
+        `refresh-on-open:${actor.user.id}`,
+        REFRESH_ON_OPEN_RATE_LIMIT,
+        REFRESH_ON_OPEN_RATE_WINDOW_MS,
+      );
+      if (!decision.allowed) {
+        // Not an error a page shows: it keeps what it rendered.
+        return json(200, { refreshed: [], changed: [] });
+      }
+      const reach = await deps.reachOf(actor);
+      const outcome = await deps.refresher.refreshStale(ids.filter((id) => reach.has(id)));
+      return json(200, outcome);
+    },
+
     async checkMissionResources(request, missionId) {
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
