@@ -24,7 +24,7 @@ const SNAPSHOT: MissionSnapshot = {
   accounts: [
     {
       account_id: acme.id,
-      provider: 'acme',
+      service: 'acme',
       display_name: acme.display_name,
       resource_sets: [
         {
@@ -75,7 +75,7 @@ describe('the mission screen in edit mode', () => {
         ...SNAPSHOT.accounts,
         {
           account_id: 'conn-lost',
-          provider: 'lost',
+          service: 'lost',
           display_name: 'Lost',
           resource_sets: [
             {

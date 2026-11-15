@@ -11,7 +11,7 @@
  * nothing but how to say it.
  */
 import { requireOperator } from '@/lib/auth/session';
-import { providerCards } from '@/lib/providers/reference';
+import { serviceCards } from '@/lib/services/reference';
 
 import { PluginsPage, type PluginLine } from './plugins-view';
 
@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPluginsPage() {
   const { root } = await requireOperator();
   const { entries } = root.plugins;
-  const icons = new Map(providerCards(root.registry).map((card) => [card.id, card.icon]));
+  const icons = new Map(serviceCards(root.registry).map((card) => [card.id, card.icon]));
   const [counts, validations] = await Promise.all([
     root.limits.counts.accounts(),
     Promise.all(
@@ -32,7 +32,7 @@ export default async function AdminPluginsPage() {
   const lines: PluginLine[] = entries.map((entry, index) => ({
     entry,
     icon: icons.get(entry.id) ?? null,
-    accounts: counts.byProvider[entry.id] ?? 0,
+    accounts: counts.byService[entry.id] ?? 0,
     validation: validations[index] ?? null,
   }));
 

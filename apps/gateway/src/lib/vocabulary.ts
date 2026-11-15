@@ -121,7 +121,7 @@ export const TERMS = {
   missionToken: { one: 'key', many: 'keys' },
   namedToken: { one: 'machine key', many: 'machine keys' },
   request: { one: 'request', many: 'requests' },
-  provider: { one: 'service', many: 'services' },
+  service: { one: 'service', many: 'services' },
   member: { one: 'teammate', many: 'teammates' },
   operator: { one: 'administrator', many: 'administrators' },
   group: { one: 'team', many: 'teams' },
@@ -572,7 +572,7 @@ export const PART_LOSS_WORDS = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reference (the pages under `/reference`). Protocol names: provider, plugin,
+// Reference (the pages under `/reference`). Protocol names: service, plugin,
 // risk, macro-action, trust level, tool, plane, slice pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -792,7 +792,7 @@ export const ACT_WORDS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings and administration (`/settings/**`, `/admin/**`). Protocol names:
-// identity provider, provider app, user, group,
+// sign-in provider (identity provider), user, group,
 // operator, bootstrap token, telemetry.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -807,7 +807,7 @@ export const SETTINGS_PAGES = {
   },
   signIn: {
     title: 'Sign-in',
-    lede: 'The providers people sign in through. No password is stored here, and one person signing in through two providers is two people.',
+    lede: 'The sign-in providers people sign in through. No password is stored here, and one person signing in through two sign-in providers is two people.',
   },
   people: {
     title: 'People',
@@ -978,7 +978,7 @@ export const SETTINGS_ACTIONS = {
   addTeam: 'Add a local team',
   addMember: 'Add',
   addSignInProvider: 'Add a sign-in provider',
-  addProvider: 'Add the provider',
+  addTheSignInProvider: 'Add the sign-in provider',
   invite: 'Invite',
 } as const;
 
@@ -1444,7 +1444,7 @@ export const CARD_WORDS = {
   neverIn: (env: string): string => `never in ${env}`,
   /** A card of an account that lists no resource. */
   accountItself: 'the account itself',
-  /** The resources without an environment label, on a provider that needs one. */
+  /** The resources without an environment label, on a service that needs one. */
   notSelectable: 'not selectable',
   labelIt: 'Label it to add it',
   /** Ticks every free listed resource of a group (never a hidden one). */
@@ -1702,7 +1702,7 @@ export const DOC_PAGES = {
   },
   connect: {
     label: ACCOUNT_PAGES.connect.title,
-    path: 'providers',
+    path: 'services',
     hint: 'Choose a service, then plug in one of your accounts there, once: a key you create and paste, or a sign-in at the service. The secret is stored encrypted and no agent ever sees it.',
   },
   account: {

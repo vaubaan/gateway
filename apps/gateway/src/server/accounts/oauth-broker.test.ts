@@ -91,7 +91,7 @@ function harness(
         credential: BROKERED,
         discoverResources: async (ctx) => {
           seenByPlugin.push(ctx.credential);
-          return [{ provider: PLUGIN, ref: 'primary', displayName: 'Primary' }];
+          return [{ service: PLUGIN, ref: 'primary', displayName: 'Primary' }];
         },
       }),
     ],
@@ -137,19 +137,19 @@ function callsTo(path: string) {
 }
 
 describe('a plugin whose client is an OAuth broker', () => {
-  it('is listed as not configured, with the reason, when no broker serves its provider', async () => {
+  it('is listed as not configured, with the reason, when no broker serves its service', async () => {
     const h = harness(null);
-    const [provider] = await h.service.providers();
-    expect(provider?.unavailable).toMatch(/OAuth broker .* none is configured for "google"/);
-    expect(provider?.brokerAttested).toBeNull();
+    const [service] = await h.service.services();
+    expect(service?.unavailable).toMatch(/OAuth broker .* none is configured for "google"/);
+    expect(service?.brokerAttested).toBeNull();
     const alice = await h.actor('alice@example.com');
     await expectConnectError(h.service.start(alice, PLUGIN), 'broker-not-configured');
   });
 
   it('attests the broker, then starts at it with the S256 challenge, never the verifier, and the gateway’s state', async () => {
     const h = harness();
-    const [provider] = await h.service.providers();
-    expect(provider).toMatchObject({ unavailable: null, viaBroker: true, brokerAttested: true });
+    const [service] = await h.service.services();
+    expect(service).toMatchObject({ unavailable: null, viaBroker: true, brokerAttested: true });
     const { authorizeUrl } = await startFlow(h);
     expect(authorizeUrl.startsWith(FAKE_AUTHORIZE_URL)).toBe(true);
     const [attest, flows] = broker.calls;
@@ -204,7 +204,7 @@ describe('a plugin whose client is an OAuth broker', () => {
     const { alice, authorizeUrl } = await startFlow(h);
     await expectConnectError(
       h.service.complete(alice, PLUGIN, broker.deny(authorizeUrl).searchParams),
-      'provider-denied',
+      'service-denied',
     );
   });
 
@@ -258,9 +258,9 @@ describe('a plugin whose client is an OAuth broker', () => {
     const h = harness();
     const { alice, account } = await connect(h);
     const { brokerGrant } = await storedOf(h, account.id);
-    expect(h.service.providerGrantOf(account).grant.withdrawnByGateway).toBe(true);
+    expect(h.service.serviceGrantOf(account).grant.withdrawnByGateway).toBe(true);
     const revoked = await h.service.revoke(alice, account.id);
-    expect(revoked.providerGrant).toBe('revoked');
+    expect(revoked.serviceGrant).toBe('revoked');
     expect(callsTo('/revoke')[0]?.body).toEqual({
       provider: 'google',
       refresh_token: brokerGrant?.refreshToken,
@@ -274,7 +274,7 @@ describe('a plugin whose client is an OAuth broker', () => {
     broker.down();
     const revoked = await h.service.revoke(alice, account.id);
     expect(revoked.status).toBe('revoked');
-    expect(revoked.providerGrant).toBe('failed');
+    expect(revoked.serviceGrant).toBe('failed');
   });
 });
 
@@ -532,7 +532,7 @@ describe('a broker declared attestation: none', () => {
 
   it('is reached as any HTTPS service, its certificate checked, without /attest, and every page says it is not attested', async () => {
     const h = harness(KEY, [], broker.trustingFetch());
-    expect((await h.service.providers())[0]?.brokerAttested).toBe(false);
+    expect((await h.service.services())[0]?.brokerAttested).toBe(false);
     const { account } = await connect(h);
     expect(callsTo('/attest')).toEqual([]);
     expect(callsTo('/grants/redeem')[0]?.status).toBe(200);

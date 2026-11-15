@@ -59,7 +59,7 @@ async function seededDeps(loaded: LoadedConfig): Promise<{ deps: ResealDeps; sto
   });
   for (const credential of ['one', 'two']) {
     await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: credential,
       credential,

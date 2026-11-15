@@ -5,7 +5,7 @@ import { CONFIG_FILE_ENV, isSecretKeyPath, secretEnvVariables } from './sources'
 import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../../../tests/support/config/testing';
 
 describe('secret variables leave the environment once loaded (H3)', () => {
-  it('names every secret key of the table, the sign-in secrets, their _FILE siblings, and every retired provider variable', () => {
+  it('names every secret key of the table, the sign-in secrets, their _FILE siblings, and every retired service variable', () => {
     const env = validEnv({
       VAUBAAN_MASTER_KEY_PREVIOUS: `1=${TEST_MASTER_KEY}`,
       VAUBAAN_SIGN_IN_GITHUB_KIND: 'github',

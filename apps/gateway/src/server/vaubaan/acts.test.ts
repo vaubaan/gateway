@@ -92,12 +92,12 @@ function rig(
     ...options.missions,
   };
   const catalog: VaubaanCatalog = {
-    providers: () => ['acme'],
-    get: (provider) =>
-      provider === 'acme'
+    services: () => ['acme'],
+    get: (service) =>
+      service === 'acme'
         ? {
-            provider: 'acme',
-            provider_label: 'Acme',
+            service: 'acme',
+            service_label: 'Acme',
             derives_env: false,
             risks: enumerateCatalog(ACME_CATALOG),
             macro_actions: macroActionsOf(ACME_CATALOG),
@@ -113,7 +113,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
   it('each act calls the mission service with the calling mission’s creator, never another', async () => {
     const { tools, calls } = rig();
     await tools.listMyAccounts(ACTOR);
-    await tools.getCatalog(ACTOR, { provider: 'acme', account_id: 'conn-acme' });
+    await tools.getCatalog(ACTOR, { service: 'acme', account_id: 'conn-acme' });
     await tools.listMyMissions(ACTOR);
     await tools.listMyMissions(ACTOR, { mission_id: 'm1' });
     await tools.previewPolicy(ACTOR, DRAFT);
@@ -144,7 +144,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     if (outcome.ok) return;
     expect(outcome.refusal).toMatchObject({
       code: 'draft-refused',
-      uncovered: [{ account_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] }],
+      uncovered: [{ account_id: 'conn-acme', service: 'acme', risk_ids: ['acme.admin'] }],
     });
     expect(outcome.refusal.message).toContain('outside the user’s authority');
     expect(calls.some((call) => call.method === 'issue')).toBe(false);
@@ -336,10 +336,10 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
       );
     });
 
-    it('a draft carrying a Vaubaan account is refused before any preview, by id or by provider', async () => {
-      const vaubaan = { ...acmeAccount(), id: 'conn-vaubaan', provider: 'vaubaan' };
+    it('a draft carrying a Vaubaan account is refused before any preview, by id or by service', async () => {
+      const vaubaan = { ...acmeAccount(), id: 'conn-vaubaan', service: 'vaubaan' };
       const { tools, calls } = rig({ extra: [vaubaan] });
-      for (const account of [{ account_id: 'conn-vaubaan' }, { provider: 'vaubaan' }]) {
+      for (const account of [{ account_id: 'conn-vaubaan' }, { service: 'vaubaan' }]) {
         const outcome = await tools.issueMission(ACTOR, {
           ...DRAFT,
           accounts: [
@@ -487,7 +487,7 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     const handbook = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
-        '../../../../../docs/handbook/providers/vaubaan.md',
+        '../../../../../docs/handbook/services/vaubaan.md',
       ),
       'utf8',
     );
@@ -499,13 +499,13 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     expect(documented.sort()).toEqual([...VAUBAAN_REFUSAL_CODES, 'internal-error'].sort());
   });
 
-  it('get_catalog names the providers when asked for one that does not exist', async () => {
+  it('get_catalog names the services when asked for one that does not exist', async () => {
     const { tools } = rig();
-    expect(await tools.getCatalog(ACTOR, { provider: 'nope' })).toMatchObject({
+    expect(await tools.getCatalog(ACTOR, { service: 'nope' })).toMatchObject({
       ok: false,
-      refusal: { code: 'unknown-provider', providers: ['acme'] },
+      refusal: { code: 'unknown-service', services: ['acme'] },
     });
-    expect(await tools.getCatalog(ACTOR, { provider: 'acme', account_id: 'x' })).toMatchObject({
+    expect(await tools.getCatalog(ACTOR, { service: 'acme', account_id: 'x' })).toMatchObject({
       ok: false,
       refusal: { code: 'unknown-account' },
     });
@@ -615,7 +615,7 @@ describe('views', () => {
     expect(answers).toEqual([true, false, false, true]);
   });
 
-  it('with no labelled resource, env-qualified ids are unusable unless the provider derives the environment', () => {
+  it('with no labelled resource, env-qualified ids are unusable unless the service derives the environment', () => {
     const unlabelled = acmeAccount({
       resources: [
         {
@@ -694,8 +694,8 @@ describe('views', () => {
   it('the catalog is explicit ids; an account flags each one', () => {
     const { tools: _tools, account } = rig({ shared: true });
     const catalog = {
-      provider: 'acme',
-      provider_label: 'Acme',
+      service: 'acme',
+      service_label: 'Acme',
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
       macro_actions: macroActionsOf(ACME_CATALOG),
@@ -732,8 +732,8 @@ describe('views', () => {
     expect(accountView(acmeAccount()).everything_i_hold.risks).toBe(6);
 
     const catalog = {
-      provider: 'acme',
-      provider_label: 'Acme',
+      service: 'acme',
+      service_label: 'Acme',
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
       macro_actions: macroActionsOf(ACME_CATALOG),
@@ -771,7 +771,7 @@ describe('views', () => {
       DRAFT,
     );
     expect(uncoveredOfPreview(preview)).toEqual([
-      { account_id: 'conn-acme', provider: 'acme', risk_ids: ['acme.admin'] },
+      { account_id: 'conn-acme', service: 'acme', risk_ids: ['acme.admin'] },
     ]);
     expect(previewView(preview)).toMatchObject({ ok: false, name: DRAFT.name });
   });
@@ -864,7 +864,7 @@ describe('tool definitions and results', () => {
     expect(text.get_catalog).toContain('explicit RiskIds');
     expect(text.get_catalog).toContain('macro_actions');
     expect(text.preview_policy).toContain('explicit RiskIds only');
-    expect(text.preview_policy).toContain('one account per provider');
+    expect(text.preview_policy).toContain('one account per service');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');
     expect(text.preview_policy).toContain('labelled with that environment');
     // `all` and future resources are told apart where a draft is composed.

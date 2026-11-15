@@ -47,12 +47,12 @@ export interface CreateMissionInput {
   /**
    * Every account with its sets and their lines (`resourceSets`), or with its
    * selection directly: it then has one set, whose lines are the `policy` lines of its
-   * provider.
+   * service.
    */
   readonly accounts: readonly MissionAccountInput[];
   /**
    * The lines of the accounts given without sets, placed in the set of the
-   * account of their provider (the first segment of the risk id). Every id must be in
+   * account of their service (the first segment of the risk id). Every id must be in
    * the catalog; a line no account is for is refused.
    */
   readonly policy?: readonly MissionPolicyLineInput[];
@@ -612,9 +612,9 @@ function trustLevelsJsonOf(c: {
     : null;
 }
 
-/** True for a risk id of this provider: its first segment, before `.` or `[`. */
-export function isRiskOfProvider(riskId: RiskId, provider: string): boolean {
-  return riskId.startsWith(`${provider}.`) || riskId.startsWith(`${provider}[`);
+/** True for a risk id of this service: its first segment, before `.` or `[`. */
+export function isRiskOfService(riskId: RiskId, service: string): boolean {
+  return riskId.startsWith(`${service}.`) || riskId.startsWith(`${service}[`);
 }
 
 /** An account of a write, with its sets and their lines. */
@@ -637,7 +637,7 @@ interface CheckedAccountInput {
 
 /**
  * The accounts of a write with their sets: an account given with its selection
- * directly becomes one set holding the `policy` lines of its provider. A line no
+ * directly becomes one set holding the `policy` lines of its service. A line no
  * account of that shape is for is refused.
  */
 function resolveAccountInputs(
@@ -645,15 +645,15 @@ function resolveAccountInputs(
   accounts: readonly MissionAccountInput[],
   policy: readonly MissionPolicyLineInput[] = [],
 ): ResolvedAccountInput[] {
-  const providerOf = ctx.db.prepare<[string], { provider: string }>(
-    'SELECT provider FROM accounts WHERE id = ?',
+  const serviceOf = ctx.db.prepare<[string], { service: string }>(
+    'SELECT service FROM accounts WHERE id = ?',
   );
   const placed = new Set<MissionPolicyLineInput>();
   const resolved = accounts.map((c): ResolvedAccountInput => {
     if ('resourceSets' in c) return { accountId: c.accountId, resourceSets: c.resourceSets };
-    const provider = providerOf.get(c.accountId)?.provider;
-    if (provider === undefined) throw new NotFoundError('account', c.accountId);
-    const lines = policy.filter((line) => isRiskOfProvider(line.riskId, provider));
+    const service = serviceOf.get(c.accountId)?.service;
+    if (service === undefined) throw new NotFoundError('account', c.accountId);
+    const lines = policy.filter((line) => isRiskOfService(line.riskId, service));
     for (const line of lines) placed.add(line);
     return {
       accountId: c.accountId,

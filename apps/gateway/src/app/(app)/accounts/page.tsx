@@ -61,8 +61,8 @@ import {
 import type { GatewayRoot } from '@/server/compose';
 import { accountPath, type Actor, type AccountView } from '@/server/accounts';
 import type { MissionOnAccount } from '@/server/missions/mission-service';
-import { PROVIDERS_PATH } from '@/lib/providers/links';
-import { providerCards } from '@/lib/providers/reference';
+import { SERVICES_PATH } from '@/lib/services/links';
+import { serviceCards } from '@/lib/services/reference';
 import type { ReceivedRisk, ReceivedShare } from '@/server/shares';
 
 export const dynamic = 'force-dynamic';
@@ -93,10 +93,10 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   const notice = await takeNotice(root, principal.sessionId, params);
   const now = new Date();
 
-  const [owned, received, providers, mine, ownerless, ownerTeams] = await Promise.all([
+  const [owned, received, services, mine, ownerless, ownerTeams] = await Promise.all([
     root.accounts.service.listFor(actor),
     root.shares.service.received(actor),
-    root.accounts.service.providers(),
+    root.accounts.service.services(),
     root.missions.service.list(actor.user),
     // The administrator's only act on an account: name an owner where none is left.
     principal.isOperator ? root.accounts.service.listOwnerless() : [],
@@ -106,7 +106,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   const yours = rows.filter((row) => row.view.account.status !== 'revoked');
   const disconnected = rows.filter((row) => row.view.account.status === 'revoked');
   const totals = new Map(
-    providerCards(root.registry).map((card) => [card.id, card.counts.risk_ids] as const),
+    serviceCards(root.registry).map((card) => [card.id, card.counts.risk_ids] as const),
   );
   const shared = sharedRows(
     received,
@@ -128,13 +128,13 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.account,
       cell: ({ view, ownership: owns }) => (
         <span className={styles.named}>
-          <ServiceMark name={view.provider_label} icon={view.provider_icon} />
+          <ServiceMark name={view.service_label} icon={view.service_icon} />
           <span className={styles.namedText}>
             <Link href={accountPath(view.account.id)} className={styles.name}>
               {view.account.displayName}
             </Link>
             <span className={styles.sub}>
-              {view.provider_label} · {owns}
+              {view.service_label} · {owns}
             </span>
           </span>
         </span>
@@ -202,10 +202,10 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.account,
       cell: (row) => (
         <span className={styles.named}>
-          <ServiceMark name={row.providerLabel} icon={row.providerIcon} />
+          <ServiceMark name={row.serviceLabel} icon={row.serviceIcon} />
           <span className={styles.namedText}>
             <span className={styles.name}>{row.account.displayName}</span>
-            <span className={styles.sub}>{row.providerLabel}</span>
+            <span className={styles.sub}>{row.serviceLabel}</span>
           </span>
         </span>
       ),
@@ -357,10 +357,10 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         note={ACCOUNT_PAGES.connect.lede}
         id={CONNECT_ANCHOR}
       >
-        <ServicePicker providers={providers} />
+        <ServicePicker services={services} />
         <Hint>
           What an agent can then do on each service, permission by permission, is in the{' '}
-          <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link>.
+          <Link href={SERVICES_PATH}>{PAGES.reference.title}</Link>.
         </Hint>
       </Section>
 
@@ -397,8 +397,8 @@ async function ownedRow(root: GatewayRoot, actor: Actor, view: AccountView): Pro
 /** One account shared with the person: every access to it added up. */
 interface SharedRow {
   readonly account: ReceivedShare['account'];
-  readonly providerLabel: string;
-  readonly providerIcon: ReceivedShare['providerIcon'];
+  readonly serviceLabel: string;
+  readonly serviceIcon: ReceivedShare['serviceIcon'];
   readonly givenBy: string;
   /** Through which teams the access reaches the person; empty when it was given to them. */
   readonly through: readonly string[];
@@ -423,13 +423,13 @@ function sharedRows(
     if (!known) {
       rows.set(item.account.id, {
         account: item.account,
-        providerLabel: item.providerLabel,
-        providerIcon: item.providerIcon,
+        serviceLabel: item.serviceLabel,
+        serviceIcon: item.serviceIcon,
         givenBy: holderWords(item.ownerLabel),
         through,
         since: item.share.createdAt,
         permissions: item.risks,
-        total: totals.get(item.account.provider) ?? item.risks.length,
+        total: totals.get(item.account.service) ?? item.risks.length,
         missions: missionsOn(item.account.id),
       });
       continue;

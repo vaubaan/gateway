@@ -31,7 +31,7 @@ export function reportOf(
   outcome: CallOutcome,
   commands: readonly RefCommand[],
   format: ReportFormat,
-  provider: string,
+  service: string,
 ): Response {
   switch (outcome.kind) {
     case 'refused':
@@ -50,7 +50,7 @@ export function reportOf(
       return refuseAll(
         format,
         commands,
-        `${provider} refused the update: ${firstLine(outcome.error)}`,
+        `${service} refused the update: ${firstLine(outcome.error)}`,
       );
     }
     case 'allowed':

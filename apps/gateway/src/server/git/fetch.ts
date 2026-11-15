@@ -1,6 +1,6 @@
 /**
  * The fetch side of the git remote (spec §4.1 ter; ADR gateway-as-git-remote
- * D3): a clone or fetch relayed to the provider.
+ * D3): a clone or fetch relayed to the service.
  *
  *   GET  info/refs?service=git-upload-pack   prechecked (refs only), relayed with
  *                                            the gateway's temporary refs hidden
@@ -11,7 +11,7 @@
  *
  * A v2 request head is read strictly (`readV2RequestHead`): exactly one
  * `command=` line, or the request is refused — the door does not rely on the
- * provider to refuse a second command. A gzip-encoded v2 body is not read
+ * service to refuse a second command. A gzip-encoded v2 body is not read
  * and is counted as a transfer (fail closed).
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
@@ -169,7 +169,7 @@ export class FetchSide {
     try {
       let answer = await attempt();
       if (answer.status === HTTP_UNAUTHORIZED && request.body === null) {
-        // A cached token the provider no longer takes: drop it and mint once more.
+        // A cached token the service no longer takes: drop it and mint once more.
         await answer.body?.cancel();
         await this.deps.credentialCache.drop(target.account.id);
         answer = await attempt();

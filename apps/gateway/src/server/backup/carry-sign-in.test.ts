@@ -102,7 +102,7 @@ describe('a backup carries the sign-in configuration', () => {
     return targetPath;
   }
 
-  it('restored on a fresh host with another environment: providers present, secrets sealed', async () => {
+  it('restored on a fresh host with another environment: sign-in providers present, secrets sealed', async () => {
     const copy = await backup();
     expect(out).toContain('sign-in provider(s) the configuration sets (entra, local)');
     expect(out).toContain('master key version(s) 2');
@@ -131,12 +131,12 @@ describe('a backup carries the sign-in configuration', () => {
       expect(service.isReadOnly('entra')).toBe(false);
       const entra = await service.resolve('entra');
       expect(entra?.source).toBe('store');
-      if (entra?.provider.kind !== 'oidc') throw new Error('not oidc');
-      expect(entra.provider.clientSecret).toBe(ENTRA_SECRET);
-      expect(entra.provider.name).toBe('Acme');
-      expect(entra.provider.requireVerifiedEmail).toBe(true);
-      expect(entra.provider.claims.emailVerified).toBe('xms_edov');
-      expect(entra.provider.invitationOnly).toBe(true);
+      if (entra?.signInProvider.kind !== 'oidc') throw new Error('not oidc');
+      expect(entra.signInProvider.clientSecret).toBe(ENTRA_SECRET);
+      expect(entra.signInProvider.name).toBe('Acme');
+      expect(entra.signInProvider.requireVerifiedEmail).toBe(true);
+      expect(entra.signInProvider.claims.emailVerified).toBe('xms_edov');
+      expect(entra.signInProvider.invitationOnly).toBe(true);
 
       // No admin rule is carried: the administrators are rows of the copied store
       // (ADR administrators-live-in-the-instance).
@@ -157,11 +157,11 @@ describe('a backup carries the sign-in configuration', () => {
         'update',
       );
       const edited = await service.resolve('entra');
-      if (edited?.provider.kind !== 'oidc') throw new Error('not oidc');
-      expect(edited.provider.name).toBe('Acme SSO');
-      expect(edited.provider.requireVerifiedEmail).toBe(true);
-      expect(edited.provider.claims.emailVerified).toBe('xms_edov');
-      expect(edited.provider.clientSecret).toBe(ENTRA_SECRET);
+      if (edited?.signInProvider.kind !== 'oidc') throw new Error('not oidc');
+      expect(edited.signInProvider.name).toBe('Acme SSO');
+      expect(edited.signInProvider.requireVerifiedEmail).toBe(true);
+      expect(edited.signInProvider.claims.emailVerified).toBe('xms_edov');
+      expect(edited.signInProvider.clientSecret).toBe(ENTRA_SECRET);
     } finally {
       await store.close();
     }
@@ -182,15 +182,15 @@ describe('a backup carries the sign-in configuration', () => {
       const { service } = providersOf(config, store);
       const entra = await service.resolve('entra');
       expect(entra?.source).toBe('file');
-      if (entra?.provider.kind !== 'oidc') throw new Error('not oidc');
-      expect(entra.provider.clientSecret).toBe(OTHER_SECRET);
+      if (entra?.signInProvider.kind !== 'oidc') throw new Error('not oidc');
+      expect(entra.signInProvider.clientSecret).toBe(OTHER_SECRET);
       expect((await service.views()).filter((v) => v.id === 'entra')).toHaveLength(1);
     } finally {
       await store.close();
     }
   });
 
-  it('a backup of a restored instance carries its providers again', async () => {
+  it('a backup of a restored instance carries its sign-in providers again', async () => {
     const targetPath = restoredPath(await backup());
     let second = '';
     const code = await runBackupCli(

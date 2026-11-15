@@ -26,14 +26,14 @@ const INPUT: BootstrapKitInput = {
   },
   accounts: [
     {
-      provider_label: 'GitHub',
+      service_label: 'GitHub',
       display_name: 'acme-org',
       resources: [
         { ref: 'acme/app', env: 'prod' },
         { ref: 'acme/web', env: null },
       ],
     },
-    { provider_label: 'Gmail', display_name: 'ops mailbox', resources: [] },
+    { service_label: 'Gmail', display_name: 'ops mailbox', resources: [] },
   ],
   policy: [
     {
@@ -82,12 +82,12 @@ describe('buildBootstrapKit', () => {
       ...INPUT,
       accounts: [
         {
-          provider_label: 'Fly.io',
+          service_label: 'Fly.io',
           display_name: 'acme-org',
           resources: [{ ref: 'acme-api', env: 'prod' }],
           future: true,
         },
-        { provider_label: 'Fly.io', display_name: 'empty-org', resources: [], future: true },
+        { service_label: 'Fly.io', display_name: 'empty-org', resources: [], future: true },
       ],
     }).agent_instructions;
     expect(whole).toContain(
@@ -246,12 +246,12 @@ describe('the git step of the kit', () => {
     expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/github/acme/web.git'`);
   });
 
-  it('offers no rewrite when the plugin names no provider prefix', () => {
+  it('offers no rewrite when the plugin names no service prefix', () => {
     const kit = buildBootstrapKit({ ...INPUT, git: [{ ...github, insteadOf: null }] });
     expect(kit.git).not.toContain('insteadOf');
   });
 
-  it('rewrites each provider to its own path, with one credential helper for the instance', () => {
+  it('rewrites each service to its own path, with one credential helper for the instance', () => {
     const kit = buildBootstrapKit({
       ...INPUT,
       git: [

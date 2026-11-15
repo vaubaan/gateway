@@ -2,7 +2,7 @@
  * `/login/second-factor` — a sign-in continues with the enrolment of the
  * gateway's second factor (ADR administrators-live-in-the-instance, §7): the QR
  * code, the secret, the first code. Reachable only with the step cookie the sign-in
- * set, whatever the provider.
+ * set, whatever the sign-in provider.
  */
 import Link from 'next/link';
 import { headers } from 'next/headers';

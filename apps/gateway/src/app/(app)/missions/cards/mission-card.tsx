@@ -21,7 +21,7 @@ import {
   type TrustLevel,
 } from '@/lib/missions/macro-actions';
 import type { IssuanceAccount } from '@/lib/missions/model';
-import type { RiskPlanes } from '@/lib/providers/planes';
+import type { RiskPlanes } from '@/lib/services/planes';
 
 import { cardResources, type CardState } from '../new/form-state';
 import {
@@ -103,11 +103,11 @@ export function MissionCard({
     <section
       className={styles.card}
       aria-label={where}
-      data-testid={`card-${account.provider}`}
+      data-testid={`card-${account.service}`}
       data-env={card.env ?? undefined}
     >
       <div className={styles.head}>
-        <ServiceMark name={account.provider_label} icon={icon} />
+        <ServiceMark name={account.service_label} icon={icon} />
         <span className={styles.account}>{label}</span>
         {card.env && showsEnv(account) && <EnvTag env={card.env} />}
         <span className={styles.resources} data-testid="card-resources">
@@ -218,7 +218,7 @@ function ActionRowView({
   return (
     <tr
       className={[styles.row, ticked ? '' : styles.rowOff].join(' ')}
-      data-testid={`macro-${account.provider}-${row.id}`}
+      data-testid={`macro-${account.service}-${row.id}`}
       data-level={row.level ?? 'off'}
     >
       <td className={styles.tick}>

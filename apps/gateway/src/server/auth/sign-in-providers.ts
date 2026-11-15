@@ -5,16 +5,16 @@
  * Two sources, merged by id:
  *
  * - `file` — the mounted configuration and the environment (`sign_in.<id>.*`).
- *   Read-only in the interface; it wins over a saved provider of the same id.
+ *   Read-only in the interface; it wins over a saved sign-in provider of the same id.
  * - `store` — saved by an administrator in Settings → Sign-in: `sign_in.<id>` (its
  *   settings, as JSON) and `sign_in.<id>.client_secret` (sealed by the `Encryptor`,
  *   associated data `instance_config:sign_in.<id>.client_secret`). The settings an
  *   earlier build kept under `idp.*` are moved there at boot
- *   (`single-provider-upgrade.ts`).
+ *   (`single-sign-in-provider-upgrade.ts`).
  *
  * `views()` never decrypts a secret: it is what the authenticator reads on every
- * request (which providers exist, their issuers) and what the pages show.
- * `resolve(id)` returns the provider with its client secret, for a sign-in.
+ * request (which sign-in providers exist, their issuers) and what the pages show.
+ * `resolve(id)` returns the sign-in provider with its client secret, for a sign-in.
  */
 import {
   admissionProblem,
@@ -33,41 +33,41 @@ import {
   type SignInKind,
   type SignInProvider,
   type SignInProviderSource,
-  DEFAULT_LOCAL_PROVIDER_NAME,
-  localProviderOf,
+  DEFAULT_LOCAL_SIGN_IN_PROVIDER_NAME,
+  localSignInProviderOf,
   type LocalSignInProvider,
 } from '../config/sign-in';
 import type { IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
 import { IdpSettingsError } from './errors';
 
-/** A provider without its secret (the union kept: `kind` still tells the two apart). */
+/** A sign-in provider without its secret (the union kept: `kind` still tells the two apart). */
 export type SignInProviderWithoutSecret =
   | Omit<OidcSignInProvider, 'clientSecret'>
   | Omit<GithubSignInProvider, 'clientSecret'>
   | LocalSignInProvider;
 
-/** A provider as the pages and the authenticator see it: never its secret. */
+/** A sign-in provider as the pages and the authenticator see it: never its secret. */
 export type SignInProviderView = SignInProviderWithoutSecret & {
   readonly source: SignInProviderSource;
   /**
    * Whether people may sign in through it (ADR administrators-live-in-the-instance,
-   * §5): a provider of the configuration always; one saved in Settings once an
+   * §5): a sign-in provider of the configuration always; one saved in Settings once an
    * administrator enabled it after a passed test (sign-in accounts: when added).
    */
   readonly enabled: boolean;
-  /** The public address the provider was set up for; `ProviderState.registeredFor`. */
+  /** The public address the sign-in provider was set up for; `ProviderState.registeredFor`. */
   readonly registeredFor: string | null;
 };
 
-/** What a test of a provider beside the session found (`/auth/test/<id>`). */
-export interface ProviderTestRecord {
+/** What a test of a sign-in provider beside the session found (`/auth/test/<id>`). */
+export interface SignInProviderTestRecord {
   readonly at: string;
   /** The tester: a user id, or `bootstrap`. */
   readonly by: string;
   /** The web session that ran it: only that session acts on the result. */
   readonly sessionId: string;
-  /** `passed`: the provider returned an identity the instance accepts as one. */
+  /** `passed`: the sign-in provider returned an identity the instance accepts as one. */
   readonly outcome: 'passed' | 'failed';
   /** The closed code of the failure (`LoginErrorCode`), and what the discovery said. */
   readonly error?: string;
@@ -90,22 +90,22 @@ export interface ProviderTestRecord {
   };
 }
 
-/** The state of a provider saved in Settings: `sign_in_state.<id>` (absent: enabled). */
-export interface ProviderState {
+/** The state of a sign-in provider saved in Settings: `sign_in_state.<id>` (absent: enabled). */
+export interface SignInProviderState {
   readonly enabled: boolean;
   /** When its settings were last saved: a test before that is stale. */
   readonly changedAt: string | null;
-  readonly test: ProviderTestRecord | null;
+  readonly test: SignInProviderTestRecord | null;
   /**
-   * The second factor waived for the people of this provider (ADR
+   * The second factor waived for the people of this sign-in provider (ADR
    * administrators-live-in-the-instance §7): `always`, or `amr` when the ID token
    * says `mfa`; `null` when the instance asks its own. Never for an administrator.
    */
   readonly waiver: 'always' | 'amr' | null;
   /**
-   * The public address (origin) the provider was set up for: written at its save and
-   * again when a test passes, since the provider's callback is registered at the
-   * identity provider per public URL. `null` for a provider of the file, and for a
+   * The public address (origin) the sign-in provider was set up for: written at its save and
+   * again when a test passes, since the sign-in provider's callback is registered at the
+   * identity provider per public URL. `null` for a sign-in provider of the file, and for a
    * local one. When it differs from the instance's address — a restore on another
    * host — the sign-in page and Settings say so (see
    * docs/handbook/authentication.md).
@@ -113,9 +113,9 @@ export interface ProviderState {
   readonly registeredFor: string | null;
 }
 
-/** A provider with its secret, for a sign-in. */
+/** A sign-in provider with its secret, for a sign-in. */
 export interface EffectiveSignInProvider {
-  readonly provider: SignInProvider;
+  readonly signInProvider: SignInProvider;
   readonly source: SignInProviderSource;
 }
 
@@ -141,7 +141,7 @@ export interface SignInProvidersOptions {
   /** Tests only: accept an `http://` issuer for the in-process providers. */
   readonly allowInsecureIssuer?: boolean;
   /**
-   * Fetches an OpenID Connect issuer's discovery document before the provider is
+   * Fetches an OpenID Connect issuer's discovery document before the sign-in provider is
    * saved (`RelyingPartyFactory.checkIssuer`): `null` when it is valid, otherwise why
    * not. Absent: no check (unit tests of the other rules).
    */
@@ -159,7 +159,7 @@ function secretKey(id: string): string {
   return `${KEY_PREFIX}${id}${SECRET_SUFFIX}`;
 }
 
-/** The JSON of `sign_in.<id>`: everything but the secret (a local provider: its name). */
+/** The JSON of `sign_in.<id>`: everything but the secret (a local sign-in provider: its name). */
 interface StoredSettings {
   readonly kind: SignInKind;
   readonly name: string;
@@ -173,9 +173,9 @@ interface StoredSettings {
   readonly created_at: string;
 }
 
-/** What `carryIntoStore` wrote: the ids of the providers, never a secret. */
+/** What `carryIntoStore` wrote: the ids of the sign-in providers, never a secret. */
 export interface CarriedSignIn {
-  readonly providers: readonly string[];
+  readonly signInProviders: readonly string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -245,8 +245,12 @@ function parseStored(raw: string): StoredSettings | null {
   };
 }
 
-function toProvider(id: string, s: StoredSettings, clientSecret: string): SignInProvider | null {
-  if (s.kind === 'local') return localProviderOf(id, s.name);
+function toSignInProvider(
+  id: string,
+  s: StoredSettings,
+  clientSecret: string,
+): SignInProvider | null {
+  if (s.kind === 'local') return localSignInProviderOf(id, s.name);
   let issuer: URL;
   try {
     issuer = new URL(s.issuer);
@@ -274,18 +278,18 @@ function toProvider(id: string, s: StoredSettings, clientSecret: string): SignIn
 
 /** The JSON of `sign_in.<id>` for an OpenID Connect or GitHub provider. */
 function storedSettingsOf(
-  provider: OidcSignInProvider | GithubSignInProvider,
+  signInProvider: OidcSignInProvider | GithubSignInProvider,
   createdAt: string,
 ): StoredSettings {
   return {
-    kind: provider.kind,
-    name: provider.name,
-    issuer: provider.issuer.href,
-    client_id: provider.clientId,
-    ...(provider.kind === 'oidc' ? { claims: provider.claims } : {}),
-    allowed_email_domains: provider.allowedEmailDomains,
-    invitation_only: provider.invitationOnly,
-    ...(provider.kind === 'oidc' && provider.requireVerifiedEmail === true
+    kind: signInProvider.kind,
+    name: signInProvider.name,
+    issuer: signInProvider.issuer.href,
+    client_id: signInProvider.clientId,
+    ...(signInProvider.kind === 'oidc' ? { claims: signInProvider.claims } : {}),
+    allowed_email_domains: signInProvider.allowedEmailDomains,
+    invitation_only: signInProvider.invitationOnly,
+    ...(signInProvider.kind === 'oidc' && signInProvider.requireVerifiedEmail === true
       ? { require_verified_email: true }
       : {}),
     created_at: createdAt,
@@ -293,32 +297,33 @@ function storedSettingsOf(
 }
 
 /**
- * What stores a provider that redirects (OpenID Connect, GitHub): its settings and its
- * sealed client secret, written together. A local provider has no secret: its
+ * What stores a sign-in provider that redirects (OpenID Connect, GitHub): its settings and its
+ * sealed client secret, written together. A local sign-in provider has no secret: its
  * settings alone (`carriedWritesOf`, `saveSettings`).
  */
-export function storedProviderWrites(
-  provider: OidcSignInProvider | GithubSignInProvider,
+export function storedSignInProviderWrites(
+  signInProvider: OidcSignInProvider | GithubSignInProvider,
   createdAt: string,
 ): ConfigWrite[] {
   return [
     {
       kind: 'value',
-      key: settingsKey(provider.id),
-      value: JSON.stringify(storedSettingsOf(provider, createdAt)),
+      key: settingsKey(signInProvider.id),
+      value: JSON.stringify(storedSettingsOf(signInProvider, createdAt)),
     },
-    { kind: 'secret', key: secretKey(provider.id), plain: provider.clientSecret },
+    { kind: 'secret', key: secretKey(signInProvider.id), plain: signInProvider.clientSecret },
   ];
 }
 
 function viewOf(
-  provider: SignInProvider,
+  signInProvider: SignInProvider,
   source: SignInProviderSource,
   enabled = true,
   registeredFor: string | null = null,
 ): SignInProviderView {
-  if (provider.kind === 'local') return { ...provider, source, enabled, registeredFor: null };
-  const { clientSecret: _secret, ...rest } = provider;
+  if (signInProvider.kind === 'local')
+    return { ...signInProvider, source, enabled, registeredFor: null };
+  const { clientSecret: _secret, ...rest } = signInProvider;
   return { ...rest, source, enabled, registeredFor };
 }
 
@@ -328,15 +333,15 @@ function viewOf(
  * through it fails here until the operator registers this one. `null` otherwise.
  */
 export function setUpElsewhere(
-  provider: Pick<SignInProviderView, 'kind' | 'registeredFor'>,
+  signInProvider: Pick<SignInProviderView, 'kind' | 'registeredFor'>,
   publicUrl: URL,
 ): string | null {
-  if (provider.kind === 'local' || provider.registeredFor === null) return null;
-  if (provider.registeredFor === publicUrl.origin) return null;
+  if (signInProvider.kind === 'local' || signInProvider.registeredFor === null) return null;
+  if (signInProvider.registeredFor === publicUrl.origin) return null;
   try {
-    return new URL(provider.registeredFor).host;
+    return new URL(signInProvider.registeredFor).host;
   } catch {
-    return provider.registeredFor;
+    return signInProvider.registeredFor;
   }
 }
 
@@ -345,7 +350,7 @@ function stateKey(id: string): string {
   return `${STATE_PREFIX}${id}`;
 }
 
-const NO_STATE: ProviderState = {
+const NO_STATE: SignInProviderState = {
   enabled: true,
   changedAt: null,
   test: null,
@@ -353,7 +358,7 @@ const NO_STATE: ProviderState = {
   registeredFor: null,
 };
 
-function parseState(raw: string | null): ProviderState {
+function parseState(raw: string | null): SignInProviderState {
   if (!raw) return NO_STATE;
   try {
     const value = JSON.parse(raw) as {
@@ -369,7 +374,7 @@ function parseState(raw: string | null): ProviderState {
       changedAt: typeof value.changed_at === 'string' ? value.changed_at : null,
       test:
         typeof value.test === 'object' && value.test !== null
-          ? (value.test as ProviderTestRecord)
+          ? (value.test as SignInProviderTestRecord)
           : null,
       registeredFor: typeof value.registered_for === 'string' ? value.registered_for : null,
     };
@@ -378,7 +383,7 @@ function parseState(raw: string | null): ProviderState {
   }
 }
 
-function serializeState(state: ProviderState): string {
+function serializeState(state: SignInProviderState): string {
   return JSON.stringify({
     enabled: state.enabled,
     changed_at: state.changedAt,
@@ -388,36 +393,36 @@ function serializeState(state: ProviderState): string {
   });
 }
 
-/** Whether a test passed since the provider was last saved: what enabling it needs. */
-export function testPassedSinceSaved(state: ProviderState): boolean {
+/** Whether a test passed since the sign-in provider was last saved: what enabling it needs. */
+export function testPassedSinceSaved(state: SignInProviderState): boolean {
   const test = state.test;
   if (!test || test.outcome !== 'passed') return false;
   return state.changedAt === null || test.at >= state.changedAt;
 }
 
-/** What an administrative audit entry records of a provider: never the secret. */
+/** What an administrative audit entry records of a sign-in provider: never the secret. */
 export function signInProviderAuditView(
-  provider: SignInProviderWithoutSecret,
+  signInProvider: SignInProviderWithoutSecret,
 ): Record<string, unknown> {
   return {
-    id: provider.id,
-    kind: provider.kind,
-    name: provider.name,
-    issuer: provider.issuer.href,
-    ...(provider.kind === 'local' ? {} : { client_id: provider.clientId }),
-    ...(provider.kind === 'oidc' ? { claims: provider.claims } : {}),
-    allowed_email_domains: provider.allowedEmailDomains,
-    invitation_only: provider.invitationOnly,
+    id: signInProvider.id,
+    kind: signInProvider.kind,
+    name: signInProvider.name,
+    issuer: signInProvider.issuer.href,
+    ...(signInProvider.kind === 'local' ? {} : { client_id: signInProvider.clientId }),
+    ...(signInProvider.kind === 'oidc' ? { claims: signInProvider.claims } : {}),
+    allowed_email_domains: signInProvider.allowedEmailDomains,
+    invitation_only: signInProvider.invitationOnly,
   };
 }
 
-/** The audit object id of a provider's settings: `sign-in:<id>`. */
+/** The audit object id of a sign-in provider's settings: `sign-in:<id>`. */
 export function signInAuditObjectId(id: string): string {
   return `sign-in:${id}`;
 }
 
 function sameGroup(a: AdminGroup | null, b: AdminGroup | null): boolean {
-  return a?.provider === b?.provider && a?.name === b?.name;
+  return a?.signInProvider === b?.signInProvider && a?.name === b?.name;
 }
 
 export class SignInProvidersService {
@@ -428,8 +433,8 @@ export class SignInProvidersService {
   constructor(
     config: Pick<InstanceConfig, 'signIn' | 'publicUrl'>,
     /**
-     * The groups designated without a provider (a bare `admin.group` carried over from
-     * the configuration): they name the group of the one provider, so a change of the
+     * The groups designated without a sign-in provider (a bare `admin.group` carried over from
+     * the configuration): they name the group of the one sign-in provider, so a change of the
      * provider list must not make them ambiguous or move them.
      */
     private readonly bareAdminGroups: () => Promise<readonly string[]>,
@@ -441,11 +446,11 @@ export class SignInProvidersService {
     this.publicUrl = config.publicUrl;
   }
 
-  /** Every provider, the file's first, without secrets. */
+  /** Every sign-in provider, the file's first, without secrets. */
   async views(): Promise<SignInProviderView[]> {
     const fromFile = this.file.map((p) => viewOf(p, 'file'));
     const fileIds = new Set(this.file.map((p) => p.id));
-    const fromStore = (await this.storedProviders(false)).filter((p) => !fileIds.has(p.id));
+    const fromStore = (await this.storedSignInProviders(false)).filter((p) => !fileIds.has(p.id));
     const stored: SignInProviderView[] = [];
     for (const p of fromStore) {
       const state = await this.state(p.id);
@@ -454,8 +459,8 @@ export class SignInProvidersService {
     return [...fromFile, ...stored];
   }
 
-  /** The state of a provider saved in Settings; a provider of the file is always enabled. */
-  async state(id: string): Promise<ProviderState> {
+  /** The state of a sign-in provider saved in Settings; a sign-in provider of the file is always enabled. */
+  async state(id: string): Promise<SignInProviderState> {
     if (this.isReadOnly(id)) {
       return { ...parseState(await this.store.get(stateKey(id))), enabled: true };
     }
@@ -463,7 +468,7 @@ export class SignInProvidersService {
   }
 
   /**
-   * Waives the second factor for this provider's people, or asks it again (`null`).
+   * Waives the second factor for this sign-in provider's people, or asks it again (`null`).
    * Sign-in accounts never; GitHub `always` only (it sends no `amr`). Works for a
    * provider of the file too: the waiver lives in the store, never in the
    * configuration. Returns the waiver it replaced.
@@ -471,26 +476,26 @@ export class SignInProvidersService {
   async setWaiver(
     id: string,
     waiver: 'always' | 'amr' | null,
-  ): Promise<{ provider: SignInProviderView; before: ProviderState['waiver'] }> {
-    const provider = await this.view(id);
-    if (!provider) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
-    if (waiver !== null && provider.kind === 'local') {
+  ): Promise<{ signInProvider: SignInProviderView; before: SignInProviderState['waiver'] }> {
+    const signInProvider = await this.view(id);
+    if (!signInProvider) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
+    if (waiver !== null && signInProvider.kind === 'local') {
       throw new IdpSettingsError([
         'the second factor of sign-in accounts is the instance’s own: it cannot be waived',
       ]);
     }
-    if (waiver === 'amr' && provider.kind !== 'oidc') {
+    if (waiver === 'amr' && signInProvider.kind !== 'oidc') {
       throw new IdpSettingsError([
         'GitHub says nothing of how the person signed in: waive it always, or not at all',
       ]);
     }
     const current = parseState(await this.store.get(stateKey(id)));
     await this.store.set(stateKey(id), serializeState({ ...current, waiver }));
-    return { provider, before: current.waiver };
+    return { signInProvider, before: current.waiver };
   }
 
   /** Records the outcome of a test beside the session; returns it. */
-  async recordTest(id: string, test: ProviderTestRecord): Promise<void> {
+  async recordTest(id: string, test: SignInProviderTestRecord): Promise<void> {
     const current = parseState(await this.store.get(stateKey(id)));
     // A test that passed proves the callback is registered for this address.
     const registeredFor = test.outcome === 'passed' ? this.publicUrl.origin : current.registeredFor;
@@ -498,40 +503,40 @@ export class SignInProvidersService {
   }
 
   /**
-   * Switches a provider saved in Settings on or off. On: only after a test that passed
+   * Switches a sign-in provider saved in Settings on or off. On: only after a test that passed
    * since its last save (sign-in accounts need none). A file provider cannot be switched.
    */
   async setEnabled(id: string, enabled: boolean): Promise<SignInProvider> {
     if (this.isReadOnly(id)) {
       throw new IdpSettingsError([
-        `provider '${id}' is set by the mounted configuration; it is always on`,
+        `sign-in provider '${id}' is set by the mounted configuration; it is always on`,
       ]);
     }
     const existing = await this.resolve(id);
     if (!existing) throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
     const current = await this.state(id);
-    if (enabled && existing.provider.kind !== 'local' && !testPassedSinceSaved(current)) {
+    if (enabled && existing.signInProvider.kind !== 'local' && !testPassedSinceSaved(current)) {
       throw new IdpSettingsError([
-        'test it first: a provider is switched on after a test that passed since it was last saved',
+        'test it first: a sign-in provider is switched on after a test that passed since it was last saved',
       ]);
     }
     await this.store.set(stateKey(id), serializeState({ ...current, enabled }));
-    return existing.provider;
+    return existing.signInProvider;
   }
 
   async view(id: string): Promise<SignInProviderView | null> {
     return (await this.views()).find((p) => p.id === id) ?? null;
   }
 
-  /** The provider with its client secret, or `null` when no provider has this id. */
+  /** The sign-in provider with its client secret, or `null` when no sign-in provider has this id. */
   async resolve(id: string): Promise<EffectiveSignInProvider | null> {
     const fromFile = this.file.find((p) => p.id === id);
-    if (fromFile) return { provider: fromFile, source: 'file' };
-    const stored = (await this.storedProviders(true)).find((p) => p.id === id);
-    return stored ? { provider: stored, source: 'store' } : null;
+    if (fromFile) return { signInProvider: fromFile, source: 'file' };
+    const stored = (await this.storedSignInProviders(true)).find((p) => p.id === id);
+    return stored ? { signInProvider: stored, source: 'store' } : null;
   }
 
-  /** The provider whose users are recorded under `issuer` (a user's `users.issuer`). */
+  /** The sign-in provider whose users are recorded under `issuer` (a user's `users.issuer`). */
   async ofIssuer(issuer: string | null): Promise<SignInProviderView | null> {
     if (issuer === null) return null;
     const key = issuerKey(issuer);
@@ -563,7 +568,7 @@ export class SignInProvidersService {
         test: current.test,
         waiver: current.waiver,
         // The callback the administrator registers at the identity provider is this
-        // instance's: the provider is set up for this address until a test says otherwise.
+        // instance's: the sign-in provider is set up for this address until a test says otherwise.
         registeredFor: result.saved.kind === 'local' ? null : this.publicUrl.origin,
       }),
     );
@@ -584,7 +589,7 @@ export class SignInProvidersService {
     }
     if (this.isReadOnly(id)) {
       throw new IdpSettingsError([
-        `provider '${id}' is set by the mounted configuration; edit it there`,
+        `sign-in provider '${id}' is set by the mounted configuration; edit it there`,
       ]);
     }
     const existing = await this.resolve(id);
@@ -594,13 +599,13 @@ export class SignInProvidersService {
     if (mode === 'update' && !existing) {
       throw new IdpSettingsError([`no sign-in provider has the id '${id}'`]);
     }
-    const before = existing?.provider ?? null;
+    const before = existing?.signInProvider ?? null;
     const kind = input.kind.trim();
     if (!isSignInKind(kind)) {
       throw new IdpSettingsError([`the kind must be OpenID Connect or GitHub, not '${kind}'`]);
     }
     if (before && before.kind !== kind) {
-      problems.push('the kind of a provider cannot change: remove it and add another');
+      problems.push('the kind of a sign-in provider cannot change: remove it and add another');
     }
     const others = (await this.views()).filter((p) => p.id !== id);
     if (kind === 'local') {
@@ -608,7 +613,7 @@ export class SignInProvidersService {
       const twin = others.find((p) => p.kind === 'local');
       if (twin) {
         problems.push(
-          `provider '${twin.id}' already keeps this gateway's sign-in accounts: one local provider per instance`,
+          `sign-in provider '${twin.id}' already keeps this gateway's sign-in accounts: one local sign-in provider per instance`,
         );
       }
       problems.push(
@@ -618,7 +623,10 @@ export class SignInProvidersService {
         )),
       );
       if (problems.length > 0) throw new IdpSettingsError(problems);
-      const saved = localProviderOf(id, input.name.trim() || DEFAULT_LOCAL_PROVIDER_NAME);
+      const saved = localSignInProviderOf(
+        id,
+        input.name.trim() || DEFAULT_LOCAL_SIGN_IN_PROVIDER_NAME,
+      );
       const stored: StoredSettings = {
         kind: 'local',
         name: saved.name,
@@ -640,13 +648,13 @@ export class SignInProvidersService {
     const given = input.clientSecret?.trim() || null;
     const issuerChanged =
       before !== null && issuer !== null && issuerKey(before.issuer) !== issuerKey(issuer);
-    // A blank field keeps the stored secret — for the provider it was given for.
+    // A blank field keeps the stored secret — for the sign-in provider it was given for.
     const kept = before && before.kind !== 'local' ? before.clientSecret : null;
     const clientSecret = given ?? (issuerChanged ? null : kept);
     if (!clientSecret) {
       problems.push(
         issuerChanged
-          ? 'client secret is required when the issuer changes: the stored secret belongs to the previous provider'
+          ? 'client secret is required when the issuer changes: the stored secret belongs to the previous sign-in provider'
           : 'client secret is required',
       );
     }
@@ -665,7 +673,7 @@ export class SignInProvidersService {
       const twin = others.find((p) => issuerKey(p.issuer) === issuerKey(issuer));
       if (twin) {
         problems.push(
-          `provider '${twin.id}' already signs people in through ${issuerKey(issuer)}: a person is (issuer, subject), so one issuer is one provider`,
+          `sign-in provider '${twin.id}' already signs people in through ${issuerKey(issuer)}: a person is (issuer, subject), so one issuer is one sign-in provider`,
         );
       }
     }
@@ -691,7 +699,7 @@ export class SignInProvidersService {
       allowedEmailDomains,
       invitationOnly: input.invitationOnly,
     };
-    // The form shows neither: an edit keeps what the provider had (a carried
+    // The form shows neither: an edit keeps what the sign-in provider had (a carried
     // Entra provider must keep requiring a verified email).
     const keptOidc = before?.kind === 'oidc' ? before : null;
     const keptVerifiedClaim =
@@ -708,18 +716,21 @@ export class SignInProvidersService {
             ...(keptOidc?.requireVerifiedEmail === true ? { requireVerifiedEmail: true } : {}),
           };
 
-    // One transaction: never the settings of one provider with the secret of another.
+    // One transaction: never the settings of one sign-in provider with the secret of another.
     await this.store.apply(
-      storedProviderWrites(saved, (await this.createdAt(id)) ?? this.clock.now().toISOString()),
+      storedSignInProviderWrites(
+        saved,
+        (await this.createdAt(id)) ?? this.clock.now().toISOString(),
+      ),
     );
     return { saved, before };
   }
 
-  /** Removes a provider saved in Settings; returns it. A file provider cannot be removed here. */
+  /** Removes a sign-in provider saved in Settings; returns it. A file provider cannot be removed here. */
   async remove(id: string): Promise<SignInProvider> {
     if (this.isReadOnly(id)) {
       throw new IdpSettingsError([
-        `provider '${id}' is set by the mounted configuration; remove it there`,
+        `sign-in provider '${id}' is set by the mounted configuration; remove it there`,
       ]);
     }
     const existing = await this.resolve(id);
@@ -732,11 +743,11 @@ export class SignInProvidersService {
       { kind: 'delete', key: secretKey(id) },
       { kind: 'delete', key: stateKey(id) },
     ]);
-    return existing.provider;
+    return existing.signInProvider;
   }
 
   /**
-   * Writes every provider the configuration sets into this store as store-held ones
+   * Writes every sign-in provider the configuration sets into this store as store-held ones
    * (docs/handbook/authentication.md). Run by the `backup` command on
    * its copy, never on a live store: the copy restored elsewhere signs people in as
    * the source did. The client secrets are sealed like any stored secret. One
@@ -745,38 +756,38 @@ export class SignInProvidersService {
    */
   async carryIntoStore(): Promise<CarriedSignIn> {
     const writes: ConfigWrite[] = [];
-    for (const provider of this.file) {
-      writes.push(...(await this.carriedWritesOf(provider)));
+    for (const signInProvider of this.file) {
+      writes.push(...(await this.carriedWritesOf(signInProvider)));
     }
     await this.store.apply(writes);
-    return { providers: this.file.map((p) => p.id) };
+    return { signInProviders: this.file.map((p) => p.id) };
   }
 
-  private async carriedWritesOf(provider: SignInProvider): Promise<ConfigWrite[]> {
-    if (provider.kind === 'local') {
+  private async carriedWritesOf(signInProvider: SignInProvider): Promise<ConfigWrite[]> {
+    if (signInProvider.kind === 'local') {
       const stored: StoredSettings = {
         kind: 'local',
-        name: provider.name,
+        name: signInProvider.name,
         issuer: '',
         client_id: '',
         allowed_email_domains: [],
         invitation_only: true,
-        created_at: (await this.createdAt(provider.id)) ?? this.clock.now().toISOString(),
+        created_at: (await this.createdAt(signInProvider.id)) ?? this.clock.now().toISOString(),
       };
       return [
-        { kind: 'value', key: settingsKey(provider.id), value: JSON.stringify(stored) },
-        { kind: 'delete', key: secretKey(provider.id) },
+        { kind: 'value', key: settingsKey(signInProvider.id), value: JSON.stringify(stored) },
+        { kind: 'delete', key: secretKey(signInProvider.id) },
       ];
     }
-    return storedProviderWrites(
-      provider,
-      (await this.createdAt(provider.id)) ?? this.clock.now().toISOString(),
+    return storedSignInProviderWrites(
+      signInProvider,
+      (await this.createdAt(signInProvider.id)) ?? this.clock.now().toISOString(),
     );
   }
 
   /**
-   * Refuses a change of the provider list that would leave an administrators' group
-   * designated without a provider ambiguous, or make it name another provider's group
+   * Refuses a change of the sign-in provider list that would leave an administrators' group
+   * designated without a sign-in provider ambiguous, or make it name another sign-in provider's group
    * than it does now.
    */
   private async adminRuleChange(
@@ -789,12 +800,12 @@ export class SignInProvidersService {
       const after = resolveAdminGroup(raw, afterIds);
       if (after === null && afterIds.length > 1) {
         problems.push(
-          `the administrators' group "${raw}" does not say which provider claims it, and this change leaves ${afterIds.length} providers: ` +
-            `name the group with its provider first in Administration → Users (for instance "${before?.provider ?? afterIds[0] ?? '<provider>'}:${before?.name ?? raw}"), then remove the one without`,
+          `the administrators' group "${raw}" does not say which sign-in provider claims it, and this change leaves ${afterIds.length} sign-in providers: ` +
+            `name the group with its sign-in provider first in Administration → Users (for instance "${before?.signInProvider ?? afterIds[0] ?? '<sign-in provider>'}:${before?.name ?? raw}"), then remove the one without`,
         );
       } else if (before !== null && after !== null && !sameGroup(before, after)) {
         problems.push(
-          `this change would make the administrators' group "${raw}" mean the group "${after.name}" of provider '${after.provider}' instead of "${before.name}" of '${before.provider}': name the group with its provider first in Administration → Users`,
+          `this change would make the administrators' group "${raw}" mean the group "${after.name}" of sign-in provider '${after.signInProvider}' instead of "${before.name}" of '${before.signInProvider}': name the group with its sign-in provider first in Administration → Users`,
         );
       }
     }
@@ -840,11 +851,11 @@ export class SignInProvidersService {
   }
 
   /**
-   * The providers saved in Settings, in the order they were added. With `withSecrets`
+   * The sign-in providers saved in Settings, in the order they were added. With `withSecrets`
    * false the secret is an empty string and never decrypted.
    */
-  private async storedProviders(withSecrets: boolean): Promise<SignInProvider[]> {
-    const out: { provider: SignInProvider; createdAt: string }[] = [];
+  private async storedSignInProviders(withSecrets: boolean): Promise<SignInProvider[]> {
+    const out: { signInProvider: SignInProvider; createdAt: string }[] = [];
     for (const key of await this.store.keys()) {
       const match = SETTINGS_KEY.exec(key);
       if (!match) continue;
@@ -852,16 +863,16 @@ export class SignInProvidersService {
       const raw = await this.store.get(key);
       const settings = raw ? parseStored(raw) : null;
       if (!settings) continue;
-      // A local provider has no secret to read.
+      // A local sign-in provider has no secret to read.
       const secret =
         withSecrets && settings.kind !== 'local' ? await this.store.getSecret(secretKey(id)) : '';
       if (secret === null) continue;
-      const provider = toProvider(id, settings, secret);
-      if (provider) out.push({ provider, createdAt: settings.created_at });
+      const signInProvider = toSignInProvider(id, settings, secret);
+      if (signInProvider) out.push({ signInProvider, createdAt: settings.created_at });
     }
     return out
       .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))
-      .map((entry) => entry.provider);
+      .map((entry) => entry.signInProvider);
   }
 }
 

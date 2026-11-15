@@ -43,7 +43,7 @@ export interface UsersModuleDeps {
   readonly sessions: Pick<SessionService, 'destroy'>;
   /** The sign-in accounts and their links: an invitation also creates the account's link. */
   readonly signInAccounts: SignInAccountsService;
-  readonly providers: Pick<SignInProvidersService, 'views'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'views'>;
   /** Sends the mails of the links; absent when the instance sends no mail. */
   readonly mailer?: LinkMailer;
   readonly logger: Logger;
@@ -84,7 +84,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     users: service,
     invitations,
     signInAccounts: deps.signInAccounts,
-    providers: deps.providers,
+    signInProviders: deps.signInProviders,
     administrators: deps.administrators,
     bootstrap: deps.bootstrap,
     secondFactors: deps.secondFactors,

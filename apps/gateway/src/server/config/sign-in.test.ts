@@ -8,7 +8,7 @@ import {
   admitsEveryone,
   githubApiBase,
   isGithubDotComHost,
-  isOpenProvider,
+  isOpenSignInProvider,
   isSignInProviderId,
   issuerKey,
   reservedGroupNames,
@@ -19,7 +19,7 @@ import {
 import { parseSignInEnvName } from './sources';
 import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../tests/support/config/testing';
 
-/** The company's directory, as the provider `idp` (what the single-provider keys described). */
+/** The company's directory, as the sign-in provider `idp` (what the single-provider keys described). */
 const IDP_ENV = {
   VAUBAAN_SIGN_IN_IDP_KIND: 'oidc',
   VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://login.example.com/realms/acme',
@@ -51,7 +51,7 @@ function messages(err: ConfigError): string {
 }
 
 describe('sign-in providers in the configuration', () => {
-  it('refuses the single-provider keys of earlier builds, naming the sign_in.idp.* way', () => {
+  it('refuses the single-sign-in-provider keys of earlier builds, naming the sign_in.idp.* way', () => {
     const err = failure({
       VAUBAAN_IDP_ISSUER: 'https://login.example.com/realms/acme',
       VAUBAAN_IDP_CLIENT_ID: 'vaubaan-gateway',
@@ -73,7 +73,7 @@ describe('sign-in providers in the configuration', () => {
     expect(fromFile.issues.map((i) => i.path)).toEqual(['idp']);
   });
 
-  it('reads the provider idp as an ordinary sign_in.idp.* provider', () => {
+  it('reads the sign-in provider idp as an ordinary sign_in.idp.* sign-in provider', () => {
     const { config } = loadInstanceConfig({ env: validEnv(IDP_ENV) });
     expect(config.signIn).toEqual([
       expect.objectContaining({
@@ -86,7 +86,7 @@ describe('sign-in providers in the configuration', () => {
     ]);
   });
 
-  it('reads a GitHub provider from the environment, with github.com as its issuer', () => {
+  it('reads a GitHub sign-in provider from the environment, with github.com as its issuer', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({ ...GITHUB_ENV, VAUBAAN_BOOTSTRAP_TOKEN: undefined }),
     });
@@ -102,11 +102,11 @@ describe('sign-in providers in the configuration', () => {
         invitationOnly: true,
       },
     ]);
-    // A provider in the configuration makes the bootstrap token optional.
+    // A sign-in provider in the configuration makes the bootstrap token optional.
     expect(config.bootstrapToken).toBeNull();
   });
 
-  it('reads several providers from the file next to the environment, and the secret by reference', () => {
+  it('reads several sign-in providers from the file next to the environment, and the secret by reference', () => {
     const yaml = [
       'sign_in:',
       '  partners:',
@@ -135,7 +135,7 @@ describe('sign-in providers in the configuration', () => {
     });
   });
 
-  it('refuses an open provider with neither allowed domains nor invitation only, saying why', () => {
+  it('refuses an open sign-in provider with neither allowed domains nor invitation only, saying why', () => {
     const err = failure({ ...GITHUB_ENV, VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY: undefined });
     expect(messages(err)).toMatch(
       /sign_in\.github\.allowed_email_domains: anyone can hold an account at https:\/\/github\.com.*needs an admission rule/,
@@ -143,7 +143,7 @@ describe('sign-in providers in the configuration', () => {
     expect(err.issues[0]?.env).toContain('VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY');
   });
 
-  it('refuses an OpenID Connect provider at personal Google accounts without a rule', () => {
+  it('refuses an OpenID Connect sign-in provider at personal Google accounts without a rule', () => {
     const err = failure({ ...IDP_ENV, VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://accounts.google.com' });
     expect(messages(err)).toMatch(
       /sign_in\.idp\.allowed_email_domains: anyone can hold an account/,
@@ -166,15 +166,15 @@ describe('sign-in providers in the configuration', () => {
     expect(messages(err)).toMatch(/choose one/);
   });
 
-  it('refuses a bare admin group once several providers are configured', () => {
+  it('refuses a bare admin group once several sign-in providers are configured', () => {
     const err = failure({ ...IDP_ENV, ...GITHUB_ENV, VAUBAAN_ADMIN_GROUP: 'gateway-admins' });
-    expect(messages(err)).toMatch(/admin\.group: .*write it as "<provider>:<group>"/);
+    expect(messages(err)).toMatch(/admin\.group: .*write it as "<sign-in provider>:<group>"/);
     loadInstanceConfig({
       env: validEnv({ ...IDP_ENV, ...GITHUB_ENV, VAUBAAN_ADMIN_GROUP: 'github:acme/admins' }),
     });
   });
 
-  it('refuses two providers of one issuer, a bad id, a bad kind and claims on GitHub', () => {
+  it('refuses two sign-in providers of one issuer, a bad id, a bad kind and claims on GitHub', () => {
     expect(
       messages(
         failure({
@@ -205,7 +205,7 @@ describe('sign-in providers in the configuration', () => {
     );
   });
 
-  it('requires https for every provider issuer', () => {
+  it('requires https for every sign-in provider issuer', () => {
     expect(
       messages(
         failure({
@@ -218,7 +218,7 @@ describe('sign-in providers in the configuration', () => {
     ).toMatch(/sign_in\.acme\.issuer: must use https/);
   });
 
-  it('refuses GitHub as an OpenID Connect provider, without reaching the network', () => {
+  it('refuses GitHub as an OpenID Connect sign-in provider, without reaching the network', () => {
     for (const issuer of ['https://github.com', 'https://github.com/', 'https://www.GitHub.com']) {
       expect(
         messages(
@@ -231,12 +231,12 @@ describe('sign-in providers in the configuration', () => {
           }),
         ),
       ).toContain(
-        'sign_in.gh.issuer: GitHub is not an OpenID Connect provider: choose the GitHub kind',
+        'sign_in.gh.issuer: GitHub is not an OpenID Connect sign-in provider: choose the GitHub kind',
       );
     }
     expect(
       messages(failure({ ...IDP_ENV, VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://github.com' })),
-    ).toMatch(/sign_in\.idp\.issuer: GitHub is not an OpenID Connect provider/);
+    ).toMatch(/sign_in\.idp\.issuer: GitHub is not an OpenID Connect sign-in provider/);
     // The GitHub kind at github.com loads as before: the way out the message names.
     const { config } = loadInstanceConfig({ env: validEnv(GITHUB_ENV) });
     expect(config.signIn).toEqual([
@@ -260,16 +260,16 @@ describe('sign-in providers in the configuration', () => {
     ).not.toThrow();
   });
 
-  it('keeps the bootstrap token required while no provider is configured', () => {
+  it('keeps the bootstrap token required while no sign-in provider is configured', () => {
     expect(messages(failure({ VAUBAAN_BOOTSTRAP_TOKEN: undefined }))).toMatch(
       /bootstrap_token: missing required key/,
     );
     expect(TEST_BOOTSTRAP_TOKEN.length).toBeGreaterThan(31);
   });
 
-  it('parses provider ids with hyphens and the _FILE form of the secret', () => {
+  it('parses sign-in provider ids with hyphens and the _FILE form of the secret', () => {
     expect(parseSignInEnvName('VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID')).toMatchObject({
-      providerId: 'acme-entra',
+      signInProviderId: 'acme-entra',
       spec: { field: 'client_id' },
     });
     expect(parseSignInEnvName('VAUBAAN_SIGN_IN_CLIENT_ID')).toBeNull();
@@ -289,21 +289,25 @@ describe('sign-in providers in the configuration', () => {
 describe('sign-in helpers', () => {
   const at = (issuer: string) => ({ kind: 'oidc' as const, issuer: new URL(issuer) });
 
-  it('knows which providers anyone can hold an account at', () => {
-    expect(isOpenProvider({ kind: 'github', issuer: new URL('https://github.com') })).toBe(true);
-    expect(isOpenProvider({ kind: 'github', issuer: new URL('https://ghe.example.com') })).toBe(
+  it('knows which sign-in providers anyone can hold an account at', () => {
+    expect(isOpenSignInProvider({ kind: 'github', issuer: new URL('https://github.com') })).toBe(
       true,
     );
-    expect(isOpenProvider(at('https://accounts.google.com'))).toBe(true);
-    expect(isOpenProvider(at('https://accounts.google.com/'))).toBe(true);
-    expect(isOpenProvider(at('https://login.microsoftonline.com/common/v2.0'))).toBe(true);
     expect(
-      isOpenProvider(
+      isOpenSignInProvider({ kind: 'github', issuer: new URL('https://ghe.example.com') }),
+    ).toBe(true);
+    expect(isOpenSignInProvider(at('https://accounts.google.com'))).toBe(true);
+    expect(isOpenSignInProvider(at('https://accounts.google.com/'))).toBe(true);
+    expect(isOpenSignInProvider(at('https://login.microsoftonline.com/common/v2.0'))).toBe(true);
+    expect(
+      isOpenSignInProvider(
         at('https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0'),
       ),
     ).toBe(true);
-    expect(isOpenProvider(at('https://login.microsoftonline.com/11111111-2222/v2.0'))).toBe(false);
-    expect(isOpenProvider(at('https://keycloak.example.com/realms/acme'))).toBe(false);
+    expect(isOpenSignInProvider(at('https://login.microsoftonline.com/11111111-2222/v2.0'))).toBe(
+      false,
+    );
+    expect(isOpenSignInProvider(at('https://keycloak.example.com/realms/acme'))).toBe(false);
   });
 
   it('admits everyone only for a directory with no domain and not invitation only', () => {
@@ -326,11 +330,11 @@ describe('sign-in helpers', () => {
     ).toBeNull();
   });
 
-  it('resolves the admin group against the providers configured now', () => {
-    expect(resolveAdminGroup('admins', ['idp'])).toEqual({ provider: 'idp', name: 'admins' });
+  it('resolves the admin group against the sign-in providers configured now', () => {
+    expect(resolveAdminGroup('admins', ['idp'])).toEqual({ signInProvider: 'idp', name: 'admins' });
     expect(resolveAdminGroup('admins', ['idp', 'github'])).toBeNull();
     expect(resolveAdminGroup('github:acme/a', ['idp', 'github'])).toEqual({
-      provider: 'github',
+      signInProvider: 'github',
       name: 'acme/a',
     });
     expect(resolveAdminGroup('github:acme/a', ['company'])).toBeNull();

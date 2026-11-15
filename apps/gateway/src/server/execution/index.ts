@@ -241,7 +241,7 @@ export { createRiskStage } from './risk-stage';
 export { TokenVerifier } from './token-verifier';
 export {
   buildCatalog,
-  callableProviders,
+  callableServices,
   callableTools,
   type GitRemoteView,
   type CatalogBudgetLine,

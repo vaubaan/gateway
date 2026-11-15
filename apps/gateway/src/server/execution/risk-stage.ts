@@ -5,7 +5,7 @@
  * judged against (risk model §4.7).
  *
  * The classifier, the catalog and the environment derivation all come from
- * the registered plugin of the target account's provider; the resources
+ * the registered plugin of the target account's service; the resources
  * are the mission's on that account, every set together, so an
  * env-qualified risk the mission accepted (`supabase[staging].bulk-row-write`)
  * matches through the label of the resource the call touches (`envResolverFor`,
@@ -50,8 +50,8 @@ export function resourceSetsToJudge(
 export function createRiskStage(deps: { readonly registry: PluginRegistry }): RiskStage {
   return {
     async evaluate(ctx, call, target): Promise<CallVerdict> {
-      const registered = deps.registry.get(target.account.provider);
-      if (!registered) return { kind: 'no-catalog', provider: target.account.provider };
+      const registered = deps.registry.get(target.account.service);
+      if (!registered) return { kind: 'no-catalog', service: target.account.service };
       return evaluateCallForResourceSets({
         tool: call.tool,
         args: call.args,

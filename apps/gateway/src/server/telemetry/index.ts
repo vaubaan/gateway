@@ -193,7 +193,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   const profiler = new InstanceProfiler({
     registry: deps.registry,
     gatewayVersion: deps.build.version,
-    signInKinds: [...new Set(deps.config.signIn.map((provider) => provider.kind))],
+    signInKinds: [...new Set(deps.config.signIn.map((signInProvider) => signInProvider.kind))],
     source: deps.profileSource,
     instanceId: () => instanceId.current(),
     ...profilerOverrides,
@@ -207,7 +207,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         const report = reportOf(execution, deps.build.version);
         if (report) client.record({ kind: 'plugin-health', report });
       } catch {
-        // Telemetry never fails a call, and an error here may carry provider text: not logged.
+        // Telemetry never fails a call, and an error here may carry service text: not logged.
       }
     },
     callDecided(decision) {

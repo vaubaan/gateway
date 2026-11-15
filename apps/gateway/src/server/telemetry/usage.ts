@@ -75,8 +75,8 @@ export function decisionReportOf(
 export interface ProfileSource {
   users(): Promise<number>;
   activeMissions(now: Date): Promise<number>;
-  /** Accounts per provider id. */
-  accountsByProvider(): Promise<Readonly<Record<string, number>>>;
+  /** Accounts per service id. */
+  accountsByService(): Promise<Readonly<Record<string, number>>>;
 }
 
 export interface InstanceProfilerDeps {
@@ -130,7 +130,7 @@ export class InstanceProfiler {
     const [users, missions, accounts, instanceId] = await Promise.all([
       source.users(),
       source.activeMissions(now),
-      source.accountsByProvider(),
+      source.accountsByService(),
       this.deps.instanceId(),
     ]);
     const calls = this.calls;

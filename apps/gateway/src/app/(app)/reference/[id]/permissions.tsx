@@ -39,13 +39,13 @@ import {
 } from '@/lib/missions/catalog-view';
 import { TRUST_LEVELS } from '@/lib/missions/macro-actions';
 import type { CatalogRisk } from '@/lib/missions/model';
-import { riskReferencePath } from '@/lib/providers/links';
+import { riskReferencePath } from '@/lib/services/links';
 import {
   type TrustLevelCell,
   type MacroActionReference,
   type RiskReference,
   type RiskReferenceGroup,
-} from '@/lib/providers/reference';
+} from '@/lib/services/reference';
 
 import styles from '../reference.module.css';
 

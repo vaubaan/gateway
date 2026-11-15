@@ -1,15 +1,15 @@
 /**
  * Upstream stage — decrypt the account's credential in memory, forward the
  * call through the plugin, release (spec §2.4 "the executor never sees a
- * provider credential").
+ * service credential").
  *
  * The credential comes from the accounts' `CredentialBroker` only
  * (handbook accounts, Start here): `resolve()` decrypts
  * and refreshes an OAuth token about to expire; `refresh()` forces a refresh
- * and marks the account `expired` when the provider rejects it. This
+ * and marks the account `expired` when the service rejects it. This
  * module never reads a sealed blob.
  *
- * When the provider answers that the credential is not valid (HTTP 401,
+ * When the service answers that the credential is not valid (HTTP 401,
  * surfaced by the plugin as `UpstreamAuthError`):
  *
  *   1. the derived credentials cached for the account are dropped; if
@@ -22,25 +22,25 @@
  *      `expired`), or an account that is no longer `active`, ends as the
  *      `account-unavailable` refusal, thrown as `UpstreamRefusalError`.
  *
- * A 403 is NOT treated as a dead credential: the provider recognised the
+ * A 403 is NOT treated as a dead credential: the service recognised the
  * credential and refused that action (a permission the company's app lacks, a
  * secondary rate limit). Expiring the account on it would stop every
  * mission of that account for a call that was merely not permitted; it is
- * reported as an ordinary upstream failure, naming the provider's answer.
+ * reported as an ordinary upstream failure, naming the service's answer.
  *
  * Every failure that is not that refusal leaves as `UpstreamFailureError`.
  * Plugins build their message from the request path and the start of the
- * provider's body, and providers echo input there (a SQL fragment, an object
+ * service's body, and services echo input there (a SQL fragment, an object
  * id). So the message is the `detail`, for the agent only; what the audit
- * keeps is the `summary` built here from the provider id, the HTTP status
+ * keeps is the `summary` built here from the service id, the HTTP status
  * when the error carries one, and the error's class name.
  *
  * Streaming (spec §4.1): the plugin receives `emitPart`. Each part it emits
  * is counted and handed to the call's `onPart` (the door turns it into a
- * progress notification) while `execute` keeps reading the provider; the
+ * progress notification) while `execute` keeps reading the service; the
  * stage still resolves with the complete result, so the pipeline writes the
  * audit entry when the stream has ended. After a first part the retry ladder
- * is closed, and a failure is summarised as `<provider> stream failed after
+ * is closed, and a failure is summarised as `<service> stream failed after
  * N parts (…)`. `emitPart` rejects with `CallerGoneError` once the call's
  * signal is aborted: the plugin stops, the entry records `stream stopped
  * after N parts: the caller was gone`. The credit stays consumed in every
@@ -52,7 +52,7 @@
  * if the plugin does not listen. A call past its deadline is never retried;
  * it leaves as `UpstreamFailureError` whose summary ends in `(timeout)` —
  * the audit's `upstream_error` — and whose detail tells the agent the call
- * was counted and that its effect at the provider is unknown. A provider
+ * was counted and that its effect at the service is unknown. A service
  * that never answers therefore holds the request, the decrypted credential
  * and the audit entry for that long at most.
  *
@@ -135,7 +135,7 @@ export interface UpstreamStageDeps {
 
 const MS_PER_SECOND = 1000;
 
-/** The provider said the credential itself is not valid (as opposed to "not allowed"). */
+/** The service said the credential itself is not valid (as opposed to "not allowed"). */
 function credentialRejected(err: unknown): err is UpstreamAuthError {
   return isUpstreamAuthError(err) && err.upstreamStatus === HTTP_UNAUTHORIZED;
 }
@@ -164,7 +164,7 @@ function httpStatusOf(err: unknown): number | null {
 
 /**
  * The caller of a streamed call went away (disconnect, MCP cancellation):
- * what `emitPart` rejects with, so the plugin stops reading its provider.
+ * what `emitPart` rejects with, so the plugin stops reading its service.
  */
 export class CallerGoneError extends Error {
   constructor() {
@@ -250,8 +250,8 @@ function partsPhrase(count: number): string {
   return `${count} ${count === 1 ? 'part' : 'parts'}`;
 }
 
-/** A provider failure, split into what the audit stores and what the agent reads. */
-function asUpstreamFailure(err: unknown, provider: string, parts: number): UpstreamFailureError {
+/** A service failure, split into what the audit stores and what the agent reads. */
+function asUpstreamFailure(err: unknown, service: string, parts: number): UpstreamFailureError {
   if (isUpstreamFailureError(err)) return err;
   const status = httpStatusOf(err);
   const className = upstreamErrorClassName(err);
@@ -259,11 +259,11 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
   if (err instanceof CallTimeoutError) {
     const after = parts > 0 ? ` after ${partsPhrase(parts)}` : '';
     return new UpstreamFailureError({
-      summary: `${provider} call stopped${after}: no answer within ${err.seconds} s (timeout)`,
+      summary: `${service} call stopped${after}: no answer within ${err.seconds} s (timeout)`,
       detail:
-        `timeout: ${provider} did not answer within ${err.seconds} seconds, so Vaubaan stopped the call` +
+        `timeout: ${service} did not answer within ${err.seconds} seconds, so Vaubaan stopped the call` +
         `${after} (execution.call_timeout_seconds). It was counted against the mission; whether ` +
-        `${provider} carried it out is unknown: check before repeating a change.`,
+        `${service} carried it out is unknown: check before repeating a change.`,
       status: null,
       cause: err,
     });
@@ -272,8 +272,8 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
     return new UpstreamFailureError({
       summary:
         parts > 0
-          ? `${provider} stream stopped after ${partsPhrase(parts)}: the caller was gone`
-          : `${provider} call stopped: the caller was gone`,
+          ? `${service} stream stopped after ${partsPhrase(parts)}: the caller was gone`
+          : `${service} call stopped: the caller was gone`,
       detail,
       status: null,
       cause: err,
@@ -283,7 +283,7 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
     // The caller already holds what was sent; the audit says where it stopped.
     const answered = status === null ? '' : `, HTTP ${status}`;
     return new UpstreamFailureError({
-      summary: `${provider} stream failed after ${partsPhrase(parts)}${answered} (${className})`,
+      summary: `${service} stream failed after ${partsPhrase(parts)}${answered} (${className})`,
       detail: `the stream was interrupted after ${partsPhrase(parts)}: ${detail}`,
       status,
       cause: err,
@@ -292,8 +292,8 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
   return new UpstreamFailureError({
     summary:
       status === null
-        ? `${provider} call failed (${className})`
-        : `${provider} answered HTTP ${status} (${className})`,
+        ? `${service} call failed (${className})`
+        : `${service} answered HTTP ${status} (${className})`,
     detail,
     status,
     cause: err,
@@ -405,7 +405,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
       if (!retriable(err)) throw err;
       deps.logger.warn('upstream rejected the credential', {
         account_id: accountId,
-        provider: target.account.provider,
+        service: target.account.service,
         tool: call.tool,
       });
     }
@@ -447,7 +447,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         const err = limits.signal.aborted ? stopReason(limits) : thrown;
         // The caller left: not an outcome of the plugin, nothing to report (spec §9).
         if (!(err instanceof CallerGoneError)) report(call, { ok: false, error: err });
-        throw asUpstreamFailure(err, target.account.provider, relay.count);
+        throw asUpstreamFailure(err, target.account.service, relay.count);
       }
     },
   };

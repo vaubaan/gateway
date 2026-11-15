@@ -1,7 +1,7 @@
 /**
  * What a log line may say about an unexpected error: its class and where it was
- * thrown — never its message, which can quote a call's arguments or a provider's
- * answer (and so a credential the provider echoed).
+ * thrown — never its message, which can quote a call's arguments or a service's
+ * answer (and so a credential the service echoed).
  */
 import { upstreamErrorClassName } from '@vaubaan/gateway-core';
 

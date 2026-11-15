@@ -50,7 +50,7 @@ describe('a Gmail account connected by OAuth in an earlier build', () => {
     const h = accountsHarness({ plugins: [gmail] });
     const alice = await h.actor('alice@example.com');
     const existing = await h.store.accounts.create({
-      provider: 'gmail',
+      service: 'gmail',
       owner: { kind: 'user', id: alice.user.id },
       displayName: 'alice@example.com',
       credential: serializeSecret({

@@ -1,5 +1,5 @@
 /**
- * The connect driver, one credential kind at a time, against mocked provider
+ * The connect driver, one credential kind at a time, against mocked service
  * endpoints (`mockFetch` rejects any request no route covers, so nothing
  * here can reach a network).
  */
@@ -30,8 +30,8 @@ const TOKEN_OK: MockRoute = {
   body: { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600, scope: 'read write' },
 };
 
-const resource = (provider: string, ref: string, extra: Partial<Resource> = {}): Resource => ({
-  provider,
+const resource = (service: string, ref: string, extra: Partial<Resource> = {}): Resource => ({
+  service,
   ref,
   displayName: `Display ${ref}`,
   ...extra,
@@ -57,9 +57,9 @@ function connectedOf(result: StartResult) {
   return result;
 }
 
-/** The client the gateway would have registered at the provider (not what these tests are about). */
-async function configureOAuthApp(h: AccountsHarness, providerId = 'oauthco'): Promise<void> {
-  await h.seedClient(providerId, 'cid', 'csecret');
+/** The client the gateway would have registered at the service (not what these tests are about). */
+async function configureOAuthApp(h: AccountsHarness, serviceId = 'oauthco'): Promise<void> {
+  await h.seedClient(serviceId, 'cid', 'csecret');
 }
 
 describe('oauth2 — authorization code with PKCE and a single-use state', () => {
@@ -85,7 +85,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     return { h, seen };
   }
 
-  it('redirects to the provider with the redirect URI on public_url, then stores the exchanged credential', async () => {
+  it('redirects to the service with the redirect URI on public_url, then stores the exchanged credential', async () => {
     const { h, seen } = harness();
     await configureOAuthApp(h);
     const alice = await h.actor('alice@example.com');
@@ -117,7 +117,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     );
 
     expect(done.account).toMatchObject({
-      provider: 'oauthco',
+      service: 'oauthco',
       status: 'active',
       displayName: 'OAuth Co',
       owner: { kind: 'user', id: alice.user.id },
@@ -159,7 +159,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(await h.service.listFor(alice)).toHaveLength(1);
   });
 
-  it('refuses a state that is unknown, absent, of another user or of another provider', async () => {
+  it('refuses a state that is unknown, absent, of another user or of another service', async () => {
     const { h } = harness();
     await configureOAuthApp(h);
     await configureOAuthApp(h, 'otherco');
@@ -185,7 +185,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     await expectConnectError(h.service.complete(mallory, 'oauthco', query), 'state-invalid');
     await expectConnectError(h.service.complete(alice, 'oauthco', query), 'state-invalid');
 
-    // A state minted for one provider does not complete another provider's callback.
+    // A state minted for one service does not complete another service's callback.
     const crossed = stateOf(redirectOf(await h.service.start(alice, 'oauthco')));
     await expectConnectError(
       h.service.complete(alice, 'otherco', new URLSearchParams({ code: 'c', state: crossed })),
@@ -250,9 +250,9 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
           state: first,
         }),
       ),
-      'provider-denied',
+      'service-denied',
     );
-    // The protocol code only: `error_description` is the provider's text (ADR provider-error-text-stays-with-the-agent).
+    // The protocol code only: `error_description` is the service's text (ADR provider-error-text-stays-with-the-agent).
     expect(refused.detail).toBe('OAuth Co: access_denied');
     // The state went with the denial.
     await expectConnectError(
@@ -273,7 +273,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(failed.detail).not.toContain('code already used');
     expect(failed.detail).not.toContain('csecret');
     expect(await denied.h.store.accounts.list()).toEqual([]);
-    await expectConnectError(denied.h.service.start(alice, 'nope'), 'provider-unknown');
+    await expectConnectError(denied.h.service.start(alice, 'nope'), 'service-unknown');
   });
 
   it('keeps the credential when the first discovery fails: the authorization code is spent', async () => {
@@ -301,7 +301,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(done.discovery).toMatchObject({
       ok: false,
       count: 0,
-      error: 'the provider call failed (Error)',
+      error: 'the service call failed (Error)',
     });
     expect((await h.service.get(alice, done.account.id)).discovery?.ok).toBe(false);
   });
@@ -369,7 +369,7 @@ describe('api-key — form checked by a first discovery', () => {
       fields: { token: 'tok-secret-123', team_id: 'team_a' },
       metadata: { team_id: 'team_a' },
     });
-    // Resources of another provider or without a ref are ignored.
+    // Resources of another service or without a ref are ignored.
     expect(done.discovery).toMatchObject({ ok: true, count: 1 });
     const view = await h.service.get(alice, done.account.id);
     expect(view.fields).toEqual({ team_id: 'team_a' });
@@ -408,7 +408,7 @@ describe('api-key — form checked by a first discovery', () => {
       ],
     });
     const alice = await h.actor('alice@example.com');
-    expect((await h.service.provider('keyco'))!.alternatives.map((a) => a.id)).toEqual([
+    expect((await h.service.service('keyco'))!.alternatives.map((a) => a.id)).toEqual([
       'team',
       'project',
     ]);
@@ -444,7 +444,7 @@ describe('api-key — form checked by a first discovery', () => {
     });
   });
 
-  it('stores nothing when the provider rejects the key, and shows the provider error', async () => {
+  it('stores nothing when the service rejects the key, and shows the service error', async () => {
     const h = accountsHarness({
       plugins: [
         fixturePlugin({
@@ -476,7 +476,7 @@ describe('api-key — form checked by a first discovery', () => {
     expect(h.audit.admin).toEqual([]);
   });
 
-  it('reports an unreachable provider as such, still storing nothing', async () => {
+  it('reports an unreachable service as such, still storing nothing', async () => {
     const h = accountsHarness({
       plugins: [
         fixturePlugin({
@@ -491,7 +491,7 @@ describe('api-key — form checked by a first discovery', () => {
     const alice = await h.actor('alice@example.com');
     await expectConnectError(
       h.service.start(alice, 'keyco', { fields: { token: 't', team_id: 'team_a' } }),
-      'provider-unreachable',
+      'service-unreachable',
     );
     expect(await h.store.accounts.list()).toEqual([]);
   });
@@ -597,17 +597,17 @@ describe('ownership, reconnection, revocation', () => {
   it('offers every plugin on the picker, in registration order', async () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');
-    const providers = await h.service.providers();
-    expect(providers.map((p) => [p.id, p.kind])).toEqual([
+    const services = await h.service.services();
+    expect(services.map((p) => [p.id, p.kind])).toEqual([
       ['keyco', 'api-key'],
       ['gmailco', 'api-key'],
     ]);
     const { account } = connectedOf(await h.service.start(alice, 'gmailco', { fields }));
-    expect((await h.service.get(alice, account.id)).provider_label).toBe('gmailco');
-    expect(await h.service.provider('nope')).toBeNull();
+    expect((await h.service.get(alice, account.id)).service_label).toBe('gmailco');
+    expect(await h.service.service('nope')).toBeNull();
   });
 
-  it('reconnects an expired account in place and refuses a revoked or foreign-provider one', async () => {
+  it('reconnects an expired account in place and refuses a revoked or foreign-service one', async () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');
     const { account } = connectedOf(
@@ -617,7 +617,7 @@ describe('ownership, reconnection, revocation', () => {
 
     await expectConnectError(
       h.service.start(alice, 'gmailco', { fields, reconnectId: account.id }),
-      'provider-mismatch',
+      'service-mismatch',
     );
     const again = connectedOf(
       await h.service.start(alice, 'keyco', {
@@ -756,7 +756,7 @@ describe('resources — discovery merge and owner edits', () => {
       metadata: {
         kind: 'domain',
         domain_id: 'd_1',
-        status: 'verified', // provider fact refreshed
+        status: 'verified', // service fact refreshed
         internal_domains: ['acme.com', 'acme.io'], // owner setting kept
       },
       ownerMetadata: { internal_domains: ['acme.com', 'acme.io'] },
@@ -955,14 +955,14 @@ describe('resources — discovery merge and owner edits', () => {
 
     state.failWith = new Error('GET /projects answered 500');
     const outcome = await h.service.discover(alice, account.id);
-    expect(outcome).toMatchObject({ ok: false, error: 'the provider call failed (Error)' });
+    expect(outcome).toMatchObject({ ok: false, error: 'the service call failed (Error)' });
     const detail = await h.service.get(alice, account.id);
     expect(detail.account.status).toBe('active');
     expect(detail.resources.map((r) => [r.ref, r.staleSince])).toEqual([['proj-a', null]]);
     expect(detail.discovery).toMatchObject({ ok: false });
   });
 
-  it('expires the account when the provider rejects a credential that cannot be refreshed', async () => {
+  it('expires the account when the service rejects a credential that cannot be refreshed', async () => {
     const { h, state } = harness();
     const alice = await h.actor('alice@example.com');
     state.resources = [resource('keyco', 'proj-a')];
@@ -971,7 +971,7 @@ describe('resources — discovery merge and owner edits', () => {
     state.failWith = new UpstreamAuthError('401 token revoked', 401);
     const outcome = await h.service.discover(alice, account.id);
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toBe('the provider rejected the credential (HTTP 401)');
+    expect(outcome.error).toBe('the service rejected the credential (HTTP 401)');
     expect((await h.store.accounts.getById(account.id))!.status).toBe('expired');
   });
 });

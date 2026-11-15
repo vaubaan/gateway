@@ -55,8 +55,8 @@ import {
   type PreviewView,
 } from './views';
 
-/** The provider id of the gateway's own account: a mission issued here never carries one. */
-export const VAUBAAN_PROVIDER = 'vaubaan';
+/** The service id of the gateway's own account: a mission issued here never carries one. */
+export const VAUBAAN_SERVICE = 'vaubaan';
 
 /**
  * Every code an act refuses with. `acts.test.ts` holds this list to the table
@@ -71,7 +71,7 @@ export const VAUBAAN_REFUSAL_CODES = [
   'mission-not-found',
   'mission-inactive',
   'mission-not-issued-here',
-  'unknown-provider',
+  'unknown-service',
   'unknown-account',
   'instance-limit-reached',
 ] as const;
@@ -243,15 +243,15 @@ function notIssuedHere(missionId: string): ActRefusal {
   };
 }
 
-/** The Vaubaan accounts a draft names, by id or by provider. */
+/** The Vaubaan accounts a draft names, by id or by service. */
 function vaubaanAccountsOf(
   draft: MissionDraft,
   context: readonly IssuanceAccount[],
 ): readonly string[] {
-  const vaubaan = new Set(context.filter((c) => c.provider === VAUBAAN_PROVIDER).map((c) => c.id));
+  const vaubaan = new Set(context.filter((c) => c.service === VAUBAAN_SERVICE).map((c) => c.id));
   const named: string[] = [];
   for (const account of draft.accounts) {
-    if (account.provider === VAUBAAN_PROVIDER) named.push(account.account_id ?? VAUBAAN_PROVIDER);
+    if (account.service === VAUBAAN_SERVICE) named.push(account.account_id ?? VAUBAAN_SERVICE);
     else if (account.account_id !== undefined && vaubaan.has(account.account_id)) {
       named.push(account.account_id);
     }
@@ -277,31 +277,29 @@ export class VaubaanActs {
   }
 
   /**
-   * One provider's risk catalog as explicit ids, with its macro-actions. With an
+   * One service's risk catalog as explicit ids, with its macro-actions. With an
    * account of the user, each id says whether their authority covers it.
    */
   async getCatalog(
     caller: VaubaanCaller,
-    input: { readonly provider: string; readonly account_id?: string | undefined },
+    input: { readonly service: string; readonly account_id?: string | undefined },
   ): Promise<ActOutcome<CatalogView>> {
-    const catalog = this.deps.catalog.get(input.provider);
+    const catalog = this.deps.catalog.get(input.service);
     if (!catalog) {
       return refused({
-        code: 'unknown-provider',
-        message: `This instance has no provider "${input.provider}".`,
-        hint: 'Use a provider id of `vaubaan__list_my_accounts`, or one of `providers`.',
-        providers: this.deps.catalog.providers(),
+        code: 'unknown-service',
+        message: `This instance has no service "${input.service}".`,
+        hint: 'Use a service id of `vaubaan__list_my_accounts`, or one of `services`.',
+        services: this.deps.catalog.services(),
       });
     }
     if (input.account_id === undefined) return done(catalogView(catalog, null));
     const context = await this.deps.missions.issuanceContext({ id: caller.userId });
-    const account = context.find(
-      (c) => c.id === input.account_id && c.provider === catalog.provider,
-    );
+    const account = context.find((c) => c.id === input.account_id && c.service === catalog.service);
     if (!account) {
       return refused({
         code: 'unknown-account',
-        message: `The user holds no ${catalog.provider} account "${input.account_id}".`,
+        message: `The user holds no ${catalog.service} account "${input.account_id}".`,
         hint: 'Use a `account_id` of `vaubaan__list_my_accounts`, or leave it out to read the catalog alone.',
         account_id: input.account_id,
       });

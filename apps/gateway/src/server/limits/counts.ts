@@ -13,8 +13,8 @@ import type { Store } from '../store';
 
 export interface AccountCounts {
   readonly total: number;
-  /** Not revoked, by provider id; a provider with none is absent. */
-  readonly byProvider: Readonly<Record<string, number>>;
+  /** Not revoked, by service id; a service with none is absent. */
+  readonly byService: Readonly<Record<string, number>>;
 }
 
 export interface InstanceCounts {
@@ -29,9 +29,9 @@ export function storeCounts(store: CountedStore): InstanceCounts {
   return {
     users: () => store.users.countActive(),
     async accounts() {
-      const byProvider = await store.accounts.countByProvider();
-      const total = Object.values(byProvider).reduce((sum, n) => sum + n, 0);
-      return { total, byProvider };
+      const byService = await store.accounts.countByService();
+      const total = Object.values(byService).reduce((sum, n) => sum + n, 0);
+      return { total, byService };
     },
     activeMissions: (now) => store.missions.countActive(now.toISOString()),
   };

@@ -36,7 +36,7 @@ import {
 import { ACTIONS, formatNumber, giveAccessLabel } from '@/lib/vocabulary';
 import { groupByKind } from '@/lib/missions/catalog-view';
 import type { CatalogRisk } from '@/lib/missions/model';
-import { riskReferencePath } from '@/lib/providers/links';
+import { riskReferencePath } from '@/lib/services/links';
 import {
   envNotes,
   selectAllIds,

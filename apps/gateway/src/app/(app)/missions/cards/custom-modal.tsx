@@ -13,7 +13,7 @@ import { Button, Dialog, EnvTag, FilterChips } from '@/components/ui';
 import { ACTIONS, CARD_WORDS, TRUST_LEVEL_LABELS } from '@/lib/vocabulary';
 import { DEFAULT_TRUST_LEVEL, TRUST_LEVELS, type TrustLevel } from '@/lib/missions/macro-actions';
 import type { IssuanceAccount } from '@/lib/missions/model';
-import type { RiskPlanes } from '@/lib/providers/planes';
+import type { RiskPlanes } from '@/lib/services/planes';
 
 import type { CardState, EntryState } from '../new/form-state';
 import { accountLabel, customDraftOf, customView, startFrom } from './card-model';

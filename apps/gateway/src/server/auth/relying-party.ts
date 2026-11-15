@@ -72,11 +72,11 @@ export interface OidcRelyingParty {
   finish(callbackUrl: URL, checks: LoginChecks): Promise<FinishedLogin>;
 }
 
-/** What discovery and the code grant need of a provider. */
+/** What discovery and the code grant need of a sign-in provider. */
 export type RelyingPartySettings = Pick<OidcSignInProvider, 'issuer' | 'clientId' | 'clientSecret'>;
 
 export interface RelyingPartyFactory {
-  /** `redirectUri`: the provider's callback (`callbackUrl`). */
+  /** `redirectUri`: the sign-in provider's callback (`callbackUrl`). */
   for(settings: RelyingPartySettings, redirectUri: URL): OidcRelyingParty;
   /**
    * Fetches the issuer's discovery document the way a sign-in does, before an OpenID
@@ -90,9 +90,9 @@ export interface RelyingPartyFactory {
 const ISSUER_CHECK_TIMEOUT_SECONDS = 10;
 
 /** The callback of a sign-in provider: `<public_url>/auth/callback/<id>`. */
-export function callbackUrl(publicUrl: URL, providerId: string): URL {
+export function callbackUrl(publicUrl: URL, signInProviderId: string): URL {
   const base = `${publicUrl.pathname.replace(/\/$/, '')}${CALLBACK_PATH}`;
-  return new URL(`${base}/${encodeURIComponent(providerId)}`, publicUrl.origin);
+  return new URL(`${base}/${encodeURIComponent(signInProviderId)}`, publicUrl.origin);
 }
 
 export function createRelyingPartyFactory(options: RelyingPartyOptions): RelyingPartyFactory {
@@ -125,7 +125,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
         return issuerCheckProblem(issuer, err);
       }
     },
-    for(settings, providerRedirectUri) {
+    for(settings, signInProviderRedirectUri) {
       return {
         async describe() {
           const config = await configurationFor(settings);
@@ -143,7 +143,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
           const state = oidc.randomState();
           const nonce = oidc.randomNonce();
           const redirectTo = oidc.buildAuthorizationUrl(config, {
-            redirect_uri: providerRedirectUri.href,
+            redirect_uri: signInProviderRedirectUri.href,
             scope: scopesFor(config),
             code_challenge: codeChallenge,
             code_challenge_method: 'S256',
@@ -245,7 +245,7 @@ function issuerCheckProblem(issuer: URL, err: unknown): string {
     return (
       `the discovery document at ${where} names another issuer` +
       (named ? ` (${named})` : '') +
-      ': give the issuer exactly as the provider writes it there'
+      ': give the issuer exactly as the sign-in provider writes it there'
     );
   }
   if (code === 'OAUTH_RESPONSE_IS_NOT_CONFORM') {

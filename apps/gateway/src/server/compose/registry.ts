@@ -1,5 +1,5 @@
 /**
- * Plugin registry wiring — where the single provider list reaches the root.
+ * Plugin registry wiring — where the single service list reaches the root.
  *
  * The registry itself is `@vaubaan/plugin-sdk`'s `PluginRegistry` (ADR
  * plugin-contract-and-credential-spec D6): the root builds it once from the
@@ -22,7 +22,7 @@ import {
   isBrokeredSpec,
   PluginRegistry,
   PluginRegistryError,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 import { findRiskEntry, isAcceptableInEnv, isEnvScopedEntry } from '@vaubaan/policy-engine';
 import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
@@ -31,17 +31,17 @@ import { ConfigError, type InstanceConfig } from '../config';
 import { permissionRequestTool } from '../execution/permission-request';
 import type { CatalogIndex } from '../store';
 
-/** A registry with no plugin — tests of the root that need no provider. */
+/** A registry with no plugin — tests of the root that need no service. */
 export async function buildEmptyRegistry(): Promise<PluginRegistry> {
   return new PluginRegistry([]);
 }
 
 /**
  * `CatalogIndex` over the registry's catalogs. A base id (`acme.thing-write`)
- * exists when its provider is registered and its catalog has the entry; an
+ * exists when its service is registered and its catalog has the entry; an
  * env-qualified id (`acme[prod].thing-write`) exists when, in addition, the
  * entry is env-scoped and lists that environment in `acceptable_in_envs`.
- * Anything else — unknown provider, wildcard, sentinel, malformed id — does
+ * Anything else — unknown service, wildcard, sentinel, malformed id — does
  * not exist, so the store refuses to persist it (spec §10).
  */
 export class RegistryCatalogIndex implements CatalogIndex {
@@ -50,7 +50,7 @@ export class RegistryCatalogIndex implements CatalogIndex {
   has(riskId: RiskId): boolean {
     const parsed = parseRiskId(riskId);
     if (!parsed) return false;
-    const registered = this.registry.get(parsed.provider);
+    const registered = this.registry.get(parsed.service);
     if (!registered) return false;
     const entry = findRiskEntry(registered.catalog, baseRiskId(riskId));
     if (!entry) return false;
@@ -61,19 +61,19 @@ export class RegistryCatalogIndex implements CatalogIndex {
 
 /**
  * Every configured self resource (`self_resources`) names a registered plugin: an entry
- * of an unknown provider (a typo, `Railway` for `railway`) would match nothing and
+ * of an unknown service (a typo, `Railway` for `railway`) would match nothing and
  * protect nothing, silently (SEC 2026-10-15 re-check L-1). Exit 78 like any invalid key.
  */
 export function checkSelfResources(config: InstanceConfig, registry: PluginRegistry): void {
   if (registry.size === 0) return;
-  const unknown = config.selfResources.filter((self) => !registry.has(self.provider));
+  const unknown = config.selfResources.filter((self) => !registry.has(self.service));
   if (unknown.length === 0) return;
   const known = registry.ids.join(', ');
   throw new ConfigError(
     unknown.map((self) => ({
       path: 'self_resources',
       env: ['VAUBAAN_SELF_RESOURCES'],
-      message: `'${self.provider}' is not a registered plugin id (registered: ${known}); the entry would protect nothing`,
+      message: `'${self.service}' is not a registered plugin id (registered: ${known}); the entry would protect nothing`,
     })),
   );
 }
@@ -86,7 +86,7 @@ export function checkSelfResources(config: InstanceConfig, registry: PluginRegis
  * Empty when every brokered plugin fits.
  */
 export function brokeredPluginProblems(
-  plugins: readonly ProviderPlugin[],
+  plugins: readonly ServicePlugin[],
   providers: ProviderTable = PROVIDERS,
 ): string[] {
   const problems: string[] = [];
@@ -123,7 +123,7 @@ export const HOST_TOOL_NAMES: readonly string[] = [permissionRequestTool.name];
  * the plugin's would never run, so a plugin may not take one of those names.
  */
 export function hostToolNameProblems(
-  plugins: readonly ProviderPlugin[],
+  plugins: readonly ServicePlugin[],
   hostTools: readonly string[] = HOST_TOOL_NAMES,
 ): string[] {
   const taken = new Set(hostTools);

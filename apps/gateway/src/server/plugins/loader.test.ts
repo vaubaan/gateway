@@ -3,7 +3,7 @@
  * plugins-bundled-or-pinned-by-the-operator). The pinned plugin is a real bundle:
  * the SDK's `acme` fixture built by esbuild the way `scripts/build-plugin-bundle.mjs`
  * builds one (its own SDK copy inside, its catalog read beside it), then copied into
- * directories whose manifests vary. No network, no provider.
+ * directories whose manifests vary. No network, no service.
  */
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
-import { isUpstreamAuthError, UpstreamAuthError, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { isUpstreamAuthError, UpstreamAuthError, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ConfigError } from '../config';
@@ -27,14 +27,27 @@ let root: string;
 let bundle: string;
 
 /** The acme fixture as a self-contained ESM bundle at `version`, its credential replaced by `credential` (a JS expression). */
-async function bundleAcme(version: string, credential?: string): Promise<string> {
+async function bundleAcme(
+  version: string,
+  credential?: string,
+  shape: 'current' | 'legacy' = 'current',
+): Promise<string> {
   const overrides = credential === undefined ? '' : `, credential: ${credential}`;
+  // A bundle of an SDK before 0.9.4 says provider where this one says service.
+  const legacy = [
+    `const { service, ...catalog } = plugin.catalog;`,
+    `const { service: model, ...dataModel } = plugin.dataModel;`,
+    `const old = { ...plugin, catalog: { ...catalog, provider: service }, dataModel: { ...dataModel, provider: model },`,
+    `  classify: (...a) => { const o = plugin.classify(...a); return 'slices' in o ? { slices: o.slices.map(({ service: s, ...r }) => ({ ...r, provider: s })) } : o; } };`,
+    `export default old;`,
+  ];
   const result = await build({
     stdin: {
       contents: [
         `import { acmePlugin } from ${JSON.stringify(join(ACME, 'acme-plugin.ts'))};`,
         `import { definePlugin, UpstreamAuthError } from '@vaubaan/plugin-sdk';`,
-        `export default definePlugin({ ...acmePlugin, version: ${JSON.stringify(version)}${overrides} });`,
+        `const plugin = definePlugin({ ...acmePlugin, version: ${JSON.stringify(version)}${overrides} });`,
+        ...(shape === 'legacy' ? legacy : [`export default plugin;`]),
         `export const throwAuth = async () => { throw new UpstreamAuthError('no', 401); };`,
       ].join('\n'),
       resolveDir: REPO,
@@ -120,7 +133,17 @@ describe('readPinnedPlugins', () => {
       ['acme', '1.2.4', join(dir, 'acme')],
     ]);
     // The catalog was read beside the bundle, by the bundle's own SDK.
-    expect(pins[0]?.plugin.catalog.provider).toBe('acme');
+    expect(pins[0]?.plugin.catalog.service).toBe('acme');
+  });
+
+  it("reads a bundle of an SDK before 0.9.4 in this SDK's words (provider became service)", async () => {
+    const dir = freshDir('legacy');
+    pin(dir, 'acme', { code: await bundleAcme('1.2.4', undefined, 'legacy') });
+    const [pinned] = await readPinnedPlugins(dir, { sdkVersion: SDK });
+    expect(pinned?.plugin.catalog.service).toBe('acme');
+    expect(pinned?.plugin.dataModel.service).toBe('acme');
+    const outcome = pinned?.plugin.classify('acme__list_things', { space: 'sp' }, []);
+    expect(outcome && 'slices' in outcome && outcome.slices[0]?.service).toBe('acme');
   });
 
   it('recognises an error of the pinned copy of the SDK by its brand, not instanceof', async () => {
@@ -210,7 +233,7 @@ describe('loadPlugins', () => {
   it('lets the pin replace the bundled plugin of its id and logs it', async () => {
     const dir = freshDir('replace');
     pin(dir, 'acme');
-    const bundled = (await import(join(ACME, 'acme-plugin.ts'))) as { acmePlugin: ProviderPlugin };
+    const bundled = (await import(join(ACME, 'acme-plugin.ts'))) as { acmePlugin: ServicePlugin };
     const lines: string[] = [];
     const logger = createLogger({
       level: 'info',

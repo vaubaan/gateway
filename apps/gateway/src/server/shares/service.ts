@@ -3,7 +3,7 @@
  *
  * A share is `(account, target, restriction)`: the owner of an account
  * grants a user or a group the right to accept, in their missions, a subset
- * of an explicit list of `RiskId`s of the provider's catalog.
+ * of an explicit list of `RiskId`s of the service's catalog.
  *
  * Rules held here (spec §11.2 v1 assumptions):
  *
@@ -11,7 +11,7 @@
  *     `AccountService.get(actor, …)`, which answers "not found" to anyone
  *     who does not own the account now;
  *   - a restriction carries risks only: no quantity, no gate, no resource;
- *   - never a wildcard: the ids are checked one by one against the provider's
+ *   - never a wildcard: the ids are checked one by one against the service's
  *     catalog, and an empty list is refused rather than stored;
  *   - never to someone who owns the account now — its owner, or a current
  *     member of the group that owns it: such a share grants nothing today and
@@ -76,7 +76,7 @@ export interface ShareView {
 /** What the Share dialog of one account needs. */
 export interface ShareContext {
   readonly account: AccountRecord;
-  readonly providerLabel: string;
+  readonly serviceLabel: string;
   /** The whole catalog as explicit ids, catalog order. */
   readonly risks: readonly CatalogRisk[];
   /** Every group of the instance: a share may target any of them. */
@@ -155,10 +155,10 @@ export interface ReceivedRisk {
 
 export interface ReceivedShare {
   readonly share: ShareRecord;
-  readonly account: Pick<AccountRecord, 'id' | 'displayName' | 'provider' | 'status'>;
-  readonly providerLabel: string;
+  readonly account: Pick<AccountRecord, 'id' | 'displayName' | 'service' | 'status'>;
+  readonly serviceLabel: string;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
-  readonly providerIcon: ServiceIcon | null;
+  readonly serviceIcon: ServiceIcon | null;
   readonly ownerLabel: string;
   /** How it reaches the user: `you`, or the group it was made to. */
   readonly via: string;
@@ -226,13 +226,13 @@ export class ShareService {
   async contextFor(actor: Actor, accountId: string): Promise<ShareContext> {
     const detail = await this.owned(actor, accountId);
     const { account } = detail;
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     const shares = (await this.deps.store.shares.listForAccount(account.id)).filter(
       (share) => share.status === 'active',
     );
     return {
       account,
-      providerLabel: detail.provider_label,
+      serviceLabel: detail.service_label,
       risks: registered ? enumerateCatalog(registered.plugin.catalog) : [],
       groups: await this.deps.store.groups.list(),
       labelling: labellingOf(detail.resources, typeof registered?.plugin.envOf === 'function'),
@@ -484,13 +484,13 @@ export class ShareService {
     for (const share of await this.deps.store.shares.listActiveForTargets(principals)) {
       const account = await this.deps.store.accounts.getById(share.accountId);
       if (!account) continue;
-      const registered = this.deps.registry.get(account.provider);
+      const registered = this.deps.registry.get(account.service);
       const rows = registered ? enumerateCatalog(registered.plugin.catalog) : [];
       received.push({
         share,
         account,
-        providerLabel: registered?.plugin.displayName ?? account.provider,
-        providerIcon: registered ? serviceIconOf(registered.plugin) : null,
+        serviceLabel: registered?.plugin.displayName ?? account.service,
+        serviceIcon: registered ? serviceIconOf(registered.plugin) : null,
         ownerLabel: await principalLabel(this.deps.store, account.owner),
         via:
           share.target.kind === 'user'
@@ -513,10 +513,10 @@ export class ShareService {
     }
   }
 
-  /** The ids as a restriction: non-empty, each one an explicit id of the provider's catalog. */
+  /** The ids as a restriction: non-empty, each one an explicit id of the service's catalog. */
   private restrictionOf(account: AccountRecord, riskIds: readonly RiskId[]): RiskId[] {
-    const registered = this.deps.registry.get(account.provider);
-    if (!registered) throw new ShareError('provider-unknown');
+    const registered = this.deps.registry.get(account.service);
+    if (!registered) throw new ShareError('service-unknown');
     const asked = [...new Set(riskIds)];
     if (asked.length === 0) throw new ShareError('restriction-empty');
     // The authority's own enumeration: what a share may carry and what an authority

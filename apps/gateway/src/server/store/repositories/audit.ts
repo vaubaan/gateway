@@ -407,11 +407,9 @@ function adminParams(id: string, e: AdminAuditEntry): SqlParams {
 
 function isSlice(value: unknown): value is Slice {
   if (typeof value !== 'object' || value === null) return false;
-  const v = value as { provider?: unknown; path?: unknown; action?: unknown };
+  const v = value as { service?: unknown; path?: unknown; action?: unknown };
   return (
-    typeof v.provider === 'string' &&
-    Array.isArray(v.path) &&
-    (v.action === 'R' || v.action === 'W')
+    typeof v.service === 'string' && Array.isArray(v.path) && (v.action === 'R' || v.action === 'W')
   );
 }
 

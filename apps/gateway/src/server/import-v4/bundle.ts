@@ -9,7 +9,7 @@
  */
 import { z } from 'zod';
 
-import { PASTED_KEY_PROVIDERS } from './credential-mapping';
+import { PASTED_KEY_SERVICES } from './credential-mapping';
 
 export const BUNDLE_FORMAT = 'vaubaan-v4-export';
 export const BUNDLE_VERSION = 1;
@@ -51,15 +51,15 @@ const organizationSchema = z.object({ id, slug, name }).strict();
 const projectSchema = z.object({ id, slug, name }).strict();
 
 /**
- * One `provider_admins` row: the account an organization connected once per
- * provider. `access_token` is present only for the providers whose key is
- * imported as is (`PASTED_KEY_PROVIDERS`); the exporter never decrypts the
+ * One `service_admins` row: the account an organization connected once per
+ * service. `access_token` is present only for the services whose key is
+ * imported as is (`PASTED_KEY_SERVICES`); the exporter never decrypts the
  * others (GitHub installation, Railway and Supabase OAuth grants).
  */
 const accountSchema = z
   .object({
     id,
-    provider: slug,
+    service: slug,
     status: z.enum(['connected', 'expired', 'revoked']),
     team_id: z.string().max(200).nullable(),
     installation_id: z.string().max(200).nullable(),
@@ -69,15 +69,15 @@ const accountSchema = z
   .refine(
     (account) =>
       account.access_token === null ||
-      (PASTED_KEY_PROVIDERS as readonly string[]).includes(account.provider),
-    { message: 'carries a secret for a provider whose secret is never imported' },
+      (PASTED_KEY_SERVICES as readonly string[]).includes(account.service),
+    { message: 'carries a secret for a service whose secret is never imported' },
   );
 
-/** One `provider_bindings` row (deduplicated by the importer). */
+/** One `service_bindings` row (deduplicated by the importer). */
 const bindingSchema = z
   .object({
     project_id: id,
-    provider: slug,
+    service: slug,
     resource_ref: z.string().min(1).max(500),
     display_name: z.string().max(500).nullable(),
     /** The v4 label as stored: sometimes `prod`, sometimes junk such as a project name. */
@@ -146,7 +146,7 @@ const skippedSchema = z
     project_env_vars: z.number().int().min(0),
     /** Tokens delegated from another token: v5 has no sub-mission. */
     child_tokens: z.number().int().min(0),
-    /** `bash_bindings` rows: v5 has no bash provider. */
+    /** `bash_bindings` rows: v5 has no bash service. */
     bash_bindings: z.number().int().min(0),
     /** SSH host slugs of the organization the operator did not ask for. */
     ssh_hosts_not_exported: z.array(slug).max(1000),

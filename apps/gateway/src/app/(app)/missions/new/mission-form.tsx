@@ -73,7 +73,7 @@ import type {
 import { hasChanges, judgeEdit } from '@/lib/missions/mission-edit';
 import { previewDraft } from '@/lib/missions/preview';
 import { TRUST_LEVELS } from '@/lib/missions/macro-actions';
-import type { RiskPlanes } from '@/lib/providers/planes';
+import type { RiskPlanes } from '@/lib/services/planes';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
@@ -260,9 +260,7 @@ export function MissionForm({
         name: body.mission.name,
         ...made,
         permissions: preview.policy.length,
-        services: [
-          ...new Set(state.cards.flatMap((card) => accountOf(card)?.provider_label ?? [])),
-        ],
+        services: [...new Set(state.cards.flatMap((card) => accountOf(card)?.service_label ?? []))],
       });
     } else if (answer.status === 422 && isRefusedBody(body)) {
       setServerIssues(body.preview.issues);
@@ -576,7 +574,7 @@ export function MissionForm({
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
                 aria-label="Agent proposal (JSON)"
-                placeholder='{"accounts":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                placeholder='{"accounts":[{"service":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
                 spellCheck={false}
               />
             </Field>
@@ -620,8 +618,8 @@ export function MissionForm({
                 key={card.key}
                 account={account}
                 card={card}
-                icon={icons[account.provider] ?? null}
-                planes={planes[account.provider] ?? null}
+                icon={icons[account.service] ?? null}
+                planes={planes[account.service] ?? null}
                 limitLabel={limitLabel}
                 issues={issuesOfCard(issues, state, card).map((i) => issueSentence(i, context))}
                 onLevel={(actionId, level) =>
@@ -644,11 +642,11 @@ export function MissionForm({
               {CARD_WORDS.addAccount}
             </Button>
             <span className={cardStyles.marks} aria-hidden="true">
-              {[...new Map(offered.map(({ account: c }) => [c.provider, c])).values()].map((c) => (
+              {[...new Map(offered.map(({ account: c }) => [c.service, c])).values()].map((c) => (
                 <ServiceMark
-                  key={c.provider}
-                  name={c.provider_label}
-                  icon={icons[c.provider] ?? null}
+                  key={c.service}
+                  name={c.service_label}
+                  icon={icons[c.service] ?? null}
                 />
               ))}
             </span>
@@ -741,7 +739,7 @@ export function MissionForm({
           account={customAccount}
           card={customCard}
           actionId={custom.actionId}
-          planes={planes[customAccount.provider] ?? null}
+          planes={planes[customAccount.service] ?? null}
           limitLabel={limitLabel}
           onCancel={() => setCustom(null)}
           onApply={(applied, from) => {

@@ -138,14 +138,14 @@ export interface TelemetryConfig {
 export type SelfResourceSource = 'config' | 'railway' | 'fly';
 
 /**
- * A provider resource that hosts or runs this instance (SEC 2026-10-15 H1):
+ * A service resource that hosts or runs this instance (SEC 2026-10-15 H1):
  * never a mission resource — not offered at issuance, left out of a
  * mission's resources at execution, flagged on the account page. Host-level:
  * no plugin can add or remove one.
  */
 export interface SelfResource {
   /** A plugin id (`railway`, `fly`). */
-  readonly provider: string;
+  readonly service: string;
   /** The resource ref as discovery stores it (a Railway project id, a Fly app name). */
   readonly ref: string;
   readonly source: SelfResourceSource;
@@ -342,7 +342,7 @@ export interface InstanceConfig {
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
   /**
-   * The execution door's plugin calls: how long one call may wait for its provider, in
+   * The execution door's plugin calls: how long one call may wait for its service, in
    * seconds, before it is stopped and answered as a timeout.
    */
   readonly execution: { readonly callTimeoutSeconds: number };
@@ -375,8 +375,8 @@ export interface InstanceConfig {
  */
 export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   const out: string[] = [];
-  for (const provider of config.signIn) {
-    if (provider.kind !== 'local') out.push(provider.clientSecret);
+  for (const signInProvider of config.signIn) {
+    if (signInProvider.kind !== 'local') out.push(signInProvider.clientSecret);
   }
   if (config.bootstrapToken) out.push(config.bootstrapToken);
   if (config.ops.token) out.push(config.ops.token);

@@ -1,11 +1,11 @@
 /**
- * `/reference/<id>` — the reference of one service (spec §4.2 "Providers"):
+ * `/reference/<id>` — the reference of one service (spec §4.2 "Services"):
  * what it is in the plugin's own words, then its permissions compared across
  * the trust levels, its tools, and how it is modelled, behind tabs
  * (`service-view.tsx`). The plugin's version is on the summary line, tagged
  * "pinned" with the bundled version it replaces when the operator pinned it.
  *
- * Generated from the plugin registry (`server/providers/reference.ts`): no
+ * Generated from the plugin registry (`server/services/reference.ts`): no
  * service has a hand-written page. Every permission and every macro-action has
  * an anchor (`#risk-<id>`, `#macro-<id>`) the other pages link to; the ids are
  * the protocol's and are printed as it spells them.
@@ -27,7 +27,7 @@ import {
 import { requirePrincipal } from '@/lib/auth/session';
 import { serviceDoc, ENVIRONMENT_WORDS } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
-import { providerCards, providerReference } from '@/lib/providers/reference';
+import { serviceCards, serviceReference } from '@/lib/services/reference';
 
 import { catalogSize, pinnedPlugins, PinnedTag, ReferenceFrame } from '../frame';
 import styles from '../reference.module.css';
@@ -42,7 +42,7 @@ interface Props {
 export default async function ServiceReferencePage({ params }: Props) {
   const { root } = await requirePrincipal();
   const { id } = await params;
-  const reference = providerReference(root.registry, id);
+  const reference = serviceReference(root.registry, id);
   if (!reference) notFound();
   const validation = await root.telemetry.stats.statusFor(reference.id);
   const { environment } = reference;
@@ -50,14 +50,14 @@ export default async function ServiceReferencePage({ params }: Props) {
   const pinned = pinnedPlugins(root.plugins).get(reference.id);
 
   return (
-    <ReferenceFrame cards={providerCards(root.registry)}>
+    <ReferenceFrame cards={serviceCards(root.registry)}>
       <PageHeader
         level={2}
         doc={serviceDoc(reference.id, reference.name, 'page', reference.description)}
         mark={<ServiceMark name={reference.name} icon={reference.icon} size="lg" />}
         title={reference.name}
         lede={
-          <span data-testid="provider-summary">
+          <span data-testid="service-summary">
             {reference.summary ?? reference.description ?? 'This service ships no description.'}
           </span>
         }
@@ -71,7 +71,7 @@ export default async function ServiceReferencePage({ params }: Props) {
             },
             {
               label: (
-                <span className={styles.inline} data-testid="provider-version">
+                <span className={styles.inline} data-testid="service-version">
                   plugin <Mono>{reference.version}</Mono>
                   <PinnedTag entry={pinned} withReplaced />
                 </span>
@@ -151,7 +151,7 @@ export default async function ServiceReferencePage({ params }: Props) {
             </ul>
             <p className={styles.quiet}>
               The gateway decides on refs and changed paths, never on the content of the code: it
-              does not read the pack. A push the provider cannot compare in full is refused; split
+              does not read the pack. A push the service cannot compare in full is refused; split
               it. Git LFS, signed pushes, push options and <Mono>--atomic</Mono> are not served.
             </p>
           </div>

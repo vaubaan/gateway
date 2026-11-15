@@ -27,7 +27,7 @@ export type LocalLinkKind = (typeof LOCAL_LINK_KINDS)[number];
 
 export interface SignInAccountRecord {
   readonly id: string;
-  readonly provider: string;
+  readonly signInProvider: string;
   /** Lower-cased. */
   readonly email: string;
   /** When the second factor was confirmed; `null`: none. */
@@ -45,7 +45,7 @@ export interface SignInAccountRecord {
 export interface LocalLinkRecord {
   readonly id: string;
   readonly kind: LocalLinkKind;
-  readonly provider: string;
+  readonly signInProvider: string;
   readonly email: string;
   /** A user id, `bootstrap`, or `self` (a reset the person asked for). */
   readonly createdBy: string;
@@ -91,12 +91,12 @@ export function nextLockout(
 }
 
 export interface SignInAccountsRepo {
-  /** `null` when the provider already has an account for this address. */
-  create(input: { provider: string; email: string }): Promise<SignInAccountRecord | null>;
+  /** `null` when the sign-in provider already has an account for this address. */
+  create(input: { signInProvider: string; email: string }): Promise<SignInAccountRecord | null>;
   getById(id: string): Promise<SignInAccountRecord | null>;
-  getByEmail(provider: string, email: string): Promise<SignInAccountRecord | null>;
-  /** Of one provider, oldest first. */
-  list(provider: string): Promise<SignInAccountRecord[]>;
+  getByEmail(signInProvider: string, email: string): Promise<SignInAccountRecord | null>;
+  /** Of one sign-in provider, oldest first. */
+  list(signInProvider: string): Promise<SignInAccountRecord[]>;
   /** The account and its secrets. */
   remove(id: string): Promise<boolean>;
   /** The clear text of a secret, or `null` when the account has none of that kind. */
@@ -117,7 +117,7 @@ export interface SignInAccountsRepo {
   /** Retires the unused links of that kind for the address, then records the new one. */
   createLink(input: {
     kind: LocalLinkKind;
-    provider: string;
+    signInProvider: string;
     email: string;
     tokenSha256: string;
     createdBy: string;
@@ -127,12 +127,12 @@ export interface SignInAccountsRepo {
   /** Marks the link used; `false` when it was used already (or does not exist). */
   useLink(id: string): Promise<boolean>;
   /** The unused links for the address, newest first (People: "a link is pending"). */
-  pendingLinks(provider: string, email: string): Promise<LocalLinkRecord[]>;
+  pendingLinks(signInProvider: string, email: string): Promise<LocalLinkRecord[]>;
 }
 
 interface AccountRow {
   id: string;
-  provider: string;
+  sign_in_provider: string;
   email: string;
   totp_confirmed_at: string | null;
   totp_last_step: number | null;
@@ -147,7 +147,7 @@ interface AccountRow {
 interface LinkRow {
   id: string;
   kind: string;
-  provider: string;
+  sign_in_provider: string;
   email: string;
   created_by: string;
   created_at: string;
@@ -156,13 +156,14 @@ interface LinkRow {
 }
 
 const ACCOUNT_COLUMNS =
-  'id, provider, email, totp_confirmed_at, totp_last_step, failed_attempts, first_failure_at, locked_until, password_changed_at, created_at, updated_at';
-const LINK_COLUMNS = 'id, kind, provider, email, created_by, created_at, expires_at, used_at';
+  'id, sign_in_provider, email, totp_confirmed_at, totp_last_step, failed_attempts, first_failure_at, locked_until, password_changed_at, created_at, updated_at';
+const LINK_COLUMNS =
+  'id, kind, sign_in_provider, email, created_by, created_at, expires_at, used_at';
 
 function toAccount(row: AccountRow): SignInAccountRecord {
   return {
     id: row.id,
-    provider: row.provider,
+    signInProvider: row.sign_in_provider,
     email: row.email,
     totpConfirmedAt: row.totp_confirmed_at,
     totpLastStep: row.totp_last_step,
@@ -179,7 +180,7 @@ function toLink(row: LinkRow): LocalLinkRecord {
   return {
     id: row.id,
     kind: row.kind === 'reset' ? 'reset' : 'invite',
-    provider: row.provider,
+    signInProvider: row.sign_in_provider,
     email: row.email,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -202,17 +203,17 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
   const normalize = (email: string): string => email.trim().toLowerCase();
 
   const insertAccount = db.prepare<[string, string, string, string, string]>(
-    `INSERT INTO sign_in_accounts (id, provider, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (provider, email) DO NOTHING`,
+    `INSERT INTO sign_in_accounts (id, sign_in_provider, email, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (sign_in_provider, email) DO NOTHING`,
   );
   const accountById = db.prepare<[string], AccountRow>(
     `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE id = ?`,
   );
   const accountByEmail = db.prepare<[string, string], AccountRow>(
-    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE provider = ? AND email = ?`,
+    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE sign_in_provider = ? AND email = ?`,
   );
   const accountsOf = db.prepare<[string], AccountRow>(
-    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE provider = ? ORDER BY created_at, email`,
+    `SELECT ${ACCOUNT_COLUMNS} FROM sign_in_accounts WHERE sign_in_provider = ? ORDER BY created_at, email`,
   );
   const deleteAccount = db.prepare<[string]>('DELETE FROM sign_in_accounts WHERE id = ?');
   const deleteSecretsOf = db.prepare<[string]>(
@@ -246,10 +247,10 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
     'UPDATE sign_in_accounts SET password_changed_at = ?, updated_at = ? WHERE id = ?',
   );
   const retireLinks = db.prepare<[string, string, string, string]>(
-    `UPDATE local_links SET used_at = ? WHERE kind = ? AND provider = ? AND email = ? AND used_at IS NULL`,
+    `UPDATE local_links SET used_at = ? WHERE kind = ? AND sign_in_provider = ? AND email = ? AND used_at IS NULL`,
   );
   const insertLink = db.prepare<[string, string, string, string, string, string, string, string]>(
-    `INSERT INTO local_links (id, kind, provider, email, token_sha256, created_by, created_at, expires_at)
+    `INSERT INTO local_links (id, kind, sign_in_provider, email, token_sha256, created_by, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const linkById = db.prepare<[string], LinkRow>(
@@ -263,7 +264,7 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
   );
   const pendingOf = db.prepare<[string, string, string], LinkRow>(
     `SELECT ${LINK_COLUMNS} FROM local_links
-     WHERE provider = ? AND email = ? AND used_at IS NULL AND expires_at > ?
+     WHERE sign_in_provider = ? AND email = ? AND used_at IS NULL AND expires_at > ?
      ORDER BY created_at DESC`,
   );
 
@@ -272,7 +273,7 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
       const now = nowIso(ctx);
       const id = ctx.newId();
       const email = normalize(input.email);
-      if (insertAccount.run(id, input.provider, email, now, now).changes === 0) return null;
+      if (insertAccount.run(id, input.signInProvider, email, now, now).changes === 0) return null;
       const row = accountById.get(id);
       return row ? toAccount(row) : null;
     },
@@ -280,12 +281,12 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
       const row = accountById.get(id);
       return row ? toAccount(row) : null;
     },
-    async getByEmail(provider, email) {
-      const row = accountByEmail.get(provider, normalize(email));
+    async getByEmail(signInProvider, email) {
+      const row = accountByEmail.get(signInProvider, normalize(email));
       return row ? toAccount(row) : null;
     },
-    async list(provider) {
-      return accountsOf.all(provider).map(toAccount);
+    async list(signInProvider) {
+      return accountsOf.all(signInProvider).map(toAccount);
     },
     async remove(id) {
       return withImmediateTransaction(db, () => {
@@ -348,12 +349,12 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
       const email = normalize(input.email);
       return withImmediateTransaction(db, () => {
         const now = nowIso(ctx);
-        retireLinks.run(now, input.kind, input.provider, email);
+        retireLinks.run(now, input.kind, input.signInProvider, email);
         const id = ctx.newId();
         insertLink.run(
           id,
           input.kind,
-          input.provider,
+          input.signInProvider,
           email,
           input.tokenSha256,
           input.createdBy,
@@ -372,8 +373,8 @@ export function createSignInAccountsRepo(ctx: RepoContext): SignInAccountsRepo {
     async useLink(id) {
       return useLinkStmt.run(nowIso(ctx), id).changes > 0;
     },
-    async pendingLinks(provider, email) {
-      return pendingOf.all(provider, normalize(email), nowIso(ctx)).map(toLink);
+    async pendingLinks(signInProvider, email) {
+      return pendingOf.all(signInProvider, normalize(email), nowIso(ctx)).map(toLink);
     },
   };
 }

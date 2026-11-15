@@ -62,7 +62,7 @@ function wordsOfKey(key: string): string {
 const KEY_LABELS: Readonly<Record<string, string>> = {
   name: 'Name',
   display_name: 'Name',
-  provider: 'Service',
+  service: 'Service',
   status: 'State',
   owner: 'Owner',
   target: 'Given to',

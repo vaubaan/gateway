@@ -64,13 +64,13 @@ export type MissionContextStore = Pick<Store, 'accounts' | 'users' | 'groups' | 
 
 /** The shared `AccountResource` of a stored row — what `classify` and `execute` receive. */
 export function missionResourceOf(
-  account: Pick<AccountRecord, 'id' | 'provider'>,
+  account: Pick<AccountRecord, 'id' | 'service'>,
   record: AccountResourceRecord,
 ): MissionResource {
   return {
     id: record.id,
     account_id: account.id,
-    provider: account.provider,
+    service: account.service,
     ref: record.ref,
     env: record.env,
     displayName: record.displayName,
@@ -120,9 +120,7 @@ export async function loadMissionContext(
       // What the classifier may cite of the account (a Fly organization): never a secret.
       public_fields: accountPublicFields(account),
       // Any resource it reaches, selected or not, stale or not: the credential still reaches it.
-      hosts_instance: discovered.some((r) =>
-        isSelfResource(selfResources, account.provider, r.ref),
-      ),
+      hosts_instance: discovered.some((r) => isSelfResource(selfResources, account.service, r.ref)),
       ...(takesFutureResources(selection) ? { takes_future_resources: true } : {}),
       // A revoked account is lost whatever the grounds said: its status is final.
       ...(loss === 'access-withdrawn'
@@ -132,7 +130,7 @@ export async function loadMissionContext(
           : {}),
     });
     const bySet = reachedResourcesBySet(selection, discovered, (r) =>
-      isSelfResource(selfResources, account.provider, r.ref),
+      isSelfResource(selfResources, account.service, r.ref),
     );
     for (const set of selection.resourceSets) {
       const reached = bySet.get(set.id) ?? [];

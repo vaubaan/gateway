@@ -1,16 +1,16 @@
 /**
  * The temporary refs of a push (spec §4.1 ter; ADR gateway-as-git-remote D4,
- * D5): the pack stored at the provider under `refs/vaubaan/<random>` so that
- * the provider can say what it brings, then deleted — on every path. The pack
+ * D5): the pack stored at the service under `refs/vaubaan/<random>` so that
+ * the service can say what it brings, then deleted — on every path. The pack
  * reaches this module read whole, inspected and decided on (`push.ts`, ADR
  * gateway-as-git-remote): a push its mission refuses for what
  * its objects change never gets here.
  *
  *   names     random, carrying no mission id: every reader of the repository
  *             can list them while they exist (the fetch listings of the door
- *             hide them, the provider's own interface does not);
+ *             hide them, the service's own interface does not);
  *   rows      one per ref (`git_pending_refs`), written before a byte leaves,
- *             with the request's deadline; dropped once the provider confirmed
+ *             with the request's deadline; dropped once the service confirmed
  *             the ref gone, kept for the sweeper otherwise;
  *   ceiling   a mission holds at most `MAX_TEMPORARY_REFS_PER_MISSION` refs at
  *             once, in flight or waiting for an approval;
@@ -77,8 +77,8 @@ export interface StoredRef {
 }
 
 /**
- * Delete temporary refs at the provider, a compare-and-swap on what each
- * points at. Returns the refs that are gone: those the provider reported
+ * Delete temporary refs at the service, a compare-and-swap on what each
+ * points at. Returns the refs that are gone: those the service reported
  * `ok`, and those it refused that it no longer lists (already gone). A ref it
  * refused and still lists stays: its row is kept for the sweeper.
  */
@@ -108,7 +108,7 @@ export async function deleteTemporaryRefs(
   return gone;
 }
 
-/** The refs the provider's receive-pack advertises now. */
+/** The refs the service's receive-pack advertises now. */
 async function listedRefs(
   ctx: ExecuteContext,
   upstream: GitUpstream,
@@ -142,7 +142,7 @@ export interface TemporaryRefsScope {
   readonly signal: AbortSignal;
 }
 
-/** The temporary refs of one push, and the write access to the provider they need. */
+/** The temporary refs of one push, and the write access to the service they need. */
 export class TemporaryRefs {
   private storedRefs: readonly StoredRef[] = [];
   private account: { execCtx: ExecuteContext; upstream: GitUpstream } | null = null;
@@ -170,7 +170,7 @@ export class TemporaryRefs {
       if (isExecutorRefusal(err)) throw new PushStop(err.message, err.message);
       throw new PushStop(
         `the ${target.plugin.displayName} account of this mission could not be used (${errorName(err)}); tell the human`,
-        `the provider account could not be used (${errorName(err)})`,
+        `the service account could not be used (${errorName(err)})`,
       );
     }
   }
@@ -186,7 +186,7 @@ export class TemporaryRefs {
 
   /**
    * Send the pack — already read whole, inspected and decided on — to the
-   * provider under one temporary ref per created or moved ref.
+   * service under one temporary ref per created or moved ref.
    */
   async store(pack: Uint8Array, list: CommandList): Promise<void> {
     const { ctx, target, signal } = this.scope;
@@ -229,7 +229,7 @@ export class TemporaryRefs {
         expiresAt: deadline,
       })),
     );
-    // From here the provider may hold the refs: they are cleaned up whatever follows.
+    // From here the service may hold the refs: they are cleaned up whatever follows.
     this.storedRefs = stored;
     let answer: Response;
     try {
@@ -258,17 +258,17 @@ export class TemporaryRefs {
       if (answer.status === HTTP_UNAUTHORIZED) {
         await this.deps.credentialCache.drop(target.account.id);
       }
-      // A 403 on the upload is the provider's own permission check: the account's
+      // A 403 on the upload is the service's own permission check: the account's
       // token cannot write to this repository.
       if (answer.status === HTTP_FORBIDDEN) {
         throw new PushStop(
           `${target.plugin.displayName} refused the push for a permission the account's token lacks (HTTP 403): the token needs write access to this repository; its owner creates one with it and reconnects the account.`,
-          'the provider refused the push for a permission the token lacks (HTTP 403)',
+          'the service refused the push for a permission the token lacks (HTTP 403)',
         );
       }
       throw new PushStop(
         `${target.plugin.displayName} refused to store the pack (HTTP ${answer.status}); push again, and tell the human if it persists`,
-        `the provider refused to store the pack (HTTP ${answer.status})`,
+        `the service refused to store the pack (HTTP ${answer.status})`,
       );
     }
     let report;
@@ -291,12 +291,12 @@ export class TemporaryRefs {
             : 'no status reported';
       throw new PushStop(
         `${target.plugin.displayName} could not store the pack: ${firstLine(detail || report.errors)}`,
-        'the provider could not store the pack',
+        'the service could not store the pack',
       );
     }
   }
 
-  /** A mission holds a bounded number of temporary refs at the provider. */
+  /** A mission holds a bounded number of temporary refs at the service. */
   private async checkCeiling(adding: number): Promise<void> {
     const held = await this.deps.pendingRefs.countFor(this.scope.ctx.mission.id);
     if (held + adding <= MAX_TEMPORARY_REFS_PER_MISSION) return;
@@ -312,13 +312,13 @@ export class TemporaryRefs {
     if (stopped) return stopped;
     return new PushStop(
       `the pack could not be sent to ${this.scope.target.plugin.displayName} (${errorName(err)}); push again`,
-      `the pack could not be sent to the provider (${errorName(err)})`,
+      `the pack could not be sent to the service (${errorName(err)})`,
     );
   }
 
   /**
    * The push waits for an approval: its refs stay until the request expires,
-   * so the person who answers reads the change at the provider. What an
+   * so the person who answers reads the change at the service. What an
    * earlier push of the same mission left waiting for the same refs is
    * superseded and deleted.
    */
@@ -348,9 +348,9 @@ export class TemporaryRefs {
   }
 
   /**
-   * Delete temporary refs at the provider, then the rows of those confirmed
+   * Delete temporary refs at the service, then the rows of those confirmed
    * gone. Runs on every path with a deadline of its own, never the request's
-   * signal. A ref the provider kept keeps its row, for the sweeper.
+   * signal. A ref the service kept keeps its row, for the sweeper.
    */
   async cleanUp(stored: readonly StoredRef[] = this.storedRefs): Promise<void> {
     if (stored.length === 0) return;
@@ -365,7 +365,7 @@ export class TemporaryRefs {
       );
       await this.deps.pendingRefs.remove([...gone]);
       if (gone.size < stored.length) {
-        this.deps.logger.warn('temporary refs kept by the provider; left to the sweeper', {
+        this.deps.logger.warn('temporary refs kept by the service; left to the sweeper', {
           mission_id: this.scope.ctx.mission.id,
           refs: stored.length - gone.size,
         });

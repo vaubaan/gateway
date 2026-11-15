@@ -44,7 +44,7 @@ describe('enumerateCatalog', () => {
     const [, envScoped] = ACME_CATALOG.risks;
     if (!envScoped) throw new Error('fixture: the second entry is env-scoped');
     const malformed: RiskCatalog = {
-      provider: 'acme',
+      service: 'acme',
       risks: [...ACME_CATALOG.risks, { ...envScoped, id: 'not a risk id' }],
     };
     expect(fullCatalogRiskIds(malformed)).toEqual(fullCatalogRiskIds(ACME_CATALOG));

@@ -54,7 +54,7 @@ describe('SignInProvidersService', () => {
     );
   }
 
-  it('records the address a provider was set up for, and a passed test moves it', async () => {
+  it('records the address a sign-in provider was set up for, and a passed test moves it', async () => {
     const s = service();
     await s.save(GITHUB, 'create');
     expect((await s.state('github')).registeredFor).toBe('https://gateway.test');
@@ -83,7 +83,7 @@ describe('SignInProvidersService', () => {
     expect((await s.state('local')).registeredFor).toBeNull();
   });
 
-  it('saves a GitHub provider with github.com as issuer, its secret sealed and never in a view', async () => {
+  it('saves a GitHub sign-in provider with github.com as issuer, its secret sealed and never in a view', async () => {
     const s = service();
     const { saved } = await s.save(GITHUB, 'create');
     expect(saved).toMatchObject({
@@ -95,7 +95,7 @@ describe('SignInProvidersService', () => {
     expect(views).toHaveLength(1);
     expect(JSON.stringify(views)).not.toContain('github-secret');
     expect(views[0]).not.toHaveProperty('clientSecret');
-    const resolved = (await s.resolve('github'))?.provider;
+    const resolved = (await s.resolve('github'))?.signInProvider;
     expect(resolved?.kind === 'github' ? resolved.clientSecret : null).toBe('github-secret');
     const row = t.store.db
       .prepare<[string], { value: string | null; secret_blob: Buffer | null }>(
@@ -112,7 +112,7 @@ describe('SignInProvidersService', () => {
     const s = service();
     await s.save(COMPANY, 'create');
     await s.save({ ...COMPANY, name: 'Acme corp', clientSecret: null }, 'update');
-    expect((await s.resolve('company'))?.provider).toMatchObject({
+    expect((await s.resolve('company'))?.signInProvider).toMatchObject({
       name: 'Acme corp',
       clientSecret: 'company-secret',
     });
@@ -121,7 +121,7 @@ describe('SignInProvidersService', () => {
     ).rejects.toMatchObject({ problems: [expect.stringContaining('issuer changes')] });
   });
 
-  it('saves a provider named idp like any other: its settings and its sealed secret', async () => {
+  it('saves a sign-in provider named idp like any other: its settings and its sealed secret', async () => {
     const s = service();
     await s.save({ ...COMPANY, id: 'idp' }, 'create');
     expect(await t.store.config.get('idp.issuer')).toBeNull();
@@ -131,7 +131,7 @@ describe('SignInProvidersService', () => {
     expect(await t.store.config.get('sign_in.idp')).toBeNull();
   });
 
-  it('shows a provider of the file read-only and refuses to change or remove it', async () => {
+  it('shows a sign-in provider of the file read-only and refuses to change or remove it', async () => {
     const file: SignInProvider = {
       kind: 'github',
       id: 'github',
@@ -152,20 +152,20 @@ describe('SignInProvidersService', () => {
     });
   });
 
-  it('refuses a second provider that would make a bare admin group ambiguous', async () => {
+  it('refuses a second sign-in provider that would make a bare admin group ambiguous', async () => {
     const s = service({ rule: { group: 'gateway-admins', emails: [] } });
     await s.save(COMPANY, 'create');
     await expect(s.save(GITHUB, 'create')).rejects.toMatchObject({
-      problems: [expect.stringContaining('does not say which provider claims it')],
+      problems: [expect.stringContaining('does not say which sign-in provider claims it')],
     });
-    // Named with its provider, the rule allows both.
+    // Named with its sign-in provider, the rule allows both.
     const named = service({ rule: { group: 'company:gateway-admins', emails: [] } });
     await expect(named.save(GITHUB, 'create')).resolves.toMatchObject({
       saved: { id: 'github' },
     });
   });
 
-  it('refuses a bad id, a duplicate id, a change of kind and an open provider without a rule', async () => {
+  it('refuses a bad id, a duplicate id, a change of kind and an open sign-in provider without a rule', async () => {
     const s = service();
     await expect(s.save({ ...GITHUB, id: 'Git Hub' }, 'create')).rejects.toMatchObject({
       problems: [expect.stringContaining('lower-case letter')],
@@ -175,7 +175,7 @@ describe('SignInProvidersService', () => {
       problems: [expect.stringContaining('already exists')],
     });
     await expect(s.save({ ...COMPANY, id: 'github' }, 'update')).rejects.toThrow(
-      /kind of a provider cannot change/,
+      /kind of a sign-in provider cannot change/,
     );
     await expect(
       s.save(
@@ -223,7 +223,7 @@ describe('SignInProvidersService — what an OpenID Connect issuer must be', () 
         s.save({ ...COMPANY, id: 'gh', issuer, invitationOnly: true }, 'create'),
       ).rejects.toMatchObject({
         problems: expect.arrayContaining([
-          'GitHub is not an OpenID Connect provider: choose the GitHub kind',
+          'GitHub is not an OpenID Connect sign-in provider: choose the GitHub kind',
         ]) as unknown,
       });
     }
@@ -231,7 +231,7 @@ describe('SignInProvidersService — what an OpenID Connect issuer must be', () 
     expect(await s.views()).toEqual([]);
     // The GitHub kind is the way out.
     await expect(s.save(GITHUB, 'create')).resolves.toMatchObject({ saved: { kind: 'github' } });
-    const resolved = (await s.resolve('github'))?.provider;
+    const resolved = (await s.resolve('github'))?.signInProvider;
     expect(resolved).toMatchObject({
       kind: 'github',
       issuer: new URL('https://github.com'),

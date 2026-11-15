@@ -7,7 +7,7 @@
  * path:
  *
  *   read      the plugin reads the resource(s) the call created from its answer
- *             (`createdResources`, pure); a resource of another provider, without
+ *             (`createdResources`, pure); a resource of another service, without
  *             a ref, or one of the instance's own (`isSelfResource`) is left out
  *   record    `AccountsRepo.upsertDiscoveredResources`: the row is inserted (it
  *             reads the account's default environment) or its stale flag cleared,
@@ -24,7 +24,7 @@
  *             resource-set-is-one-environment-with-optional-future-resources)
  *
  * It returns the refs it recorded, for the discovery after the call (which looks
- * again while the provider does not list them). A failure is logged — account,
+ * again while the service does not list them). A failure is logged — account,
  * tool, mission, never the arguments — and never changes the call's outcome: the
  * step returns `[]` and the discovery after the call runs as before.
  */
@@ -43,10 +43,10 @@ import { toIso, type Clock } from '../store/clock';
 export const CREATED_BY_THE_MISSION = 'created-by-the-mission';
 
 export interface CreatedResourcesDeps {
-  readonly registry: Pick<PluginRegistry, 'providerForTool'>;
+  readonly registry: Pick<PluginRegistry, 'serviceForTool'>;
   readonly store: Pick<Store, 'accounts' | 'missions'>;
   readonly audit: AuditWriter;
-  readonly selfResources: readonly Pick<SelfResource, 'provider' | 'ref'>[];
+  readonly selfResources: readonly Pick<SelfResource, 'service' | 'ref'>[];
   readonly logger: Logger;
   readonly clock: Clock;
   /** The other missions' future resources; absent, only the creating mission reaches it. */
@@ -66,11 +66,11 @@ export class CreatedResources {
     if (accountId === null || !isToolResult(call.result) || call.result.isError === true) {
       return [];
     }
-    const registered = this.deps.registry.providerForTool(call.tool);
+    const registered = this.deps.registry.serviceForTool(call.tool);
     const plugin = registered?.plugin;
     if (!plugin?.resourceCreatingTools?.includes(call.tool) || !plugin.createdResources) return [];
     const account = ctx.accounts.find((c) => c.id === accountId);
-    if (!account || account.provider !== plugin.id) return [];
+    if (!account || account.service !== plugin.id) return [];
     const context = { account_id: accountId, tool: call.tool, mission_id: ctx.mission.id };
     try {
       const { usable, unusable } = usableResourcesOf(

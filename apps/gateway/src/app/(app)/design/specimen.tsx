@@ -75,7 +75,7 @@ export function Pile({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The marks of the shipped services, by provider id (path and brand colour),
+ * The marks of the shipped services, by service id (path and brand colour),
  * read from the registry by the server page: the gallery shows real icons
  * beside the lettered fallback, without a list of its own.
  */

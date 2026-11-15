@@ -1,5 +1,5 @@
 /**
- * An OAuth client the gateway registers itself at the provider (RFC 7591,
+ * An OAuth client the gateway registers itself at the service (RFC 7591,
  * ADR oauth-client-registered-by-the-gateway): the registration request, how
  * the client is kept and reused, when it is registered again, and the whole
  * connect → refresh path of a service that needs nothing declared.
@@ -11,7 +11,7 @@ import { silentLogger } from '../logging';
 import { openTestStore } from '../../../tests/support/store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError } from './errors';
-import { providerFailureReason } from './failure-reason';
+import { serviceFailureReason } from './failure-reason';
 import { codeChallengeS256, OAuth2RegistrationError, registerClient } from './oauth2';
 import {
   OAuth2ClientMissing,
@@ -28,7 +28,7 @@ import {
 } from '../../../tests/support/accounts/testing';
 
 const SPEC = REGISTERED_OAUTH_SPEC;
-const REGISTER_URL = 'https://mcp.provider.example.com/register';
+const REGISTER_URL = 'https://mcp.service.example.com/register';
 const CALLBACK = 'https://gateway.example.com/connections/callback/boardco';
 
 function registered(clientId = 'client-1', secret = 'secret-1'): MockRoute {
@@ -88,7 +88,7 @@ describe('registerClient (RFC 7591)', () => {
     }
   });
 
-  it('keeps only the status and the protocol code of a refusal, never the provider text', async () => {
+  it('keeps only the status and the protocol code of a refusal, never the service text', async () => {
     const fetch = mockFetch([
       {
         url: REGISTER_URL,
@@ -105,13 +105,13 @@ describe('registerClient (RFC 7591)', () => {
     expect(err).toBeInstanceOf(OAuth2RegistrationError);
     expect((err as OAuth2RegistrationError).rejected).toBe(true);
     expect((err as Error).message).not.toContain('secret-token');
-    expect(providerFailureReason(err)).toBe(
+    expect(serviceFailureReason(err)).toBe(
       'the registration endpoint answered HTTP 400 (invalid_redirect_uri)',
     );
   });
 });
 
-describe('OAuth2Clients — one registered client per instance and provider', () => {
+describe('OAuth2Clients — one registered client per instance and service', () => {
   function clients(routes: readonly MockRoute[]) {
     const test = openTestStore();
     const fetch = mockFetch(routes);
@@ -198,7 +198,7 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
           displayName: 'Board Co',
           credential: SPEC,
           discoverResources: async () => [
-            { provider: 'boardco', ref: 'b-1', displayName: 'Board 1' },
+            { service: 'boardco', ref: 'b-1', displayName: 'Board 1' },
           ],
         }),
       ],
@@ -208,7 +208,7 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
 
   it('is offered at once, with nothing to declare', async () => {
     const h = harness([]);
-    expect(await h.service.provider('boardco')).toMatchObject({
+    expect(await h.service.service('boardco')).toMatchObject({
       kind: 'oauth2',
       redirects: true,
       fields: [],
@@ -230,7 +230,7 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
     const url = new URL(start.url);
     expect(url.searchParams.get('client_id')).toBe('client-1');
     expect(url.searchParams.get('redirect_uri')).toBe(CALLBACK);
-    expect(url.searchParams.get('resource')).toBe('https://mcp.provider.example.com/');
+    expect(url.searchParams.get('resource')).toBe('https://mcp.service.example.com/');
     expect(url.searchParams.get('scope')).toBe('boards:read boards:write');
 
     const done = await h.service.complete(
@@ -241,11 +241,11 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
     const exchange = new URLSearchParams(h.fetch.calls[1]?.body ?? '');
     expect(exchange.get('client_id')).toBe('client-1');
     expect(exchange.get('client_secret')).toBe('secret-1');
-    expect(exchange.get('resource')).toBe('https://mcp.provider.example.com/');
+    expect(exchange.get('resource')).toBe('https://mcp.service.example.com/');
     expect(codeChallengeS256(exchange.get('code_verifier')!)).toBe(
       url.searchParams.get('code_challenge'),
     );
-    expect(done.account).toMatchObject({ provider: 'boardco', status: 'active' });
+    expect(done.account).toMatchObject({ service: 'boardco', status: 'active' });
     expect(done.discovery).toMatchObject({ ok: true, count: 1 });
     expect(parseSecret((await h.store.accounts.getCredential(done.account.id))!)).toMatchObject({
       kind: 'oauth2',
@@ -254,7 +254,7 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
     });
   });
 
-  it('refreshes with the registered client, and forgets it when the provider says invalid_client', async () => {
+  it('refreshes with the registered client, and forgets it when the service says invalid_client', async () => {
     const h = harness([
       registered(),
       {

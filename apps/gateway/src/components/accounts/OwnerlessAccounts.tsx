@@ -94,10 +94,10 @@ const COLUMNS: readonly Column<AccountView>[] = [
     header: 'Account',
     cell: (view) => (
       <span className={shared.named}>
-        <ServiceMark name={view.provider_label} />
+        <ServiceMark name={view.service_label} />
         <span className={shared.namedText}>
           <span className={shared.name}>{view.account.displayName}</span>
-          <span className={shared.sub}>{view.provider_label}</span>
+          <span className={shared.sub}>{view.service_label}</span>
         </span>
       </span>
     ),

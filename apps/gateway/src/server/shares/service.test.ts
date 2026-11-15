@@ -90,10 +90,10 @@ describe('ShareService', () => {
 
     it.each([
       ['a wildcard', ['*']],
-      ['a provider wildcard', ['depot.*']],
+      ['a service wildcard', ['depot.*']],
       ['the base id of an env-scoped entry', ['depot.write']],
       ['an env the entry is not acceptable in', ['depot[dev].write']],
-      ['a risk of another provider', ['github.code-read']],
+      ['a risk of another service', ['github.code-read']],
       ['a preset reference', ['reader']],
     ])(
       'refuses %s and stores nothing: a restriction is explicit ids of this catalog',
@@ -181,11 +181,11 @@ describe('ShareService', () => {
       expect(await stored()).toEqual([]);
     });
 
-    it('refuses an account whose provider has no registered plugin', async () => {
+    it('refuses an account whose service has no registered plugin', async () => {
       // A plugin removed from the build after the account was made: simulated in the registry.
       const get = vi.spyOn(rig.root.registry, 'get').mockImplementation(() => undefined);
       try {
-        await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'provider-unknown' });
+        await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'service-unknown' });
       } finally {
         get.mockRestore();
       }
@@ -283,7 +283,7 @@ describe('ShareService', () => {
       await rig.root.shares.service.revoke(ada, revoked.share.id, revoked.share.accountId);
 
       const context = await rig.root.shares.service.contextFor(ada, rig.account.id);
-      expect(context.providerLabel).toBe('Depot');
+      expect(context.serviceLabel).toBe('Depot');
       expect(context.risks.map((r) => r.risk_id)).toEqual([
         READ,
         WRITE_STAGING,

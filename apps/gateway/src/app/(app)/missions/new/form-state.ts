@@ -471,8 +471,8 @@ export function expiryOf(
 // The platform management mission
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The provider id of the gateway's own account (the `vaubaan` plugin). */
-export const PLATFORM_PROVIDER = 'vaubaan';
+/** The service id of the gateway's own account (the `vaubaan` plugin). */
+export const PLATFORM_SERVICE = 'vaubaan';
 export const PLATFORM_MISSION_NAME = 'Platform management';
 /** The macro-action the gateway adds to every catalog for its fallback: never ticked here. */
 const ANYTHING_ELSE = 'anything-else';
@@ -611,10 +611,10 @@ export const OUTSIDE_AUTHORITY = 'outside what you may allow';
  */
 export function issueSentence(
   issue: PreviewIssue,
-  context: readonly Pick<IssuanceAccount, 'id' | 'provider_label' | 'display_name'>[],
+  context: readonly Pick<IssuanceAccount, 'id' | 'service_label' | 'display_name'>[],
 ): string {
   const found = context.find((c) => c.id === issue.account_id);
-  const account = found ? `${found.provider_label} · ${found.display_name}` : null;
+  const account = found ? `${found.service_label} · ${found.display_name}` : null;
   const ids = quotedIds(issue.risk_ids);
   const refs = quotedIds(issue.resource_refs);
   const several = (issue.risk_ids?.length ?? 0) !== 1;
@@ -623,7 +623,7 @@ export function issueSentence(
       return 'Give the mission a name.';
     case 'no-account':
       return 'Add at least one account.';
-    case 'duplicate-provider':
+    case 'duplicate-service':
       return 'A mission takes one account per service.';
     case 'invalid-period':
       return 'Choose how often the limits reset.';

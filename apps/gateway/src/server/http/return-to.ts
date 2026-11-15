@@ -2,7 +2,7 @@
  * The return address of a flow, limited to the instance (spec §6
  * "anti-redirect: return URL limited to the instance's public URL"). One
  * rule for every flow that redirects after an action — sign-in, connect,
- * provider callback — so there is one place to get it right.
+ * service callback — so there is one place to get it right.
  */
 
 /**

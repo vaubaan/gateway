@@ -1,14 +1,14 @@
 /**
- * Sweeper of the temporary refs a push left at the provider (spec §4.1 ter;
+ * Sweeper of the temporary refs a push left at the service (spec §4.1 ter;
  * ADR gateway-as-git-remote D5; migration 0015): those whose deadline passed
  * — the request of a pending approval expired, or a push never finished (a
- * crash, a client gone, a provider that did not answer or kept the ref).
+ * crash, a client gone, a service that did not answer or kept the ref).
  *
- *   per ref    a row goes only once the provider confirmed its ref gone
- *              (`deleteTemporaryRefs`); a ref the provider kept keeps its row
+ *   per ref    a row goes only once the service confirmed its ref gone
+ *              (`deleteTemporaryRefs`); a ref the service kept keeps its row
  *   passes     one run takes batches until nothing is left to try, at most
  *              `PENDING_REF_SWEEP_PASSES` batches
- *   no blocking a group the provider refused this run is postponed by one
+ *   no blocking a group the service refused this run is postponed by one
  *              interval: it goes to the back of the queue instead of heading
  *              every batch
  *   giving up  a row older than `PENDING_REF_GIVE_UP_MS` is dropped (logged)
@@ -33,7 +33,7 @@ export const PENDING_REF_SWEEP_INTERVAL_MS = 5 * 60_000;
 export const PENDING_REF_SWEEP_BATCH = 100;
 /** Batches per run, at most. */
 export const PENDING_REF_SWEEP_PASSES = 20;
-/** Rows a provider never let us delete are dropped once this old. */
+/** Rows a service never let us delete are dropped once this old. */
 export const PENDING_REF_GIVE_UP_MS = 48 * 60 * 60_000;
 
 export interface PendingRefSweeperDeps {
@@ -60,7 +60,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
   const intervalMs = deps.intervalMs ?? PENDING_REF_SWEEP_INTERVAL_MS;
   let running = false;
 
-  /** The refs of `rows` the provider confirmed gone (all of them for an account that is gone). */
+  /** The refs of `rows` the service confirmed gone (all of them for an account that is gone). */
   async function sweepGroup(rows: readonly PendingRefRecord[]): Promise<Set<string>> {
     const [first] = rows;
     if (!first) return new Set();
@@ -81,7 +81,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
       );
     } catch (err) {
       if (err instanceof AccountUnavailableError) return new Set(rows.map((r) => r.ref));
-      deps.logger.warn('temporary refs not deleted at the provider', {
+      deps.logger.warn('temporary refs not deleted at the service', {
         account_id: first.accountId,
         refs: rows.length,
         error: errorName(err),
@@ -102,7 +102,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
         (r) => !gone.has(r.ref) && now.getTime() - Date.parse(r.createdAt) > PENDING_REF_GIVE_UP_MS,
       );
       if (tooOld.length > 0) {
-        deps.logger.warn('temporary refs given up: the provider kept them', {
+        deps.logger.warn('temporary refs given up: the service kept them', {
           account_id: group[0]?.accountId,
           refs: tooOld.length,
         });

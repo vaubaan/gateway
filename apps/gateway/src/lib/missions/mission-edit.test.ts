@@ -70,7 +70,7 @@ const BEFORE: MissionSnapshot = {
   accounts: [
     account({
       account_id: 'conn-acme',
-      provider: 'acme',
+      service: 'acme',
       display_name: 'Acme main',
       resource_ids: ['res-app-staging'],
       env: 'staging',
@@ -199,7 +199,7 @@ describe('judgeEdit', () => {
           ...BEFORE.accounts,
           account({
             account_id: 'conn-gone',
-            provider: 'other',
+            service: 'other',
             display_name: 'Gone',
             resource_ids: [],
             policy: [line('other.read')],
@@ -237,7 +237,7 @@ describe('the revision and the words of an edit', () => {
       accounts: [
         account({
           account_id: 'conn-acme',
-          provider: 'acme',
+          service: 'acme',
           display_name: 'Acme main',
           resource_ids: ['res-app-staging', 'res-scratch'],
           policy: [line('acme.read', 50)],

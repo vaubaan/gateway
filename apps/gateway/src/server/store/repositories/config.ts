@@ -1,6 +1,6 @@
 /**
  * Instance configuration persisted in the store (spec §4.3): the Admin-set half of the
- * configuration (IdP, provider apps, telemetry opt-in, retention, bootstrap state). The
+ * configuration (IdP, service apps, telemetry opt-in, retention, bootstrap state). The
  * mounted config file wins on conflict — that precedence is the loader's job.
  * Secrets are sealed with `instance_config:<key>` as associated data.
  */
@@ -24,7 +24,7 @@ export interface ConfigRepo {
   delete(key: string): Promise<boolean>;
   /**
    * Applies every write in one transaction, in order: all of them or none. For
-   * settings spread over several keys (the IdP, a provider app), where a
+   * settings spread over several keys (the IdP, a service app), where a
    * half-saved set would pair one value with another's secret.
    */
   apply(writes: readonly ConfigWrite[]): Promise<void>;

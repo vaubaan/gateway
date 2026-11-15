@@ -201,12 +201,12 @@ the list of permissions and confirms **Create mission**.
   "name": "Ship the billing page",
   "accounts": [
     {
-      "provider": "github",
+      "service": "github",
       "trust_levels": { "read": "careful", "propose": "trusting" },
       "resources": { "scope": "selected", "resource_refs": ["acme/app"] }
     },
     {
-      "provider": "supabase",
+      "service": "supabase",
       "resources": { "scope": "selected", "resource_refs": ["<project ref>"] },
       "policy": [
         {
@@ -225,7 +225,7 @@ the list of permissions and confirms **Create mission**.
 
 Rules of a draft (the field names are the protocol's):
 
-- an account is named by `provider` (when the human can use exactly one
+- an account is named by `service` (when the human can use exactly one
   account of that service) or by `account_id`;
 - `resources` is `{ "scope": "all" }` or a selection by `resource_refs`;
 - `trust_levels` ticks the service's macro-actions (its `get_catalog` names
@@ -304,7 +304,7 @@ What these tools change and what they do not:
 
 When your mission holds repositories of a service this gateway serves as a
 git remote (GitHub), the gateway is your remote:
-`<instance>/git/<provider>/<owner>/<repo>.git`, `<provider>` the service's id
+`<instance>/git/<service>/<owner>/<repo>.git`, `<service>` the service's id
 (`github`).
 The catalog (`GET <instance>/mcp/catalog`) gives it per repository as
 `git_remote`, and your setup kit has the configuration. Plain git, nothing
@@ -313,8 +313,8 @@ else to install:
 ```sh
 git config --global credential.<instance origin>.helper \
   '!f() { echo username=mission; echo "password=$VAUBAAN_MISSION_TOKEN"; }; f'
-git config --global url.<instance>/git/<provider>/.insteadOf <the service's own git URL prefix>
-git clone <instance>/git/<provider>/<owner>/<repo>.git
+git config --global url.<instance>/git/<service>/.insteadOf <the service's own git URL prefix>
+git clone <instance>/git/<service>/<owner>/<repo>.git
 ```
 
 The mission key is the password, read from the variable each time git asks.

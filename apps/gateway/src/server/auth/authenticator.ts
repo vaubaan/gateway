@@ -22,7 +22,7 @@ export interface UserPrincipal {
   readonly groups: readonly GroupRecord[];
   readonly isOperator: boolean;
   /** The sign-in provider the user's issuer belongs to; `null` when none is configured any more. */
-  readonly providerId: string | null;
+  readonly signInProviderId: string | null;
   /** The claims seen at sign-in (display only). */
   readonly login: UserSessionRecord['login'];
 }
@@ -62,7 +62,7 @@ export class Authenticator {
     private readonly store: Store,
     private readonly administrators: Pick<AdministratorsService, 'current'>,
     private readonly bootstrap: BootstrapService,
-    private readonly providers: Pick<SignInProvidersService, 'views'>,
+    private readonly signInProviders: Pick<SignInProvidersService, 'views'>,
   ) {}
 
   async authenticate(headers: Headers): Promise<Principal | null> {
@@ -81,23 +81,23 @@ export class Authenticator {
       await this.sessions.destroyById(session.id);
       return null;
     }
-    // A provider removed in Settings ended its users' sessions (`sessions_ended_at`,
-    // above); the provider is looked up for display.
-    const providers = await this.providers.views();
+    // A sign-in provider removed in Settings ended its users' sessions (`sessions_ended_at`,
+    // above); the sign-in provider is looked up for display.
+    const signInProviders = await this.signInProviders.views();
     const key = user.issuer === null ? null : issuerKey(user.issuer);
-    const provider = providers.find((p) => issuerKey(p.issuer) === key) ?? null;
+    const signInProvider = signInProviders.find((p) => issuerKey(p.issuer) === key) ?? null;
     const authority = await currentAuthority(
       this.store,
       user,
       await this.administrators.current(),
-      provider?.id ?? null,
+      signInProvider?.id ?? null,
     );
     return {
       kind: 'user',
       sessionId: session.id,
       user,
       ...authority,
-      providerId: provider?.id ?? null,
+      signInProviderId: signInProvider?.id ?? null,
       login: session.record.login,
     };
   }

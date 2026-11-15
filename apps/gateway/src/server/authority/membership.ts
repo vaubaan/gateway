@@ -57,7 +57,7 @@ export class MembershipSettler {
         for (const account of unowned) {
           this.deps.logger.warn('account has no owner left', {
             account_id: account.id,
-            provider: account.provider,
+            service: account.service,
             owner_group_id: account.owner.id,
           });
         }

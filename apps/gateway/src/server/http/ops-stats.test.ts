@@ -15,7 +15,7 @@ const URL_ = 'https://gateway.example.com/ops/stats';
 const STATS: OpsStats = {
   generated_at: '2026-10-31T15:30:00.000Z',
   users: 3,
-  accounts: { total: 1, by_provider: { github: 1 } },
+  accounts: { total: 1, by_service: { github: 1 } },
   active_missions: 1,
   calls_today: { since: '2026-10-31T00:00:00.000Z', allowed: 2, refused: 0 },
   store: { kind: 'memory', bytes: 4096 },

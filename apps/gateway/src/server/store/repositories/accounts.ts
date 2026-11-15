@@ -10,9 +10,9 @@ import type {
   DiscoveredResource,
   Iso,
   Principal,
-  ProviderGrantOutcome,
+  ServiceGrantOutcome,
 } from '../types.ts';
-import { PROVIDER_GRANT_OUTCOMES, RESOURCE_ENV_SOURCES } from '../types.ts';
+import { SERVICE_GRANT_OUTCOMES, RESOURCE_ENV_SOURCES } from '../types.ts';
 import { effectiveResourceEnv } from '../resource-env.ts';
 import { toIso } from '../clock.ts';
 import {
@@ -29,7 +29,7 @@ import {
 
 /**
  * How long a resource row stays safe from being marked stale after it was first seen
- * (inserted, or seen again after it was stale): a provider may list a resource a while
+ * (inserted, or seen again after it was stale): a service may list a resource a while
  * after creating it (Miro's board search did not return a board two minutes after its
  * creation), and the discovery a creating call schedules must not drop the row that call
  * just recorded (ADR created-resources-join-the-mission).
@@ -37,7 +37,7 @@ import {
 export const FRESH_RESOURCE_STALE_GRACE_MS = 15 * 60 * 1000;
 
 export interface CreateAccountInput {
-  readonly provider: string;
+  readonly service: string;
   readonly owner: Principal;
   readonly displayName: string;
   /** Clear credential payload (the plugin's serialized credential); sealed by the store
@@ -48,7 +48,7 @@ export interface CreateAccountInput {
 }
 
 export interface AccountFilter {
-  readonly provider?: string;
+  readonly service?: string;
   readonly status?: AccountStatus;
 }
 
@@ -70,11 +70,11 @@ export interface AccountsRepo {
   getById(id: string): Promise<AccountRecord | null>;
   list(filter?: AccountFilter): Promise<AccountRecord[]>;
   /**
-   * Accounts not revoked, every owner together, by provider (an expired or
+   * Accounts not revoked, every owner together, by service (an expired or
    * ownerless one included): the count of the `limits.accounts` ceiling and of
-   * the counters (spec §4.3 bis). A provider with none is absent.
+   * the counters (spec §4.3 bis). A service with none is absent.
    */
-  countByProvider(): Promise<Record<string, number>>;
+  countByService(): Promise<Record<string, number>>;
   /** Accounts owned by any of the principals (a user and the groups they belong to). */
   listOwnedBy(principals: readonly Principal[]): Promise<AccountRecord[]>;
   /** Decrypts the credential in memory; the caller releases it after the upstream call. */
@@ -128,7 +128,7 @@ export interface AccountsRepo {
    */
   refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
-   * The provider rejected the credential and the refresh failed: a serving account
+   * The service rejected the credential and the refresh failed: a serving account
    * (`active` or `unowned`) → `expired`. Conditional, so it never downgrades a `revoked`
    * account. An `unowned` account that expires stays ownerless (`listOwnerless`):
    * the operator reassigns an owner, who reconnects. Returns false when the account
@@ -138,19 +138,19 @@ export interface AccountsRepo {
   /** Terminal revocation: status `revoked`, `revoked_at` set, the credential blob erased. */
   revoke(id: string): Promise<AccountRecord>;
   /**
-   * Records what became of the provider-side grant of an account that is
+   * Records what became of the service-side grant of an account that is
    * already revoked. Written once: a row that is not revoked, or that already
    * holds an outcome, is left alone and `null` is returned.
    */
-  recordProviderGrant(id: string, outcome: ProviderGrantOutcome): Promise<AccountRecord | null>;
+  recordServiceGrant(id: string, outcome: ServiceGrantOutcome): Promise<AccountRecord | null>;
   /**
-   * Discovery merge (spec §0 "Resource"): provider facts are refreshed, owner edits are
+   * Discovery merge (spec §0 "Resource"): service facts are refreshed, owner edits are
    * kept, nothing is deleted.
    *  - a new ref is inserted; an `env` the plugin returns marks the label `plugin`-set;
    *  - a known ref keeps its id, its owner label, its owner metadata, its `hidden` flag once
    *    the owner hid or showed it (else `hidden` follows the plugin's hint) and its display
    *    name once the owner renamed it; the discovered metadata replaces the
-   *    previous provider facts; a plugin-set `env` always follows the plugin;
+   *    previous service facts; a plugin-set `env` always follows the plugin;
    *  - a ref the discovery no longer returns is marked stale (`staleSince`), unless it
    *    was first seen less than `FRESH_RESOURCE_STALE_GRACE_MS` ago; a stale ref that
    *    comes back is cleared (and counts as first seen again).
@@ -162,7 +162,7 @@ export interface AccountsRepo {
   /**
    * The resources a creating call made, read from its answer (ADR
    * created-resources-join-the-mission): each ref is inserted, or — known already — has its
-   * stale flag cleared and its provider facts merged over the ones it had (the next
+   * stale flag cleared and its service facts merged over the ones it had (the next
    * discovery replaces them whole). Owner edits are kept as by `syncDiscoveredResources`;
    * no other row is touched, nothing is marked stale. A new row carries no label of its
    * own unless the plugin set one, so it reads the account's default environment.
@@ -187,7 +187,7 @@ export interface AccountsRepo {
 
 interface AccountRow {
   id: string;
-  provider: string;
+  service: string;
   owner_kind: string;
   owner_user_id: string | null;
   owner_group_id: string | null;
@@ -199,7 +199,7 @@ interface AccountRow {
   created_at: string;
   updated_at: string;
   revoked_at: string | null;
-  provider_grant: string | null;
+  service_grant: string | null;
   default_env: string | null;
 }
 
@@ -230,9 +230,9 @@ function isHostRecord(record: Pick<AccountRecord, 'metadata'>): boolean {
   return record.metadata?.credential_kind === 'host';
 }
 
-const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
+const COLUMNS = `id, service, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
-  provider_grant, default_env`;
+  service_grant, default_env`;
 const RESOURCE_COLUMNS = `id, account_id, ref, env, display_name, discovered_at, metadata_json,
   owner_metadata_json, env_source, display_name_edited, hidden, hidden_edited, stale_since,
   first_seen_at`;
@@ -264,7 +264,7 @@ const RECONNECTABLE_STATUSES: readonly AccountStatus[] = ['active', 'expired'];
 function toRecord(row: AccountRow): AccountRecord {
   return {
     id: row.id,
-    provider: row.provider,
+    service: row.service,
     owner: principalFromColumns(row.owner_kind, row.owner_user_id, row.owner_group_id),
     displayName: row.display_name,
     status: parseEnum(ACCOUNT_STATUSES, row.status, 'accounts.status'),
@@ -274,10 +274,10 @@ function toRecord(row: AccountRow): AccountRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
-    providerGrant:
-      row.provider_grant === null
+    serviceGrant:
+      row.service_grant === null
         ? null
-        : parseEnum(PROVIDER_GRANT_OUTCOMES, row.provider_grant, 'accounts.provider_grant'),
+        : parseEnum(SERVICE_GRANT_OUTCOMES, row.service_grant, 'accounts.service_grant'),
     defaultEnv: row.default_env,
   };
 }
@@ -332,13 +332,13 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
       string,
     ]
   >(
-    `INSERT INTO accounts (id, provider, owner_kind, owner_user_id, owner_group_id, display_name,
+    `INSERT INTO accounts (id, service, owner_kind, owner_user_id, owner_group_id, display_name,
        status, credential_blob, key_version, credential_expires_at, metadata_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const countByProviderStmt = db.prepare<[], { readonly provider: string; readonly n: number }>(
-    `SELECT provider, COUNT(*) AS n FROM accounts WHERE status <> 'revoked'
-     GROUP BY provider ORDER BY provider`,
+  const countByServiceStmt = db.prepare<[], { readonly service: string; readonly n: number }>(
+    `SELECT service, COUNT(*) AS n FROM accounts WHERE status <> 'revoked'
+     GROUP BY service ORDER BY service`,
   );
   const credentialStmt = db.prepare<
     [string],
@@ -408,9 +408,9 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
        credential_blob = NULL, key_version = NULL, credential_expires_at = NULL, updated_at = ?
      WHERE id = ?`,
   );
-  const providerGrantStmt = db.prepare<[string, string]>(
-    `UPDATE accounts SET provider_grant = ?
-     WHERE id = ? AND status = 'revoked' AND provider_grant IS NULL`,
+  const serviceGrantStmt = db.prepare<[string, string]>(
+    `UPDATE accounts SET service_grant = ?
+     WHERE id = ? AND status = 'revoked' AND service_grant IS NULL`,
   );
   const resourceByRef = db.prepare<[string, string], ResourceRow>(
     `SELECT ${RESOURCE_COLUMNS} FROM account_resources WHERE account_id = ? AND ref = ?`,
@@ -461,7 +461,7 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
   /**
    * One discovered ref merged into the account's rows (`syncDiscoveredResources`,
    * `upsertDiscoveredResources`): inserted, or refreshed with the owner's edits kept.
-   * `keepMetadata` merges the new provider facts over the ones the row has instead of
+   * `keepMetadata` merges the new service facts over the ones the row has instead of
    * replacing them (a creating call knows fewer facts than a discovery). Inside the
    * caller's transaction.
    */
@@ -522,7 +522,7 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
         input.credential !== null ? await sealText(encryptor, id, input.credential) : null;
       insert.run(
         id,
-        input.provider,
+        input.service,
         owner.kind,
         owner.userId,
         owner.groupId,
@@ -541,17 +541,17 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
       const row = byId.get(id);
       return row ? toRecord(row) : null;
     },
-    async countByProvider() {
+    async countByService() {
       const counts: Record<string, number> = {};
-      for (const row of countByProviderStmt.all()) counts[row.provider] = row.n;
+      for (const row of countByServiceStmt.all()) counts[row.service] = row.n;
       return counts;
     },
     async list(filter = {}) {
       const where: string[] = [];
       const params: string[] = [];
-      if (filter.provider) {
-        where.push('provider = ?');
-        params.push(filter.provider);
+      if (filter.service) {
+        where.push('service = ?');
+        params.push(filter.service);
       }
       if (filter.status) {
         where.push('status = ?');
@@ -680,11 +680,11 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
       if (result.changes === 0) throw new NotFoundError('account', id);
       return requireAccount(id);
     },
-    async recordProviderGrant(id, outcome) {
-      if (!PROVIDER_GRANT_OUTCOMES.includes(outcome)) {
-        throw new InvariantError(`unknown provider grant outcome '${String(outcome)}'`);
+    async recordServiceGrant(id, outcome) {
+      if (!SERVICE_GRANT_OUTCOMES.includes(outcome)) {
+        throw new InvariantError(`unknown service grant outcome '${String(outcome)}'`);
       }
-      return providerGrantStmt.run(outcome, id).changes === 1 ? requireAccount(id) : null;
+      return serviceGrantStmt.run(outcome, id).changes === 1 ? requireAccount(id) : null;
     },
     async syncDiscoveredResources(accountId, resources) {
       requireAccount(accountId);

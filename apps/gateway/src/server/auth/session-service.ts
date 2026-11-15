@@ -5,7 +5,7 @@
  * it can be revoked by deleting the row and never carries claims the browser
  * could read. Two record kinds live in the same store under distinct key
  * prefixes: `session:<id>` (a signed-in user, or the bootstrap operator) and
- * `login:<id>` (a sign-in attempt in flight: its provider, state, nonce, PKCE
+ * `login:<id>` (a sign-in attempt in flight: its sign-in provider, state, nonce, PKCE
  * verifier, return path). A session ends `SESSION_TTL_MS` after sign-in whatever
  * the activity (spec §6 "web sessions are short"), and earlier after
  * `SESSION_IDLE_MS` without a request: the record carries `seenAt`, written again
@@ -47,8 +47,8 @@ export interface UserSessionRecord {
   readonly login: {
     readonly email: string;
     readonly groups: readonly string[];
-    /** The sign-in provider's id; absent on a session from before several providers. */
-    readonly provider?: string;
+    /** The sign-in provider's id; absent on a session from before several sign-in providers. */
+    readonly signInProvider?: string;
   };
 }
 
@@ -65,7 +65,7 @@ export interface PendingLogin {
    * The sign-in provider the attempt was started for. The callback of another
    * provider never completes it (`state-mismatch`).
    */
-  readonly providerId: string;
+  readonly signInProviderId: string;
   readonly state: string;
   /** OpenID Connect only; a GitHub attempt carries none (empty string). */
   readonly nonce: string;
@@ -73,7 +73,7 @@ export interface PendingLogin {
   /** Same-origin path to land on after sign-in. */
   readonly returnTo: string;
   /**
-   * Set when the attempt is a test of the provider beside the session (ADR
+   * Set when the attempt is a test of the sign-in provider beside the session (ADR
    * administrators-live-in-the-instance, §5): the web session of the tester. The
    * callback then signs nobody in.
    */
@@ -82,9 +82,9 @@ export interface PendingLogin {
 }
 
 /**
- * A sign-in between its provider and its session (ADR
+ * A sign-in between its sign-in provider and its session (ADR
  * administrators-live-in-the-instance, §7): the person's second factor is asked, or
- * enrolled when they have none. Any provider: the password of a sign-in account, the
+ * enrolled when they have none. Any sign-in provider: the password of a sign-in account, the
  * callback of an OpenID Connect or GitHub provider. Bound to the browser by the same
  * cookie as a pending sign-in, for the same ten minutes, counted from the step's
  * creation: a step re-issued after a wrong code keeps its `createdAt` (security audit
@@ -94,7 +94,7 @@ export interface PendingLogin {
 export interface PendingLocalStep {
   readonly kind: 'local-step';
   readonly step: 'second-factor' | 'enrol';
-  readonly providerId: string;
+  readonly signInProviderId: string;
   /** The person signing in (their `users` row exists: the sign-in was admitted). */
   readonly userId: string;
   /** What the session records of the sign-in, for display (`UserSessionRecord.login`). */
@@ -138,7 +138,7 @@ export function isWebSessionRecord(value: unknown): value is WebSessionRecord {
     isObject(login) &&
     typeof login.email === 'string' &&
     isStringArray(login.groups) &&
-    (login.provider === undefined || typeof login.provider === 'string')
+    (login.signInProvider === undefined || typeof login.signInProvider === 'string')
   );
 }
 
@@ -148,7 +148,7 @@ export function isPendingLocalStep(value: unknown): value is PendingLocalStep {
   return (
     v.kind === 'local-step' &&
     (v.step === 'second-factor' || v.step === 'enrol') &&
-    typeof v.providerId === 'string' &&
+    typeof v.signInProviderId === 'string' &&
     typeof v.userId === 'string' &&
     typeof v.login === 'object' &&
     v.login !== null &&
@@ -162,7 +162,7 @@ export function isPendingLocalStep(value: unknown): value is PendingLocalStep {
 export function isPendingLogin(value: unknown): value is PendingLogin {
   return (
     isObject(value) &&
-    typeof value.providerId === 'string' &&
+    typeof value.signInProviderId === 'string' &&
     typeof value.state === 'string' &&
     typeof value.nonce === 'string' &&
     typeof value.codeVerifier === 'string' &&

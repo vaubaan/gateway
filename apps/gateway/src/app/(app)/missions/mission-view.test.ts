@@ -138,8 +138,8 @@ describe('small sentences', () => {
   it('says what a mission reaches in a few words', () => {
     expect(
       reachOf([
-        { provider_label: 'GitHub', resources: [{ ref: 'acme/app' }, { ref: 'acme/web' }] },
-        { provider_label: 'Resend', resources: [] },
+        { service_label: 'GitHub', resources: [{ ref: 'acme/app' }, { ref: 'acme/web' }] },
+        { service_label: 'Resend', resources: [] },
       ]),
     ).toEqual(['GitHub acme/app, acme/web', 'Resend']);
   });

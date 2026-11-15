@@ -1,17 +1,17 @@
 /**
- * What the gateway itself keeps of a provider's failure: the HTTP status and a short
- * reason it writes itself — never text the provider sent (ADR
+ * What the gateway itself keeps of a service's failure: the HTTP status and a short
+ * reason it writes itself — never text the service sent (ADR
  * provider-error-text-stays-with-the-agent).
  *
- * A provider's error body can echo the credential it was given (the offending header,
+ * A service's error body can echo the credential it was given (the offending header,
  * a URL with `?apikey=`), on purpose or not. The plugins quote it in their error
  * messages for the calling agent; everything the gateway logs, persists (discovery
- * state, audit) or renders on a page goes through `providerFailureReason` instead.
+ * state, audit) or renders on a page goes through `serviceFailureReason` instead.
  *
- * One exception, written by the plugin and not by the provider: a
+ * One exception, written by the plugin and not by the service: a
  * `CredentialRefusal` carries a sentence the plugin authored ("the token lacks
  * the scope boards:write"), which is kept as it is (one line, bounded). The
- * plugin's rule is to quote nothing the provider sent in it (ADR
+ * plugin's rule is to quote nothing the service sent in it (ADR
  * provider-error-text-stays-with-the-agent, amendment of 2026-10-21).
  *
  * A second one, at connect time only (amendment of 2026-10-31): the sentence of an
@@ -34,7 +34,7 @@ import {
   ConnectError,
   OAuthBrokerUnavailableError,
   oneLine,
-  ProviderUnreachableError,
+  ServiceUnreachableError,
 } from './errors';
 import { OAuth2RegistrationError, OAuth2TokenError } from './oauth2';
 import { OAuth2ClientMissing } from './oauth2-clients';
@@ -79,20 +79,20 @@ function connectSentence(err: UpstreamAuthError, credential: CredentialSecret): 
 }
 
 /**
- * The reason of a provider failure in the gateway's words. `connecting`: the
+ * The reason of a service failure in the gateway's words. `connecting`: the
  * credential the person is connecting right now, given only by the connect page's
  * checks (`verify`, the first discovery): a rejection then keeps the plugin's
  * sentence, masked.
  */
-export function providerFailureReason(err: unknown, connecting?: CredentialSecret): string {
+export function serviceFailureReason(err: unknown, connecting?: CredentialSecret): string {
   if (isCredentialRefusal(err)) return oneLine(err.message);
   if (isUpstreamAuthError(err)) {
     if (connecting !== undefined && err.message.trim() !== '') {
       return connectSentence(err, connecting);
     }
-    return `the provider rejected the credential (HTTP ${err.upstreamStatus})`;
+    return `the service rejected the credential (HTTP ${err.upstreamStatus})`;
   }
-  if (isUpstreamHttpError(err)) return `the provider answered HTTP ${err.status}`;
+  if (isUpstreamHttpError(err)) return `the service answered HTTP ${err.status}`;
   if (err instanceof OAuth2TokenError) {
     if (err.status === 0) return 'the token endpoint could not be reached';
     const code =
@@ -115,12 +115,12 @@ export function providerFailureReason(err: unknown, connecting?: CredentialSecre
     return oneLine(err.message);
   }
   if (err instanceof ConnectError) return err.code;
-  if (err instanceof ProviderUnreachableError) return 'the provider could not be reached';
+  if (err instanceof ServiceUnreachableError) return 'the service could not be reached';
   if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
-    return 'the provider did not answer in time';
+    return 'the service did not answer in time';
   }
-  if (err instanceof TypeError) return 'the provider could not be reached';
+  if (err instanceof TypeError) return 'the service could not be reached';
   if (err instanceof Error && ERROR_NAME.test(err.name))
-    return `the provider call failed (${err.name})`;
-  return 'the provider call failed';
+    return `the service call failed (${err.name})`;
+  return 'the service call failed';
 }

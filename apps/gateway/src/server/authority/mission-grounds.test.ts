@@ -50,8 +50,8 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     await store.close();
   });
 
-  const connect = (owner: Principal, provider = 'acme'): Promise<AccountRecord> =>
-    store.accounts.create({ provider, owner, displayName: provider, credential: null });
+  const connect = (owner: Principal, service = 'acme'): Promise<AccountRecord> =>
+    store.accounts.create({ service, owner, displayName: service, credential: null });
 
   const share = (account: AccountRecord, target: Principal, restriction: string[]) =>
     store.shares.create({

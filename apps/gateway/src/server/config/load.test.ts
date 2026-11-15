@@ -295,18 +295,18 @@ describe('loadInstanceConfig — sign-in providers and the bootstrap token', () 
     ]);
   });
 
-  it('makes the bootstrap token optional once a provider is configured, with default claim mapping', () => {
+  it('makes the bootstrap token optional once a service is configured, with default claim mapping', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({ ...idpEnv, VAUBAAN_BOOTSTRAP_TOKEN: undefined }),
     });
     expect(config.bootstrapToken).toBeNull();
-    const [provider] = config.signIn;
-    expect(provider).toMatchObject({
+    const [service] = config.signIn;
+    expect(service).toMatchObject({
       id: 'idp',
       issuer: new URL('https://login.example.com/realms/acme'),
       clientId: 'vaubaan-gateway',
     });
-    expect(provider?.kind === 'oidc' && provider.claims).toMatchObject({
+    expect(service?.kind === 'oidc' && service.claims).toMatchObject({
       sub: 'sub',
       email: 'email',
       groups: 'groups',
@@ -314,7 +314,7 @@ describe('loadInstanceConfig — sign-in providers and the bootstrap token', () 
   });
 });
 
-describe('loadInstanceConfig — the retired OAuth clients of providers', () => {
+describe('loadInstanceConfig — the retired OAuth clients of services', () => {
   // ADR gmail-over-imap-with-an-app-password: no OAuth client is declared by an administrator.
   it('starts, reads none of them, and lists every key and variable still set', () => {
     const { config, secretEnvNames } = loadInstanceConfig({
@@ -671,11 +671,11 @@ describe('loadInstanceConfig — self resources (SEC 2026-10-15 H1)', () => {
       env: validEnv({ RAILWAY_PROJECT_ID: 'b6f0c3a2-1d2e-4f5a-8b9c-0d1e2f3a4b5c' }),
     });
     expect(config.selfResources).toEqual([
-      { provider: 'railway', ref: 'b6f0c3a2-1d2e-4f5a-8b9c-0d1e2f3a4b5c', source: 'railway' },
+      { service: 'railway', ref: 'b6f0c3a2-1d2e-4f5a-8b9c-0d1e2f3a4b5c', source: 'railway' },
     ]);
   });
 
-  it('adds the configured <provider>:<ref> entries, without duplicating the platform one', () => {
+  it('adds the configured <service>:<ref> entries, without duplicating the platform one', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({
         RAILWAY_PROJECT_ID: 'proj-1',
@@ -683,13 +683,13 @@ describe('loadInstanceConfig — self resources (SEC 2026-10-15 H1)', () => {
       }),
     });
     expect(config.selfResources).toEqual([
-      { provider: 'railway', ref: 'proj-1', source: 'railway' },
-      { provider: 'vercel', ref: 'prj_gateway', source: 'config' },
-      { provider: 'supabase', ref: 'abcdefghijklmnopqrst', source: 'config' },
+      { service: 'railway', ref: 'proj-1', source: 'railway' },
+      { service: 'vercel', ref: 'prj_gateway', source: 'config' },
+      { service: 'supabase', ref: 'abcdefghijklmnopqrst', source: 'config' },
     ]);
   });
 
-  it('refuses an entry that is not <provider>:<ref>, naming the key and its variable', () => {
+  it('refuses an entry that is not <service>:<ref>, naming the key and its variable', () => {
     const err = failure(validEnv({ VAUBAAN_SELF_RESOURCES: 'proj-1,railway:' }));
     expect(paths(err)).toEqual(['self_resources', 'self_resources']);
     expect(err.issues[0]?.env).toContain('VAUBAAN_SELF_RESOURCES');

@@ -36,7 +36,7 @@ import {
   type OAuth2BrokeredSpec,
   type OAuth2RegisteredClientSpec,
   type PluginRegistry,
-  type ProviderPlugin,
+  type ServicePlugin,
   type Resource,
   type ResourceNoun,
   type ServiceIcon,
@@ -57,7 +57,7 @@ import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { connectFileUrl } from '../plugins/connect-files';
 import { catalogEnvsOf } from '../../lib/missions/catalog-view';
-import { resourceNounOf } from '../../lib/providers/resource-noun';
+import { resourceNounOf } from '../../lib/services/resource-noun';
 import type { ResourceMove, ResourceMoveReason, Store } from '../store';
 import { ownResourceEnv } from '../store/resource-env';
 import { toIso, type Clock } from '../store/clock';
@@ -72,7 +72,7 @@ import { serializeSecret } from './credential-codec';
 import type { CredentialBroker, ResolvedCredential } from './credentials';
 import { canWithdraw } from './credentials';
 import { ConnectError } from './errors';
-import { providerFailureReason } from './failure-reason';
+import { serviceFailureReason } from './failure-reason';
 import { grantedNames, tokenLacks } from './token-permissions';
 import {
   cleanName,
@@ -127,8 +127,8 @@ export const CHECK_NOW_RATE_WINDOW_MS = 60_000;
 /** The pages of the accounts a person can use ("accounts" in the spec and the store). */
 export const ACCOUNTS_PATH = '/accounts';
 /**
- * Where a provider sends the browser back after an authorization. This path is
- * registered at the provider (the redirect URI of the company's OAuth client):
+ * Where a service sends the browser back after an authorization. This path is
+ * registered at the service (the redirect URI of the company's OAuth client):
  * it is part of the protocol, so it kept its name when the pages moved to
  * `/accounts`.
  */
@@ -146,7 +146,7 @@ export interface Actor {
 }
 
 /**
- * One permission to tick at the provider and its access. The tools it serves
+ * One permission to tick at the service and its access. The tools it serves
  * stay in the plugin's declaration (coverage), not on the connect page.
  */
 export interface TokenPermissionView {
@@ -188,7 +188,7 @@ export interface AlternativeView extends CredentialAlternative {
  * A service as the connect page shows it: its one way of connecting, read
  * from the plugin's declaration, and whether it can be used now.
  */
-export interface ConnectableProvider {
+export interface ConnectableService {
   readonly id: string;
   readonly displayName: string;
   readonly description: string | null;
@@ -234,7 +234,7 @@ export interface DiscoveryRecord {
   readonly at: string;
   readonly ok: boolean;
   readonly count: number;
-  /** The provider's (or the plugin's) own message when the discovery failed. */
+  /** The service's (or the plugin's) own message when the discovery failed. */
   readonly error: string | null;
   /**
    * Set when the gateway ran this discovery itself, after a call that created a
@@ -264,11 +264,11 @@ export interface AfterCallDiscovery {
 }
 
 /**
- * What revoking an account does to the grant at its provider — said before
+ * What revoking an account does to the grant at its service — said before
  * the act (the confirmation) and after it (the revoked account's page).
  */
-export interface ProviderGrantView {
-  /** True when the gateway asks the provider to withdraw the grant on revocation. */
+export interface ServiceGrantView {
+  /** True when the gateway asks the service to withdraw the grant on revocation. */
   readonly withdrawnByGateway: boolean;
   /** Where the person removes the grant themselves; `null` when the plugin gives no sentence. */
   readonly byHand: string | null;
@@ -276,12 +276,12 @@ export interface ProviderGrantView {
 
 export interface AccountView {
   readonly account: AccountRecord;
-  readonly provider_label: string;
-  /** What one resource of this provider is called (`resourceNounOf`); the fallback when the plugin is gone. */
+  readonly service_label: string;
+  /** What one resource of this service is called (`resourceNounOf`); the fallback when the plugin is gone. */
   readonly resource_noun: ResourceNoun;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
-  readonly provider_icon: ServiceIcon | null;
-  readonly provider_grant: ProviderGrantView;
+  readonly service_icon: ServiceIcon | null;
+  readonly service_grant: ServiceGrantView;
   /** How this account was made (`accountCredentialKind`); `null` when unknown and the plugin is gone. */
   readonly credential_kind: StoredCredentialKind | null;
   /**
@@ -378,7 +378,7 @@ export interface ImportPastedInput {
 }
 
 export interface ImportSshInput {
-  readonly providerId: string;
+  readonly serviceId: string;
   readonly displayName: string;
   /** host, port, user, host_key_fingerprint: the plugin's `ssh-key` form. */
   readonly fields: Readonly<Record<string, string>>;
@@ -434,7 +434,7 @@ export interface AccountServiceDeps {
   readonly logger: Logger;
   /**
    * The `limits.accounts` ceiling (spec §4.3 bis): asked before a connect flow
-   * reaches the provider and again before a new account is stored; never for a
+   * reaches the service and again before a new account is stored; never for a
    * reconnection. Absent: no ceiling.
    */
   readonly ceilings?: CeilingCheck;
@@ -476,7 +476,7 @@ type DiscoveryPolicy =
 /** What every credential kind needs to start a flow, resolved once by `start`. */
 interface FlowStart {
   readonly actor: Actor;
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   readonly displayName: string;
   readonly returnTo: string | null;
   /** The account being re-authenticated, already checked as reconnectable. */
@@ -490,7 +490,7 @@ interface FinalizeOptions {
   readonly returnTo: string | null;
   readonly discovery: DiscoveryPolicy;
   readonly metadata: Record<string, unknown>;
-  /** When the credential stops working, as the provider said; else an OAuth token's own expiry. */
+  /** When the credential stops working, as the service said; else an OAuth token's own expiry. */
   readonly expiresAt?: string | null;
   /** The OAuth broker's grant of a brokered account, sealed beside the secret. */
   readonly brokerGrant?: BrokerGrant | null;
@@ -507,27 +507,27 @@ interface FirstDiscovery {
 export class AccountService {
   constructor(private readonly deps: AccountServiceDeps) {}
 
-  /** The URL the provider sends the browser back to — always on `public_url`. */
-  callbackUrl(providerId: string): URL {
+  /** The URL the service sends the browser back to — always on `public_url`. */
+  callbackUrl(serviceId: string): URL {
     return new URL(
-      `${CONNECT_CALLBACK_PATH}/${encodeURIComponent(providerId)}`,
+      `${CONNECT_CALLBACK_PATH}/${encodeURIComponent(serviceId)}`,
       this.deps.publicUrl,
     );
   }
 
-  // ── Providers ─────────────────────────────────────────────────────────────
+  // ── Services ─────────────────────────────────────────────────────────────
 
   /** Every registered plugin, in registry order. */
-  async providers(): Promise<ConnectableProvider[]> {
+  async services(): Promise<ConnectableService[]> {
     return Promise.all(this.deps.registry.ids.map((id) => this.describe(id)));
   }
 
-  async provider(providerId: string): Promise<ConnectableProvider | null> {
-    return this.deps.registry.has(providerId) ? this.describe(providerId) : null;
+  async service(serviceId: string): Promise<ConnectableService | null> {
+    return this.deps.registry.has(serviceId) ? this.describe(serviceId) : null;
   }
 
-  private async describe(providerId: string): Promise<ConnectableProvider> {
-    const { plugin } = this.deps.registry.require(providerId);
+  private async describe(serviceId: string): Promise<ConnectableService> {
+    const { plugin } = this.deps.registry.require(serviceId);
     const spec = plugin.credential;
     const guide = spec.kind === 'api-key' ? spec.guide : undefined;
     const steps = (list: readonly GuideStep[]): GuideStepView[] =>
@@ -566,7 +566,7 @@ export class AccountService {
   }
 
   /** Why a plugin cannot be connected here, or `null`: a broker it needs is not configured. */
-  private unavailableReason(plugin: ProviderPlugin): string | null {
+  private unavailableReason(plugin: ServicePlugin): string | null {
     const spec = plugin.credential;
     if (spec.kind !== 'oauth2' || !isBrokeredSpec(spec)) return null;
     return this.deps.brokers.forProvider(spec.broker.provider)
@@ -590,26 +590,26 @@ export class AccountService {
     return {
       ...(await this.view(account)),
       resources: await this.deps.store.accounts.listResources(account.id),
-      default_env_choices: this.defaultEnvChoices(account.provider),
+      default_env_choices: this.defaultEnvChoices(account.service),
     };
   }
 
-  /** The environment labels of the provider's catalog: what a default may be. */
-  defaultEnvChoices(providerId: string): string[] {
-    const registered = this.deps.registry.get(providerId);
+  /** The environment labels of the service's catalog: what a default may be. */
+  defaultEnvChoices(serviceId: string): string[] {
+    const registered = this.deps.registry.get(serviceId);
     return registered ? catalogEnvsOf(registered.plugin.catalog) : [];
   }
 
   // ── Connect ───────────────────────────────────────────────────────────────
 
-  async start(actor: Actor, providerId: string, input: StartInput = {}): Promise<StartResult> {
+  async start(actor: Actor, serviceId: string, input: StartInput = {}): Promise<StartResult> {
     await this.limit(actor);
-    const plugin = this.requirePlugin(providerId);
+    const plugin = this.requirePlugin(serviceId);
     const returnTo = this.returnToOf(input.returnTo);
     const reconnect = input.reconnectId
-      ? await this.requireReconnectable(actor, input.reconnectId, providerId)
+      ? await this.requireReconnectable(actor, input.reconnectId, serviceId)
       : null;
-    // Before the provider is reached: a refused flow spends no authorization code.
+    // Before the service is reached: a refused flow spends no authorization code.
     if (!reconnect) await this.refuseAtCeiling();
     const flow: FlowStart = {
       actor,
@@ -644,7 +644,7 @@ export class AccountService {
       { kind: 'user', id: flow.actor.user.id },
     ]);
     const existing = owned.find(
-      (c) => c.provider === flow.plugin.id && c.status !== 'revoked' && c.id !== flow.reconnectId,
+      (c) => c.service === flow.plugin.id && c.status !== 'revoked' && c.id !== flow.reconnectId,
     );
     if (existing && !flow.reconnectId) {
       return {
@@ -685,8 +685,8 @@ export class AccountService {
 
   /**
    * A brokered flow (ADR google-calendar-through-an-oauth-broker D2): the
-   * broker that serves the plugin's provider answers `POST /flows` with the
-   * provider's page; the S256 PKCE verifier and the broker's name stay in the
+   * broker that serves the plugin's service answers `POST /flows` with the
+   * service's page; the S256 PKCE verifier and the broker's name stay in the
    * pending flow, whose `state` the browser brings back with the grant.
    */
   private async startBrokered(flow: FlowStart, spec: OAuth2BrokeredSpec): Promise<StartResult> {
@@ -711,7 +711,7 @@ export class AccountService {
   }
 
   /** The broker that serves a brokered plugin, or `broker-not-configured`. */
-  private brokerOrThrow(plugin: ProviderPlugin, spec: OAuth2BrokeredSpec): OAuthBrokerClient {
+  private brokerOrThrow(plugin: ServicePlugin, spec: OAuth2BrokeredSpec): OAuthBrokerClient {
     const broker = this.deps.brokers.forProvider(spec.broker.provider);
     if (!broker) {
       throw new ConnectError(
@@ -723,10 +723,10 @@ export class AccountService {
   }
 
   /** What the page shows when the broker failed: its failure, never an expiry or the broker's text. */
-  private brokerFailure(plugin: ProviderPlugin, err: unknown): unknown {
+  private brokerFailure(plugin: ServicePlugin, err: unknown): unknown {
     if (!(err instanceof OAuthBrokerError)) return err;
     this.deps.logger.warn('OAuth broker call failed', {
-      provider: plugin.id,
+      service: plugin.id,
       broker: err.broker,
       call: err.call,
       upstream_status: err.status,
@@ -793,10 +793,10 @@ export class AccountService {
    */
   async importPastedKey(
     actor: Actor,
-    providerId: string,
+    serviceId: string,
     input: ImportPastedInput,
   ): Promise<Connected> {
-    const plugin = this.requirePlugin(providerId);
+    const plugin = this.requirePlugin(serviceId);
     const spec = plugin.credential;
     if (spec.kind !== 'api-key') {
       throw new ConnectError('invalid-input', `${plugin.displayName} takes no pasted key`);
@@ -817,7 +817,7 @@ export class AccountService {
    * failure refuses the account.
    */
   async importSshKey(actor: Actor, input: ImportSshInput): Promise<Connected> {
-    const plugin = this.requirePlugin(input.providerId);
+    const plugin = this.requirePlugin(input.serviceId);
     const spec = plugin.credential;
     if (spec.kind !== 'ssh-key') {
       throw new ConnectError('invalid-input', `${plugin.displayName} takes no ssh key`);
@@ -843,7 +843,7 @@ export class AccountService {
     });
   }
 
-  private importFlow(actor: Actor, plugin: ProviderPlugin, displayName: string): FlowStart {
+  private importFlow(actor: Actor, plugin: ServicePlugin, displayName: string): FlowStart {
     return {
       actor,
       plugin,
@@ -854,14 +854,14 @@ export class AccountService {
   }
 
   /**
-   * Asks the provider about pasted values before anything is stored (the
+   * Asks the service about pasted values before anything is stored (the
    * spec's `verify`): who they act as and when they stop working. A
    * rejection, an answer that is not understood or a credential already
-   * expired refuses the account; an unreachable provider says so. `null`
+   * expired refuses the account; an unreachable service says so. `null`
    * when the spec declares no check (the first discovery is then the check).
    */
   private async verifyPasted(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     spec: ApiKeyCredentialSpec,
     secret: CredentialSecret,
   ): Promise<CredentialCheck | null> {
@@ -876,8 +876,8 @@ export class AccountService {
     } catch (err) {
       const rejected = isUpstreamAuthError(err) || !isTransportFailure(err);
       throw new ConnectError(
-        rejected ? 'credential-rejected' : 'provider-unreachable',
-        `${plugin.displayName}: ${providerFailureReason(err, secret)}`,
+        rejected ? 'credential-rejected' : 'service-unreachable',
+        `${plugin.displayName}: ${serviceFailureReason(err, secret)}`,
       );
     }
     const expiresAt = check.expiresAt === null ? null : Date.parse(check.expiresAt);
@@ -932,7 +932,7 @@ export class AccountService {
   ): PendingConnect {
     return {
       kind,
-      providerId: flow.plugin.id,
+      serviceId: flow.plugin.id,
       userId: flow.actor.user.id,
       displayName: flow.displayName,
       codeVerifier,
@@ -956,15 +956,15 @@ export class AccountService {
   }
 
   /**
-   * The provider's callback. `query` is the query string the browser came
+   * The service's callback. `query` is the query string the browser came
    * back with; its `state` must name a pending flow of this user and this
-   * provider, and is consumed whatever the outcome.
+   * service, and is consumed whatever the outcome.
    */
-  async complete(actor: Actor, providerId: string, query: URLSearchParams): Promise<Connected> {
+  async complete(actor: Actor, serviceId: string, query: URLSearchParams): Promise<Connected> {
     await this.limit(actor);
     const pending = await this.deps.pending.take(query.get('state'), actor.user.id);
-    if (!pending || pending.providerId !== providerId) throw new ConnectError('state-invalid');
-    const plugin = this.requirePlugin(providerId);
+    if (!pending || pending.serviceId !== serviceId) throw new ConnectError('state-invalid');
+    const plugin = this.requirePlugin(serviceId);
     const spec = plugin.credential;
     if (pending.kind === 'oauth2' && spec.kind === 'oauth2') {
       return isBrokeredSpec(spec)
@@ -983,19 +983,19 @@ export class AccountService {
    */
   private async completeBrokered(
     actor: Actor,
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     pending: PendingConnect,
     query: URLSearchParams,
   ): Promise<Connected> {
     const denied = query.get('error');
     if (denied) {
       throw new ConnectError(
-        'provider-denied',
+        'service-denied',
         PROTOCOL_ERROR_CODE.test(denied) ? `${plugin.displayName}: ${denied}` : null,
       );
     }
     const grant = query.get('grant');
-    if (!grant) throw new ConnectError('provider-denied', 'no grant was returned');
+    if (!grant) throw new ConnectError('service-denied', 'no grant was returned');
     // The broker that started the flow, by name: a grant is redeemed where it was issued.
     const broker = pending.broker ? this.deps.brokers.byName(pending.broker) : null;
     if (!broker || !pending.codeVerifier) throw new ConnectError('state-invalid');
@@ -1028,21 +1028,21 @@ export class AccountService {
 
   private async completeOAuth2(
     actor: Actor,
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     spec: OAuth2RegisteredClientSpec,
     pending: PendingConnect,
     query: URLSearchParams,
   ): Promise<Connected> {
     const denied = query.get('error');
     if (denied) {
-      // The protocol code only (RFC 6749 §4.1.2.1): `error_description` is the provider's text.
+      // The protocol code only (RFC 6749 §4.1.2.1): `error_description` is the service's text.
       throw new ConnectError(
-        'provider-denied',
+        'service-denied',
         PROTOCOL_ERROR_CODE.test(denied) ? `${plugin.displayName}: ${denied}` : null,
       );
     }
     const code = query.get('code');
-    if (!code) throw new ConnectError('provider-denied', 'no authorization code was returned');
+    if (!code) throw new ConnectError('service-denied', 'no authorization code was returned');
     const client = await this.clientOrThrow(plugin, () =>
       this.deps.clients.forTokenRequest(plugin, spec),
     );
@@ -1060,8 +1060,8 @@ export class AccountService {
           await this.deps.clients.rejected(plugin, spec, client.clientId);
         }
         throw new ConnectError(
-          err.rejected ? 'token-exchange-failed' : 'provider-unreachable',
-          `${plugin.displayName}: ${providerFailureReason(err)}`,
+          err.rejected ? 'token-exchange-failed' : 'service-unreachable',
+          `${plugin.displayName}: ${serviceFailureReason(err)}`,
         );
       }
       throw err;
@@ -1078,7 +1078,7 @@ export class AccountService {
   /** First discovery, then the write, then the discovery's outcome on the account. */
   private async finalize(
     actor: Actor,
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     secret: CredentialSecret,
     options: FinalizeOptions,
   ): Promise<Connected> {
@@ -1096,7 +1096,7 @@ export class AccountService {
 
     this.deps.logger.info(options.reconnectId ? 'account reconnected' : 'account created', {
       account_id: account.id,
-      provider: plugin.id,
+      service: plugin.id,
       user_id: actor.user.id,
       credential_kind: secret.kind,
       resources: discovery?.count ?? 0,
@@ -1114,7 +1114,7 @@ export class AccountService {
    * Throws the `ConnectError` of a failure the policy does not tolerate.
    */
   private async firstDiscovery(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     secret: CredentialSecret,
     policy: DiscoveryPolicy,
   ): Promise<FirstDiscovery> {
@@ -1129,12 +1129,12 @@ export class AccountService {
       const rejected = isUpstreamAuthError(err);
       if (policy === 'required') {
         throw new ConnectError(
-          rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
-          `${plugin.displayName}: ${providerFailureReason(err, secret)}`,
+          rejected || !isTransportFailure(err) ? 'credential-rejected' : 'service-unreachable',
+          `${plugin.displayName}: ${serviceFailureReason(err, secret)}`,
         );
       }
       // Recorded on the account, which other owners read: the status only.
-      return { resources: null, error: providerFailureReason(err) };
+      return { resources: null, error: serviceFailureReason(err) };
     }
   }
 
@@ -1152,7 +1152,7 @@ export class AccountService {
   /** Creates the account, or reconnects the one the flow named; audited either way. */
   private async persist(
     actor: Actor,
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     secret: CredentialSecret,
     options: FinalizeOptions,
   ): Promise<AccountRecord> {
@@ -1164,7 +1164,7 @@ export class AccountService {
       // Again when the account is stored: a redirect flow may end long after it started.
       await this.refuseAtCeiling();
       const created = await accounts.create({
-        provider: plugin.id,
+        service: plugin.id,
         owner: { kind: 'user', id: actor.user.id },
         displayName: options.displayName,
         credential: sealed,
@@ -1262,7 +1262,7 @@ export class AccountService {
    * The hourly discovery of an account a running mission's future resources depend
    * on (`HourlyDiscovery`). Not audited itself — the joins and leaves it causes are,
    * in the name of `DISCOVERY_ACTOR_ID`; a failure is recorded on the account and
-   * logged without the provider's words. `null` when the account no longer serves
+   * logged without the service's words. `null` when the account no longer serves
    * (gone, revoked, expired).
    */
   async discoverOnSchedule(accountId: string): Promise<DiscoveryRecord | null> {
@@ -1277,7 +1277,7 @@ export class AccountService {
    * The gateway's own discovery after a call that created a resource of the
    * account (ADR created-resources-join-the-mission): the same merge as
    * the owner's "Refresh", run by `DiscoveryAfterCall` off the request path.
-   * Nothing is audited here: the scheduler may look again (a provider that
+   * Nothing is audited here: the scheduler may look again (a service that
    * lists a new resource a moment late) and audits the outcome once, through
    * `auditDiscoveryAfterCall`. `null` when the account no longer serves
    * (gone, revoked, expired): there is nothing to look for with it.
@@ -1354,7 +1354,7 @@ export class AccountService {
           resolved = await this.deps.broker.refresh(account.id);
         } catch (refreshErr) {
           if (!isUpstreamAuthError(refreshErr)) throw refreshErr;
-          // Keep the provider's own words: they say what is wrong with the credential.
+          // Keep the service's own words: they say what is wrong with the credential.
           throw new UpstreamAuthError(
             `${err.message} — the credential could not be refreshed, the account is now expired; reconnect it`,
             err.upstreamStatus,
@@ -1366,11 +1366,11 @@ export class AccountService {
     } catch (err) {
       this.deps.logger.warn('resource discovery failed', {
         account_id: account.id,
-        provider: account.provider,
-        failure: providerFailureReason(err),
+        service: account.service,
+        failure: serviceFailureReason(err),
         ...(afterCall ? { after_call_of: afterCall.tool, mission_id: afterCall.missionId } : {}),
       });
-      return this.recordDiscovery(account.id, 0, providerFailureReason(err), afterCall);
+      return this.recordDiscovery(account.id, 0, serviceFailureReason(err), afterCall);
     }
   }
 
@@ -1452,7 +1452,7 @@ export class AccountService {
     if (account.status === 'revoked') throw new ConnectError('account-revoked');
     const parsed = parseEnvLabel(raw);
     if (!parsed.ok) throw new ConnectError('invalid-input', parsed.problem);
-    const choices = this.defaultEnvChoices(account.provider);
+    const choices = this.defaultEnvChoices(account.service);
     if (parsed.env !== null && !choices.includes(parsed.env)) {
       throw new ConnectError(
         'invalid-input',
@@ -1492,30 +1492,30 @@ export class AccountService {
    * and stays so — a revoked account never comes back (spec §2.3, §7.8; ADR
    * orphaned-missions-and-ownerless-connections, amendment 2026-10-21).
    *
-   * The grant at the provider is withdrawn too when the provider documents
-   * how (`CredentialBroker.withdrawAtProvider`). In this order, on purpose:
+   * The grant at the service is withdrawn too when the service documents
+   * how (`CredentialBroker.withdrawAtService`). In this order, on purpose:
    * the credential is read, the account is revoked here, and only then is
-   * the provider asked — the local revocation never waits for the provider
-   * and never depends on its answer. What the provider answered is stored on
-   * the account (`providerGrant`) and written in the entry, so that a
+   * the service asked — the local revocation never waits for the service
+   * and never depends on its answer. What the service answered is stored on
+   * the account (`serviceGrant`) and written in the entry, so that a
    * grant that still stands stays visible until somebody removes it by hand.
    */
   async revoke(actor: Actor, accountId: string): Promise<AccountRecord> {
     const account = await this.requireOwned(actor, accountId);
     if (account.status === 'revoked') return account;
     const watch = await this.deps.grounds.watchAccount(account.id);
-    // Read before the erase: the provider's endpoint wants the token the store is about to drop.
+    // Read before the erase: the service's endpoint wants the token the store is about to drop.
     const held = await this.deps.broker.forRevocation(account.id);
     let revoked = await this.deps.store.accounts.revoke(account.id);
-    const providerGrant = await this.deps.broker.withdrawAtProvider(revoked, held);
+    const serviceGrant = await this.deps.broker.withdrawAtService(revoked, held);
     try {
       revoked =
-        (await this.deps.store.accounts.recordProviderGrant(revoked.id, providerGrant)) ?? revoked;
+        (await this.deps.store.accounts.recordServiceGrant(revoked.id, serviceGrant)) ?? revoked;
     } catch (err) {
-      // The revocation stands and the entry below still says what the provider answered.
-      this.deps.logger.error('provider grant outcome not stored', {
+      // The revocation stands and the entry below still says what the service answered.
+      this.deps.logger.error('service grant outcome not stored', {
         account_id: revoked.id,
-        provider_grant: providerGrant,
+        service_grant: serviceGrant,
         error_class: err instanceof Error ? err.name : typeof err,
       });
     }
@@ -1527,16 +1527,16 @@ export class AccountService {
         'account-revoked',
         revoked,
         { status: account.status },
-        { provider_grant: providerGrant },
+        { service_grant: serviceGrant },
       );
     } finally {
       await watch.settle(actor.user.id);
     }
     this.deps.logger.info('account revoked', {
       account_id: revoked.id,
-      provider: revoked.provider,
+      service: revoked.service,
       user_id: actor.user.id,
-      provider_grant: providerGrant,
+      service_grant: serviceGrant,
     });
     return revoked;
   }
@@ -1701,9 +1701,9 @@ export class AccountService {
     if (!decision.allowed) throw new ConnectError('rate-limited', null, decision.retryAfterMs);
   }
 
-  private requirePlugin(providerId: string): ProviderPlugin {
-    const registered = this.deps.registry.get(providerId);
-    if (!registered) throw new ConnectError('provider-unknown');
+  private requirePlugin(serviceId: string): ServicePlugin {
+    const registered = this.deps.registry.get(serviceId);
+    if (!registered) throw new ConnectError('service-unknown');
     return registered.plugin;
   }
 
@@ -1730,10 +1730,10 @@ export class AccountService {
   private async requireReconnectable(
     actor: Actor,
     accountId: string,
-    providerId: string,
+    serviceId: string,
   ): Promise<AccountRecord> {
     const account = await this.requireOwned(actor, accountId);
-    if (account.provider !== providerId) throw new ConnectError('provider-mismatch');
+    if (account.service !== serviceId) throw new ConnectError('service-mismatch');
     // Spec §2.3: nobody reconnects an unowned account until an owner is reassigned.
     const refusal = ownerActRefusal(account);
     if (refusal) throw new ConnectError(refusal);
@@ -1743,11 +1743,11 @@ export class AccountService {
   /**
    * The OAuth client of a flow, or the `ConnectError` the page shows: a
    * registration the service refused (`client-registration-failed`) or could not take
-   * (`provider-unreachable`), a registered client gone between the start and
+   * (`service-unreachable`), a registered client gone between the start and
    * the callback (`state-invalid`: start again).
    */
   private async clientOrThrow(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     get: () => Promise<OAuth2Client>,
   ): Promise<OAuth2Client> {
     try {
@@ -1756,12 +1756,12 @@ export class AccountService {
       if (err instanceof OAuth2ClientMissing) throw new ConnectError('state-invalid');
       if (err instanceof OAuth2RegistrationError) {
         this.deps.logger.warn('OAuth client registration failed', {
-          provider: plugin.id,
-          failure: providerFailureReason(err),
+          service: plugin.id,
+          failure: serviceFailureReason(err),
         });
         throw new ConnectError(
-          err.rejected ? 'client-registration-failed' : 'provider-unreachable',
-          `${plugin.displayName}: ${providerFailureReason(err)}`,
+          err.rejected ? 'client-registration-failed' : 'service-unreachable',
+          `${plugin.displayName}: ${serviceFailureReason(err)}`,
         );
       }
       throw err;
@@ -1774,7 +1774,7 @@ export class AccountService {
   }
 
   private async discoverWith(
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     ctx: AccountContext,
   ): Promise<readonly Resource[]> {
     return plugin.discoverResources(ctx);
@@ -1782,7 +1782,7 @@ export class AccountService {
 
   private async storeDiscovery(
     account: AccountRecord,
-    plugin: ProviderPlugin,
+    plugin: ServicePlugin,
     resources: readonly Resource[],
     sinks: DiscoverySinks,
     afterCall: DiscoveryAfterCallCause | null = null,
@@ -1791,7 +1791,7 @@ export class AccountService {
     for (const r of usable) sinks.returned?.add(r.ref);
     for (let i = 0; i < unusable; i += 1) {
       this.deps.logger.warn('plugin returned an unusable resource; ignored', {
-        provider: plugin.id,
+        service: plugin.id,
         account_id: account.id,
       });
     }
@@ -1831,26 +1831,26 @@ export class AccountService {
 
   /**
    * What the plugin of an account says about withdrawing its grant, with the
-   * provider's label. Read from the registry alone: it answers for a revoked
-   * account too, and for a provider whose plugin is gone (nothing is known,
+   * service's label. Read from the registry alone: it answers for a revoked
+   * account too, and for a service whose plugin is gone (nothing is known,
    * so the person removes the access by hand).
    */
-  providerGrantOf(
-    account: Pick<AccountRecord, 'provider'> & Partial<Pick<AccountRecord, 'metadata'>>,
+  serviceGrantOf(
+    account: Pick<AccountRecord, 'service'> & Partial<Pick<AccountRecord, 'metadata'>>,
   ): {
-    readonly providerLabel: string;
-    readonly grant: ProviderGrantView;
+    readonly serviceLabel: string;
+    readonly grant: ServiceGrantView;
   } {
-    const plugin = this.deps.registry.get(account.provider)?.plugin;
+    const plugin = this.deps.registry.get(account.service)?.plugin;
     if (!plugin) {
       return {
-        providerLabel: account.provider,
+        serviceLabel: account.service,
         grant: { withdrawnByGateway: false, byHand: null },
       };
     }
     const kind = accountCredentialKind(account, plugin.credential.kind) ?? plugin.credential.kind;
     return {
-      providerLabel: plugin.displayName,
+      serviceLabel: plugin.displayName,
       grant: {
         withdrawnByGateway: canWithdraw(plugin, kind),
         byHand: plugin.manualRevocation ?? null,
@@ -1860,7 +1860,7 @@ export class AccountService {
 
   /** The refusal sentence of an account made a way its plugin no longer declares, or `null`. */
   private retiredWayOf(account: AccountRecord): string | null {
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     if (!registered) return null;
     const { plugin } = registered;
     const kind = accountCredentialKind(account, plugin.credential.kind);
@@ -1870,7 +1870,7 @@ export class AccountService {
   }
 
   private async view(account: AccountRecord): Promise<AccountView> {
-    const registered = this.deps.registry.get(account.provider);
+    const registered = this.deps.registry.get(account.service);
     const metadata = account.metadata ?? {};
     const kind = accountCredentialKind(account, registered?.plugin.credential.kind ?? null);
     const pasted = kind === 'api-key';
@@ -1878,10 +1878,10 @@ export class AccountService {
     const accountSaid = pasted || kind === 'oauth2';
     return {
       account,
-      provider_label: registered?.plugin.displayName ?? account.provider,
+      service_label: registered?.plugin.displayName ?? account.service,
       resource_noun: resourceNounOf(registered?.plugin ?? null),
-      provider_icon: registered ? serviceIconOf(registered.plugin) : null,
-      provider_grant: this.providerGrantOf(account).grant,
+      service_icon: registered ? serviceIconOf(registered.plugin) : null,
+      service_grant: this.serviceGrantOf(account).grant,
       credential_kind: kind,
       way_retired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
       token_account: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
@@ -1929,7 +1929,7 @@ export class AccountService {
       object: { type: 'account', id: account.id },
       before,
       after: {
-        provider: account.provider,
+        service: account.service,
         display_name: account.displayName,
         status: account.status,
         owner: account.owner,
@@ -2047,9 +2047,9 @@ function movesBySet(moves: readonly ResourceMove[]): MissionResourceMoves[] {
   return [...groups.values()];
 }
 
-export function toPluginResource(provider: string, record: AccountResourceRecord): Resource {
+export function toPluginResource(service: string, record: AccountResourceRecord): Resource {
   return {
-    provider,
+    service,
     ref: record.ref,
     env: record.env,
     displayName: record.displayName,
@@ -2059,7 +2059,7 @@ export function toPluginResource(provider: string, record: AccountResourceRecord
 
 /** A step with its screenshot resolved: served from the plugin's folder, its provenance derived. */
 function stepView(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   screenshots: TokenGuide['screenshots'],
   step: GuideStep,
 ): GuideStepView {

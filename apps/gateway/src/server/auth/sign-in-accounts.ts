@@ -17,7 +17,7 @@
  * account is no free hash for anonymous posts (threat model A44).
  *
  * Audited (`AdminAuditEntry`, object `instance-config` /
- * `sign-in-account:<provider>`): `local-link-created`, `sign-in-account-created`,
+ * `sign-in-account:<sign-in provider>`): `local-link-created`, `sign-in-account-created`,
  * `local-password-changed`, `sign-in-account-removed`. Never a secret, never a link.
  */
 import { createHash, randomBytes } from 'node:crypto';
@@ -87,9 +87,9 @@ function tokenDigest(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-/** The audit object id of a provider's accounts. */
-export function signInAccountsObjectId(providerId: string): string {
-  return `sign-in-account:${providerId}`;
+/** The audit object id of a sign-in provider's accounts. */
+export function signInAccountsObjectId(signInProviderId: string): string {
+  return `sign-in-account:${signInProviderId}`;
 }
 
 export class SignInAccountsService {
@@ -115,7 +115,7 @@ export class SignInAccountsService {
    */
   async createLink(input: {
     readonly kind: LocalLinkKind;
-    readonly providerId: string;
+    readonly signInProviderId: string;
     readonly email: string;
     readonly createdBy: string;
   }): Promise<IssuedLink> {
@@ -123,7 +123,7 @@ export class SignInAccountsService {
     if (!email) throw new SignInAccountError('address-invalid');
     if (input.kind === 'reset') {
       const signInAccount = await this.deps.store.signInAccounts.getByEmail(
-        input.providerId,
+        input.signInProviderId,
         email,
       );
       if (!signInAccount) throw new SignInAccountError('sign-in-account-not-found');
@@ -132,20 +132,20 @@ export class SignInAccountsService {
     const expiresAt = toIso(new Date(this.deps.clock.now().getTime() + LOCAL_LINK_TTL_MS));
     const link = await this.deps.store.signInAccounts.createLink({
       kind: input.kind,
-      provider: input.providerId,
+      signInProvider: input.signInProviderId,
       email,
       tokenSha256: tokenDigest(token),
       createdBy: input.createdBy,
       expiresAt,
     });
-    await this.audit(input.createdBy, 'local-link-created', input.providerId, null, {
+    await this.audit(input.createdBy, 'local-link-created', input.signInProviderId, null, {
       kind: input.kind,
       email,
       expires_at: expiresAt,
     });
     this.deps.logger.info('sign-in account link created', {
       kind: input.kind,
-      provider: input.providerId,
+      sign_in_provider: input.signInProviderId,
     });
     return { token, url: this.linkUrl(input.kind, token), link };
   }
@@ -165,18 +165,18 @@ export class SignInAccountsService {
     if (!link || link.kind !== 'invite') throw new SignInAccountError('link-invalid');
     const problem = passwordProblem(password);
     if (problem) throw new SignInAccountError('password-weak', problem);
-    if (await this.deps.store.signInAccounts.getByEmail(link.provider, link.email)) {
+    if (await this.deps.store.signInAccounts.getByEmail(link.signInProvider, link.email)) {
       throw new SignInAccountError('sign-in-account-exists');
     }
     if (!(await this.deps.store.signInAccounts.useLink(link.id))) {
       throw new SignInAccountError('link-invalid');
     }
-    return this.create(link.provider, link.email, password, link.createdBy);
+    return this.create(link.signInProvider, link.email, password, link.createdBy);
   }
 
   /** The setup or an administrator creates an account outright (the first administrator). */
   async createSignInAccount(input: {
-    readonly providerId: string;
+    readonly signInProviderId: string;
     readonly email: string;
     readonly password: string;
     readonly actor: string;
@@ -185,10 +185,10 @@ export class SignInAccountsService {
     if (!email) throw new SignInAccountError('address-invalid');
     const problem = passwordProblem(input.password);
     if (problem) throw new SignInAccountError('password-weak', problem);
-    if (await this.deps.store.signInAccounts.getByEmail(input.providerId, email)) {
+    if (await this.deps.store.signInAccounts.getByEmail(input.signInProviderId, email)) {
       throw new SignInAccountError('sign-in-account-exists');
     }
-    return this.create(input.providerId, email, input.password, input.actor);
+    return this.create(input.signInProviderId, email, input.password, input.actor);
   }
 
   /** The person sets a new password on a reset link: the link is spent first. */
@@ -198,7 +198,7 @@ export class SignInAccountsService {
     const problem = passwordProblem(password);
     if (problem) throw new SignInAccountError('password-weak', problem);
     const signInAccount = await this.deps.store.signInAccounts.getByEmail(
-      link.provider,
+      link.signInProvider,
       link.email,
     );
     if (!signInAccount) throw new SignInAccountError('link-invalid');
@@ -224,10 +224,14 @@ export class SignInAccountsService {
    * refused before any hash. A wrong password counts towards the lockout, a right one
    * clears the count.
    */
-  async checkPassword(providerId: string, email: string, password: string): Promise<PasswordCheck> {
+  async checkPassword(
+    signInProviderId: string,
+    email: string,
+    password: string,
+  ): Promise<PasswordCheck> {
     const normalized = normalizeLocalEmail(email);
     const signInAccount = normalized
-      ? await this.deps.store.signInAccounts.getByEmail(providerId, normalized)
+      ? await this.deps.store.signInAccounts.getByEmail(signInProviderId, normalized)
       : null;
     if (!signInAccount) {
       await this.passwords.verifyDecoy(password);
@@ -235,7 +239,9 @@ export class SignInAccountsService {
     }
     const now = this.deps.clock.now().getTime();
     if (signInAccount.lockedUntil !== null && Date.parse(signInAccount.lockedUntil) > now) {
-      this.deps.logger.warn('local sign-in refused: account locked', { provider: providerId });
+      this.deps.logger.warn('local sign-in refused: account locked', {
+        sign_in_provider: signInProviderId,
+      });
       return { ok: false, cause: 'locked' };
     }
     const hash = await this.deps.store.signInAccounts.readSecret(signInAccount.id, 'password');
@@ -248,7 +254,7 @@ export class SignInAccountsService {
       );
       if (after?.lockedUntil && Date.parse(after.lockedUntil) > now) {
         this.deps.logger.warn('sign-in account locked after too many wrong passwords', {
-          provider: providerId,
+          sign_in_provider: signInProviderId,
           attempts: after.failedAttempts,
         });
       }
@@ -260,22 +266,27 @@ export class SignInAccountsService {
     return { ok: true, signInAccount };
   }
 
-  async signInAccountOf(providerId: string, email: string): Promise<SignInAccountRecord | null> {
+  async signInAccountOf(
+    signInProviderId: string,
+    email: string,
+  ): Promise<SignInAccountRecord | null> {
     const normalized = normalizeLocalEmail(email);
-    return normalized ? this.deps.store.signInAccounts.getByEmail(providerId, normalized) : null;
+    return normalized
+      ? this.deps.store.signInAccounts.getByEmail(signInProviderId, normalized)
+      : null;
   }
 
   async signInAccountById(id: string): Promise<SignInAccountRecord | null> {
     return this.deps.store.signInAccounts.getById(id);
   }
 
-  async list(providerId: string): Promise<SignInAccountRecord[]> {
-    return this.deps.store.signInAccounts.list(providerId);
+  async list(signInProviderId: string): Promise<SignInAccountRecord[]> {
+    return this.deps.store.signInAccounts.list(signInProviderId);
   }
 
   /** The unused, unexpired links of an address, newest first. */
-  async pendingLinks(providerId: string, email: string): Promise<LocalLinkRecord[]> {
-    return this.deps.store.signInAccounts.pendingLinks(providerId, email);
+  async pendingLinks(signInProviderId: string, email: string): Promise<LocalLinkRecord[]> {
+    return this.deps.store.signInAccounts.pendingLinks(signInProviderId, email);
   }
 
   /** An administrator removes an account: the person can no longer sign in through it. */
@@ -286,30 +297,32 @@ export class SignInAccountsService {
     await this.audit(
       actor,
       'sign-in-account-removed',
-      signInAccount.provider,
+      signInAccount.signInProvider,
       { email: signInAccount.email },
       null,
     );
-    this.deps.logger.info('sign-in account removed', { provider: signInAccount.provider });
+    this.deps.logger.info('sign-in account removed', {
+      sign_in_provider: signInAccount.signInProvider,
+    });
     return signInAccount;
   }
 
   private async create(
-    providerId: string,
+    signInProviderId: string,
     email: string,
     password: string,
     actor: string,
   ): Promise<SignInAccountRecord> {
     const hash = await this.passwords.hash(password);
     const signInAccount = await this.deps.store.signInAccounts.create({
-      provider: providerId,
+      signInProvider: signInProviderId,
       email,
     });
     if (!signInAccount) throw new SignInAccountError('sign-in-account-exists');
     await this.deps.store.signInAccounts.writeSecret(signInAccount.id, 'password', hash);
     await this.deps.store.signInAccounts.markPasswordChanged(signInAccount.id);
-    await this.audit(actor, 'sign-in-account-created', providerId, null, { email });
-    this.deps.logger.info('sign-in account created', { provider: providerId });
+    await this.audit(actor, 'sign-in-account-created', signInProviderId, null, { email });
+    this.deps.logger.info('sign-in account created', { sign_in_provider: signInProviderId });
     return signInAccount;
   }
 
@@ -322,10 +335,12 @@ export class SignInAccountsService {
     await this.deps.store.signInAccounts.writeSecret(signInAccount.id, 'password', hash);
     await this.deps.store.signInAccounts.markPasswordChanged(signInAccount.id);
     await this.deps.store.signInAccounts.clearFailures(signInAccount.id);
-    await this.audit(actor, 'local-password-changed', signInAccount.provider, null, {
+    await this.audit(actor, 'local-password-changed', signInAccount.signInProvider, null, {
       email: signInAccount.email,
     });
-    this.deps.logger.info('sign-in account password changed', { provider: signInAccount.provider });
+    this.deps.logger.info('sign-in account password changed', {
+      sign_in_provider: signInAccount.signInProvider,
+    });
   }
 
   private async audit(
@@ -336,7 +351,7 @@ export class SignInAccountsService {
       | 'local-password-changed'
       | 'local-second-factor-changed'
       | 'sign-in-account-removed',
-    providerId: string,
+    signInProviderId: string,
     before: unknown,
     after: unknown,
   ): Promise<void> {
@@ -346,7 +361,7 @@ export class SignInAccountsService {
         ts: toIso(this.deps.clock.now()),
         user_id: actor,
         act,
-        object: { type: 'instance-config', id: signInAccountsObjectId(providerId) },
+        object: { type: 'instance-config', id: signInAccountsObjectId(signInProviderId) },
         before,
         after,
       });

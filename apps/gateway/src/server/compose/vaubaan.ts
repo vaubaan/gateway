@@ -19,7 +19,7 @@
  * call has then passed the door like any other: the mission key, its accepted
  * risks, its resources, its budget and gates, the audit.
  */
-import { createVaubaanExecute, PROVIDER_ID, type VaubaanPorts } from '@vaubaan/plugin-vaubaan';
+import { createVaubaanExecute, SERVICE_ID, type VaubaanPorts } from '@vaubaan/plugin-vaubaan';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { HostComposedExecute } from '../execution';
@@ -28,7 +28,7 @@ import { enumerateCatalog, macroActionsOf, type MissionService } from '../missio
 import {
   createVaubaanPorts,
   VAUBAAN_MISSION_METHODS,
-  type ProviderCatalog,
+  type ServiceCatalog,
   type VaubaanCatalog,
   type VaubaanMissions,
 } from '../vaubaan';
@@ -73,24 +73,24 @@ export function vaubaanMissionsOf(service: MissionService): VaubaanMissions {
 
 /** The shipped catalogs as plain data: ids, labels, macro-actions. No plugin behaviour is handed over. */
 export function vaubaanCatalogOf(registry: PluginRegistry): VaubaanCatalog {
-  const catalogs = new Map<string, ProviderCatalog>();
+  const catalogs = new Map<string, ServiceCatalog>();
   for (const id of registry.ids) {
     const { plugin } = registry.require(id);
     catalogs.set(
       id,
       Object.freeze({
-        provider: id,
-        provider_label: plugin.displayName,
+        service: id,
+        service_label: plugin.displayName,
         derives_env: typeof plugin.envOf === 'function',
         risks: enumerateCatalog(plugin.catalog),
         macro_actions: macroActionsOf(plugin.catalog),
       }),
     );
   }
-  const providers = Object.freeze([...catalogs.keys()]);
+  const services = Object.freeze([...catalogs.keys()]);
   return Object.freeze({
-    providers: () => providers,
-    get: (provider: string) => catalogs.get(provider) ?? null,
+    services: () => services,
+    get: (service: string) => catalogs.get(service) ?? null,
   });
 }
 
@@ -103,6 +103,6 @@ export function wireVaubaanPlugin(deps: VaubaanWiringDeps): VaubaanPluginModule 
   // Bound only when the configuration enables the plugin: otherwise no account of it
   // exists to reach, and the door has nothing to run.
   const hostExecutes = new Map<string, HostComposedExecute>();
-  if (deps.registry.has(PROVIDER_ID)) hostExecutes.set(PROVIDER_ID, createVaubaanExecute(ports));
+  if (deps.registry.has(SERVICE_ID)) hostExecutes.set(SERVICE_ID, createVaubaanExecute(ports));
   return { ports, hostExecutes };
 }

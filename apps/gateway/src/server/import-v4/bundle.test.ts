@@ -1,5 +1,5 @@
 import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import sshPlugin from '@vaubaan/plugin-ssh';
 import stripePlugin from '@vaubaan/plugin-stripe';
 import vercelPlugin from '@vaubaan/plugin-vercel';
@@ -40,7 +40,7 @@ describe('bundle validation', () => {
     if (!refused.ok) expect(refused.problems[0]).toContain('refresh_token');
   });
 
-  it('refuses a secret for a provider whose secret is never imported', () => {
+  it('refuses a secret for a service whose secret is never imported', () => {
     const bundle = fixtureBundle();
     const github = { ...bundle.accounts[0]!, access_token: 'ghs_never_imported_value' };
     const result = parse({ ...bundle, accounts: [github, ...bundle.accounts.slice(1)] });
@@ -88,7 +88,7 @@ describe('bundle validation', () => {
 });
 
 describe('credential mapping holds to the plugins’ forms', () => {
-  function fieldNames(plugin: ProviderPlugin, kind: 'api-key' | 'ssh-key'): string[] {
+  function fieldNames(plugin: ServicePlugin, kind: 'api-key' | 'ssh-key'): string[] {
     const spec = plugin.credential;
     return (spec.kind === kind ? spec.fields : []).map((f) => f.name);
   }
@@ -131,19 +131,19 @@ describe('credential mapping holds to the plugins’ forms', () => {
 describe('bindings', () => {
   it('collapses the duplicated v4 rows and keeps every label they carried', () => {
     const bindings = normalizeBindings(fixtureBundle());
-    const vercel = bindings.filter((b) => b.provider === 'vercel');
+    const vercel = bindings.filter((b) => b.service === 'vercel');
     expect(vercel).toHaveLength(1);
     expect(vercel[0]).toMatchObject({
       projectId: PROJECT_WEB,
       label: 'prj_web',
       v4Labels: ['prod'],
     });
-    expect(bindings.find((b) => b.provider === 'stripe')?.matcher).toEqual({
+    expect(bindings.find((b) => b.service === 'stripe')?.matcher).toEqual({
       kind: 'stripe-account',
       accountId: 'acct_1Acme',
       mode: 'test',
     });
-    expect(bindings.find((b) => b.provider === 'ssh')?.label).toBe('vps-ops.example.com');
+    expect(bindings.find((b) => b.service === 'ssh')?.label).toBe('vps-ops.example.com');
   });
 
   it('recognises a hand-made account by its non-secret values only', () => {
@@ -211,13 +211,13 @@ describe('command line', () => {
       object: { type: 'account' as const, id: 'c1' },
       before: null,
     };
-    await marked.auditWriter.write({ ...admin, after: { provider: 'vercel' } });
+    await marked.auditWriter.write({ ...admin, after: { service: 'vercel' } });
     await marker
       .provenance({ audit: {} as Store['audit'] })
       .during('tokens/t1', () => marked.auditWriter.write({ ...admin, after: null }));
     await marked.auditWriter.write({ ...admin, after: null });
     expect(written).toEqual([
-      { ...admin, after: { provider: 'vercel', marker: 'imported-from-v4', v4_org: 'acme' } },
+      { ...admin, after: { service: 'vercel', marker: 'imported-from-v4', v4_org: 'acme' } },
       {
         ...admin,
         after: { value: null, marker: 'imported-from-v4', v4_org: 'acme', v4_source: 'tokens/t1' },

@@ -4,16 +4,16 @@
  * Host-agnostic `Request → Response`; `src/app/git/[...path]/route.ts` is a
  * one-line adapter.
  *
- *   GET  /git/<provider>/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch    (fetch.ts)
- *   POST /git/<provider>/<repo>.git/git-upload-pack                       a fetch            (fetch.ts)
- *   GET  /git/<provider>/<repo>.git/info/refs?service=git-receive-pack   refs before a push (push-side.ts)
- *   POST /git/<provider>/<repo>.git/git-receive-pack                      a push             (push-side.ts, push.ts)
+ *   GET  /git/<service>/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch    (fetch.ts)
+ *   POST /git/<service>/<repo>.git/git-upload-pack                       a fetch            (fetch.ts)
+ *   GET  /git/<service>/<repo>.git/info/refs?service=git-receive-pack   refs before a push (push-side.ts)
+ *   POST /git/<service>/<repo>.git/git-receive-pack                      a push             (push-side.ts, push.ts)
  *
  * Order of a request, here:
  *
- *   path        the provider, the repository and the endpoint; LFS is
+ *   path        the service, the repository and the endpoint; LFS is
  *               answered "not supported"
- *   provider    the plugin the `<provider>` segment names, if it declares a
+ *   service    the plugin the `<service>` segment names, if it declares a
  *               git remote (`PluginRegistry.gitRemoteOf`); else 404. Whether
  *               the mission holds an account on it is the resource stage's
  *               call, decided and audited like any call
@@ -25,7 +25,7 @@
  *               rate limit shared with `/mcp`
  *   probe       git's credential probe (a flush packet alone) is answered empty
  *
- * The key is never logged and never sent upstream; the provider's credential
+ * The key is never logged and never sent upstream; the service's credential
  * never comes back. Nothing here imports `next`.
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
@@ -74,18 +74,18 @@ const TEXT = {
     'The mission key was not recognised, or it stopped working. Check VAUBAAN_MISSION_TOKEN; GET <instance>/mcp/catalog with the key tells why it stopped.',
   smartOnly:
     'This git remote speaks the smart HTTP protocol only; use a git client of 2005 or later.',
-  noProvider:
-    'A git remote path names its provider first: <instance>/git/<provider>/<owner>/<repo>.git. Take the setup kit of your mission again.',
+  noService:
+    'A git remote path names its service first: <instance>/git/<service>/<owner>/<repo>.git. Take the setup kit of your mission again.',
 } as const;
 
-/** The 404 of a `<provider>` segment that names no plugin of this instance serving git. */
-function noRemoteFor(provider: string, registry: PluginRegistry): string {
-  const known = registry.get(provider);
+/** The 404 of a `<service>` segment that names no plugin of this instance serving git. */
+function noRemoteFor(service: string, registry: PluginRegistry): string {
+  const known = registry.get(service);
   const what = known
     ? `${known.plugin.displayName} is not served as a git remote by this instance`
-    : `'${oneLine(provider.slice(0, 60))}' is not a provider of this instance`;
+    : `'${oneLine(service.slice(0, 60))}' is not a service of this instance`;
   const served = registry.gitRemotes().map((r) => `${GIT_DOOR_SEGMENT}${r.plugin.id}/`);
-  return `${what}. Git remotes here: ${served.length > 0 ? served.join(', ') : 'none'}. ${TEXT.noProvider}`;
+  return `${what}. Git remotes here: ${served.length > 0 ? served.join(', ') : 'none'}. ${TEXT.noService}`;
 }
 
 export class GitDoor {
@@ -106,10 +106,10 @@ export class GitDoor {
     const path = parseGitPath(new URL(request.url));
     if (!path) return gitText(HTTP_NOT_FOUND, 'Not a git path.');
     if (path.endpoint.kind === 'lfs') return lfsUnsupported();
-    if (path.provider === '') return gitText(HTTP_NOT_FOUND, TEXT.noProvider);
-    const registered = this.deps.registry.gitRemoteOf(path.provider);
+    if (path.service === '') return gitText(HTTP_NOT_FOUND, TEXT.noService);
+    const registered = this.deps.registry.gitRemoteOf(path.service);
     if (!registered) {
-      return gitText(HTTP_NOT_FOUND, noRemoteFor(path.provider, this.deps.registry));
+      return gitText(HTTP_NOT_FOUND, noRemoteFor(path.service, this.deps.registry));
     }
 
     const wrong = wrongMethodOrEndpoint(request.method, path);

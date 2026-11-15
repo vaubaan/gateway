@@ -6,15 +6,15 @@ import { missionGitViews } from './git-view';
 
 const registry = new PluginRegistry([githubPlugin]);
 const publicUrl = new URL('https://gateway.acme.example');
-const accounts = [{ provider: 'github', resources: [{ ref: 'acme/app' }, { ref: 'acme/app' }] }];
+const accounts = [{ service: 'github', resources: [{ ref: 'acme/app' }, { ref: 'acme/app' }] }];
 
 describe('missionGitViews', () => {
-  it('is empty without a repository on a provider the instance serves as a git remote', () => {
+  it('is empty without a repository on a service the instance serves as a git remote', () => {
     expect(
       missionGitViews({
         registry,
         publicUrl,
-        accounts: [{ provider: 'github', resources: [] }],
+        accounts: [{ service: 'github', resources: [] }],
         policy: [],
       }),
     ).toEqual([]);
@@ -45,6 +45,6 @@ describe('missionGitViews', () => {
     ]);
     expect(view?.cannot).toContain('push and delete tags');
     expect(view?.cannot.some((w) => w.startsWith('push to main'))).toBe(true);
-    expect(view?.provider).toBe('GitHub');
+    expect(view?.service).toBe('GitHub');
   });
 });

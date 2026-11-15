@@ -2,7 +2,7 @@
  * `/admin/identity-provider` — Settings → Sign-in: the sign-in providers of the
  * gateway (spec §4.2; docs/handbook/authentication.md). One row
  * each: its name and id, its kind, who it admits, how many people signed in
- * through it, whether it is on. A provider saved here is edited
+ * through it, whether it is on. A sign-in provider saved here is edited
  * (`/admin/identity-provider/<id>`), tested beside the session — in another window,
  * signing nobody in, the result on `/admin/identity-provider/<id>/test` (ADR
  * administrators-live-in-the-instance) —, switched on after a passed test, switched
@@ -33,12 +33,12 @@ import {
   signInTestPage,
   signInTestPath,
   testPassedSinceSaved,
-  type ProviderState,
+  type SignInProviderState,
   type SignInProviderView,
   callbackUrl,
   setUpElsewhere,
 } from '@/server/auth';
-import { isOpenProvider, issuerKey } from '@/server/config';
+import { isOpenSignInProvider, issuerKey } from '@/server/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,18 +52,18 @@ function first(value: string | string[] | undefined): string | null {
 
 const KIND_WORDS = { oidc: 'OpenID Connect', github: 'GitHub', local: 'Sign-in accounts' } as const;
 
-/** Who a provider admits, in words. */
-function admits(provider: SignInProviderView): string {
-  if (provider.invitationOnly) return 'invited people only';
-  if (provider.allowedEmailDomains.length > 0) {
-    return `${provider.allowedEmailDomains.join(', ')}, and invited people`;
+/** Who a sign-in provider admits, in words. */
+function admits(signInProvider: SignInProviderView): string {
+  if (signInProvider.invitationOnly) return 'invited people only';
+  if (signInProvider.allowedEmailDomains.length > 0) {
+    return `${signInProvider.allowedEmailDomains.join(', ')}, and invited people`;
   }
   return 'everyone the directory signs in';
 }
 
 interface Row {
-  readonly provider: SignInProviderView;
-  readonly state: ProviderState;
+  readonly signInProvider: SignInProviderView;
+  readonly state: SignInProviderState;
   readonly people: number;
 }
 
@@ -76,19 +76,21 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
   const removedPeople = Number(first(params.people) ?? '0');
   const enabled = first(params.enabled);
   const disabled = first(params.disabled);
-  const providers = await root.auth.providers.views();
+  const signInProviders = await root.auth.signInProviders.views();
   const administrators = await root.auth.administrators.current();
   const users = await root.store.users.list();
-  const states = await Promise.all(providers.map((p) => root.auth.providers.state(p.id)));
+  const states = await Promise.all(
+    signInProviders.map((p) => root.auth.signInProviders.state(p.id)),
+  );
   const publicUrl = root.config.publicUrl;
   // Providers whose callback is registered for another address (a restore on a new host).
-  const elsewhere = providers
-    .map((provider) => ({ provider, host: setUpElsewhere(provider, publicUrl) }))
+  const elsewhere = signInProviders
+    .map((signInProvider) => ({ signInProvider, host: setUpElsewhere(signInProvider, publicUrl) }))
     .filter(
-      (entry): entry is { provider: SignInProviderView; host: string } => entry.host !== null,
+      (entry): entry is { signInProvider: SignInProviderView; host: string } => entry.host !== null,
     );
-  const rows: Row[] = providers.map((provider, index) => ({
-    provider,
+  const rows: Row[] = signInProviders.map((signInProvider, index) => ({
+    signInProvider,
     state: states[index] ?? {
       enabled: true,
       changedAt: null,
@@ -97,21 +99,24 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
       registeredFor: null,
     },
     people: users.filter(
-      (user) => user.issuer !== null && issuerKey(user.issuer) === issuerKey(provider.issuer),
+      (user) => user.issuer !== null && issuerKey(user.issuer) === issuerKey(signInProvider.issuer),
     ).length,
   }));
 
   const columns: readonly Column<Row>[] = [
     {
-      id: 'provider',
-      header: 'Provider',
-      cell: ({ provider }) => (
+      id: 'signInProvider',
+      header: 'Sign-in provider',
+      cell: ({ signInProvider }) => (
         <span className={styles.namedText}>
           <span>
-            <span className={styles.name}>{provider.name}</span> <Mono>{provider.id}</Mono>
+            <span className={styles.name}>{signInProvider.name}</span>{' '}
+            <Mono>{signInProvider.id}</Mono>
           </span>
           <span className={styles.sub}>
-            {provider.kind === 'local' ? 'kept by this gateway' : issuerKey(provider.issuer)}
+            {signInProvider.kind === 'local'
+              ? 'kept by this gateway'
+              : issuerKey(signInProvider.issuer)}
           </span>
         </span>
       ),
@@ -120,22 +125,22 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
       id: 'kind',
       header: 'Kind',
       nowrap: true,
-      cell: ({ provider }) => (
+      cell: ({ signInProvider }) => (
         <span className={styles.inline}>
-          {KIND_WORDS[provider.kind]}
-          {isOpenProvider(provider) && <Tag>open to anyone</Tag>}
+          {KIND_WORDS[signInProvider.kind]}
+          {isOpenSignInProvider(signInProvider) && <Tag>open to anyone</Tag>}
         </span>
       ),
     },
-    { id: 'admits', header: 'Admits', cell: ({ provider }) => admits(provider) },
+    { id: 'admits', header: 'Admits', cell: ({ signInProvider }) => admits(signInProvider) },
     {
       id: 'state',
       header: 'State',
-      cell: ({ provider, state }) => (
+      cell: ({ signInProvider, state }) => (
         <span className={styles.namedText}>
-          {provider.enabled ? (
-            provider.kind !== 'local' &&
-            provider.source === 'store' &&
+          {signInProvider.enabled ? (
+            signInProvider.kind !== 'local' &&
+            signInProvider.source === 'store' &&
             !testPassedSinceSaved(state) ? (
               <span className={styles.inline}>
                 on <Tag>changed since its last test</Tag>
@@ -148,16 +153,16 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
               off{testPassedSinceSaved(state) ? ': test passed' : ': test it first'}
             </span>
           )}
-          {setUpElsewhere(provider, publicUrl) && (
-            <span className={styles.sub} data-testid={`elsewhere-${provider.id}`}>
-              set up for {setUpElsewhere(provider, publicUrl)}
+          {setUpElsewhere(signInProvider, publicUrl) && (
+            <span className={styles.sub} data-testid={`elsewhere-${signInProvider.id}`}>
+              set up for {setUpElsewhere(signInProvider, publicUrl)}
             </span>
           )}
           {state.waiver && (
-            <span className={styles.sub} data-testid={`waiver-${provider.id}`}>
+            <span className={styles.sub} data-testid={`waiver-${signInProvider.id}`}>
               second factor waived
-              {state.waiver === 'amr' ? ' when the provider says it asked one' : ''}, never for
-              administrators
+              {state.waiver === 'amr' ? ' when the sign-in provider says it asked one' : ''}, never
+              for administrators
             </span>
           )}
         </span>
@@ -177,7 +182,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
           </ButtonLink>
         }
         secondary={
-          rows.some(({ provider }) => provider.kind === 'local')
+          rows.some(({ signInProvider }) => signInProvider.kind === 'local')
             ? [
                 <ButtonLink key="github" href={`${NEW_SIGN_IN_PROVIDER_PAGE}?kind=github`}>
                   Add GitHub
@@ -196,40 +201,48 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
 
       {(saved || removed || enabled || disabled || problems.length > 0 || elsewhere.length > 0) && (
         <div className={styles.notes}>
-          {elsewhere.map(({ provider, host }) => (
+          {elsewhere.map(({ signInProvider, host }) => (
             <Callout
-              key={provider.id}
+              key={signInProvider.id}
               tone="warn"
-              title={`${provider.name} was set up for ${host}`}
-              testId={`set-up-elsewhere-${provider.id}`}
+              title={`${signInProvider.name} was set up for ${host}`}
+              testId={`set-up-elsewhere-${signInProvider.id}`}
             >
-              Its callback is registered at {provider.name} under that address, so nobody can sign
-              in through it here yet. At {provider.name}, register the callback{' '}
-              <Mono>{callbackUrl(publicUrl, provider.id).href}</Mono> for this gateway, then test
-              the sign-in: a passed test records this address.
+              Its callback is registered at {signInProvider.name} under that address, so nobody can
+              sign in through it here yet. At {signInProvider.name}, register the callback{' '}
+              <Mono>{callbackUrl(publicUrl, signInProvider.id).href}</Mono> for this gateway, then
+              test the sign-in: a passed test records this address.
             </Callout>
           ))}
           {saved && (
             <Callout tone="ok" title="Saved" testId="idp-saved">
-              The client secret is encrypted at rest. A new provider is off until a test passes: use
-              “Test”, which opens the provider in another window and signs nobody in, then switch it
-              on.
+              The client secret is encrypted at rest. A new signInProvider is off until a test
+              passes: use “Test”, which opens the sign-in provider in another window and signs
+              nobody in, then switch it on.
             </Callout>
           )}
           {enabled && (
-            <Callout tone="ok" title={`Provider ${enabled} switched on`} testId="idp-enabled">
+            <Callout
+              tone="ok"
+              title={`Sign-in provider ${enabled} switched on`}
+              testId="idp-enabled"
+            >
               The sign-in page offers it from now on.
             </Callout>
           )}
           {disabled && (
-            <Callout tone="ok" title={`Provider ${disabled} switched off`} testId="idp-disabled">
+            <Callout
+              tone="ok"
+              title={`Sign-in provider ${disabled} switched off`}
+              testId="idp-disabled"
+            >
               {removedPeople === 0
                 ? 'Nobody else had signed in through it.'
                 : `${removedPeople} ${removedPeople === 1 ? 'person' : 'people'} signed in through it: their sessions are over until it is on again.`}
             </Callout>
           )}
           {removed && (
-            <Callout tone="ok" title={`Provider ${removed} removed`} testId="idp-removed">
+            <Callout tone="ok" title={`Sign-in provider ${removed} removed`} testId="idp-removed">
               {removedPeople === 0
                 ? 'Nobody else had signed in through it.'
                 : `${removedPeople} ${removedPeople === 1 ? 'person' : 'people'} signed in through it: their sessions are over and they can no longer sign in. Their missions and connected apps keep running until you deactivate them on People.`}
@@ -265,109 +278,111 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
           </EmptyState>
         ) : (
           <DataTable
-            caption="The providers people sign in through"
+            caption="The sign-in providers people sign in through"
             columns={columns}
             rows={rows}
-            rowKey={({ provider }) => provider.id}
-            actions={({ provider, people, state }) => (
+            rowKey={({ signInProvider }) => signInProvider.id}
+            actions={({ signInProvider, people, state }) => (
               <span className={styles.inline}>
-                {provider.kind !== 'local' && (
+                {signInProvider.kind !== 'local' && (
                   // A form, in another window: the test runs beside this session, and a
                   // link from elsewhere cannot start one (it writes a pending sign-in).
-                  <form method="post" action={signInTestPath(provider.id)} target="_blank">
+                  <form method="post" action={signInTestPath(signInProvider.id)} target="_blank">
                     <Button
                       type="submit"
                       size="sm"
-                      aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
-                      data-testid={`test-provider-${provider.id}`}
+                      aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${signInProvider.name}`}
+                      data-testid={`test-sign-in-provider-${signInProvider.id}`}
                     >
                       Test
                     </Button>
                   </form>
                 )}
                 {state.test && (
-                  <ButtonLink href={signInTestPage(provider.id)} size="sm" variant="ghost">
+                  <ButtonLink href={signInTestPage(signInProvider.id)} size="sm" variant="ghost">
                     Last test
                   </ButtonLink>
                 )}
-                {provider.source === 'store' && !provider.enabled && (
+                {signInProvider.source === 'store' && !signInProvider.enabled && (
                   <form
                     method="post"
-                    action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/enable`}
+                    action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/enable`}
                   >
                     <Button
                       type="submit"
                       size="sm"
                       variant="primary"
-                      aria-label={`Switch ${provider.name} on`}
-                      data-testid={`enable-provider-${provider.id}`}
+                      aria-label={`Switch ${signInProvider.name} on`}
+                      data-testid={`enable-sign-in-provider-${signInProvider.id}`}
                     >
                       Switch on
                     </Button>
                   </form>
                 )}
-                {provider.kind !== 'local' && (
+                {signInProvider.kind !== 'local' && (
                   // Reversible either way, so asked nowhere (spec §4.2): the button's
                   // title says what it does.
                   <form
                     method="post"
-                    action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/waiver`}
+                    action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/waiver`}
                   >
                     <input
                       type="hidden"
                       name="waiver"
-                      value={state.waiver ? 'none' : provider.kind === 'oidc' ? 'amr' : 'always'}
+                      value={
+                        state.waiver ? 'none' : signInProvider.kind === 'oidc' ? 'amr' : 'always'
+                      }
                       readOnly
                     />
                     <Button
                       type="submit"
                       size="sm"
                       variant="ghost"
-                      aria-label={`Second factor for ${provider.name}`}
+                      aria-label={`Second factor for ${signInProvider.name}`}
                       title={
                         state.waiver
                           ? 'Each of its people enrols one at their next sign-in.'
-                          : provider.kind === 'oidc'
-                            ? 'Its people sign in without this gateway’s code when the provider says it asked a second factor of its own (the “mfa” method of its token); otherwise the code is still asked. Never for administrators. Do it only for a directory that enforces one.'
-                            : 'Its people sign in without this gateway’s code: you vouch that the provider enforces a second factor of its own. Never for administrators.'
+                          : signInProvider.kind === 'oidc'
+                            ? 'Its people sign in without this gateway’s code when the sign-in provider says it asked a second factor of its own (the “mfa” method of its token); otherwise the code is still asked. Never for administrators. Do it only for a directory that enforces one.'
+                            : 'Its people sign in without this gateway’s code: you vouch that the sign-in provider enforces a second factor of its own. Never for administrators.'
                       }
-                      data-testid={`waiver-toggle-${provider.id}`}
+                      data-testid={`waiver-toggle-${signInProvider.id}`}
                     >
                       {state.waiver ? 'Ask the second factor again' : 'Waive the second factor'}
                     </Button>
                   </form>
                 )}
-                {provider.source === 'store' && provider.enabled && (
+                {signInProvider.source === 'store' && signInProvider.enabled && (
                   <ConfirmSubmit
-                    action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/disable`}
+                    action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/disable`}
                     label="Switch off"
-                    ariaLabel={`Switch ${provider.name} off`}
+                    ariaLabel={`Switch ${signInProvider.name} off`}
                     variant="ghost"
                     tone="danger"
-                    title={`Switch ${provider.name} off?`}
+                    title={`Switch ${signInProvider.name} off?`}
                     consequence="Nobody signs in through it until it is on again, and the sessions of its people end — not yours. Refused if it is the last way in of every administrator."
                     confirmLabel="Switch off"
-                    testId={`disable-provider-${provider.id}`}
+                    testId={`disable-sign-in-provider-${signInProvider.id}`}
                   />
                 )}
-                {provider.source === 'file' ? (
+                {signInProvider.source === 'file' ? (
                   <Tag>{CONFIG_WORDS.file}</Tag>
                 ) : (
                   <>
                     <ButtonLink
-                      href={signInProviderPage(provider.id)}
+                      href={signInProviderPage(signInProvider.id)}
                       size="sm"
-                      aria-label={`${SETTINGS_ACTIONS.edit} ${provider.name}`}
+                      aria-label={`${SETTINGS_ACTIONS.edit} ${signInProvider.name}`}
                     >
                       {SETTINGS_ACTIONS.edit}
                     </ButtonLink>
                     <ConfirmSubmit
-                      action={`/api/admin/sign-in-providers/${encodeURIComponent(provider.id)}/remove`}
+                      action={`/api/admin/sign-in-providers/${encodeURIComponent(signInProvider.id)}/remove`}
                       label={SETTINGS_ACTIONS.remove}
-                      ariaLabel={`${SETTINGS_ACTIONS.remove} ${provider.name}`}
+                      ariaLabel={`${SETTINGS_ACTIONS.remove} ${signInProvider.name}`}
                       variant="danger"
                       tone="danger"
-                      title={`Remove ${provider.name}?`}
+                      title={`Remove ${signInProvider.name}?`}
                       consequence={
                         people === 0 ? (
                           <>
@@ -379,14 +394,14 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                             {people} {people === 1 ? 'person has' : 'people have'} signed in through
                             it. At once they can no longer sign in, and their open sessions end.
                             Their missions, keys and connected apps keep running, as for anyone the
-                            provider no longer vouches for: deactivate them on People to stop those.
-                            Added again later with the same address, the provider gives them back
-                            the same accounts.
+                            signInProvider no longer vouches for: deactivate them on People to stop
+                            those. Added again later with the same address, the sign-in provider
+                            gives them back the same accounts.
                           </>
                         )
                       }
                       confirmLabel={SETTINGS_ACTIONS.remove}
-                      testId={`remove-provider-${provider.id}`}
+                      testId={`remove-sign-in-provider-${signInProvider.id}`}
                     />
                   </>
                 )}
@@ -400,7 +415,7 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
           {administrators.designations.length === 0
             ? 'nobody yet'
             : `${administrators.designations.length} named under People`}
-          . A provider where anyone can open an account — GitHub, personal Google or Microsoft
+          . A signInProvider where anyone can open an account — GitHub, personal Google or Microsoft
           accounts — admits only allowed domains and invited people; the gateway never joins two
           accounts of one person.
         </Hint>

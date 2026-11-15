@@ -12,7 +12,7 @@ import {
 function pendingFor(userId: string): PendingConnect {
   return {
     kind: 'oauth2',
-    providerId: 'oauthco',
+    serviceId: 'oauthco',
     userId,
     displayName: 'OAuth Co',
     codeVerifier: 'verifier',

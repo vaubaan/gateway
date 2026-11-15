@@ -8,7 +8,7 @@
  * first, with what it stops.
  *
  * Each person says the sign-in provider they signed in through: one person
- * signing in through two providers is two people here, and the gateway never
+ * signing in through two sign-in providers is two people here, and the gateway never
  * joins them. Under the list, the invitations: the addresses administrators
  * allowed to sign in (spec §0 "Invitation"), with "Invite" and "Remove" (asked
  * first: it stops the next sign-ins, not an open session).
@@ -69,30 +69,32 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
   const { root, principal } = await requireOperator();
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const [users, invitations, providers, administrators, drift, channels] = await Promise.all([
+  const [users, invitations, signInProviders, administrators, drift, channels] = await Promise.all([
     root.users.service.list(),
     root.users.invitations.list(),
-    root.auth.providers.views(),
+    root.auth.signInProviders.views(),
     root.auth.administrators.current(),
     root.auth.administrators.configurationDrift(),
     // How many channels each person receives notifications on, never which (spec §4.2 bis).
     root.notifications.channelCounts(),
   ]);
   const emailOfUser = new Map(users.map((view) => [view.user.id, view.user.email]));
-  const groupProviders = providers.filter((p) => p.kind !== 'local');
-  const local = providers.find((p) => p.kind === 'local') ?? null;
+  const groupSignInProviders = signInProviders.filter((p) => p.kind !== 'local');
+  const local = signInProviders.find((p) => p.kind === 'local') ?? null;
   const sendsMail = root.auth.sendsMail;
   const isLocal = (view: UserView): boolean =>
     local !== null &&
     view.user.issuer !== null &&
     issuerKey(view.user.issuer) === issuerKey(local.issuer);
-  const providerIdOf = (view: UserView): string | null => {
+  const signInProviderIdOf = (view: UserView): string | null => {
     const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
-    return providers.find((p) => issuerKey(p.issuer) === key)?.id ?? null;
+    return signInProviders.find((p) => issuerKey(p.issuer) === key)?.id ?? null;
   };
-  const providerOf = (view: UserView): string => {
+  const signInProviderOf = (view: UserView): string => {
     const key = view.user.issuer === null ? null : issuerKey(view.user.issuer);
-    return providers.find((p) => issuerKey(p.issuer) === key)?.name ?? 'a removed provider';
+    return (
+      signInProviders.find((p) => issuerKey(p.issuer) === key)?.name ?? 'a removed sign-in provider'
+    );
   };
   const self = principal.kind === 'user' ? principal.user.id : null;
   const now = new Date();
@@ -110,7 +112,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
             {
               id: view.user.id,
               email: view.user.email,
-              providerId: providerIdOf(view),
+              signInProviderId: signInProviderIdOf(view),
               groups: view.groupRecords,
             },
             administrators,
@@ -139,9 +141,9 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
       },
     },
     {
-      id: 'provider',
+      id: 'signInProvider',
       header: 'Signed in with',
-      cell: (view) => <span className={styles.quiet}>{providerOf(view)}</span>,
+      cell: (view) => <span className={styles.quiet}>{signInProviderOf(view)}</span>,
     },
     {
       id: 'teams',
@@ -332,7 +334,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         )}
         <Hint>
           A person appears here once they have signed in. One person who signs in through two
-          providers is two people here: the gateway never joins accounts by email. You cannot
+          signInProviders is two people here: the gateway never joins accounts by email. You cannot
           deactivate yourself or stop administering: another administrator can.
         </Hint>
       </Section>
@@ -399,15 +401,15 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
             testId="administrator-list"
           />
         )}
-        {groupProviders.length > 0 && (
+        {groupSignInProviders.length > 0 && (
           <form
             method="post"
             action={`${USERS_PAGE}/administrators/group`}
             className={styles.lineForm}
           >
-            <Field label="Sign-in provider" htmlFor="admin-group-provider">
-              <Select id="admin-group-provider" name="provider" required>
-                {groupProviders.map((p) => (
+            <Field label="Sign-in provider" htmlFor="admin-group-sign-in-provider">
+              <Select id="admin-group-sign-in-provider" name="sign_in_provider" required>
+                {groupSignInProviders.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -431,7 +433,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
             ? sendsMail
               ? 'Addresses allowed to sign in. With sign-in accounts, inviting sends the person a link to create theirs.'
               : 'Addresses allowed to sign in. With sign-in accounts, inviting gives you a link to hand to the person; this gateway sends no mail.'
-            : 'Addresses allowed to sign in through any provider that verified them. Nothing is sent.'
+            : 'Addresses allowed to sign in through any sign-in provider that verified them. Nothing is sent.'
         }
         testId="invitations"
       >
@@ -451,7 +453,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         {invitations.length === 0 ? (
           <Hint>
             Nobody is invited. Only allowed domains and the administrators are admitted on a
-            provider where anyone can open an account.
+            signInProvider where anyone can open an account.
           </Hint>
         ) : (
           <DataTable
@@ -480,9 +482,9 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
                   title={`Remove the invitation of ${invitation.email}?`}
                   consequence={
                     <>
-                      Their next sign-in is refused unless an allowed domain of the provider admits
-                      them. A session already open runs to its end, at most 8 hours; their account,
-                      missions and keys stay. To stop them at once, deactivate them above.
+                      Their next sign-in is refused unless an allowed domain of the sign-in provider
+                      admits them. A session already open runs to its end, at most 8 hours; their
+                      account, missions and keys stay. To stop them at once, deactivate them above.
                     </>
                   }
                   confirmLabel={SETTINGS_ACTIONS.remove}
@@ -513,13 +515,13 @@ function designationColumns(
           <span>
             <Mono>{d.email}</Mono>{' '}
             <span className={styles.quiet}>
-              at their first sign-in{d.provider ? ` through ${d.provider}` : ''}
+              at their first sign-in{d.signInProvider ? ` through ${d.signInProvider}` : ''}
             </span>
           </span>
         ) : (
           <span>
             members of <Mono>{d.groupName}</Mono>
-            {d.provider ? <span className={styles.quiet}> of {d.provider}</span> : null}
+            {d.signInProvider ? <span className={styles.quiet}> of {d.signInProvider}</span> : null}
           </span>
         ),
     },

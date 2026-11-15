@@ -2,7 +2,7 @@
  * The pack of a push, read whole and bounded before any byte of it leaves
  * the gateway (ADR gateway-as-git-remote): the plugin inspects
  * its objects first, the pipeline decides on what it found, and only then is
- * it stored at the provider (`temporary-refs.ts`).
+ * it stored at the service (`temporary-refs.ts`).
  *
  * Memory: at most `git.max_pack_mb` per push, and at most
  * `MAX_PUSHES_IN_FLIGHT_PER_MISSION` pushes of a mission at once.

@@ -1,15 +1,15 @@
 /**
  * What a pasted token holds against what the plugin's guide asks the person to
- * tick (account-ux audit 2026-10-31, M2). A plugin whose provider can list a
+ * tick (account-ux audit 2026-10-31, M2). A plugin whose service can list a
  * token's permissions returns their names from `verify` (`CredentialCheck.granted`);
  * the account keeps them in its metadata and the account page names each
  * permission of `guide.permissions` the token lacks, with the tools that need it.
- * A provider that cannot say (GitHub's fine-grained tokens) leaves it `null`: the
+ * A service that cannot say (GitHub's fine-grained tokens) leaves it `null`: the
  * page then says nothing rather than guess.
  */
 import type { CredentialSpec, TokenPermission } from '@vaubaan/plugin-sdk';
 
-/** More names than any provider's token page lists; the rest is dropped. */
+/** More names than any service's token page lists; the rest is dropped. */
 const MAX_GRANTED = 200;
 const MAX_NAME_LENGTH = 120;
 

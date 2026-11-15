@@ -40,7 +40,7 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
   const ids: string[] = [];
   for (const credential of ['first-credential', 'second-credential']) {
     const account = await store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: credential,
       credential,
@@ -50,7 +50,7 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
   await store.config.setSecret('idp.client_secret', 'company-secret');
   await store.config.set('telemetry', '{"enabled":false}');
   const signInAccount = await store.signInAccounts.create({
-    provider: 'local',
+    signInProvider: 'local',
     email: 'u2@example.com',
   });
   if (!signInAccount) throw new Error('no account');

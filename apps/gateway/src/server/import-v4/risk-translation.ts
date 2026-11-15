@@ -2,7 +2,7 @@
  * v4 `accepted_risks` → the explicit policy of a v5 mission, one id at a
  * time (docs/handbook/import-from-v4.md). Pure.
  *
- * The rule, for each v4 id of the account's provider:
+ * The rule, for each v4 id of the account's service:
  *
  *   1. The same id is an explicit id of the v5 catalog → kept.
  *   2. An account-scoped v4 id whose v5 entry became env-scoped (Supabase,
@@ -103,9 +103,9 @@ export type TranslatableAccount = Pick<
   'risks' | 'derives_env' | 'macro_actions' | 'authority'
 >;
 
-/** The provider a v4 risk id belongs to, or `null` when it is not a risk id. */
-export function providerOfV4Risk(v4RiskId: string): string | null {
-  return parseRiskId(v4RiskId)?.provider ?? null;
+/** The service a v4 risk id belongs to, or `null` when it is not a risk id. */
+export function serviceOfV4Risk(v4RiskId: string): string | null {
+  return parseRiskId(v4RiskId)?.service ?? null;
 }
 
 export function translateRisks(
@@ -214,7 +214,7 @@ function targetsOf(
   if (!parsed) return { reason: 'unknown-in-v5', v5RiskIds: [] };
   if (parsed.env !== null) {
     // `github[feature].x` → `github.x` would cover more than v4 did: never.
-    const base = formatRiskId({ provider: parsed.provider, name: parsed.name });
+    const base = formatRiskId({ service: parsed.service, name: parsed.name });
     const counterparts = account.risks.filter((r) => r.risk_id === base || r.base_id === base);
     return counterparts.length > 0
       ? { reason: 'no-exact-env-counterpart', v5RiskIds: counterparts.map((r) => r.risk_id) }

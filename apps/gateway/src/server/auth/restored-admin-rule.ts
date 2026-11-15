@@ -4,7 +4,7 @@
  * administrators-live-in-the-instance).
  *
  * A copy made by a build between the two carries the source's rule as the key
- * `restored.admin_rule`, JSON `{ "group": "<provider>:<group>" | null, "emails": [...] }`.
+ * `restored.admin_rule`, JSON `{ "group": "<sign-in provider>:<group>" | null, "emails": [...] }`.
  * Restored on this version, it is read once: while the store names no administrator,
  * the boot applies it with the configuration's own rule (`seedFromConfiguration`);
  * the key is deleted then, or at the first boot that finds administrators. A backup

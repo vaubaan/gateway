@@ -59,8 +59,8 @@ describe('AccountAuthorityService', () => {
     await store.close();
   });
 
-  function connect(owner: AccountRecord['owner'], provider = 'acme'): Promise<AccountRecord> {
-    return store.accounts.create({ provider, owner, displayName: 'Acme', credential: null });
+  function connect(owner: AccountRecord['owner'], service = 'acme'): Promise<AccountRecord> {
+    return store.accounts.create({ service, owner, displayName: 'Acme', credential: null });
   }
 
   function share(account: AccountRecord, target: Principal, restriction: string[]) {
@@ -78,7 +78,7 @@ describe('AccountAuthorityService', () => {
       const held = await authority.authorityOf(ada, account);
       expect(held).toEqual({
         accountId: account.id,
-        provider: 'acme',
+        service: 'acme',
         basis: 'owner',
         riskIds: ACME_FULL,
       });
@@ -106,7 +106,7 @@ describe('AccountAuthorityService', () => {
       expect((await authority.authorityOf(ada, account)).riskIds).toEqual(ACME_FULL);
     });
 
-    it('holds nothing on an account whose provider has no registered plugin', async () => {
+    it('holds nothing on an account whose service has no registered plugin', async () => {
       const account = await connect({ kind: 'user', id: ada.id }, 'ghost');
       expect(await authority.authorityOf(ada, account)).toMatchObject({
         basis: 'none',
@@ -131,7 +131,7 @@ describe('AccountAuthorityService', () => {
       await share(account, { kind: 'user', id: bob.id }, [WRITE_STAGING, READ]);
       expect(await authority.authorityOf(bob, account)).toEqual({
         accountId: account.id,
-        provider: 'acme',
+        service: 'acme',
         basis: 'share',
         riskIds: [READ, WRITE_STAGING],
       });

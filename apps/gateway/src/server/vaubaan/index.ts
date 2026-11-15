@@ -11,7 +11,7 @@
  * own schema (`inputs.ts`; a mismatch is the `invalid-arguments` refusal), checks
  * the self rule and acts (`acts.ts`).
  *
- * Handbook: docs/handbook/providers/vaubaan.md.
+ * Handbook: docs/handbook/services/vaubaan.md.
  */
 import {
   VAUBAAN_PORT_NAMES,
@@ -114,7 +114,7 @@ export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
 }
 
 export {
-  VAUBAAN_PROVIDER,
+  VAUBAAN_SERVICE,
   VAUBAAN_REFUSAL_CODES,
   VaubaanActs,
   type ActOutcome,
@@ -133,7 +133,7 @@ export { inputJsonSchemaOf, toolSchemasDocument, VAUBAAN_INPUTS } from './inputs
 export {
   VAUBAAN_DEPENDENCIES,
   VAUBAAN_MISSION_METHODS,
-  type ProviderCatalog,
+  type ServiceCatalog,
   type VaubaanCatalog,
   type VaubaanMissions,
   type VaubaanModuleDeps,

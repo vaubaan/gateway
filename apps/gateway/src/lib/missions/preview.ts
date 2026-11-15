@@ -128,7 +128,7 @@ export function defaultResources(account: Pick<IssuanceAccount, 'resources'>): I
 
 /**
  * The resources "all" enters into a mission: `defaultResources`, less the unlabelled
- * ones where the provider needs a label (`needsEnvLabel`). What a form preselects.
+ * ones where the service needs a label (`needsEnvLabel`). What a form preselects.
  */
 export function enterableResources(
   account: Pick<IssuanceAccount, 'resources' | 'risks' | 'derives_env'>,
@@ -193,7 +193,7 @@ function resolveResources(
   if (stale.length > 0) {
     issues.push({
       code: 'resource-stale',
-      message: `No longer found on "${account.display_name}" at the provider: ${stale
+      message: `No longer found on "${account.display_name}" at the service: ${stale
         .map((r) => r.ref)
         .join(', ')}. Refresh the account's resources or leave ${
         stale.length === 1 ? 'it' : 'them'
@@ -288,7 +288,7 @@ function resolvePrefill(
   if ((draft.policy ?? []).length === 0 && unknown.length > 0) {
     issues.push({
       code: 'unknown-macro-action',
-      message: `Not ${unknown.length === 1 ? 'a macro-action' : 'macro-actions'} of ${account.provider_label}: ${list(unknown)} (known: ${list(
+      message: `Not ${unknown.length === 1 ? 'a macro-action' : 'macro-actions'} of ${account.service_label}: ${list(unknown)} (known: ${list(
         account.macro_actions.map((action) => action.id),
       )}).`,
       ...where,
@@ -395,7 +395,7 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
 /** One issue per non-empty refusing bucket, in a fixed order. */
 function issuesOf(
   buckets: LineBuckets,
-  account: Pick<IssuanceAccount, 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'display_name' | 'service_label'>,
   where: Where,
 ): PreviewIssue[] {
   const { unknown, duplicates, exceeds, unresolvable, missingBudget, invalid } = buckets;
@@ -404,7 +404,7 @@ function issuesOf(
   if (unknown.length > 0) {
     issues.push({
       code: 'unknown-risk',
-      message: `Not ${unknown.length === 1 ? 'a risk' : 'risks'} of the ${account.provider_label} catalog: ${list(unknown)}. A mission policy is an explicit enumeration of catalog ids.`,
+      message: `Not ${unknown.length === 1 ? 'a risk' : 'risks'} of the ${account.service_label} catalog: ${list(unknown)}. A mission policy is an explicit enumeration of catalog ids.`,
       risk_ids: unknown,
       ...where,
     });
@@ -467,7 +467,7 @@ function issuesOf(
  * refs are in `resource_refs`, for whoever reads the notice as data.
  */
 export function envNotices(
-  account: Pick<IssuanceAccount, 'risks' | 'derives_env' | 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'risks' | 'derives_env' | 'display_name' | 'service_label'>,
   selected: readonly (Pick<IssuanceResource, 'ref' | 'env'> &
     Partial<Pick<IssuanceResource, 'display_name'>>)[],
   passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
@@ -480,7 +480,7 @@ export function envNotices(
   const scopedIds = new Set(envScoped.map((r) => r.risk_id));
   const accepted = passes.map((p) => p.risk_id).filter((id) => scopedIds.has(id));
   const name = account.display_name;
-  const consequence = `${account.provider_label} risks that depend on the environment can never be touched there: a call that touches one is refused (risk-not-accepted), whatever the mission accepts${
+  const consequence = `${account.service_label} risks that depend on the environment can never be touched there: a call that touches one is refused (risk-not-accepted), whatever the mission accepts${
     accepted.length > 0 ? ` — including ${list(accepted)}` : ''
   }.`;
   const remedy = `Label the resource on the account's page (${list(envs)}) or leave it out.`;
@@ -502,7 +502,7 @@ export function envNotices(
   if (foreign.length > 0) {
     notices.push({
       code: 'resource-env-not-in-catalog',
-      message: `${list(foreign.map((r) => `${called(r)} (labelled "${r.env}")`))} on "${name}": no ${account.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
+      message: `${list(foreign.map((r) => `${called(r)} (labelled "${r.env}")`))} on "${name}": no ${account.service_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
       resource_refs: foreign.map((r) => r.ref),
       risk_ids: accepted,
       ...where,
@@ -544,7 +544,7 @@ export function checkPolicyLines(
  * running freely, then the fallback. The lines themselves are `passes`.
  */
 export function everythingNotice(
-  account: Pick<IssuanceAccount, 'risks' | 'display_name' | 'provider_label'>,
+  account: Pick<IssuanceAccount, 'risks' | 'display_name' | 'service_label'>,
   passes: readonly Pick<MissionPolicyEntry, 'risk_id' | 'gate'>[],
   where: Where,
 ): PreviewNotice {
@@ -563,7 +563,7 @@ export function everythingNotice(
     digest.fallback.length > 0
       ? ` Includes the fallback ${list(
           digest.fallback.map((r) => r.risk_id),
-        )}: writes no other entry of the ${account.provider_label} catalog names, which nobody reviewed.`
+        )}: writes no other entry of the ${account.service_label} catalog names, which nobody reviewed.`
       : '';
   return {
     code: 'everything-i-hold-expanded',
@@ -685,7 +685,7 @@ export function needsEnvLabel(account: Pick<IssuanceAccount, 'risks' | 'derives_
 /**
  * The environment of one set — the label every resource carries, else the one the
  * draft gave, else the one it takes when empty — and why it cannot be stored: resources
- * of several environments (`resource-set-mixed-env`), or no label where the provider
+ * of several environments (`resource-set-mixed-env`), or no label where the service
  * needs one (`resource-unlabelled`).
  */
 function envOfSet(
@@ -720,8 +720,8 @@ function envOfSet(
       code: 'resource-unlabelled',
       message:
         unlabelled.length > 0
-          ? `No environment label on ${list(unlabelled.map((r) => r.display_name || r.ref))} ("${named.display_name}"): ${account.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled. Label it on the account's page, give the account a default environment, or leave it out.`
-          : `"${named.display_name}" takes future resources without an environment: ${account.provider_label} has permissions that depend on the environment. Name the environment of the set.`,
+          ? `No environment label on ${list(unlabelled.map((r) => r.display_name || r.ref))} ("${named.display_name}"): ${account.service_label} has permissions that depend on the environment, so a resource enters a mission only once labelled. Label it on the account's page, give the account a default environment, or leave it out.`
+          : `"${named.display_name}" takes future resources without an environment: ${account.service_label} has permissions that depend on the environment. Name the environment of the set.`,
       resource_refs: unlabelled.map((r) => r.ref),
       ...where,
     });
@@ -823,7 +823,7 @@ function splitByEnvironment(
  * selections first, each resource in one set only; then the one set that takes the
  * rest (`all`, `account`), if any. A legacy selection — the flat shape, `all`,
  * `account` — is split by environment (a resource without a label left out of the
- * rest where the provider needs one); a set given in `resource_sets` with `selected` is
+ * rest where the service needs one); a set given in `resource_sets` with `selected` is
  * kept whole, and refused if it mixes environments.
  */
 function normalizeSets(
@@ -904,7 +904,7 @@ function normalizeSets(
           code: 'unlabelled-resources-left-out',
           message: `Left out on "${account.display_name}", without an environment label: ${list(
             unlabelled.map((r) => r.display_name || r.ref),
-          )}. ${account.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled.`,
+          )}. ${account.service_label} has permissions that depend on the environment, so a resource enters a mission only once labelled.`,
           resource_refs: unlabelled.map((r) => r.ref),
           risk_ids: [],
           ...whereOf(index),
@@ -1021,7 +1021,7 @@ export function previewAccount(
   return {
     preview: {
       account_id: account.id,
-      provider: account.provider,
+      service: account.service,
       display_name: account.display_name,
       resources,
       future: previews.some((set) => set.future),
@@ -1076,7 +1076,7 @@ export function normalizeDraft(
   return { draft: { ...draft, accounts }, notices };
 }
 
-/** The account a draft line names, by id or by provider. */
+/** The account a draft line names, by id or by service. */
 function findAccount(
   context: PreviewContext,
   draft: DraftAccount,
@@ -1095,9 +1095,9 @@ function findAccount(
       },
     };
   }
-  if (draft.provider) {
+  if (draft.service) {
     const candidates = context.accounts.filter(
-      (c) => c.provider === draft.provider && c.status === 'active',
+      (c) => c.service === draft.service && c.status === 'active',
     );
     const [only] = candidates;
     if (candidates.length === 1 && only) return { account: only };
@@ -1106,12 +1106,12 @@ function findAccount(
         candidates.length === 0
           ? {
               code: 'account-unknown',
-              message: `You hold no active ${draft.provider} account.`,
+              message: `You hold no active ${draft.service} account.`,
               account_index: index,
             }
           : {
               code: 'account-ambiguous',
-              message: `You hold ${candidates.length} ${draft.provider} accounts; name one by account_id (${list(candidates.map((c) => c.id))}).`,
+              message: `You hold ${candidates.length} ${draft.service} accounts; name one by account_id (${list(candidates.map((c) => c.id))}).`,
               account_index: index,
             },
     };
@@ -1119,7 +1119,7 @@ function findAccount(
   return {
     issue: {
       code: 'account-unknown',
-      message: 'An account is named by account_id or by provider.',
+      message: 'An account is named by account_id or by service.',
       account_index: index,
     },
   };
@@ -1172,7 +1172,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
   const previews: AccountPreview[] = [];
   const used: IssuanceAccount[] = [];
   const seenAccounts = new Set<string>();
-  const seenProviders = new Map<string, string>();
+  const seenServices = new Map<string, string>();
 
   draft.accounts.forEach((draftAccount, index) => {
     const found = findAccount(context, draftAccount, index);
@@ -1191,18 +1191,18 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       return;
     }
     seenAccounts.add(account.id);
-    const sameProvider = seenProviders.get(account.provider);
-    if (sameProvider !== undefined) {
-      // The policy is keyed by RiskId, whose first segment is the provider: two
-      // accounts of one provider would share one partition and one budget.
+    const sameService = seenServices.get(account.service);
+    if (sameService !== undefined) {
+      // The policy is keyed by RiskId, whose first segment is the service: two
+      // accounts of one service would share one partition and one budget.
       issues.push({
-        code: 'duplicate-provider',
-        message: `A mission carries one account per provider, and "${sameProvider}" and "${account.display_name}" are both ${account.provider_label} accounts. The risks and the budget of a mission are counted per provider, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
+        code: 'duplicate-service',
+        message: `A mission carries one account per service, and "${sameService}" and "${account.display_name}" are both ${account.service_label} accounts. The risks and the budget of a mission are counted per service, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
         ...where,
       });
       return;
     }
-    seenProviders.set(account.provider, account.display_name);
+    seenServices.set(account.service, account.display_name);
     if (account.status !== 'active') {
       issues.push({
         code: 'account-unavailable',

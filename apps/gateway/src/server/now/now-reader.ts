@@ -23,7 +23,7 @@ import type { Iso8601, MissionTokenKind, RiskId } from '@vaubaan/shared';
 
 import type { Actor, AccountService } from '../accounts';
 import type { MissionOverview, MissionRole, MissionService, TrustRaiseOffer } from '../missions';
-import { riskExplainer } from '../../lib/providers/reference';
+import { riskExplainer } from '../../lib/services/reference';
 import { issuerName } from '../../lib/vocabulary';
 import type { RequestService, WaitingItem } from '../requests';
 import { effectiveState } from '../requests/state';
@@ -181,7 +181,7 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       if (service === undefined) {
         const account = await store.accounts.getById(accountId);
         service = account
-          ? (deps.registry.get(account.provider)?.plugin.displayName ?? account.provider)
+          ? (deps.registry.get(account.service)?.plugin.displayName ?? account.service)
           : null;
         serviceNames.set(accountId, service);
       }
@@ -301,7 +301,7 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
     sharedAccounts.set(share.account.id, {
       account_id: share.account.id,
       name: share.account.displayName,
-      service: share.providerLabel,
+      service: share.serviceLabel,
       owner: share.ownerLabel,
     });
   }

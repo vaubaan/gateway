@@ -1,11 +1,11 @@
 /**
- * The explicit enumeration of a provider's catalog (spec §3.1 "Enumeration":
+ * The explicit enumeration of a service's catalog (spec §3.1 "Enumeration":
  * no stage expresses "everything").
  *
  * An account-scoped entry contributes its id (`github.merge-protected`); an
  * env-scoped entry contributes one id per environment it is acceptable in
  * (`supabase[staging].bulk-row-write`, `supabase[preview].bulk-row-write`).
- * That list is what "the provider's full catalog" means wherever an authority
+ * That list is what "the service's full catalog" means wherever an authority
  * is written down, and it is exactly the set of ids the store's catalog index
  * accepts (`RegistryCatalogIndex.has`).
  *
@@ -22,7 +22,7 @@ export function explicitRiskIdsOf(entry: RiskEntry): RiskId[] {
   const parsed = parseRiskId(entry.id);
   if (!parsed) return [];
   return (entry.acceptable_in_envs ?? []).map((env) =>
-    formatRiskId({ provider: parsed.provider, env, name: parsed.name }),
+    formatRiskId({ service: parsed.service, env, name: parsed.name }),
   );
 }
 

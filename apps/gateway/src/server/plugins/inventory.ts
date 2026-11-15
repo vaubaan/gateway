@@ -7,10 +7,10 @@
  * - **The pin wins**: a pinned plugin with the id of a bundled one takes its place in
  *   the registration order, and the inventory keeps the bundled version it replaces.
  * - **`plugins.enabled`** filters what is registered; an id no plugin has stops the boot.
- * - **Accounts are served**: a provider the store holds accounts for and no registered
- *   plugin serves stops the boot, naming the provider and the count.
+ * - **Accounts are served**: a service the store holds accounts for and no registered
+ *   plugin serves stops the boot, naming the service and the count.
  */
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 
 import { ConfigError, envNamesFor, type ConfigIssue } from '../config';
 import type { PinnedPlugin } from './loader';
@@ -36,24 +36,24 @@ export interface PluginInventoryEntry {
 /** What the boot registers and what it shows. */
 export interface PluginSet {
   /** The plugins to register, in registration order: bundled order, then the pins of new ids. */
-  readonly plugins: readonly ProviderPlugin[];
+  readonly plugins: readonly ServicePlugin[];
   /** Every plugin known, registered or not, in the same order. */
   readonly inventory: readonly PluginInventoryEntry[];
 }
 
 export interface PluginSetInput {
-  readonly bundled: readonly ProviderPlugin[];
+  readonly bundled: readonly ServicePlugin[];
   readonly pinned: readonly PinnedPlugin[];
   /** `plugins.enabled`; `null`: every plugin. */
   readonly enabled: readonly string[] | null;
 }
 
 interface Known {
-  readonly plugin: ProviderPlugin;
+  readonly plugin: ServicePlugin;
   readonly entry: Omit<PluginInventoryEntry, 'enabled'>;
 }
 
-function bundledEntry(plugin: ProviderPlugin): Known {
+function bundledEntry(plugin: ServicePlugin): Known {
   return {
     plugin,
     entry: {
@@ -67,7 +67,7 @@ function bundledEntry(plugin: ProviderPlugin): Known {
   };
 }
 
-function pinnedEntry(pin: PinnedPlugin, replaced: ProviderPlugin | undefined): Known {
+function pinnedEntry(pin: PinnedPlugin, replaced: ServicePlugin | undefined): Known {
   return {
     plugin: pin.plugin,
     entry: {
@@ -135,56 +135,56 @@ export function composePlugins(input: PluginSetInput): PluginSet {
 }
 
 /** The inventory of a registry built without the loader (tests, tools): every plugin bundled and enabled. */
-export function bundledInventory(plugins: readonly ProviderPlugin[]): PluginInventoryEntry[] {
+export function bundledInventory(plugins: readonly ServicePlugin[]): PluginInventoryEntry[] {
   return plugins.map((plugin) => ({ ...bundledEntry(plugin).entry, enabled: true }));
 }
 
-/** A provider the store holds accounts for that no registered plugin serves. */
-export interface UnservedProvider {
-  readonly provider: string;
+/** A service the store holds accounts for that no registered plugin serves. */
+export interface UnservedService {
+  readonly service: string;
   readonly accounts: number;
   /** Known but left out of `plugins.enabled`, or known to no source at all. */
   readonly cause: 'disabled' | 'missing';
 }
 
-/** The providers with accounts and no registered plugin, by provider id. Pure. */
-export function unservedProviders(
-  accountsByProvider: Readonly<Record<string, number>>,
+/** The services with accounts and no registered plugin, by service id. Pure. */
+export function unservedServices(
+  accountsByService: Readonly<Record<string, number>>,
   registered: ReadonlySet<string>,
   inventory: readonly PluginInventoryEntry[],
-): UnservedProvider[] {
+): UnservedService[] {
   const known = new Set(inventory.map((entry) => entry.id));
-  return Object.entries(accountsByProvider)
-    .filter(([provider, accounts]) => accounts > 0 && !registered.has(provider))
+  return Object.entries(accountsByService)
+    .filter(([service, accounts]) => accounts > 0 && !registered.has(service))
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([provider, accounts]) => ({
-      provider,
+    .map(([service, accounts]) => ({
+      service,
       accounts,
-      cause: known.has(provider) ? 'disabled' : 'missing',
+      cause: known.has(service) ? 'disabled' : 'missing',
     }));
 }
 
 /**
- * Stops the boot when the store holds accounts of a provider no registered plugin
+ * Stops the boot when the store holds accounts of a service no registered plugin
  * serves (ADR, "Fail closed at boot"): every page that names a service would otherwise
  * need a path for an unknown one. The operator enables or pins the plugin, or
  * disconnects the accounts on an instance that still serves them.
  */
-export function checkAccountsServed(unserved: readonly UnservedProvider[]): void {
+export function checkAccountsServed(unserved: readonly UnservedService[]): void {
   if (unserved.length === 0) return;
   throw new ConfigError(
-    unserved.map(({ provider, accounts, cause }) => {
-      const held = `the store holds ${accounts} ${accounts === 1 ? 'account' : 'accounts'} of '${provider}'`;
+    unserved.map(({ service, accounts, cause }) => {
+      const held = `the store holds ${accounts} ${accounts === 1 ? 'account' : 'accounts'} of '${service}'`;
       return cause === 'disabled'
         ? {
             path: 'plugins.enabled',
             env: envNamesFor('plugins.enabled'),
-            message: `${held} and plugins.enabled leaves the plugin out: add '${provider}', or disconnect those accounts first`,
+            message: `${held} and plugins.enabled leaves the plugin out: add '${service}', or disconnect those accounts first`,
           }
         : {
             path: 'plugins.dir',
             env: envNamesFor('plugins.dir'),
-            message: `${held} and no plugin of this image or of the plugins directory serves it: pin the plugin '${provider}', or run the former image and disconnect those accounts first`,
+            message: `${held} and no plugin of this image or of the plugins directory serves it: pin the plugin '${service}', or run the former image and disconnect those accounts first`,
           };
     }),
   );

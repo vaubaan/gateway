@@ -8,7 +8,7 @@ import type { AuthModule } from '../auth';
 import type { TelemetryModule } from '../telemetry';
 
 export interface SetupDeps {
-  readonly providers: Pick<AuthModule['providers'], 'views'>;
+  readonly signInProviders: Pick<AuthModule['signInProviders'], 'views'>;
   readonly telemetry: Pick<TelemetryModule, 'overview'>;
 }
 
@@ -23,10 +23,13 @@ export interface SetupView {
 }
 
 export async function readSetup(deps: SetupDeps): Promise<SetupView> {
-  const providers = await deps.providers.views();
+  const signInProviders = await deps.signInProviders.views();
   const { state } = await deps.telemetry.overview();
   return {
-    sign_in: providers.length > 0 ? providers.map((provider) => provider.name).join(', ') : null,
+    sign_in:
+      signInProviders.length > 0
+        ? signInProviders.map((signInProvider) => signInProvider.name).join(', ')
+        : null,
     telemetry: { enabled: state.enabled, decided: state.source !== 'default' },
   };
 }

@@ -29,14 +29,14 @@ describe('account mapping', () => {
   });
   afterEach(() => t.store.close());
 
-  it('summarises a record as id, provider, display_name and status, and nothing else', async () => {
+  it('summarises a record as id, service, display_name and status, and nothing else', async () => {
     const user = await t.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
       subject: 'a',
       email: 'alice@example.com',
     });
     const record = await t.store.accounts.create({
-      provider: 'github',
+      service: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'GitHub (acme)',
       credential: 'secret-value',
@@ -44,7 +44,7 @@ describe('account mapping', () => {
     });
     expect(accountSummaryOf(record)).toEqual({
       id: record.id,
-      provider: 'github',
+      service: 'github',
       display_name: 'GitHub (acme)',
       status: 'active',
     });

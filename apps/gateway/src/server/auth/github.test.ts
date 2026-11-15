@@ -14,7 +14,7 @@ const REDIRECT = new URL('https://gateway.example.com/auth/callback/github');
 
 function setup(teams: string[] = []) {
   const fake = new FakeGithub('client', 'secret');
-  const provider: GithubSignInProvider = {
+  const signInProvider: GithubSignInProvider = {
     kind: 'github',
     id: 'github',
     name: 'GitHub',
@@ -24,7 +24,11 @@ function setup(teams: string[] = []) {
     allowedEmailDomains: [],
     invitationOnly: true,
   };
-  const flow = new GithubSignIn(provider, { redirectUri: REDIRECT, teams, fetch: fake.fetch });
+  const flow = new GithubSignIn(signInProvider, {
+    redirectUri: REDIRECT,
+    teams,
+    fetch: fake.fetch,
+  });
   return { fake, flow };
 }
 
@@ -118,7 +122,7 @@ describe('GitHub sign-in', () => {
     await expect(round(none)).rejects.toBeInstanceOf(LoginError);
   });
 
-  it('answers an error of the provider with idp-error', async () => {
+  it('answers an error of the sign-in provider with idp-error', async () => {
     const s = setup();
     s.fake.nextUser = ADA;
     await expect(

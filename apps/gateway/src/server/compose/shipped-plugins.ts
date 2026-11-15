@@ -4,11 +4,11 @@
  * (`server/plugins`, ADR plugins-bundled-or-pinned-by-the-operator); a pin of
  * the same id replaces the bundled plugin.
  *
- * This import list is where a provider enters the gateway: the registry built
- * from it is the single provider list (ADR plugin-contract-and-credential-spec
- * D6) and every other list — the connect picker, Admin → Provider apps, the
+ * This import list is where a service enters the gateway: the registry built
+ * from it is the single service list (ADR plugin-contract-and-credential-spec
+ * D6) and every other list — the connect picker, Admin → Service apps, the
  * catalog index of the store, the tool list — derives from it. Adding a
- * provider is one import and one array entry here, plus the dependency in
+ * service is one import and one array entry here, plus the dependency in
  * `apps/gateway/package.json` (which is also what `next.config.ts` derives
  * `transpilePackages` from).
  *
@@ -31,7 +31,7 @@ import notionPlugin from '@vaubaan/plugin-notion';
 import outlookPlugin from '@vaubaan/plugin-outlook';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
-import { createRegistry, type PluginRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { createRegistry, type PluginRegistry, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import sshPlugin from '@vaubaan/plugin-ssh';
 import stripePlugin from '@vaubaan/plugin-stripe';
 import supabasePlugin from '@vaubaan/plugin-supabase';
@@ -39,7 +39,7 @@ import upstashRedisPlugin from '@vaubaan/plugin-upstash-redis';
 import vaubaanPlugin from '@vaubaan/plugin-vaubaan';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 
-export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
+export const SHIPPED_PLUGINS: readonly ServicePlugin[] = [
   githubPlugin,
   vercelPlugin,
   supabasePlugin,

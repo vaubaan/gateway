@@ -2,11 +2,11 @@
  * Secret arguments, as the person answering an approval request sees them.
  *
  * A plugin names, per tool, the arguments whose values are secrets
- * (`ProviderPlugin.secretArguments` : `fly__set_secrets` → `values`). The
+ * (`ServicePlugin.secretArguments` : `fly__set_secrets` → `values`). The
  * approval view shows the call's arguments in clear while the request is
  * open; for those arguments it shows, instead of each string value, a short
  * fingerprint — enough to tell two values apart and to compare with the
- * digest the provider lists, never enough to read the value. The keys of an
+ * digest the service lists, never enough to read the value. The keys of an
  * object (the secret names) stay. The sealed arguments and the call that may
  * be replayed are unchanged. Pure.
  *
@@ -44,7 +44,7 @@ export function maskSecretArguments(
 ): unknown {
   if (typeof args !== 'object' || args === null || Array.isArray(args)) return args;
   const split = splitToolName(tool);
-  const names = split ? registry.get(split.providerId)?.plugin.secretArguments?.[tool] : undefined;
+  const names = split ? registry.get(split.serviceId)?.plugin.secretArguments?.[tool] : undefined;
   if (!names || names.length === 0) return args;
   const secret = new Set(names);
   return Object.fromEntries(

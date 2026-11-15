@@ -1,7 +1,7 @@
 /**
  * The frame of the Reference: the services as a local navigation — a row of
  * tabs under the path bar — then the title of the place and the content. The
- * list is the plugin registry's (`providerCards`); nothing is enumerated here.
+ * list is the plugin registry's (`serviceCards`); nothing is enumerated here.
  */
 import { Mono, PageHeader, ServiceMark, SubNav, SubNavFrame, Tag } from '@/components/ui';
 import {
@@ -13,12 +13,12 @@ import {
   ROUTES,
   TERMS,
 } from '@/lib/vocabulary';
-import { providerPath } from '@/lib/providers/links';
-import type { ProviderCard } from '@/lib/providers/reference';
+import { servicePath } from '@/lib/services/links';
+import type { ServiceCard } from '@/lib/services/reference';
 import type { PluginInventory, PluginInventoryEntry } from '@/server/plugins';
 
 /** "15 permissions · 4 macro-actions · 26 tools" */
-export function catalogSize(card: Pick<ProviderCard, 'counts'>): string {
+export function catalogSize(card: Pick<ServiceCard, 'counts'>): string {
   return [
     count(card.counts.risks, TERMS.risk),
     count(card.counts.macro_actions, TERMS.macroAction),
@@ -69,7 +69,7 @@ export function ReferenceFrame({
   cards,
   children,
 }: {
-  cards: readonly ProviderCard[];
+  cards: readonly ServiceCard[];
   children: React.ReactNode;
 }) {
   return (
@@ -85,7 +85,7 @@ export function ReferenceFrame({
               label: REFERENCE_WORDS.services,
               items: cards.map((card) => ({
                 label: card.name,
-                href: providerPath(card.id),
+                href: servicePath(card.id),
                 lead: <ServiceMark name={card.name} icon={card.icon} />,
               })),
             },

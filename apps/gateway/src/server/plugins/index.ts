@@ -3,14 +3,14 @@
  * (ADR plugins-bundled-or-pinned-by-the-operator; handbook plugin-loading).
  *
  * `loadPlugins` is what the composition root runs at boot: read the pins, compose the
- * set, build the registry (the single provider list), log what was pinned or left out.
+ * set, build the registry (the single service list), log what was pinned or left out.
  * The inventory it returns is `GatewayRoot.plugins`, what Administration › Plugins shows.
  */
 import {
   createRegistry,
   SDK_VERSION,
   type PluginRegistry,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 
 import type { InstanceConfig } from '../config';
@@ -22,11 +22,11 @@ export {
   bundledInventory,
   checkAccountsServed,
   composePlugins,
-  unservedProviders,
+  unservedServices,
   type PluginInventoryEntry,
   type PluginOrigin,
   type PluginSet,
-  type UnservedProvider,
+  type UnservedService,
 } from './inventory';
 export {
   BUNDLED_PLUGINS_DIR,
@@ -61,7 +61,7 @@ export interface LoadedPlugins {
 
 export interface LoadPluginsOptions {
   /** The plugins the image bundles (`SHIPPED_PLUGINS`). */
-  readonly bundled: readonly ProviderPlugin[];
+  readonly bundled: readonly ServicePlugin[];
   /** Tests: another SDK version than this build's. */
   readonly sdkVersion?: string;
   /** Tests: a fake `import()`. */

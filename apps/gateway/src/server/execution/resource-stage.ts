@@ -4,9 +4,9 @@
  * whose arguments cite a resource outside the mission's selection is refused
  * with `resource-not-in-mission`, before any risk is evaluated").
  *
- * The account: a tool belongs to one plugin (`registry.providerForTool`)
- * and a mission holds at most one account per provider (handbook missions,
- * "One account per provider"), so `(mission, provider)` names it.
+ * The account: a tool belongs to one plugin (`registry.serviceForTool`)
+ * and a mission holds at most one account per service (handbook missions,
+ * "One account per service"), so `(mission, service)` names it.
  *
  * The resource: the host does not know which argument of which tool carries a
  * ref — the plugin's classifier does, and it writes the ref into the slices it
@@ -43,7 +43,7 @@ import {
   type ClassifyAccount,
   type ClassifyOutcome,
   type PluginRegistry,
-  type ProviderPlugin,
+  type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
 import type { Slice } from '@vaubaan/shared';
 
@@ -77,7 +77,7 @@ export function classifyAccountOf(account: Pick<MissionAccount, 'public_fields'>
 }
 
 function classifySafely(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   call: CallRequest,
   resources: readonly MissionResource[],
   account: MissionAccount,
@@ -97,7 +97,7 @@ function classifySafely(
  * and the account, then the plugin's reason ("needs the GitHub App: …").
  */
 export function toolUnavailableOn(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   account: Pick<MissionAccount, 'display_name' | 'credential_kind' | 'hosts_instance'>,
   tool: string,
 ): string | null {
@@ -114,7 +114,7 @@ export function toolUnavailableOn(
  * SEC 2026-10-15 re-check M-1). One rule for the resource stage and `tools/list`.
  */
 export function unavailableReason(
-  plugin: ProviderPlugin,
+  plugin: ServicePlugin,
   account: Pick<MissionAccount, 'credential_kind' | 'hosts_instance'> | undefined,
   tool: string,
 ): string | null {
@@ -136,7 +136,7 @@ export function unavailableReason(
  * arguments the host built from the push itself; every other tool only for
  * calls that came over MCP. The reason of the mismatch, or `null`.
  */
-export function doorMismatch(plugin: ProviderPlugin, call: CallRequest): string | null {
+export function doorMismatch(plugin: ServicePlugin, call: CallRequest): string | null {
   const remote = plugin.gitRemote;
   const isGitTool =
     remote !== undefined && (call.tool === remote.fetchTool || call.tool === remote.pushTool);
@@ -173,17 +173,17 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
 
   return {
     async resolve(ctx: MissionContext, call: CallRequest): Promise<ResourceResolution> {
-      const registered = deps.registry.providerForTool(call.tool);
+      const registered = deps.registry.serviceForTool(call.tool);
       if (!registered) {
         return {
           ok: false,
-          reason: `unknown tool '${call.tool}': no provider of this instance declares it.`,
+          reason: `unknown tool '${call.tool}': no service of this instance declares it.`,
         };
       }
       const { plugin } = registered;
       const wrongDoor = doorMismatch(plugin, call);
       if (wrongDoor) return { ok: false, reason: wrongDoor };
-      const account = ctx.accounts.find((c) => c.provider === plugin.id);
+      const account = ctx.accounts.find((c) => c.service === plugin.id);
       if (!account) {
         return {
           ok: false,

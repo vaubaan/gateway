@@ -38,7 +38,9 @@ export function createGroupsModule(deps: GroupsModuleDeps): GroupsModule {
     reservedNames: async () =>
       (await deps.store.administrators.list()).flatMap((d) =>
         d.kind === 'group'
-          ? reservedGroupNames(d.provider === null ? d.groupName : `${d.provider}:${d.groupName}`)
+          ? reservedGroupNames(
+              d.signInProvider === null ? d.groupName : `${d.signInProvider}:${d.groupName}`,
+            )
           : [],
       ),
     audit: deps.store.auditWriter,

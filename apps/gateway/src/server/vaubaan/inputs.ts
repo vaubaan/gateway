@@ -35,17 +35,17 @@ export const VAUBAAN_INPUTS = {
     .strict(),
   getCatalog: z
     .object({
-      provider: z
+      service: z
         .string()
         .min(1)
         .max(100)
-        .describe('Provider id, as `list_my_accounts` shows it, e.g. `github`.'),
+        .describe('Service id, as `list_my_accounts` shows it, e.g. `github`.'),
       account_id: z
         .string()
         .min(1)
         .max(300)
         .optional()
-        .describe('One of the user’s accounts of that provider.'),
+        .describe('One of the user’s accounts of that service.'),
     })
     .strict(),
   listMyMissions: z

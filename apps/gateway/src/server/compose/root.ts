@@ -18,7 +18,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { createAuditModule, type AuditModule } from '../audit';
 import { createBackupModule, type BackupService, type BackupTimers } from '../backup';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
-import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
+import { upgradeSingleSignInProviderSettings } from '../auth/single-sign-in-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
@@ -48,12 +48,12 @@ import {
   type NotificationsModule,
   type PushTransport,
 } from '../notifications';
-import { toolTitleOf } from '../providers/tool-titles';
+import { toolTitleOf } from '../services/tool-titles';
 import {
   bundledInventory,
   checkAccountsServed,
   loadPlugins,
-  unservedProviders,
+  unservedServices,
   type LoadedPlugins,
   type PluginInventory,
   type PluginInventoryEntry,
@@ -100,7 +100,7 @@ export interface GatewayRoot {
   /** The embedded store with its repositories; satisfies `StoreLiveness` of `ports.ts`. */
   readonly store: Store;
   /**
-   * The single provider list: the plugins the image bundles (`shipped-plugins.ts`), a pin
+   * The single service list: the plugins the image bundles (`shipped-plugins.ts`), a pin
    * of `plugins.dir` replacing the bundled plugin of its id, filtered by `plugins.enabled`.
    */
   readonly registry: PluginRegistry;
@@ -184,8 +184,8 @@ export interface RootDeps {
   readonly sessions?: SessionStore;
   /** Outbound HTTP and issuer rules of the OIDC relying party (tests inject an in-process IdP). */
   readonly oidc?: OidcOptions;
-  /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock provider). */
-  readonly providerFetch?: typeof fetch;
+  /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock service). */
+  readonly serviceFetch?: typeof fetch;
   /** Outbound HTTP to the telemetry collector (tests assert on it; default: the global `fetch`). */
   readonly telemetryFetch?: typeof fetch;
   /** Outbound HTTP to the backup's object storage (tests inject an in-process fake). */
@@ -258,11 +258,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
-    // Accounts of a provider no registered plugin serves stop the boot (ADR
+    // Accounts of a service no registered plugin serves stop the boot (ADR
     // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or dropped by an image.
     checkAccountsServed(
-      unservedProviders(
-        await store.accounts.countByProvider(),
+      unservedServices(
+        await store.accounts.countByService(),
         new Set(registry.ids),
         inventory.entries,
       ),
@@ -386,7 +386,7 @@ function logConfigurationSummary(
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
     instance_name: config.instanceName ?? 'not set (Administration decides; the host by default)',
-    sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
+    sign_in: config.signIn.map((signInProvider) => `${signInProvider.id} (${signInProvider.kind})`),
     admin_rule:
       config.admin.group === null && config.admin.emails.length === 0
         ? 'none (administrators live in the instance)'
@@ -584,7 +584,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   const rateLimiter = deps.rateLimiter ?? windows;
   // Before anything reads the sign-in providers: the `idp.*` settings of earlier builds
   // become the saved provider `idp` (a no-op once done).
-  await upgradeSingleProviderSettings({
+  await upgradeSingleSignInProviderSettings({
     store,
     configured: config.signIn,
     logger,
@@ -633,7 +633,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authenticator: auth.authenticator,
     grounds: authority.grounds,
     logger,
-    fetch: deps.providerFetch,
+    fetch: deps.serviceFetch,
     ceilings: limits,
     notifications: notifications.events,
     discoveryTimers: deps.discoveryTimers,
@@ -704,7 +704,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     profileSource: {
       users: () => limits.counts.users(),
       activeMissions: (now) => limits.counts.activeMissions(now),
-      accountsByProvider: async () => ({ ...(await limits.counts.accounts()).byProvider }),
+      accountsByService: async () => ({ ...(await limits.counts.accounts()).byService }),
     },
   });
   opened.push(() => telemetry.stop());
@@ -749,7 +749,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authenticator: auth.authenticator,
     sessions: auth.sessions,
     signInAccounts: auth.signInAccounts,
-    providers: auth.providers,
+    signInProviders: auth.signInProviders,
     mailer,
     logger,
     ceilings: limits,
@@ -839,9 +839,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
  */
 async function settleAdministrators(auth: AuthModule, config: InstanceConfig): Promise<void> {
   // The factors sign-in accounts kept per account move to their people, once (§7).
-  const providers = await auth.providers.views();
+  const signInProviders = await auth.signInProviders.views();
   await auth.secondFactors.adoptLocalFactors(
-    providers.filter((p) => p.kind === 'local').map((p) => p.id),
+    signInProviders.filter((p) => p.kind === 'local').map((p) => p.id),
   );
   await auth.administrators.seedFromConfiguration();
   if (config.bootstrapToken !== null || (await auth.administrators.any())) return;

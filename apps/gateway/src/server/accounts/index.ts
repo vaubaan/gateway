@@ -132,14 +132,14 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
     accounts: service,
     notices,
     logger,
-    connectFile: (providerId, file) =>
+    connectFile: (serviceId, file) =>
       readConnectFile(
         {
           registry: deps.registry,
           inventory:
             deps.pluginEntries ?? bundledInventory(deps.registry.all().map((r) => r.plugin)),
         },
-        providerId,
+        serviceId,
         file,
       ),
   });
@@ -150,7 +150,7 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
   });
   const unserved = deps.registry
     .brokerProviders()
-    .filter((provider) => brokers.forProvider(provider) === null);
+    .filter((service) => brokers.forProvider(service) === null);
   if (unserved.length > 0) {
     logger.info('plugins need an OAuth broker that is not configured; listed as not configured', {
       broker_providers: unserved,
@@ -221,7 +221,7 @@ export {
   AccountUnavailableError,
   isConnectError,
   OAuthBrokerUnavailableError,
-  ProviderUnreachableError,
+  ServiceUnreachableError,
   type ConnectErrorCode,
 } from './errors';
 export {
@@ -296,7 +296,7 @@ export {
   ownerActRefusal,
   toPluginResource,
   type Actor,
-  type ConnectableProvider,
+  type ConnectableService,
   type AlternativeView,
   type GuideFigureView,
   type GuideStepView,

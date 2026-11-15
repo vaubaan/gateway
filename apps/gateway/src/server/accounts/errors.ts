@@ -1,31 +1,31 @@
 /**
  * Errors of the connect flows. A `ConnectError` carries a closed code (what the
  * UI keys its sentence on), an HTTP status, and an optional `detail` that is
- * safe to show to the connecting user: a validation sentence, the provider's
- * status in the gateway's own words (`providerFailureReason`), or a refusal
- * the plugin wrote itself (`CredentialRefusal`) — never the provider's text,
+ * safe to show to the connecting user: a validation sentence, the service's
+ * status in the gateway's own words (`serviceFailureReason`), or a refusal
+ * the plugin wrote itself (`CredentialRefusal`) — never the service's text,
  * never a credential, never a token.
  */
 import type { AccountStatus } from '@vaubaan/shared';
 
 export const CONNECT_ERROR_CODES = [
-  'provider-unknown',
+  'service-unknown',
   'invalid-input',
   'return-url-refused',
   'rate-limited',
   'state-invalid',
-  'provider-denied',
+  'service-denied',
   'token-exchange-failed',
   'client-registration-failed',
   'broker-not-configured',
   'broker-failed',
   'credential-rejected',
-  'provider-unreachable',
+  'service-unreachable',
   'not-found',
   'account-revoked',
   'account-unowned',
   'account-personal',
-  'provider-mismatch',
+  'service-mismatch',
   'label-read-only',
   'transfer-not-member',
   'not-ownerless',
@@ -37,13 +37,13 @@ export const CONNECT_ERROR_CODES = [
 export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
 
 export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> = {
-  'provider-unknown': 'This service is not available on this gateway.',
+  'service-unknown': 'This service is not available on this gateway.',
   'invalid-input': 'Some values are missing or do not have the expected format.',
   'return-url-refused': 'The return address is outside this gateway and was refused.',
   'rate-limited': 'Too many attempts to connect. Wait a minute and retry.',
   'state-invalid':
     'This authorization attempt has expired, was already used, or was started by another session. Start again from Accounts.',
-  'provider-denied': 'The service did not grant the authorization.',
+  'service-denied': 'The service did not grant the authorization.',
   'token-exchange-failed': 'The service refused to exchange the authorization for a credential.',
   'client-registration-failed':
     'The service refused to register this gateway as one of its apps. Retry in a moment; if it keeps refusing, the service may not allow new apps for your organisation.',
@@ -52,14 +52,14 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
   'broker-failed':
     'The OAuth broker this gateway is enrolled with could not complete the account. Retry in a moment; if it keeps failing, tell an administrator.',
   'credential-rejected': 'The service rejected this credential.',
-  'provider-unreachable': 'The service could not be reached. Retry in a moment.',
+  'service-unreachable': 'The service could not be reached. Retry in a moment.',
   'not-found': 'This account does not exist or is not yours.',
   'account-revoked': 'This account is disconnected, for good. Connect a new one.',
   'account-unowned':
     'This account has no owner any more. It keeps serving its missions, but it cannot be reconnected until an administrator names a new owner.',
   'account-personal':
     'This account is your own place on the gateway: it holds no secret, cannot be given to a team and has nothing to reconnect.',
-  'provider-mismatch': 'This account belongs to another service.',
+  'service-mismatch': 'This account belongs to another service.',
   'label-read-only': 'The environment of this resource is set by the service and cannot be edited.',
   'transfer-not-member':
     'An account can only be transferred to a team you belong to: you would otherwise lose it by mistake.',
@@ -74,23 +74,23 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
 };
 
 const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
-  'provider-unknown': 404,
+  'service-unknown': 404,
   'invalid-input': 400,
   'return-url-refused': 400,
   'rate-limited': 429,
   'state-invalid': 400,
-  'provider-denied': 400,
+  'service-denied': 400,
   'token-exchange-failed': 502,
   'client-registration-failed': 502,
   'broker-not-configured': 409,
   'broker-failed': 502,
   'credential-rejected': 400,
-  'provider-unreachable': 502,
+  'service-unreachable': 502,
   'not-found': 404,
   'account-revoked': 409,
   'account-unowned': 409,
   'account-personal': 409,
-  'provider-mismatch': 409,
+  'service-mismatch': 409,
   'label-read-only': 409,
   'transfer-not-member': 403,
   'not-ownerless': 409,
@@ -142,11 +142,11 @@ export class AccountUnavailableError extends Error {
   }
 }
 
-/** The provider did not answer a refresh (network, 5xx): nothing was changed, retry later. */
-export class ProviderUnreachableError extends Error {
+/** The service did not answer a refresh (network, 5xx): nothing was changed, retry later. */
+export class ServiceUnreachableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'ProviderUnreachableError';
+    this.name = 'ServiceUnreachableError';
   }
 }
 
@@ -154,10 +154,10 @@ export class ProviderUnreachableError extends Error {
  * The OAuth broker of a brokered account is down, slow, refused the call or
  * is no longer configured (ADR google-calendar-through-an-oauth-broker, "the
  * account shows the broker's failure, not an expiry"): nothing changed,
- * retry later. A `ProviderUnreachableError`, so every caller that leaves the
+ * retry later. A `ServiceUnreachableError`, so every caller that leaves the
  * account alone on a transient failure does so here too.
  */
-export class OAuthBrokerUnavailableError extends ProviderUnreachableError {
+export class OAuthBrokerUnavailableError extends ServiceUnreachableError {
   constructor(
     readonly broker: string,
     message: string,

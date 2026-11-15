@@ -19,7 +19,7 @@ import { isResolvable } from '@/lib/missions/catalog-view';
 import { expandMacroAction, rowsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 import type { CatalogRisk, IssuanceAccount, IssuanceResource } from '@/lib/missions/model';
 import { needsEnvLabel } from '@/lib/missions/preview';
-import type { RiskPlanes } from '@/lib/providers/planes';
+import type { RiskPlanes } from '@/lib/services/planes';
 import {
   CARD_WORDS,
   formatNumber,
@@ -82,9 +82,9 @@ export function resourcesLine(
 }
 
 /**
- * True when the card names its environment in its head: the provider has permissions
+ * True when the card names its environment in its head: the service has permissions
  * that depend on an environment read from resource labels (`needsEnvLabel`). A
- * provider that reads it from the call itself, or has none, shows no badge.
+ * service that reads it from the call itself, or has none, shows no badge.
  */
 export function showsEnv(account: Pick<IssuanceAccount, 'risks' | 'derives_env'>): boolean {
   return needsEnvLabel(account);
@@ -92,9 +92,9 @@ export function showsEnv(account: Pick<IssuanceAccount, 'risks' | 'derives_env'>
 
 /** "Miro · Renaud Perso". */
 export function accountLabel(
-  account: Pick<IssuanceAccount, 'provider_label' | 'display_name'>,
+  account: Pick<IssuanceAccount, 'service_label' | 'display_name'>,
 ): string {
-  return `${account.provider_label} · ${account.display_name}`;
+  return `${account.service_label} · ${account.display_name}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ export interface ResourceGroup {
    * "every resource known" leaves them out (`preview.ts`). One a card holds stays tickable.
    */
   readonly hidden: readonly GroupResource[];
-  /** Resources without a label do not enter a card where the provider needs labels. */
+  /** Resources without a label do not enter a card where the service needs labels. */
   readonly selectable: boolean;
   /** Another card of this account already takes the future resources of this environment. */
   readonly futureElsewhere: boolean;
@@ -491,7 +491,7 @@ export function changeSummary(
   if (keptExpiry.before !== keptExpiry.after) phrases.push('End date changed');
   const several = after.cards.length > 1 || before.cards.length > 1;
   const find = (id: string) => context.find((c) => c.id === id);
-  const prefix = (account: IssuanceAccount) => (several ? `${account.provider_label} · ` : '');
+  const prefix = (account: IssuanceAccount) => (several ? `${account.service_label} · ` : '');
   for (const card of before.cards) {
     const account = find(card.accountId);
     if (account && !after.cards.some((c) => c.key === card.key)) {

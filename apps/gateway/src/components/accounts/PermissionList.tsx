@@ -6,7 +6,7 @@
  */
 import { Mono, RowChip } from '@/components/ui';
 import type { Row } from '@/lib/vocabulary';
-import { riskReferencePath } from '@/lib/providers/links';
+import { riskReferencePath } from '@/lib/services/links';
 
 import styles from './account.module.css';
 

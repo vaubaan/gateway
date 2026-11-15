@@ -4,7 +4,7 @@
  * under their own key prefixes (`connect:`, `notice:`), next to the web
  * sessions, so they survive a restart and expire on their own.
  *
- * Anti-replay (spec §6): the `state` sent to the provider is the key of the
+ * Anti-replay (spec §6): the `state` sent to the service is the key of the
  * pending record; `take()` returns the record at most once and only to the
  * user who started the flow. A callback replayed, forged, expired, or opened
  * in another user's session finds nothing.
@@ -16,7 +16,7 @@ import type { FormEcho } from './input';
 import { newState } from './oauth2';
 
 const MINUTE_MS = 60_000;
-/** How long the browser has to come back from the provider. */
+/** How long the browser has to come back from the service. */
 export const CONNECT_TTL_MS = 10 * MINUTE_MS;
 /** How long a notice waits for the page that shows it. */
 export const NOTICE_TTL_MS = 5 * MINUTE_MS;
@@ -27,13 +27,13 @@ export type PendingFlowKind = 'oauth2';
 
 export interface PendingConnect {
   readonly kind: PendingFlowKind;
-  readonly providerId: string;
+  readonly serviceId: string;
   /** The user who started the flow; the callback must arrive in a session of the same user. */
   readonly userId: string;
   readonly displayName: string;
   /** PKCE verifier, when the spec asks for PKCE. */
   readonly codeVerifier: string | null;
-  /** The redirect URI sent to the provider (built on `public_url`), replayed at the exchange. */
+  /** The redirect URI sent to the service (built on `public_url`), replayed at the exchange. */
   readonly redirectUri: string;
   /** Same-origin path to land on afterwards; `null` means the account's page. */
   readonly returnTo: string | null;
@@ -55,7 +55,7 @@ export class PendingConnectStore {
 
   constructor(private readonly store: SessionStore) {}
 
-  /** Stores the flow and returns the `state` to send to the provider. */
+  /** Stores the flow and returns the `state` to send to the service. */
   async create(pending: PendingConnect): Promise<string> {
     const state = newState();
     await this.store.set(key(state), pending, CONNECT_TTL_MS);

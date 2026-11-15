@@ -2,7 +2,7 @@
  * The second factor of every person (spec §6; ADR administrators-live-in-the-instance,
  * §7): the instance's TOTP (RFC 6238) and eight recovery codes, kept per user whatever
  * their sign-in provider. Every sign-in ends with it — the code, or the enrolment when
- * the person has none — unless an administrator waived it for the provider, and never
+ * the person has none — unless an administrator waived it for the sign-in provider, and never
  * waived for an administrator.
  *
  * Lockout: `SECOND_FACTOR_LOCKOUT` wrong codes within its window lock the person's
@@ -47,7 +47,7 @@ export const SECOND_FACTOR_LOCKOUT: LockoutRule = {
   lockMs: 15 * MINUTE_MS,
 };
 
-/** How a provider's waiver reads (`ProviderState.waiver`). */
+/** How a sign-in provider's waiver reads (`ProviderState.waiver`). */
 export type SecondFactorWaiver = 'always' | 'amr';
 
 /**
@@ -188,10 +188,10 @@ export class SecondFactorService {
    * from the account. Idempotent: an account without a factor is skipped. An account
    * with a factor and no user yet gets its user row first.
    */
-  async adoptLocalFactors(localProviderIds: readonly string[]): Promise<number> {
+  async adoptLocalFactors(localSignInProviderIds: readonly string[]): Promise<number> {
     let moved = 0;
-    for (const providerId of localProviderIds) {
-      for (const signInAccount of await this.deps.store.signInAccounts.list(providerId)) {
+    for (const signInProviderId of localSignInProviderIds) {
+      for (const signInAccount of await this.deps.store.signInAccounts.list(signInProviderId)) {
         if (signInAccount.totpConfirmedAt === null) continue;
         const totp = await this.deps.store.signInAccounts.readSecret(signInAccount.id, 'totp');
         const recovery = await this.deps.store.signInAccounts.readSecret(
@@ -200,7 +200,7 @@ export class SecondFactorService {
         );
         if (totp !== null) {
           const user = await this.deps.store.users.ensureIdentity({
-            issuer: localIssuer(providerId).href,
+            issuer: localIssuer(signInProviderId).href,
             subject: signInAccount.id,
             email: signInAccount.email,
           });

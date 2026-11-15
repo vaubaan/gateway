@@ -133,8 +133,8 @@ describe('previewDraft — authority (monotonicity)', () => {
 describe('previewDraft — partition per account', () => {
   const beta = acmeAccount({
     id: 'conn-beta',
-    provider: 'beta',
-    provider_label: 'Beta',
+    service: 'beta',
+    service_label: 'Beta',
     display_name: 'Beta main',
     resources: [],
     risks: [
@@ -211,40 +211,40 @@ describe('previewDraft — partition per account', () => {
     expect(p.resolved.map((c) => c.account_id)).toEqual(['conn-acme', 'conn-beta']);
   });
 
-  it('refuses the same account twice and two accounts of one provider', () => {
+  it('refuses the same account twice and two accounts of one service', () => {
     const second = acmeAccount({ id: 'conn-acme-2', display_name: 'Acme second' });
     const twice = preview([
       { account_id: 'conn-acme', trust_levels: { read: 'careful' } },
       { account_id: 'conn-acme', trust_levels: { read: 'careful' } },
     ]);
     expect(codes(twice)).toEqual(['duplicate-account']);
-    const sameProvider = preview(
+    const sameService = preview(
       [
         { account_id: 'conn-acme', trust_levels: { read: 'careful' } },
         { account_id: 'conn-acme-2', trust_levels: { read: 'careful' } },
       ],
       [acmeAccount(), second],
     );
-    expect(codes(sameProvider)).toEqual(['duplicate-provider']);
+    expect(codes(sameService)).toEqual(['duplicate-service']);
     // The refusal names both accounts, says why, and says what to do instead.
-    const [issue] = sameProvider.issues;
-    expect(issue?.message).toContain('one account per provider');
+    const [issue] = sameService.issues;
+    expect(issue?.message).toContain('one account per service');
     expect(issue?.message).toContain(acmeAccount().display_name);
     expect(issue?.message).toContain(second.display_name);
-    expect(issue?.message).toContain('counted per provider');
+    expect(issue?.message).toContain('counted per service');
     expect(issue?.message).toContain('issue a second mission for the other');
   });
 
-  it('resolves an account named by provider, and refuses an ambiguous one', () => {
-    const byProvider = preview([{ provider: 'acme', trust_levels: { read: 'careful' } }]);
-    expect(byProvider.ok).toBe(true);
-    expect(byProvider.resolved[0]?.account_id).toBe('conn-acme');
+  it('resolves an account named by service, and refuses an ambiguous one', () => {
+    const byService = preview([{ service: 'acme', trust_levels: { read: 'careful' } }]);
+    expect(byService.ok).toBe(true);
+    expect(byService.resolved[0]?.account_id).toBe('conn-acme');
     const ambiguous = preview(
-      [{ provider: 'acme', trust_levels: { read: 'careful' } }],
+      [{ service: 'acme', trust_levels: { read: 'careful' } }],
       [acmeAccount(), acmeAccount({ id: 'conn-acme-2' })],
     );
     expect(codes(ambiguous)).toEqual(['account-ambiguous']);
-    expect(codes(preview([{ provider: 'nope', trust_levels: { read: 'careful' } }]))).toEqual([
+    expect(codes(preview([{ service: 'nope', trust_levels: { read: 'careful' } }]))).toEqual([
       'account-unknown',
     ]);
     expect(codes(preview([{ trust_levels: { read: 'careful' } }]))).toEqual(['account-unknown']);

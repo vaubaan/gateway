@@ -1,5 +1,5 @@
 import githubPlugin from '@vaubaan/plugin-github';
-import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import supabasePlugin from '@vaubaan/plugin-supabase';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
@@ -10,13 +10,13 @@ import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
 import {
   IMPORT_TRUST_LEVEL,
-  providerOfV4Risk,
+  serviceOfV4Risk,
   translateRisks,
   unbindingRateLimit,
   type TranslatableAccount,
 } from './risk-translation';
 
-function accountOf(plugin: ProviderPlugin, authority?: readonly string[]): TranslatableAccount {
+function accountOf(plugin: ServicePlugin, authority?: readonly string[]): TranslatableAccount {
   const risks = enumerateCatalog(plugin.catalog);
   return {
     risks,
@@ -207,10 +207,10 @@ describe('v4 risk ids translated to the v5 catalog', () => {
 });
 
 describe('helpers', () => {
-  it('reads the provider of a v4 id', () => {
-    expect(providerOfV4Risk('supabase[prod].auth.user-write-one')).toBe('supabase');
-    expect(providerOfV4Risk('cloudflare-dns.record-write')).toBe('cloudflare-dns');
-    expect(providerOfV4Risk('not a risk')).toBeNull();
+  it('reads the service of a v4 id', () => {
+    expect(serviceOfV4Risk('supabase[prod].auth.user-write-one')).toBe('supabase');
+    expect(serviceOfV4Risk('cloudflare-dns.record-write')).toBe('cloudflare-dns');
+    expect(serviceOfV4Risk('not a risk')).toBeNull();
   });
 });
 

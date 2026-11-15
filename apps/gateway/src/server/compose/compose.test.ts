@@ -36,11 +36,11 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(36);
+    expect(root.store.schemaVersion).toBe(37);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
-    expect((await root.accounts.service.providers()).map((p) => p.id)).toEqual(root.registry.ids);
+    expect((await root.accounts.service.services()).map((p) => p.id)).toEqual(root.registry.ids);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
     const sealed = await root.encryptor.encrypt('conn-1', 'hello');
     await expect(root.encryptor.decrypt('conn-1', sealed)).resolves.toBe('hello');
@@ -274,7 +274,7 @@ describe('buildRoot and the plugins', () => {
     await root.close();
   });
 
-  it('stops the boot when the store holds accounts of a provider no registered plugin serves', async () => {
+  it('stops the boot when the store holds accounts of a service no registered plugin serves', async () => {
     let closed = false;
     const build = buildRoot({
       ...quiet,
@@ -284,7 +284,7 @@ describe('buildRoot and the plugins', () => {
         const store = openMemoryStore({ encryptor, catalog });
         return {
           ...store,
-          accounts: { ...store.accounts, countByProvider: async () => ({ notion: 2 }) },
+          accounts: { ...store.accounts, countByService: async () => ({ notion: 2 }) },
           close: async () => {
             closed = true;
             await store.close();

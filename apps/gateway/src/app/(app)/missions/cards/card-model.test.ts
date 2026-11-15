@@ -125,7 +125,7 @@ describe('"+ Add an account": resources grouped by environment', () => {
     expect(defaultTicked(resourceGroups(one, held, null)[0])).toEqual([]);
   });
 
-  it('lets unlabelled resources in where the provider reads the environment from the call', () => {
+  it('lets unlabelled resources in where the service reads the environment from the call', () => {
     const vercelLike = acmeAccount({ derives_env: true });
     const groups = resourceGroups(vercelLike, stateOf(), null);
     expect(groups.find((g) => g.env === null)?.selectable).toBe(true);
@@ -227,8 +227,8 @@ describe('the gauge of a macro-action', () => {
         accounts: [
           {
             id: acme.id,
-            provider: 'acme',
-            provider_label: 'Acme',
+            service: 'acme',
+            service_label: 'Acme',
             resource_noun: noun,
             display_name: 'Acme main',
             status: 'active',

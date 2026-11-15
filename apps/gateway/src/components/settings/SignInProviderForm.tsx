@@ -31,12 +31,12 @@ export interface SignInProviderFormValues {
   readonly admission: AdmissionChoice;
 }
 
-export function admissionOf(provider: {
+export function admissionOf(signInProvider: {
   readonly allowedEmailDomains: readonly string[];
   readonly invitationOnly: boolean;
 }): AdmissionChoice {
-  if (provider.invitationOnly) return 'invited';
-  return provider.allowedEmailDomains.length > 0 ? 'domains' : 'everyone';
+  if (signInProvider.invitationOnly) return 'invited';
+  return signInProvider.allowedEmailDomains.length > 0 ? 'domains' : 'everyone';
 }
 
 export function SignInProviderForm({
@@ -48,9 +48,9 @@ export function SignInProviderForm({
 }: {
   mode: 'create' | 'update';
   values: SignInProviderFormValues;
-  /** A secret is stored for this provider (edit): blank keeps it. */
+  /** A secret is stored for this sign-in provider (edit): blank keeps it. */
   hasSecret: boolean;
-  /** The address to register at the provider. */
+  /** The address to register at the sign-in provider. */
   callbackUrl: string;
   cancelHref: string;
 }) {
@@ -63,7 +63,7 @@ export function SignInProviderForm({
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="kind" value={values.kind} />
       {values.preset && <input type="hidden" name="preset" value={values.preset} />}
-      {mode === 'update' && <input type="hidden" name="provider_id" value={values.id} />}
+      {mode === 'update' && <input type="hidden" name="sign_in_provider_id" value={values.id} />}
       <div className={styles.block}>
         <CodeBlock label={github ? 'Authorization callback URL' : 'Redirect URI'}>
           {callbackUrl}
@@ -74,11 +74,11 @@ export function SignInProviderForm({
           label="Id"
           shape="lower-case letters, digits and hyphens; it ends the address above"
           htmlFor={`${prefix}-id`}
-          hint="It cannot change later. It also names the provider in the admin rule (id:group)."
+          hint="It cannot change later. It also names the sign-in provider in the admin rule (id:group)."
         >
           <Input
             id={`${prefix}-id`}
-            name="provider_id"
+            name="sign_in_provider_id"
             required
             pattern="[a-z][a-z0-9-]{0,31}"
             defaultValue={values.id}
@@ -115,7 +115,11 @@ export function SignInProviderForm({
       ) : (
         <Field
           label={github ? 'GitHub Enterprise Server address' : 'Issuer URL'}
-          shape={github ? 'https; leave blank for github.com' : 'https, as the provider prints it'}
+          shape={
+            github
+              ? 'https; leave blank for github.com'
+              : 'https, as the sign-in provider prints it'
+          }
           optional={github}
           htmlFor={`${prefix}-issuer`}
           hint={
@@ -123,7 +127,7 @@ export function SignInProviderForm({
               ? undefined
               : google
                 ? 'Google’s one issuer, for every account and every Workspace.'
-                : 'The gateway fetches <issuer>/.well-known/openid-configuration before saving. GitHub is not an OpenID Connect provider: for it, choose the GitHub kind.'
+                : 'The gateway fetches <issuer>/.well-known/openid-configuration before saving. GitHub is not an OpenID Connect sign-in provider: for it, choose the GitHub kind.'
           }
         >
           <Input
@@ -213,7 +217,7 @@ export function SignInProviderForm({
       )}
       <Field
         label="Who may sign in"
-        hint="Invited addresses (Settings → People) and the administrators’ emails are always admitted, on an address the provider verified."
+        hint="Invited addresses (Settings → People) and the administrators’ emails are always admitted, on an address the sign-in provider verified."
       >
         <div className={styles.form}>
           {!github && (
@@ -222,8 +226,8 @@ export function SignInProviderForm({
               value="everyone"
               defaultChecked={values.admission === 'everyone'}
             >
-              Everyone your directory signs in — only for your company’s own provider; refused for
-              one where anyone can open an account
+              Everyone your directory signs in — only for your company’s own signInProvider; refused
+              for one where anyone can open an account
             </Radio>
           )}
           <Radio name="admission" value="domains" defaultChecked={values.admission === 'domains'}>
@@ -242,7 +246,7 @@ export function SignInProviderForm({
       </Field>
       <div className={styles.formActions}>
         <Button type="submit" variant="primary">
-          {mode === 'create' ? SETTINGS_ACTIONS.addProvider : SETTINGS_ACTIONS.save}
+          {mode === 'create' ? SETTINGS_ACTIONS.addTheSignInProvider : SETTINGS_ACTIONS.save}
         </Button>
         <ButtonLink href={cancelHref} variant="ghost">
           {ACTIONS.cancel}
@@ -273,17 +277,17 @@ export function LocalSignInProviderForm({
     <form method="post" action="/api/admin/sign-in-providers" className={styles.form}>
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="kind" value="local" />
-      {mode === 'update' && <input type="hidden" name="provider_id" value={id} />}
+      {mode === 'update' && <input type="hidden" name="sign_in_provider_id" value={id} />}
       {mode === 'create' && (
         <Field
           label="Id"
           shape="lower-case letters, digits and hyphens"
           htmlFor={`${prefix}-id`}
-          hint="It cannot change later. It also names the provider in the admin rule (id:group)."
+          hint="It cannot change later. It also names the sign-in provider in the admin rule (id:group)."
         >
           <Input
             id={`${prefix}-id`}
-            name="provider_id"
+            name="sign_in_provider_id"
             required
             pattern="[a-z][a-z0-9-]{0,31}"
             defaultValue={id}
@@ -307,7 +311,7 @@ export function LocalSignInProviderForm({
       </Field>
       <div className={styles.formActions}>
         <Button type="submit" variant="primary">
-          {mode === 'create' ? SETTINGS_ACTIONS.addProvider : SETTINGS_ACTIONS.save}
+          {mode === 'create' ? SETTINGS_ACTIONS.addTheSignInProvider : SETTINGS_ACTIONS.save}
         </Button>
         <ButtonLink href={cancelHref} variant="ghost">
           {ACTIONS.cancel}

@@ -33,9 +33,9 @@ import {
   WHY_ORDER,
 } from '@/lib/vocabulary';
 import { DEPRECATED_NOTE, FALLBACK_NOTE, noteBody } from '@/lib/missions/catalog-view';
-import { REFERENCE_SECTIONS } from '@/lib/providers/links';
-import { OTHER_PLANE } from '@/lib/providers/planes';
-import { OTHER_PLANE_NOTE, type ProviderReference } from '@/lib/providers/reference';
+import { REFERENCE_SECTIONS } from '@/lib/services/links';
+import { OTHER_PLANE } from '@/lib/services/planes';
+import { OTHER_PLANE_NOTE, type ServiceReference } from '@/lib/services/reference';
 
 import styles from '../reference.module.css';
 import { DataModelSection } from './data-model';
@@ -74,7 +74,7 @@ interface Destination {
   readonly planes: readonly string[];
 }
 
-function destinationOf(reference: ProviderReference, fragment: string): Destination | null {
+function destinationOf(reference: ServiceReference, fragment: string): Destination | null {
   const tab = tabOf(fragment);
   if (tab) return { tab, target: null, risk: null, planes: [] };
   const entry = reference.risk_groups
@@ -92,7 +92,7 @@ function matches(needle: string, ...haystack: readonly string[]): boolean {
   return needle === '' || haystack.some((text) => text.toLowerCase().includes(needle));
 }
 
-export function ServiceView({ reference }: { reference: ProviderReference }) {
+export function ServiceView({ reference }: { reference: ServiceReference }) {
   const [tab, setTab] = useState<TabId>('permissions');
   const [plane, setPlane] = useState<string>(ALL_PLANES);
   const [query, setQuery] = useState('');

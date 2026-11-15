@@ -64,10 +64,10 @@ export interface AuthModuleDeps {
 export interface AuthModule {
   readonly sessions: SessionService;
   /** Every sign-in provider: the configuration's and the ones saved in Settings → Sign-in. */
-  readonly providers: SignInProvidersService;
+  readonly signInProviders: SignInProvidersService;
   /** Who administers the instance: the designations of the store (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
-  /** The second factor of every person, whatever the provider. */
+  /** The second factor of every person, whatever the sign-in provider. */
   readonly secondFactors: SecondFactorService;
   readonly flows: SignInFlows;
   readonly bootstrap: BootstrapService;
@@ -93,11 +93,11 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     fetch: deps.oidc?.fetch,
     allowInsecureRequests: deps.oidc?.allowInsecureIssuer,
   });
-  const providers = new SignInProvidersService(
+  const signInProviders = new SignInProvidersService(
     deps.config,
     async () =>
       (await deps.store.administrators.list()).flatMap((d) =>
-        d.kind === 'group' && d.provider === null ? [d.groupName] : [],
+        d.kind === 'group' && d.signInProvider === null ? [d.groupName] : [],
       ),
     deps.store.config,
     clock,
@@ -113,7 +113,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   });
   const administrators = new AdministratorsService({
     store: deps.store,
-    providers: () => providers.views(),
+    signInProviders: () => signInProviders.views(),
     rule: deps.config.admin,
     audit: deps.store.auditWriter,
     logger: logger.child({ component: 'administrators' }),
@@ -124,7 +124,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     deps.store,
     administrators,
     bootstrap,
-    providers,
+    signInProviders,
   );
   const clientIp = clientIpResolver(deps.config.trustedProxies, deps.config.clientIpHeader);
   const signInAccounts = new SignInAccountsService({
@@ -146,7 +146,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     sessions,
     sessionStore: deps.sessions,
     authenticator,
-    providers,
+    signInProviders,
     signInAccounts,
     login: {
       store: deps.store,
@@ -168,7 +168,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   const handlers = createAuthHandlers({
     publicUrl: deps.config.publicUrl,
     sessions,
-    providers,
+    signInProviders,
     flows,
     bootstrap,
     authenticator,
@@ -205,7 +205,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   const recoveryHandlers = createRecoveryHandlers({
     publicUrl: deps.config.publicUrl,
     recovery,
-    providers,
+    signInProviders,
     signInAccounts,
     sessions: deps.sessions,
     logger,
@@ -215,7 +215,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   return {
     sessions,
     recovery,
-    providers,
+    signInProviders,
     administrators,
     secondFactors,
     flows,
@@ -235,7 +235,7 @@ export {
   AdministratorsError,
   AdministratorsService,
   designationView,
-  groupsOfProvider,
+  groupsOfSignInProvider,
   isOperator,
   pendingEmailNames,
   resolveAdministrators,
@@ -285,8 +285,8 @@ export {
   type SaveMode,
   type SignInProviderInput,
   type SignInProviderView,
-  type ProviderState,
-  type ProviderTestRecord,
+  type SignInProviderState,
+  type SignInProviderTestRecord,
   setUpElsewhere,
   testPassedSinceSaved,
 } from './sign-in-providers';

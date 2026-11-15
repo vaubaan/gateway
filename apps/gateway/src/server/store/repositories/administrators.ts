@@ -31,19 +31,19 @@ export interface UserDesignation extends DesignationBase {
   readonly userId: string;
 }
 
-/** An address waiting for its first sign-in, through one provider or any (`provider` null). */
+/** An address waiting for its first sign-in, through one sign-in provider or any (`provider` null). */
 export interface EmailDesignation extends DesignationBase {
   readonly kind: 'email';
   /** Lower-cased. */
   readonly email: string;
-  readonly provider: string | null;
+  readonly signInProvider: string | null;
 }
 
-/** Every member a provider claims in this group; `provider` null: the only provider (a bare name). */
+/** Every member a sign-in provider claims in this group; `provider` null: the only provider (a bare name). */
 export interface GroupDesignation extends DesignationBase {
   readonly kind: 'group';
   readonly groupName: string;
-  readonly provider: string | null;
+  readonly signInProvider: string | null;
 }
 
 export type Designation = UserDesignation | EmailDesignation | GroupDesignation;
@@ -62,34 +62,34 @@ export interface AdministratorsRepo {
   ofUser(userId: string): Promise<UserDesignation | null>;
   /** `null` when the user already has one (the first is kept). */
   addUser(userId: string, input: DesignationInput): Promise<UserDesignation | null>;
-  /** `null` when the same address is already pending for the same provider. */
+  /** `null` when the same address is already pending for the same sign-in provider. */
   addEmail(
     email: string,
-    provider: string | null,
+    signInProvider: string | null,
     input: DesignationInput,
   ): Promise<EmailDesignation | null>;
-  /** `null` when the same group of the same provider is already designated. */
+  /** `null` when the same group of the same sign-in provider is already designated. */
   addGroup(
     groupName: string,
-    provider: string | null,
+    signInProvider: string | null,
     input: DesignationInput,
   ): Promise<GroupDesignation | null>;
   /** The removed row, or `null`. */
   remove(id: string): Promise<Designation | null>;
   /**
-   * Turns the pending addresses that name `email` for `provider` (or for any provider)
+   * Turns the pending addresses that name `email` for `provider` (or for any sign-in provider)
    * into a `user` row for `userId`, in one transaction. Returns the consumed
    * designations (empty: nothing pending, or the user already administers).
    */
-  consumeEmail(userId: string, email: string, provider: string): Promise<EmailDesignation[]>;
+  consumeEmail(userId: string, email: string, signInProvider: string): Promise<EmailDesignation[]>;
   /**
    * Writes several designations at once, all or none (the seed of the configuration's
    * rule). Duplicates are skipped.
    */
   addMany(
     users: readonly string[],
-    emails: readonly { email: string; provider: string | null }[],
-    groups: readonly { groupName: string; provider: string | null }[],
+    emails: readonly { email: string; signInProvider: string | null }[],
+    groups: readonly { groupName: string; signInProvider: string | null }[],
     input: DesignationInput,
   ): Promise<Designation[]>;
 }
@@ -99,14 +99,15 @@ interface AdministratorRow {
   kind: string;
   user_id: string | null;
   email: string | null;
-  provider: string | null;
+  sign_in_provider: string | null;
   group_name: string | null;
   granted_by: string;
   origin: string;
   created_at: string;
 }
 
-const COLUMNS = 'id, kind, user_id, email, provider, group_name, granted_by, origin, created_at';
+const COLUMNS =
+  'id, kind, user_id, email, sign_in_provider, group_name, granted_by, origin, created_at';
 
 function toDesignation(row: AdministratorRow): Designation {
   const kind = parseEnum(ADMINISTRATOR_KINDS, row.kind, 'administrators.kind');
@@ -122,10 +123,10 @@ function toDesignation(row: AdministratorRow): Designation {
   }
   if (kind === 'email') {
     if (row.email === null) throw new InvariantError('an email designation names an address');
-    return { ...base, kind, email: row.email, provider: row.provider };
+    return { ...base, kind, email: row.email, signInProvider: row.sign_in_provider };
   }
   if (row.group_name === null) throw new InvariantError('a group designation names a group');
-  return { ...base, kind, groupName: row.group_name, provider: row.provider };
+  return { ...base, kind, groupName: row.group_name, signInProvider: row.sign_in_provider };
 }
 
 export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
@@ -153,14 +154,14 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
       string,
     ]
   >(
-    `INSERT INTO administrators (id, kind, user_id, email, provider, group_name, granted_by, origin, created_at)
+    `INSERT INTO administrators (id, kind, user_id, email, sign_in_provider, group_name, granted_by, origin, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT DO NOTHING`,
   );
   const remove = db.prepare<[string]>('DELETE FROM administrators WHERE id = ?');
   const pendingFor = db.prepare<[string, string], AdministratorRow>(
     `SELECT ${COLUMNS} FROM administrators
-     WHERE kind = 'email' AND email = ? AND (provider IS NULL OR provider = ?)
+     WHERE kind = 'email' AND email = ? AND (sign_in_provider IS NULL OR sign_in_provider = ?)
      ORDER BY created_at, id`,
   );
 
@@ -169,7 +170,7 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
     fields: {
       userId?: string;
       email?: string;
-      provider?: string | null;
+      signInProvider?: string | null;
       groupName?: string;
     },
     input: DesignationInput,
@@ -180,7 +181,7 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
       kind,
       fields.userId ?? null,
       fields.email ?? null,
-      fields.provider ?? null,
+      fields.signInProvider ?? null,
       fields.groupName ?? null,
       input.grantedBy,
       input.origin,
@@ -211,17 +212,17 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
     async addUser(userId, input) {
       return insertRow('user', { userId }, input) as UserDesignation | null;
     },
-    async addEmail(email, provider, input) {
+    async addEmail(email, signInProvider, input) {
       return insertRow(
         'email',
-        { email: normalize(email), provider },
+        { email: normalize(email), signInProvider },
         input,
       ) as EmailDesignation | null;
     },
-    async addGroup(groupName, provider, input) {
+    async addGroup(groupName, signInProvider, input) {
       return insertRow(
         'group',
-        { groupName: groupName.trim(), provider },
+        { groupName: groupName.trim(), signInProvider },
         input,
       ) as GroupDesignation | null;
     },
@@ -230,9 +231,9 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
       if (!row) return null;
       return remove.run(id).changes > 0 ? toDesignation(row) : null;
     },
-    async consumeEmail(userId, email, provider) {
+    async consumeEmail(userId, email, signInProvider) {
       return withImmediateTransaction(db, () => {
-        const pending = pendingFor.all(normalize(email), provider).map(toDesignation);
+        const pending = pendingFor.all(normalize(email), signInProvider).map(toDesignation);
         if (pending.length === 0) return [];
         const first = pending[0];
         if (!byUser.get(userId) && first) {
@@ -249,12 +250,12 @@ export function createAdministratorsRepo(ctx: RepoContext): AdministratorsRepo {
           const row = insertRow('user', { userId }, input);
           if (row) out.push(row);
         }
-        for (const { email, provider } of emails) {
-          const row = insertRow('email', { email: normalize(email), provider }, input);
+        for (const { email, signInProvider } of emails) {
+          const row = insertRow('email', { email: normalize(email), signInProvider }, input);
           if (row) out.push(row);
         }
-        for (const { groupName, provider } of groups) {
-          const row = insertRow('group', { groupName: groupName.trim(), provider }, input);
+        for (const { groupName, signInProvider } of groups) {
+          const row = insertRow('group', { groupName: groupName.trim(), signInProvider }, input);
           if (row) out.push(row);
         }
         return out;

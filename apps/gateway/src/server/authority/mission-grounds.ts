@@ -160,12 +160,12 @@ const NO_SHIFT: GroundsShift = { orphaned: [], restored: [], partsLost: [], part
 /**
  * The accepted risks of a mission that belong to one account (spec §3.1
  * "A multi-account mission": the policy is partitioned per account, by
- * the provider each id names).
+ * the service each id names).
  */
-export function partitionOf(mission: Pick<MissionRecord, 'policy'>, provider: string): RiskId[] {
+export function partitionOf(mission: Pick<MissionRecord, 'policy'>, service: string): RiskId[] {
   return mission.policy
     .map((entry) => entry.riskId)
-    .filter((id) => parseRiskId(id)?.provider === provider);
+    .filter((id) => parseRiskId(id)?.service === service);
 }
 
 export class MissionGrounds {
@@ -189,7 +189,7 @@ export class MissionGrounds {
         });
         continue;
       }
-      const riskIds = partitionOf(mission, account.provider);
+      const riskIds = partitionOf(mission, account.service);
       if (account.status === 'revoked') {
         lost.set(account.id, {
           accountId: account.id,

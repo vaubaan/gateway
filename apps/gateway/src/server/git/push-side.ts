@@ -76,7 +76,7 @@ export class PushSide {
   }
 
   /**
-   * The refs before a push: the provider's, minus the gateway's temporary refs,
+   * The refs before a push: the service's, minus the gateway's temporary refs,
    * with the capabilities the door implements and nothing else.
    */
   async advertisement(scope: Scope): Promise<Response> {
@@ -101,7 +101,7 @@ export class PushSide {
         if (answer.status === HTTP_UNAUTHORIZED) {
           await this.deps.credentialCache.drop(target.account.id);
         }
-        // A 403 here is the provider's own permission check on the account's token.
+        // A 403 here is the service's own permission check on the account's token.
         if (answer.status === HTTP_FORBIDDEN) {
           return gitText(
             HTTP_FORBIDDEN,

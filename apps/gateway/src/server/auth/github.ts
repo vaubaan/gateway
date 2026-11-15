@@ -11,11 +11,11 @@
  *               GET <api>/user/emails   email = the PRIMARY address, refused unless
  *                                        GitHub verified it
  *   teams       GET <api>/orgs/<org>/teams/<team>/memberships/<login>, only for the
- *               team the admin rule names for this provider (`org/team`); `read:org`
+ *               team the admin rule names for this sign-in provider (`org/team`); `read:org`
  *               is asked for only then
  *
  * Scopes: `read:user user:email`, plus `read:org` when a team must be read. The
- * issuer recorded for the users is the provider's base URL (github.com,
+ * issuer recorded for the users is the sign-in provider's base URL (github.com,
  * or a GitHub Enterprise Server), whose REST API is `api.github.com` or
  * `<base>/api/v3` (`githubApiBase`).
  */
@@ -39,7 +39,7 @@ const TEAM = /^([A-Za-z0-9][A-Za-z0-9-]*)\/([A-Za-z0-9][A-Za-z0-9._-]*)$/;
 
 export interface GithubSignInOptions {
   readonly redirectUri: URL;
-  /** The teams to read at sign-in (`org/team`): those the admin rule names for this provider. */
+  /** The teams to read at sign-in (`org/team`): those the admin rule names for this sign-in provider. */
   readonly teams: readonly string[];
   /** Routes the outbound HTTP (corporate proxy; an in-process GitHub in tests). */
   readonly fetch?: CustomFetch;
@@ -80,10 +80,10 @@ export class GithubSignIn {
   private readonly fetchImpl: CustomFetch;
 
   constructor(
-    private readonly provider: GithubSignInProvider,
+    private readonly signInProvider: GithubSignInProvider,
     private readonly options: GithubSignInOptions,
   ) {
-    this.api = githubApiBase(provider.issuer);
+    this.api = githubApiBase(signInProvider.issuer);
     this.fetchImpl = options.fetch ?? ((url, init) => fetch(url, init as unknown as RequestInit));
   }
 
@@ -98,9 +98,9 @@ export class GithubSignIn {
     const codeVerifier = oidc.randomPKCECodeVerifier();
     const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
     const state = oidc.randomState();
-    const redirectTo = new URL(`${issuerKey(this.provider.issuer)}/login/oauth/authorize`);
+    const redirectTo = new URL(`${issuerKey(this.signInProvider.issuer)}/login/oauth/authorize`);
     redirectTo.search = new URLSearchParams({
-      client_id: this.provider.clientId,
+      client_id: this.signInProvider.clientId,
       redirect_uri: this.options.redirectUri.href,
       scope: this.scopes(),
       state,
@@ -168,7 +168,7 @@ export class GithubSignIn {
     const groups = await this.teamsOf(token, login, subject, warnings);
     return {
       identity: {
-        issuer: issuerKey(this.provider.issuer),
+        issuer: issuerKey(this.signInProvider.issuer),
         subject,
         email: primary.email.trim().toLowerCase(),
         emailVerified: true,
@@ -214,7 +214,7 @@ export class GithubSignIn {
     let response: Response;
     try {
       response = await this.fetchImpl(
-        `${issuerKey(this.provider.issuer)}/login/oauth/access_token`,
+        `${issuerKey(this.signInProvider.issuer)}/login/oauth/access_token`,
         {
           method: 'POST',
           headers: {
@@ -223,8 +223,8 @@ export class GithubSignIn {
             'user-agent': USER_AGENT,
           },
           body: new URLSearchParams({
-            client_id: this.provider.clientId,
-            client_secret: this.provider.clientSecret,
+            client_id: this.signInProvider.clientId,
+            client_secret: this.signInProvider.clientSecret,
             code,
             redirect_uri: this.options.redirectUri.href,
             code_verifier: codeVerifier,

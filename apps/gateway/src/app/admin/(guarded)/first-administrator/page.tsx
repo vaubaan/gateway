@@ -24,8 +24,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function FirstAdministratorPage() {
   const { root } = await requireOperator();
-  const providers = await root.auth.providers.views();
-  const local = providers.find((p) => p.kind === 'local') ?? null;
+  const signInProviders = await root.auth.signInProviders.views();
+  const local = signInProviders.find((p) => p.kind === 'local') ?? null;
 
   return (
     <>
@@ -38,9 +38,13 @@ export default async function FirstAdministratorPage() {
       />
       <Section first>
         {!local ? (
-          <Callout tone="neutral" title="No sign-in accounts yet" testId="first-admin-no-provider">
-            Add sign-in accounts under Sign-in first, or sign in through the provider you set up: an
-            administrator of that provider needs no sign-in account.
+          <Callout
+            tone="neutral"
+            title="No sign-in accounts yet"
+            testId="first-admin-no-sign-in-provider"
+          >
+            Add sign-in accounts under Sign-in first, or sign in through the sign-in provider you
+            set up: an administrator of that sign-in provider needs no sign-in account.
           </Callout>
         ) : (
           <form

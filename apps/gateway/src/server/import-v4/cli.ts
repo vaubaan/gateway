@@ -96,7 +96,7 @@ export interface CliIo {
 }
 
 export interface CliDeps {
-  /** Root injections (tests: the `:memory:` store, a fixture registry, a mock provider). */
+  /** Root injections (tests: the `:memory:` store, a fixture registry, a mock service). */
   readonly rootDeps?: Omit<RootDeps, 'logWrite'>;
   readonly loadConfig?: () => LoadedConfig;
   readonly storeExists?: (path: string) => boolean;

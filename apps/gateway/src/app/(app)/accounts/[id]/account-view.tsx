@@ -85,11 +85,11 @@ import {
   type AccountDetail,
   type Notice,
 } from '@/server/accounts';
-import { providerGrantForecast, providerGrantReport } from '@/server/accounts/provider-grant';
+import { serviceGrantForecast, serviceGrantReport } from '@/server/accounts/service-grant';
 import type { MissionOnAccount } from '@/server/missions/mission-service';
 import type { CatalogRisk } from '@/lib/missions/model';
-import { toolTitleOf } from '@/server/providers/tool-titles';
-import { providerPath } from '@/lib/providers/links';
+import { toolTitleOf } from '@/server/services/tool-titles';
+import { servicePath } from '@/lib/services/links';
 import {
   sharePath,
   type AccountHolders,
@@ -130,7 +130,7 @@ export interface AccountData {
   readonly selfRefs: ReadonlySet<string>;
   /**
    * The tools of this service that cannot run on this account because it reaches a
-   * resource hosting this instance (`ProviderPlugin.unboundTools`), as titles; empty
+   * resource hosting this instance (`ServicePlugin.unboundTools`), as titles; empty
    * when it reaches none (SEC 2026-10-15 re-check M-1).
    */
   readonly unboundTools: readonly string[];
@@ -157,11 +157,11 @@ export async function loadAccount(
     root.shares.service.contextFor(actor, accountId),
     root.shares.service.holders(actor, accountId),
     root.missions.service.onAccount(actor.user, accountId),
-    root.telemetry.stats.statusFor(detail.account.provider),
+    root.telemetry.stats.statusFor(detail.account.service),
   ]);
   const selfRefs = new Set(
     root.config.selfResources
-      .filter((self) => self.provider === detail.account.provider)
+      .filter((self) => self.service === detail.account.service)
       .map((self) => self.ref),
   );
   return {
@@ -173,7 +173,7 @@ export async function loadAccount(
     validation,
     selfRefs,
     unboundTools: detail.resources.some((resource) => selfRefs.has(resource.ref))
-      ? Object.keys(root.registry.get(detail.account.provider)?.plugin.unboundTools ?? {}).map(
+      ? Object.keys(root.registry.get(detail.account.service)?.plugin.unboundTools ?? {}).map(
           (tool) => toolTitleOf(root.registry, tool) ?? tool,
         )
       : [],
@@ -530,11 +530,7 @@ export function AccountView({
   // What became of the access granted at the service: kept on the page for as long as the
   // account is listed. The note of the act itself says it once; it is not said twice.
   const grant = revoked
-    ? providerGrantReport(
-        detail.provider_label,
-        account.providerGrant,
-        detail.provider_grant.byHand,
-      )
+    ? serviceGrantReport(detail.service_label, account.serviceGrant, detail.service_grant.byHand)
     : null;
   const grantSaid =
     grant !== null && (notice?.lines.some((line) => line.includes(grant.text)) ?? false);
@@ -713,7 +709,7 @@ export function AccountView({
   const moreResources = resources.slice(shown);
 
   const lede = [
-    detail.provider_label,
+    detail.service_label,
     ownedBy({
       team: holders.owner.kind === 'group',
       name: holders.owner.name,
@@ -736,7 +732,7 @@ export function AccountView({
   const details = <DetailToggle key="details" />;
   const reconnect = (
     <ButtonLink
-      href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(account.provider)}?account=${encodeURIComponent(account.id)}`}
+      href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(account.service)}?account=${encodeURIComponent(account.id)}`}
     >
       {ACCOUNT_ACTIONS.reconnect}
     </ButtonLink>
@@ -750,7 +746,7 @@ export function AccountView({
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: account.displayName },
         ]}
-        mark={<ServiceMark name={detail.provider_label} icon={detail.provider_icon} size="lg" />}
+        mark={<ServiceMark name={detail.service_label} icon={detail.service_icon} size="lg" />}
         title={account.displayName}
         status={
           ACCOUNT_STATES[account.status].tone !== null || revoked ? (
@@ -813,7 +809,7 @@ export function AccountView({
               title={TOKEN_CONNECT.lacksTitle(data.tokenLacks.length)}
               testId="token-lacks"
             >
-              <p>{TOKEN_CONNECT.lacksBody(detail.provider_label)}</p>
+              <p>{TOKEN_CONNECT.lacksBody(detail.service_label)}</p>
               <ul>
                 {data.tokenLacks.map((permission) => (
                   <li key={permission.name}>
@@ -827,7 +823,7 @@ export function AccountView({
           )}
           {account.status === 'expired' && (
             <Callout tone="bad" title="This account needs reconnecting" testId="account-expired">
-              {detail.provider_label} rejected the stored credential and it could not be renewed.
+              {detail.service_label} rejected the stored credential and it could not be renewed.
               Every call of the missions that use this account is refused until an owner reconnects
               it.
             </Callout>
@@ -838,7 +834,7 @@ export function AccountView({
               title="This account needs reconnecting"
               testId="account-way-retired"
             >
-              It was connected a way {detail.provider_label} no longer offers on this gateway. Every
+              It was connected a way {detail.service_label} no longer offers on this gateway. Every
               call of the missions that use it is refused until an owner reconnects it; reconnecting
               keeps the account, its resources and who has access.
             </Callout>
@@ -857,7 +853,7 @@ export function AccountView({
             >
               <p>Its credential is erased; this cannot be undone.</p>
               {!grantSaid && (
-                <p data-testid="provider-grant">
+                <p data-testid="service-grant">
                   <strong>{grant.title}.</strong> {grant.text}
                 </p>
               )}
@@ -876,7 +872,7 @@ export function AccountView({
           )}
           {detail.discovery && !detail.discovery.ok && !revoked && (
             <Callout tone="warn" title="The last check failed" testId="check-failed">
-              {detail.discovery.error ?? `${detail.provider_label} gave no reason.`} What was found
+              {detail.discovery.error ?? `${detail.service_label} gave no reason.`} What was found
               before is kept.
             </Callout>
           )}
@@ -888,11 +884,11 @@ export function AccountView({
           <KeyValue
             items={[
               {
-                term: capitalize(TERMS.provider.one),
+                term: capitalize(TERMS.service.one),
                 value: (
                   <>
-                    {detail.provider_label} ·{' '}
-                    <Link href={providerPath(account.provider)} className={shared.reveal}>
+                    {detail.service_label} ·{' '}
+                    <Link href={servicePath(account.service)} className={shared.reveal}>
                       what an agent can do on it
                     </Link>{' '}
                     <ValidationBadge status={data.validation} />
@@ -1070,7 +1066,7 @@ export function AccountView({
           <Hint>
             Nothing found yet.
             {!revoked &&
-              ` Use “${ACCOUNT_ACTIONS.refresh}” once ${detail.provider_label} is reachable.`}
+              ` Use “${ACCOUNT_ACTIONS.refresh}” once ${detail.service_label} is reachable.`}
           </Hint>
         ) : (
           <>
@@ -1147,7 +1143,7 @@ export function AccountView({
             action={`${base}/revoke`}
             name={account.displayName}
             running={running.length}
-            atProvider={providerGrantForecast(detail.provider_label, detail.provider_grant)}
+            atService={serviceGrantForecast(detail.service_label, detail.service_grant)}
           />
         </div>
       )}

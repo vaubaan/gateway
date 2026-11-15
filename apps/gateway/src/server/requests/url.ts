@@ -1,6 +1,6 @@
 /**
  * The one builder of a request URL (spec §3.4: "the gateway … puts the
- * request's URL into the refusal"; §6: "provider callbacks and request URLs
+ * request's URL into the refusal"; §6: "service callbacks and request URLs
  * carry [the public URL]").
  *
  * `<public_url>/r/<request_id>` is what a `budget-exhausted` or

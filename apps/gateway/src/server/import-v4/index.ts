@@ -47,7 +47,7 @@ export {
 } from './importer';
 export { renderReport } from './report';
 export {
-  providerOfV4Risk,
+  serviceOfV4Risk,
   translateRisks,
   unbindingRateLimit,
   type CarriedRisk,

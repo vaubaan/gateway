@@ -10,7 +10,7 @@ import {
   type EntityNode,
   type EnvironmentReference,
   type PlaneTree,
-} from '@/lib/providers/reference';
+} from '@/lib/services/reference';
 
 import styles from '../reference.module.css';
 
@@ -49,7 +49,7 @@ export function DataModelSection({
         The things that exist at the service and how they nest. Every permission is written over
         these; a resource of an account is one of them, named by its ref.
       </p>
-      <div className={styles.callout} data-testid="provider-environment">
+      <div className={styles.callout} data-testid="service-environment">
         <KeyValue
           items={[
             { term: 'Environment', value: environment.explanation },

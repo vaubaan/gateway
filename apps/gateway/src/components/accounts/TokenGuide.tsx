@@ -1,6 +1,6 @@
 /**
  * How to create a token by hand at a service, read from the plugin's
- * declaration (`ConnectableProvider.guide`): how wide to grant and why, the
+ * declaration (`ConnectableService.guide`): how wide to grant and why, the
  * steps with their menu paths (highlighted chips), pages, commands and
  * screenshots (a figure with its provenance line), the token page, who knows the expiry
  * and the service's documentation (step 1); the permissions to tick, each with
@@ -16,7 +16,7 @@ import { TOKEN_CONNECT } from '@/lib/vocabulary';
 import {
   ALTERNATIVE_FIELD,
   type AlternativeView,
-  type ConnectableProvider,
+  type ConnectableService,
   type GuideStepView,
   type TokenGuideView,
   type TokenPermissionView,
@@ -44,7 +44,7 @@ export function permissionLines(permissions: readonly TokenPermissionView[]): Pe
 /** What the page says about the token's lifetime, by who knows it. */
 export function expiryWords(service: string, expiry: TokenGuideView['expiry']): string {
   switch (expiry.kind) {
-    case 'provider-reports':
+    case 'service-reports':
       return TOKEN_CONNECT.expiryReported(service);
     case 'person-types':
       return TOKEN_CONNECT.expiryTyped(service, expiry.recommendedDays);
@@ -172,22 +172,22 @@ function AlternativeChoice({
  * plugin lists the narrowest first), bound to the form `formId`.
  */
 export function TokenGuide({
+  serviceName,
   service,
-  provider,
   chosen = null,
   formId,
 }: {
-  service: string;
-  provider: ConnectableProvider;
+  serviceName: string;
+  service: ConnectableService;
   chosen?: string | null;
   formId: string;
 }) {
-  const guide = provider.guide;
+  const guide = service.guide;
   if (!guide) return null;
   const lines = permissionLines(guide.permissions);
   return (
     <div className={styles.guide} data-testid="token-guide">
-      <FormStep n={1} title={TOKEN_CONNECT.stepsTitle(service)}>
+      <FormStep n={1} title={TOKEN_CONNECT.stepsTitle(serviceName)}>
         <Callout
           tone="info"
           title={TOKEN_CONNECT.reachTitle(guide.reach.what, guide.reach.grant)}
@@ -195,21 +195,21 @@ export function TokenGuide({
         >
           {guide.reach.why}
         </Callout>
-        {provider.alternatives.length > 0 && (
-          <AlternativeChoice alternatives={provider.alternatives} chosen={chosen} formId={formId} />
+        {service.alternatives.length > 0 && (
+          <AlternativeChoice alternatives={service.alternatives} chosen={chosen} formId={formId} />
         )}
-        <Steps steps={panelSteps(provider.alternatives, guide.steps)} service={service} />
-        {provider.createUrl && (
+        <Steps steps={panelSteps(service.alternatives, guide.steps)} service={serviceName} />
+        {service.createUrl && (
           <p className={styles.link}>
-            <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
-              {TOKEN_CONNECT.openTokenPage(service)}
+            <a href={service.createUrl} target="_blank" rel="noreferrer noopener">
+              {TOKEN_CONNECT.openTokenPage(serviceName)}
             </a>
           </p>
         )}
         <Hint>
-          <span data-testid="token-expiry">{expiryWords(service, guide.expiry)}</span>{' '}
+          <span data-testid="token-expiry">{expiryWords(serviceName, guide.expiry)}</span>{' '}
           <a href={guide.docsUrl} target="_blank" rel="noreferrer noopener">
-            {TOKEN_CONNECT.docsLink(service)}
+            {TOKEN_CONNECT.docsLink(serviceName)}
           </a>
         </Hint>
       </FormStep>

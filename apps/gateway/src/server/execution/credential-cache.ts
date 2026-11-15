@@ -12,7 +12,7 @@
  * a reconnect, a refresh or a revocation rewrites the account row, so the
  * entries written before it are unreachable from then on, whatever the cache
  * behind `CacheClient`. `drop(accountId)` also deletes the entries this
- * process wrote, which the upstream stage calls as soon as the provider
+ * process wrote, which the upstream stage calls as soon as the service
  * rejects a call or the account stops being `active`.
  *
  * The values are live upstream credentials, in memory only (spec §2.4: the
