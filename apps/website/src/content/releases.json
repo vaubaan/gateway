@@ -1,7 +1,7 @@
 {
-  "gateway": "2.0.0-alpha.22",
+  "gateway": "2.0.0-alpha.23",
   "prerelease": true,
-  "date": "2026-11-15",
+  "date": "2026-11-16",
   "plugins": {
     "asana": "0.1.0",
     "axonaut": "0.1.0",
@@ -9,7 +9,8 @@
     "cloudflare-dns": "4.0.0",
     "context7": "0.2.0",
     "fly": "0.4.0",
-    "github": "5.1.0",
+    "github": "5.2.0",
+    "github-projects": "0.1.0",
     "gmail": "2.0.0",
     "google-calendar": "0.4.0",
     "miro": "0.5.0",

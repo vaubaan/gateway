@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.23] - 2026-11-16
+
 ### Changed
 
 - **A lost account says so in its own card, and its creator removes it.** When an account of a
@@ -18,6 +20,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Edit mission now shows that card with **Remove from mission**; saving is an ordinary edit,
   one version in the History. Nothing removes or hides a lost account on its own, and
   restoring a version neither brings a removed one back nor takes a lost one out.
+- **GitHub 5.2.0: one repository per account, named on the connect form.** A fine-grained
+  token reads every public repository and GitHub cannot list a token's own grant, so the form
+  now asks the repository (`owner/repo`); the check at paste opens it (a 404 is refused) and
+  discovery answers that repository alone. Accounts connected before keep the former listing
+  until they are reconnected with their repository. A mission holds one account per service,
+  so one GitHub repository per mission.
 
 ### Added
 
@@ -2890,7 +2898,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.22...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.23...HEAD
+[2.0.0-alpha.23]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.22...v2.0.0-alpha.23
 [2.0.0-alpha.22]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.21...v2.0.0-alpha.22
 [2.0.0-alpha.21]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.20...v2.0.0-alpha.21
 [2.0.0-alpha.20]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.19...v2.0.0-alpha.20
