@@ -7,6 +7,7 @@
  *   request opened                → the mission's creator
  *   account needs reconnecting    → its owner (each member of an owning group)
  *   mission orphaned by another   → its creator
+ *   account lost by another       → the mission's creator
  *   mission revoked by another    → its creator
  *   backup failed                 → every administrator
  *   master-key recovery           → every administrator
@@ -84,7 +85,7 @@ export function createNotificationDispatch(deps: DispatchDeps): NotificationEven
   /** The creator of the mission, unless the act was theirs: they know it already. */
   async function missionNotice(
     missionId: string,
-    kind: 'mission-orphaned' | 'mission-revoked',
+    kind: 'mission-orphaned' | 'mission-account-lost' | 'mission-revoked',
     actorId: string,
   ): Promise<{ to: string[]; draft: NotificationBody } | null> {
     const mission = await deps.missions.getById(missionId);
@@ -129,6 +130,9 @@ export function createNotificationDispatch(deps: DispatchDeps): NotificationEven
     },
     missionOrphaned(missionId, actorId) {
       send('mission-orphaned', () => missionNotice(missionId, 'mission-orphaned', actorId));
+    },
+    missionAccountLost(missionId, actorId) {
+      send('mission-account-lost', () => missionNotice(missionId, 'mission-account-lost', actorId));
     },
     missionRevoked(missionId, actorId) {
       send('mission-revoked', () => missionNotice(missionId, 'mission-revoked', actorId));

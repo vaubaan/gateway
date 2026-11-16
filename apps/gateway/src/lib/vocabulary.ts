@@ -575,6 +575,24 @@ export const PART_LOSS_WORDS = {
   'access-withdrawn': 'no longer uses this account: its creator lost access to it',
 } as const;
 
+/**
+ * The card of an account that no longer serves a mission (ADR
+ * decisions/orphaned-missions-and-ownerless-connections.md, amendment 2026-11-16): red, folded
+ * on the mission page and in "Edit mission", where the creator removes it.
+ */
+export const LOST_ACCOUNT_WORDS = {
+  showDetails: 'Show the details',
+  hideDetails: 'Hide the details',
+  /** Edit mission: takes the account out of the mission when the edit is saved. */
+  remove: 'Remove from mission',
+  /** Edit mission: undoes "Remove from mission" before saving. */
+  keep: 'Keep it',
+  /** Edit mission: the card once "Remove from mission" is pressed, before saving. */
+  removedOnSave: 'Removed from the mission when you save.',
+  /** The phrase of the summary bar. */
+  removed: (label: string): string => `${label} removed`,
+} as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: service, plugin,
 // risk, macro-action, trust level, tool, plane, slice pattern.

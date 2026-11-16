@@ -6,7 +6,7 @@
 import type { RiskId } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
-import { hasChanges, type MissionSnapshot } from './mission-edit';
+import { draftAccountOf, hasChanges, type MissionSnapshot } from './mission-edit';
 import {
   canonicalConfig,
   changesBetween,
@@ -206,17 +206,28 @@ describe('judgeRestore', () => {
     expect(restored.dropped.resources.map((r) => r.resource_id)).toEqual(['res-app-staging']);
   });
 
-  it('leaves out an account the creator no longer holds, or that is revoked', () => {
+  it('leaves out an account the mission no longer carries that the creator no longer holds, or that is revoked', () => {
+    const removed = { ...CURRENT, accounts: [] };
     const revoked = judgeRestore(
       { accounts: [acmeAccount({ status: 'revoked' })], now: NOW },
-      CURRENT,
+      removed,
       V1,
     );
     expect(revoked.dropped.accounts).toEqual(['conn-acme']);
     expect(revoked.draft.accounts).toEqual([]);
     expect(revoked.judgement.ok).toBe(false);
-    const gone = judgeRestore({ accounts: [], now: NOW }, CURRENT, V1);
+    const gone = judgeRestore({ accounts: [], now: NOW }, removed, V1);
     expect(gone.dropped.accounts).toEqual(['conn-acme']);
+  });
+
+  it('keeps a lost account still on the mission as it stands, whatever the version holds of it', () => {
+    for (const accounts of [[acmeAccount({ status: 'revoked' })], []]) {
+      const restored = judgeRestore({ accounts, now: NOW }, CURRENT, V1);
+      expect(restored.dropped.accounts).toEqual([]);
+      expect(restored.draft.accounts).toEqual(CURRENT.accounts.map(draftAccountOf));
+      expect(restored.judgement.changes.accounts_removed).toEqual([]);
+      expect(restored.judgement.changes.accounts_added).toEqual([]);
+    }
   });
 
   it('keeps the current end when the version’s has passed', () => {

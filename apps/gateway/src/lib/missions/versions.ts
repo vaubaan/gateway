@@ -26,6 +26,7 @@ import type {
 import {
   changeSummaryOf,
   diffSnapshots,
+  draftAccountOf,
   judgeEdit,
   type EditJudgement,
   type MissionChanges,
@@ -297,7 +298,9 @@ interface DraftLine {
  * is the instance's own) is left out, a line outside their authority is left out — each
  * said in `dropped`. A set the mission still has keeps its id (its counters follow it);
  * the period is the mission's (it is not editable); an end already past keeps the
- * current one.
+ * current one. An account the mission carries now and that no longer serves it (lost)
+ * is kept as it stands, whatever the version holds of it: a restore neither removes a
+ * lost account nor brings one back (fail closed: its part stays lost, derived).
  *
  * Then judged as an edit (`judgeEdit`); a line the judgement still refuses for its risk
  * (authority, an unknown id, an environment no set holds) is dropped and the draft
@@ -315,11 +318,20 @@ export function judgeRestore(
     current.accounts.flatMap((c) => c.resource_sets.map((set) => [set.key, c.account_id])),
   );
 
+  const usableNow = (id: string): IssuanceAccount | undefined =>
+    context.accounts.find((c) => c.id === id && c.status !== 'revoked');
+  // The accounts that no longer serve the mission now (disconnected, gone, an access
+  // withdrawn): a restore never judges them, so it leaves them as they stand, lost, whatever
+  // the version says. Only "Remove from mission" takes one out; nothing brings one back.
+  const carried = current.accounts.filter((c) => !usableNow(c.account_id));
   const kept: { account: MissionVersionAccount; ctx: IssuanceAccount }[] = [];
   for (const account of config.accounts) {
-    const ctx = context.accounts.find((c) => c.id === account.account_id);
-    if (!ctx || ctx.status === 'revoked') {
-      droppedAccounts.push(account.account_id);
+    const ctx = usableNow(account.account_id);
+    if (!ctx) {
+      // Still on the mission, lost: carried as it stands below, not dropped from it.
+      if (!carried.some((c) => c.account_id === account.account_id)) {
+        droppedAccounts.push(account.account_id);
+      }
       continue;
     }
     kept.push({ account, ctx });
@@ -348,39 +360,41 @@ export function judgeRestore(
     name: config.name,
     period: current.period,
     expires_at: expiryOf(config, current, context.now),
-    accounts: shapes.map(({ account, sets }, accountIndex): DraftAccount => {
-      const drafted = sets.map(({ set, ids }, setIndex): DraftResourceSet & { id?: string } => {
-        const policy = remaining
-          .filter((l) => l.accountIndex === accountIndex && l.setIndex === setIndex)
-          .map(({ line }) => ({
-            risk_id: line.risk_id,
-            quota: line.quota,
-            rate_limit: { ...line.rate_limit },
-            gate: line.gate,
-          }));
-        const legacyWhole = set.mixed_env && set.future;
-        return {
-          ...(currentSets.get(set.id) === account.account_id ? { id: set.id } : {}),
-          resources: legacyWhole
-            ? { scope: 'account' }
-            : { scope: 'selected', resource_ids: [...ids] },
-          ...(set.mixed_env ? {} : { future: set.future }),
-          ...(!set.mixed_env && ids.length === 0 ? { env: set.env } : {}),
-          everything_i_hold: false,
-          policy,
-          ...(Object.keys(set.trust_levels).length > 0
-            ? { trust_levels: { ...set.trust_levels } }
-            : {}),
-        };
-      });
-      const [only] = drafted;
-      // One set: drafted flat, so that it keeps the mission's one set (and its counters).
-      if (drafted.length === 1 && only) {
-        const { id: _id, ...fields } = only;
-        return { account_id: account.account_id, ...fields };
-      }
-      return { account_id: account.account_id, resource_sets: drafted };
-    }),
+    accounts: shapes
+      .map(({ account, sets }, accountIndex): DraftAccount => {
+        const drafted = sets.map(({ set, ids }, setIndex): DraftResourceSet & { id?: string } => {
+          const policy = remaining
+            .filter((l) => l.accountIndex === accountIndex && l.setIndex === setIndex)
+            .map(({ line }) => ({
+              risk_id: line.risk_id,
+              quota: line.quota,
+              rate_limit: { ...line.rate_limit },
+              gate: line.gate,
+            }));
+          const legacyWhole = set.mixed_env && set.future;
+          return {
+            ...(currentSets.get(set.id) === account.account_id ? { id: set.id } : {}),
+            resources: legacyWhole
+              ? { scope: 'account' }
+              : { scope: 'selected', resource_ids: [...ids] },
+            ...(set.mixed_env ? {} : { future: set.future }),
+            ...(!set.mixed_env && ids.length === 0 ? { env: set.env } : {}),
+            everything_i_hold: false,
+            policy,
+            ...(Object.keys(set.trust_levels).length > 0
+              ? { trust_levels: { ...set.trust_levels } }
+              : {}),
+          };
+        });
+        const [only] = drafted;
+        // One set: drafted flat, so that it keeps the mission's one set (and its counters).
+        if (drafted.length === 1 && only) {
+          const { id: _id, ...fields } = only;
+          return { account_id: account.account_id, ...fields };
+        }
+        return { account_id: account.account_id, resource_sets: drafted };
+      })
+      .concat(carried.map(draftAccountOf)),
   });
 
   let remaining = lines;

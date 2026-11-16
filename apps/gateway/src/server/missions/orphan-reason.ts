@@ -28,56 +28,64 @@ export interface OrphanExplanation {
 const KEPT = 'Its keys, its activity and what it counted are kept as they are.';
 
 export interface LostAccountInput {
-  readonly account_id: string;
   readonly cause: PartLossCause;
   readonly final: boolean;
 }
 
 export interface LostExplanation {
-  /** False when one of the accounts may come back (an access withdrawn). */
+  /** False while the account may come back (an access withdrawn). */
   readonly final: boolean;
-  readonly title: string;
+  /** The one line the folded card shows. */
+  readonly summary: string;
+  /** What unfolding the card adds. */
   readonly lines: readonly string[];
 }
 
 /**
- * What the creator and the members read on a mission that lost some of its accounts
- * and still serves through the others (ADR orphaned-missions-and-ownerless-connections,
- * amendment 2026-10-21). Nothing is added in place of a lost account: the account that
- * replaced it is reached by a new mission. `null` when every account serves.
+ * What the card of an account that no longer serves a mission says (ADR
+ * orphaned-missions-and-ownerless-connections, amendments 2026-10-21 and 2026-11-16):
+ * one line folded, the rest unfolded. The mission keeps serving through its other
+ * accounts; the lost one stays on it, red, until its creator removes it in "Edit
+ * mission". `name` is the account's display name, `null` when it no longer exists;
+ * `creator` says whether the reader is the mission's creator.
  */
-export function explainLost(
-  lost: readonly LostAccountInput[],
-  accounts: readonly { readonly id: string; readonly display_name: string }[],
-): LostExplanation | null {
-  if (lost.length === 0) return null;
-  const nameOf = (id: string): string => {
-    const named = accounts.find((c) => c.id === id);
-    return named ? `“${named.display_name}”` : 'an account that no longer exists';
-  };
-  const lines = lost.map((part) => {
+export function explainLostAccount(
+  part: LostAccountInput,
+  name: string | null,
+  creator: boolean,
+): LostExplanation {
+  const named = name === null ? 'This account' : `“${name}”`;
+  const you = creator ? 'You no longer have' : 'The creator of this mission no longer has';
+  const summary = ((): string => {
     switch (part.cause) {
       case 'account-revoked':
-        return `${nameOf(part.account_id)} was disconnected by its owner. It never comes back to this mission: calls through it are refused.`;
+        return `${named} was disconnected by its owner; calls through it are refused.`;
       case 'account-missing':
-        return `An account of this mission no longer exists. Calls through it are refused.`;
+        return `${named} no longer exists; calls through it are refused.`;
       case 'access-withdrawn':
-        return `${nameOf(part.account_id)}: you no longer have access to it (its owner withdrew it, or you left the team that held it). Calls through it are refused until the access is given back, with this same mission.`;
+        return `${you} access to ${named}; calls through it are refused until it is given back.`;
     }
-  });
-  const final = lost.every((part) => part.final);
+  })();
+  const withdrawn = creator
+    ? 'Its owner withdrew your access, or you left the team that held it.'
+    : 'Its owner withdrew the creator’s access, or the creator left the team that held it.';
+  const why =
+    part.cause === 'access-withdrawn'
+      ? `${withdrawn} When the access is given back, it serves this same mission again.`
+      : 'It never comes back to this mission.';
   return {
-    final,
-    title:
-      lost.length === 1
-        ? 'An account no longer serves this mission'
-        : `${lost.length} accounts no longer serve this mission`,
+    final: part.final,
+    summary,
     lines: [
-      ...lines,
-      'The mission keeps running on its other accounts, with its keys and limits as they are. Nothing is added in place of a lost account: to work on the account that replaced it, create a new mission.',
+      why,
+      'The mission keeps running on its other accounts, with its keys and limits as they are. Nothing takes its place: to work on another account, add it in Edit mission or create a new mission.',
+      creator
+        ? 'It stays here until you remove it from the mission in Edit mission.'
+        : 'It stays here until the creator removes it from the mission.',
     ],
   };
 }
+
 const REVOKE_AND_REISSUE =
   'Nothing brings it back: stop this mission and create a new one on an account you can use.';
 

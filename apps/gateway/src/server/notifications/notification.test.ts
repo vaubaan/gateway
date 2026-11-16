@@ -51,6 +51,7 @@ describe('notification payload', () => {
         path: '/accounts/c',
       },
       { kind: 'mission-orphaned', instance: INSTANCE, mission: 'M', path: '/missions/d' },
+      { kind: 'mission-account-lost', instance: INSTANCE, mission: 'M', path: '/missions/f' },
       { kind: 'mission-revoked', instance: INSTANCE, mission: 'M', path: '/missions/e' },
       { kind: 'backup-failed', instance: INSTANCE, path: '/admin/encryption' },
       { kind: 'master-key-recovery', instance: INSTANCE, path: '/admin/users' },

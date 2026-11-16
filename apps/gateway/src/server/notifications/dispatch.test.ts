@@ -109,6 +109,18 @@ describe('notification dispatch', () => {
     expect(await recipients()).toEqual(['ada']);
   });
 
+  it('tells the creator of a mission that lost an account through someone else, never through themselves', async () => {
+    const { events, recipients, sent } = setup();
+    events.missionAccountLost('m1', 'ada');
+    expect(await recipients()).toEqual([]);
+    events.missionAccountLost('m1', 'bob');
+    expect(await recipients()).toEqual(['ada']);
+    expect(sent[0]?.notification).toMatchObject({
+      kind: 'mission-account-lost',
+      path: '/missions/m1',
+    });
+  });
+
   it('tells every active administrator of a failed backup and of a recovery', async () => {
     const { events, recipients, sent } = setup();
     events.backupFailed();
