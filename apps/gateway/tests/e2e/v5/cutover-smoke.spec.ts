@@ -30,7 +30,7 @@ const MISSION = 'Cutover — acme/app';
 const READ_CODE = 'github.read-code';
 /** The quota the creator leaves on `github.read-code`, so the smoke can spend it. */
 const QUOTA = 2;
-/** The repository the mission may touch, and the one the creator leaves out. */
+/** The account's one repository, and one of another account the token also reads. */
 const [REPOSITORY, LEFT_OUT] = MOCK_GITHUB.repositories;
 const [OWNER, REPO] = REPOSITORY.split('/');
 const AGENT_LABEL = 'cutover-agent';
@@ -84,25 +84,26 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.getByLabel(/^Name/).fill(ACCOUNT);
   // The token is checked at the mocked GitHub, then stored; it is never shown again.
   await page.getByLabel(/Fine-grained personal access token/).fill(MOCK_GITHUB.token);
+  // One account, one repository: the form names it.
+  await page.getByLabel(/^Repository/).fill(REPOSITORY);
   await page.getByRole('button', { name: 'Check and connect' }).click();
   await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
   await expect(page.getByRole('heading', { name: ACCOUNT, level: 1 })).toBeVisible();
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
   // The normal state is not labelled; the header says whose it is.
   await expect(page.getByText('you own it').first()).toBeVisible();
-  // The repositories the token reaches were found as resources.
-  for (const repository of MOCK_GITHUB.repositories) {
-    await expect(
-      page.getByTestId('account-resources').getByRole('row', { name: new RegExp(repository) }),
-    ).toBeVisible();
-  }
+  // The account's one repository is its one resource; what else the token reads is not listed.
+  const resourceRows = page.getByTestId('account-resources');
+  await expect(resourceRows.getByRole('row', { name: new RegExp(REPOSITORY) })).toBeVisible();
+  await expect(resourceRows.getByRole('row', { name: new RegExp(LEFT_OUT) })).toHaveCount(0);
   // No mission uses it yet, and nobody else holds it.
   await expect(page.getByTestId('account-missions')).toContainText('No mission uses this account');
   await expect(page.getByTestId('who-has-access').getByRole('row')).toHaveCount(2);
   await snap(page, 'cutover-account');
   const connected = await upstreamLog(request);
   expect(connected.calls.some((call) => call.url.endsWith('/user'))).toBe(true);
-  expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(true);
+  expect(connected.calls.some((call) => call.url.endsWith(`/repos/${REPOSITORY}`))).toBe(true);
+  expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(false);
   expect(await page.content()).not.toContain(MOCK_GITHUB.token);
 
   // ── 3. Issue a mission from the plugin's macro-actions ────────────────────
@@ -169,18 +170,13 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
 
   // The two refusals a day of work may meet without anything being wrong:
   // a resource outside the mission, a risk the creator did not accept.
-  const outside = await executor.call('github__list_branches', {
-    owner: LEFT_OUT.split('/')[0],
-    repo: LEFT_OUT.split('/')[1],
-  });
-  expect(outside).toMatchObject({
-    outcome: 'refused',
-    refusal: {
-      code: 'resource-not-in-mission',
-      cited_ref: LEFT_OUT,
-      allowed_resources: [{ ref: REPOSITORY }],
-    },
-  });
+  // A repository of no account of the mission: the reader of the call rejects it.
+  await expect(
+    executor.call('github__list_branches', {
+      owner: LEFT_OUT.split('/')[0],
+      repo: LEFT_OUT.split('/')[1],
+    }),
+  ).rejects.toThrow(`github repository '${LEFT_OUT}' is not selected in this mission`);
   const notAccepted = await executor.call(PROTECTED_WRITE, {
     owner: OWNER,
     repo: REPO,
@@ -238,10 +234,9 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   const entries = page.getByTestId('audit-table').locator('tbody tr[data-row]');
   const calls = entries.filter({ hasText: 'github__list_branches' });
-  // Three allowed, one outside the mission, two refused on the limit.
+  // Three allowed, one rejected outside the mission, two refused on the limit.
   await expect(calls).toHaveCount(6);
   await expect(calls.filter({ hasText: 'limit reached' })).toHaveCount(2);
-  await expect(calls.filter({ hasText: 'resource not in this mission' })).toHaveCount(1);
   await expect(calls.filter({ hasText: AGENT_LABEL })).toHaveCount(6);
   await expect(entries.filter({ hasText: PROTECTED_WRITE })).toContainText(
     'permission not in this mission',

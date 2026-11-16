@@ -184,7 +184,8 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 
 /**
  * GitHub's side of the connect flow and of the calls: the check of a pasted
- * token (`GET /user`), the repositories it reaches (`GET /user/repos`), two
+ * token (`GET /user`), the repository a form names (`GET /repos/{owner}/{repo}`),
+ * the repositories a seeded account reaches (`GET /user/repos`), two
  * read endpoints and the file write. Any other request rejects (`mockFetch`):
  * nothing reaches a network.
  */
@@ -216,6 +217,17 @@ function mockedGithub(): MockFetch {
           private: true,
           archived: false,
         })),
+    },
+    {
+      method: 'GET',
+      // The one repository a connect form names (one account, one repository).
+      url: new RegExp(`^${api}/repos/[^/]+/[^/]+$`),
+      respond: (call) => ({
+        full_name: new URL(call.url).pathname.split('/').slice(2, 4).join('/'),
+        default_branch: 'main',
+        private: true,
+        archived: false,
+      }),
     },
     {
       method: 'GET',

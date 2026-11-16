@@ -1,16 +1,23 @@
 /**
  * Credential of the `github` service : a fine-grained personal access token
- * pasted by hand (`api-key` kind), the one way of connecting GitHub.
+ * pasted by hand (`api-key` kind), the one way of connecting GitHub, and the
+ * one repository the account is for.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Account", §7.2 ; ADR
  *        one-place-to-authorize-services-token-first.
  *
- * A person creates a token at GitHub — often on a shared service account —
- * over the repositories the missions will use (ADR amendment 2026-11-13), with
- * every permission the tools use, and pastes it : this gateway decides, mission by mission, what
- * an agent may do with it. The token is the
- * account's secret ; every API tool and the git remote send it as the
+ * One account is one repository (ADR one-place-to-authorize-services-token-
+ * first, amendment 2026-11-16). A person creates a token at GitHub — often on
+ * a shared service account — over that one repository, with every permission
+ * the tools use, and pastes it with the repository's `owner/repo` : this
+ * gateway decides, mission by mission, what an agent may do with it. The token
+ * is the account's secret ; every API tool and the git remote send it as the
  * bearer. GitHub enforces what it may do : the permissions its owner ticked.
+ *
+ * Why the form names the repository : GitHub gives a fine-grained token no
+ * way to list the repositories it was granted, and every token reads every
+ * public repository, so `GET /user/repos` lists far more than the grant.
+ * The named repository is the account's one resource.
  *
  * Fine-grained tokens only. A classic token (`ghp_`) reaches every
  * repository and organisation of its account with coarse scopes and may
@@ -20,25 +27,36 @@
  *
  * Checked at paste (`verifyGithubToken`) : `GET /user` names the account ;
  * the `github-authentication-token-expiration` response header, when GitHub
- * sends one, gives the expiry. The repositories it reaches are the
- * resources (`GET /user/repos`, discovery).
+ * sends one, gives the expiry ; `GET /repos/{owner}/{repo}` proves the token
+ * opens the named repository. An account made before 2026-11-16 holds no
+ * repository : it keeps the repositories `GET /user/repos` lists until it is
+ * reconnected (`githubRepositoryOf` answers `null`).
  */
 
 import {
+  CredentialRefusal,
   expectCredentialKind,
   httpJson,
   isRecord,
+  isUpstreamHttpError,
   type ApiKeyCredentialSpec,
   type AccountContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_API_BASE, githubApiHeaders } from './api.ts';
+import { repoFullName, type RepoTarget } from './call.ts';
 import { SERVICE_ID } from './identity.ts';
 import { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
 export const GITHUB_TOKEN_FIELD = 'token';
+
+/** Name of the form field holding the account's one repository, `owner/repo`. */
+export const GITHUB_REPOSITORY_FIELD = 'repository';
+
+/** `owner/repo` in GitHub's grammar of names, the one the calls' reader holds (`call.ts`). */
+export const GITHUB_REPOSITORY_PATTERN = '^[A-Za-z0-9_-]{1,39}/[A-Za-z0-9._-]{1,100}$';
 
 /** Where a person manages their fine-grained tokens at GitHub. */
 export const GITHUB_TOKENS_PAGE = 'https://github.com/settings/personal-access-tokens';
@@ -61,6 +79,14 @@ export const githubCredential: ApiKeyCredentialSpec = {
       placeholder: 'github_pat_…',
       help: 'A classic token (ghp_…) is refused: it reaches every repository of its account.',
     },
+    {
+      name: GITHUB_REPOSITORY_FIELD,
+      label: 'Repository',
+      secret: false,
+      pattern: GITHUB_REPOSITORY_PATTERN,
+      placeholder: 'owner/repository',
+      help: 'The one repository of this account, as in its address on GitHub. One account per repository.',
+    },
   ],
   createUrl: GITHUB_TOKENS_PAGE,
   guide: {
@@ -77,9 +103,12 @@ export const githubCredential: ApiKeyCredentialSpec = {
         ],
         url: GITHUB_TOKENS_PAGE,
       },
-      { do: 'Choose the organization that owns the repositories.', path: ['Resource owner'] },
       {
-        do: 'Choose Only select repositories, then the repositories the missions will use.',
+        do: 'Choose the organization or the user that owns the repository.',
+        path: ['Resource owner'],
+      },
+      {
+        do: 'Choose Only select repositories, then the one repository of this account.',
         path: ['Repository access', 'Only select repositories'],
       },
       {
@@ -87,15 +116,15 @@ export const githubCredential: ApiKeyCredentialSpec = {
         path: ['Permissions', 'Repository permissions'],
       },
       {
-        do: 'Generate the token, copy it, and paste it here. GitHub shows it once.',
+        do: 'Generate the token, copy it, and paste it here with the repository (owner/repository). GitHub shows it once.',
         path: ['Generate token'],
       },
     ],
     permissions: GITHUB_TOKEN_PERMISSIONS,
     reach: {
       what: 'Repository access',
-      grant: 'Only select repositories: the ones the missions will use',
-      why: 'Each mission narrows further, to the repositories and permissions it names; a repository the token lacks means a new token.',
+      grant: 'Only select repositories: the one repository of this account',
+      why: 'One account per repository: a leak or a mistake stays inside it, and each mission narrows further, to the permissions it names. Another repository is another account, with its own token.',
     },
     expiry: { kind: 'service-reports' },
     docsUrl:
@@ -115,9 +144,27 @@ export function githubTokenOf(ctx: AccountContext): string {
 }
 
 /**
+ * The repository the account is for, or `null` for an account made before
+ * the form asked for one (2026-11-16), which keeps `GET /user/repos`. A value
+ * outside the grammar is a host bug (the field's pattern is checked at paste).
+ */
+export function githubRepositoryOf(ctx: AccountContext): RepoTarget | null {
+  const secret = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key');
+  const raw = secret.fields[GITHUB_REPOSITORY_FIELD];
+  if (raw === undefined || raw === '') return null;
+  const named = repoFullName(raw.trim());
+  if (named === null) {
+    throw new Error(`github: the stored '${GITHUB_REPOSITORY_FIELD}' is not owner/repo`);
+  }
+  return named;
+}
+
+/**
  * Who the token acts as and when it expires : `GET /user` (any valid token
- * may read its own user) and the expiration header. A 401 or a 403 is a
- * rejected token (`UpstreamAuthError`) ; any other failure is GitHub's.
+ * may read its own user) and the expiration header ; then, when the account
+ * names its repository, that the token opens it. A 401 or a 403 is a
+ * rejected token (`UpstreamAuthError`) ; a 404 on the repository is a
+ * `CredentialRefusal` saying what to change ; any other failure is GitHub's.
  */
 export async function verifyGithubToken(ctx: AccountContext): Promise<CredentialCheck> {
   // `httpJson` reads the body ; the expiry is a header of the same answer,
@@ -133,6 +180,8 @@ export async function verifyGithubToken(ctx: AccountContext): Promise<Credential
     { url: `${GITHUB_API_BASE}/user`, headers: githubApiHeaders(githubTokenOf(ctx)) },
     isRecord,
   );
+  const repository = githubRepositoryOf(ctx);
+  if (repository !== null) await fetchGithubRepository(ctx, repository);
   return {
     account: typeof user.login === 'string' ? user.login : null,
     expiresAt: expiryOf(expiration),
@@ -148,4 +197,30 @@ export function expiryOf(header: string | null): string | null {
   const iso = header.trim().replace(' UTC', 'Z').replace(' ', 'T');
   const at = Date.parse(iso);
   return Number.isFinite(at) ? new Date(at).toISOString() : null;
+}
+
+const HTTP_NOT_FOUND = 404;
+
+/**
+ * `GET /repos/{owner}/{repo}` with the account's token : the repository as
+ * GitHub answers it. A 404 — a private repository left out of the grant, or a
+ * name that does not exist — is a `CredentialRefusal`. A public repository
+ * outside the grant answers too (every token reads public repositories) :
+ * GitHub refuses the token's first write there, and the mission says so.
+ */
+export async function fetchGithubRepository(
+  ctx: AccountContext,
+  repository: RepoTarget,
+): Promise<Record<string, unknown>> {
+  const url = `${GITHUB_API_BASE}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}`;
+  try {
+    return await httpJson(ctx, { url, headers: githubApiHeaders(githubTokenOf(ctx)) }, isRecord);
+  } catch (err) {
+    if (isUpstreamHttpError(err) && err.status === HTTP_NOT_FOUND) {
+      throw new CredentialRefusal(
+        `GitHub: this token does not open the repository ${repository.ref}. Check its name, and under Repository access choose Only select repositories, then this repository.`,
+      );
+    }
+    throw err;
+  }
 }

@@ -15,6 +15,7 @@ import { Octokit } from '@octokit/rest';
 import {
   ExecutorRefusal,
   UpstreamAuthError,
+  UpstreamProtocolError,
   declining,
   httpJson,
   isList,
@@ -29,7 +30,7 @@ import {
 
 import { GITHUB_API_BASE, HTTP_FORBIDDEN, githubApiHeaders } from './api.ts';
 import { githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from './call.ts';
-import { githubTokenOf } from './credential.ts';
+import { fetchGithubRepository, githubRepositoryOf, githubTokenOf } from './credential.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
 import { SERVICE_ID, TOOL } from './identity.ts';
@@ -117,15 +118,36 @@ function refusalOf(tool: string, denied: string): string {
 }
 
 /**
- * Resources reachable through the account : one `Resource` per
- * repository the token reaches (`GET /user/repos`, a bare list), paged by
+ * Resources of the account : its one repository (`GET /repos/{owner}/{repo}`,
+ * named on the connect form), never hidden — the owner named it. An account
+ * made before the form asked for it (2026-11-16) keeps the former listing
+ * until it is reconnected (`discoverListedRepositories`).
+ */
+export async function discoverGithubResources(ctx: AccountContext): Promise<readonly Resource[]> {
+  const named = githubRepositoryOf(ctx);
+  if (named === null) return discoverListedRepositories(ctx);
+  const repository = await fetchGithubRepository(ctx, named);
+  const resource = resourceOf(repository, false);
+  if (resource === null) {
+    throw new UpstreamProtocolError(
+      `github: repository ${named.ref} answered without an owner/repo full_name`,
+    );
+  }
+  // GitHub answers the canonical spelling (case, a renamed repository) ; the
+  // owner named the repository, so it is never hidden from new missions.
+  return [{ ...resource, hiddenByDefault: false }];
+}
+
+/**
+ * The former discovery, kept for an account without a named repository : one
+ * `Resource` per repository the token reaches (`GET /user/repos`, a bare list), paged by
  * `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`. The owner labels the
  * environment later. A public repository the token most likely cannot act on
  * is marked `hiddenByDefault` (`hiddenByDefault` below). An answer that is not a
  * list is GitHub's failure (`UpstreamProtocolError`), not an account without
  * repositories.
  */
-export async function discoverGithubResources(ctx: AccountContext): Promise<readonly Resource[]> {
+async function discoverListedRepositories(ctx: AccountContext): Promise<readonly Resource[]> {
   const token = githubTokenOf(ctx);
   const fineGrained = token.startsWith(FINE_GRAINED_PREFIX);
   const headers = githubApiHeaders(token);

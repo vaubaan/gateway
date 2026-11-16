@@ -259,7 +259,7 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
 
   it.each([
     ['/missions', 'Ship the billing page'],
-    ['/accounts', 'Acme product repositories'],
+    ['/accounts', 'Acme app'],
     ['/waiting', 'Nightly dependency audit'],
     ['/activity/record', 'github__list_pull_requests'],
     ['/activity/timeline', 'github__list_pull_requests'],

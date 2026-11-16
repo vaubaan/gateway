@@ -328,13 +328,18 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   await root.groups.service.addMember(alice.user.id, contractors.id, bob.user.email);
 
   // ── Alice's accounts ────────────────────────────────────────────────────
-  const [product, platform] = DEMO_GITHUB_TOKENS;
-  if (!product || !platform) fail('the simulated GitHub has fewer than two tokens', 0);
-  const github = await seeder.connectGithub(alice.user, product, 'Acme product repositories');
+  // One GitHub account per repository, each with its own token.
+  const [product, webToken, platform] = DEMO_GITHUB_TOKENS;
+  if (!product || !webToken || !platform) {
+    fail('the simulated GitHub has fewer than three tokens', 0);
+  }
+  const github = await seeder.connectGithub(alice.user, product, 'Acme app');
+  // A mission carries one account per service: one repository per mission.
+  await seeder.connectGithub(alice.user, webToken, 'Acme web');
   const platformGithub = await seeder.connectGithub(
     alice.user,
     platform,
-    'Acme platform repositories',
+    'Acme platform terraform',
   );
   await root.accounts.service.transfer(
     await seeder.actor(alice.user),
@@ -390,7 +395,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   });
 
   // ── Alice's missions ───────────────────────────────────────────────────────
-  const [owner = '', repo = ''] = (product.repositories[0] ?? '').split('/');
+  const [owner = '', repo = ''] = product.repository.split('/');
   const repository = { owner, repo };
   const onRepos = (refs: readonly string[]) =>
     ({ scope: 'selected', resource_refs: [...refs] }) as const;
@@ -411,7 +416,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     accounts: [
       {
         account_id: github.id,
-        resources: onRepos(product.repositories.slice(0, 2)),
+        resources: onRepos([product.repository]),
         policy: [
           line('github.read-code', 500),
           line('github.read-meta', 500),
@@ -420,6 +425,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
           line('github.comment-write', 50),
         ],
       },
+
       {
         account_id: redis.id,
         resources: onRepos([stagingCache.database_id]),
@@ -452,7 +458,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     accounts: [
       {
         account_id: github.id,
-        resources: onRepos([product.repositories[0] ?? '']),
+        resources: onRepos([product.repository]),
         // Ship at Trusting: merges, tags and releases ask first; reads run freely.
         trust_levels: { read: 'trusting', propose: 'careful', ship: 'trusting' },
       },
@@ -480,7 +486,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     accounts: [
       {
         account_id: github.id,
-        resources: onRepos([product.repositories[0] ?? '']),
+        resources: onRepos([product.repository]),
         policy: [line('github.read-code', SMALL_QUOTA), line('github.read-meta', 50)],
       },
     ],
@@ -489,14 +495,12 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   });
 
   // ── A session of work on the active mission, by two labelled agents ───────
-  const web = product.repositories[1]?.split('/')[1] ?? repo;
   const branch = 'feature/billing-page';
   const work: [string, string, Record<string, unknown>][] = [
     ['planner', 'github__list_branches', { ...repository }],
     ['planner', 'github__list_pull_requests', { ...repository, state: 'open' }],
     ['planner', 'github__list_issues', { ...repository, state: 'open' }],
     ['planner', 'github__get_file_contents', { ...repository, path: 'README.md' }],
-    ['planner', 'github__get_file_contents', { owner, repo: web, path: 'package.json' }],
     ['coder', 'github__get_file_contents', { ...repository, path: 'src/billing/page.tsx' }],
     ['coder', 'github__list_commits', { ...repository, sha: branch }],
     [
@@ -527,10 +531,11 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     const refusal = await seeder.call(active, label, tool, args);
     if (refusal) fail(`${tool} was refused on the active mission`, refusal);
   }
-  // A call outside the mission, refused and audited: the session page shows it.
-  await seeder.call(active, 'coder', 'github__list_branches', {
-    owner,
-    repo: product.repositories[2]?.split('/')[1] ?? repo,
+  // A call outside the mission's risks, refused and audited: the session page shows it.
+  await seeder.call(active, 'coder', 'github__create_release', {
+    ...repository,
+    tag_name: 'v2.0.0',
+    name: 'Billing',
   });
 
   // ── A team on that mission: Bob as a member, and a named token ────────────
@@ -582,7 +587,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     accounts: [
       {
         account_id: github.id,
-        resources: onRepos([product.repositories[0] ?? '']),
+        resources: onRepos([product.repository]),
         policy: [
           line('github.read-code', 300),
           line('github.read-meta', 300),
@@ -597,11 +602,11 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
 
   // ── Bob: a mission within the share he received ───────────────────────────
   const bobMission = await seeder.issue(bob.user, {
-    name: 'Review the docs pull requests',
+    name: 'Review the app pull requests',
     accounts: [
       {
         account_id: github.id,
-        resources: onRepos([product.repositories[3] ?? product.repositories[0] ?? '']),
+        resources: onRepos([product.repository]),
         policy: [
           line('github.read-code', 200),
           line('github.read-meta', 200),
@@ -612,11 +617,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     period: recurring,
     expires_at: null,
   });
-  const docs = product.repositories[3]?.split('/')[1] ?? repo;
-  await seeder.call(bobMission, 'reviewer', 'github__list_pull_requests', { owner, repo: docs });
+  await seeder.call(bobMission, 'reviewer', 'github__list_pull_requests', { ...repository });
   await seeder.call(bobMission, 'reviewer', 'github__get_pull_request', {
-    owner,
-    repo: docs,
+    ...repository,
     pull_number: 131,
   });
 
