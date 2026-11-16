@@ -1,13 +1,14 @@
 # `@vaubaan/plugin-github`
 
 GitHub plugin for Vaubaan Gateway, written against
-[`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One account is one
-**fine-grained personal access token**; one resource is one repository the
-token reaches (`owner/repo`); a mission picks repositories and macro-actions at
-a trust level, which write the risks it accepts. Public repositories, which
-every token reads whatever its grant, are discovered hidden from new missions
-until the account's owner shows them (handbook, "Repositories outside the
-grant").
+[`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One account is **one
+repository** (`owner/repo`, named on the connect form) and a **fine-grained
+personal access token** made for it; that repository is the account's one
+resource, and another repository is another account. A mission picks
+repositories and macro-actions at a trust level, which write the risks it
+accepts. An account made before the form named its repository keeps the
+former listing (`GET /user/repos`) until it is reconnected (handbook,
+"Repositories outside the grant").
 
 Handbook: [`docs/handbook/services/github.md`](../../docs/handbook/services/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
@@ -164,22 +165,23 @@ Activity says who made it.
 
 1. At GitHub, signed in as the account the agents will act as: Settings →
    Developer settings → Personal access tokens → Fine-grained tokens →
-   Generate new token. Resource owner: the organization; Only select
-   repositories, then the repositories the missions will use; an expiry;
+   Generate new token. Resource owner: the organization or the user that
+   owns the repository; Only select repositories, then that one repository;
+   an expiry;
    every permission the connect page lists, built from
    `GITHUB_TOKEN_PERMISSIONS` in GitHub's alphabetical order (Actions,
    Administration, Contents, Issues, Metadata read — GitHub adds it —, Pull
-   requests, Workflows). Each mission narrows further, to the repositories
-   and permissions it names; a repository or permission the token lacks
-   means a new token.
-2. Paste it on "Connect a GitHub account". A classic token (`ghp_`) is
-   refused by the field's pattern: it reaches every repository of its
-   account.
+   requests, Workflows). Each mission narrows further, to the permissions
+   it names; a permission the token lacks means a new token, another
+   repository another account.
+2. Paste it on "Connect a GitHub account" with the repository
+   (`owner/repo`). A classic token (`ghp_`) is refused by the field's
+   pattern: it reaches every repository of its account.
 3. The gateway checks it (`GET /user` names the account; the
    `github-authentication-token-expiration` header, when sent, gives the
-   expiry), lists the repositories it reaches (`GET /user/repos`, 100 per
-   page, up to 10 pages) as resources — only those, so a repository left
-   out of the token is not offered to missions —, and seals it. Every API tool and the
+   expiry; `GET /repos/{owner}/{repo}` proves the token opens the
+   repository, a 404 is refused with what to change), keeps that one
+   repository as the resource, in GitHub's spelling, and seals it. Every API tool and the
    git remote send it as the bearer.
 
 GitHub enforces what the token may do; a call it lacks a permission for

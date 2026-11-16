@@ -3,16 +3,17 @@ title: GitHub plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-11-14
+last_reviewed: 2026-11-16
 ---
 
 # GitHub plugin — handbook
 
 `@vaubaan/plugin-github`: repositories, pull requests, issues, releases, workflow runs and logs,
 and the instance's git remote ([git-remote](../git-remote.md),
-[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). One account is a
-fine-grained personal access token
-([token first](../../decisions/one-place-to-authorize-services-token-first.md)). No risk is
+[gateway-as-git-remote](../../decisions/gateway-as-git-remote.md)). One account is one
+repository and a fine-grained personal access token made for it
+([token first](../../decisions/one-place-to-authorize-services-token-first.md), amendment
+2026-11-16). No risk is
 env-scoped. Rules common to every plugin: [services README](README.md).
 
 ## Start here
@@ -76,13 +77,19 @@ env-scoped. Rules common to every plugin: [services README](README.md).
 - **Fine-grained token** only: a classic `ghp_` token is refused by the field pattern (it reaches
   every repo with coarse scopes). Permissions to grant: `src/permissions.ts`; they are the hard
   ceiling at GitHub, which matters where a private repo on a free plan has no branch protection.
-- The guide asks for **Only select repositories**, the ones the missions will use (ADR
-  one-place-to-authorize-services-token-first, amendment 2026-11-13). Discovery
-  (`discoverGithubResources`, `GET /user/repos`) lists the repositories the token reaches: a
-  private repository left out of the grant never appears; adding it means editing the token's
-  repository access at GitHub (or a new token), then a discovery refresh or a reconnect.
+- **One repository per account** (ADR one-place-to-authorize-services-token-first, amendment
+  2026-11-16): the connect form asks the token and the repository (`repository` field,
+  `owner/repo`); the guide asks for **Only select repositories**, that one. The check at paste
+  reads `GET /repos/{owner}/{repo}` (404 → `CredentialRefusal`); discovery
+  (`discoverGithubResources`) answers that one repository, in GitHub's spelling (case, a rename),
+  never hidden. Another repository is another account with its own token.
+- **Accounts made before 2026-11-16** hold no `repository` field: `githubRepositoryOf` answers
+  `null` and discovery keeps the former listing (`GET /user/repos`, below) until the owner
+  reconnects with the repository. No migration.
 
 ### Repositories outside the grant
+
+Why the form names the repository. Applies as written only to accounts without one.
 
 - **Why they appear.** A fine-grained token "always includes read-only access to all public
   repositories" (GitHub, Managing your personal access tokens), and `GET /user/repos` lists every

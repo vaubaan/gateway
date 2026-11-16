@@ -9,9 +9,9 @@
  * is never forwarded to the real service.
  *
  * Simulated:
- *   - GitHub — two fine-grained tokens (one per organisation): the check at
- *     paste (`GET /user`), the repositories each reaches (`GET /user/repos`)
- *     and the REST endpoints behind the common tools (branches, commits,
+ *   - GitHub — three fine-grained tokens, one per repository (one account is
+ *     one repository): the check at paste (`GET /user`), the repository each
+ *     account names (`GET /repos/{owner}/{repo}`) and the REST endpoints behind the common tools (branches, commits,
  *     files, pull requests, issues, …);
  *   - Stripe — `GET /v1/account` per key (test and live as two resources),
  *     the list endpoints and the writes of the plugin's tools;
@@ -34,7 +34,11 @@ import { randomBytes } from 'node:crypto';
 
 import { AXONAUT_API_BASE } from '@vaubaan/plugin-axonaut';
 import { CLOUDFLARE_API_BASE } from '@vaubaan/plugin-cloudflare-dns';
-import { GITHUB_TOKEN_FIELD, githubCredential } from '@vaubaan/plugin-github';
+import {
+  GITHUB_REPOSITORY_FIELD,
+  GITHUB_TOKEN_FIELD,
+  githubCredential,
+} from '@vaubaan/plugin-github';
 import { RESEND_API_BASE } from '@vaubaan/plugin-resend';
 import { mockFetch, type MockRoute, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
 import { STRIPE_API_BASE } from '@vaubaan/plugin-stripe';
@@ -64,27 +68,33 @@ export interface DemoGithubToken {
   readonly token: string;
   /** The account the token was made for, as `GET /user` names it. */
   readonly account: string;
-  readonly repositories: readonly string[];
+  /** The one repository of the account, `owner/repo`. */
+  readonly repository: string;
 }
 
-/** The two organisations of the demo GitHub, one fine-grained token each. */
+/** The demo GitHub's accounts: one fine-grained token per repository. */
 export const DEMO_GITHUB_TOKENS: readonly DemoGithubToken[] = [
   {
     token: `github_pat_11DEMO0000000000000_${'a'.repeat(40)}`,
     account: 'acme-org',
-    repositories: ['acme-org/app', 'acme-org/web', 'acme-org/infra', 'acme-org/docs'],
+    repository: 'acme-org/app',
+  },
+  {
+    token: `github_pat_11DEMO0000000000000_${'c'.repeat(40)}`,
+    account: 'acme-org',
+    repository: 'acme-org/web',
   },
   {
     token: `github_pat_11DEMO0000000000000_${'b'.repeat(40)}`,
     account: 'acme-platform',
-    repositories: ['acme-platform/terraform', 'acme-platform/runbooks'],
+    repository: 'acme-platform/terraform',
   },
 ];
 
 /** The form values that connect GitHub with one of the demo's tokens. */
 export function githubTokenFields(token: DemoGithubToken): Record<string, string> {
   if (githubCredential.kind !== 'api-key') throw new Error('github connects with a token');
-  return { [GITHUB_TOKEN_FIELD]: token.token };
+  return { [GITHUB_TOKEN_FIELD]: token.token, [GITHUB_REPOSITORY_FIELD]: token.repository };
 }
 
 const BRANCHES = [
@@ -154,7 +164,7 @@ function githubRoutes(): MockRoute[] {
   };
 
   return [
-    // ── The connect flow: the check at paste, then the repositories the token reaches ──
+    // ── The connect flow: the check at paste, then the account's repository ──
     {
       method: 'GET',
       url: `${GITHUB_API}/user`,
@@ -163,14 +173,13 @@ function githubRoutes(): MockRoute[] {
     },
     {
       method: 'GET',
-      url: (url) => url.startsWith(`${GITHUB_API}/user/repos?`),
-      respond: (call) =>
-        (tokenOf(call)?.repositories ?? []).map((fullName) => ({
-          full_name: fullName,
-          default_branch: 'main',
-          private: true,
-          archived: false,
-        })),
+      url: new RegExp(`${repo}$`),
+      respond: (call) => ({
+        full_name: repoOf(call.url),
+        default_branch: 'main',
+        private: true,
+        archived: false,
+      }),
     },
     // ── Reads ───────────────────────────────────────────────────────────────
     { method: 'GET', url: new RegExp(`${repo}/branches(\\?|$)`), body: BRANCHES },

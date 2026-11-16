@@ -42,17 +42,8 @@ describe('a GitHub account connected with a token', () => {
       },
       {
         method: 'GET',
-        url: 'https://api.github.com/user/repos?per_page=100&page=1',
-        body: [
-          { full_name: 'acme/app', default_branch: 'main', private: true },
-          // Public, outside the grant: every token reads it, so GitHub lists it.
-          {
-            full_name: 'octo/docs',
-            default_branch: 'main',
-            private: false,
-            permissions: { admin: false, push: false, pull: true },
-          },
-        ],
+        url: 'https://api.github.com/repos/acme/app',
+        body: { full_name: 'acme/app', default_branch: 'main', private: true },
       },
       {
         method: 'GET',
@@ -161,10 +152,21 @@ describe('a GitHub account connected with a token', () => {
     );
     expect(github.calls).toHaveLength(0);
 
+    // The account's one repository is asked for, before GitHub is asked too.
+    const noRepository = await root.accounts.handlers.connect(
+      post('/accounts/connect/github', alice.cookie, { 'field.token': PAT }),
+      'github',
+    );
+    expect(new URL(noRepository.headers.get('location') ?? '', PUBLIC_URL).pathname).toBe(
+      '/accounts/new/github',
+    );
+    expect(github.calls).toHaveLength(0);
+
     const connected = await root.accounts.handlers.connect(
       post('/accounts/connect/github', alice.cookie, {
         name: 'GitHub bot',
         'field.token': PAT,
+        'field.repository': 'acme/app',
       }),
       'github',
     );
@@ -183,17 +185,14 @@ describe('a GitHub account connected with a token', () => {
       credentialExpiresAt: '2027-01-15T10:30:00.000Z',
     });
     expect(account?.metadata).toMatchObject({ credential_kind: 'api-key', account: 'acme-bot' });
-    // The public repository the token only reads is listed hidden from new missions.
+    // One account, one repository: whatever else the token reads is not listed.
     expect(
       (await root.store.accounts.listResources(account!.id)).map((r) => [
         r.ref,
         r.hidden,
         r.hiddenEdited,
       ]),
-    ).toEqual([
-      ['acme/app', false, false],
-      ['octo/docs', true, false],
-    ]);
+    ).toEqual([['acme/app', false, false]]);
     expect(databaseDump()).not.toContain(PAT);
     for (const call of github.calls) expect(call.headers.authorization).toBe(`Bearer ${PAT}`);
 

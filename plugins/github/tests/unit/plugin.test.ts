@@ -243,7 +243,10 @@ describe('github catalog — macro-actions at a trust level', () => {
 describe('github credential spec — a fine-grained token', () => {
   test('the one way of connecting is a pasted fine-grained token, with its guide', () => {
     expect(githubCredential.kind).toBe('api-key');
-    expect(githubCredential.fields.map((f) => [f.name, f.secret])).toEqual([['token', true]]);
+    expect(githubCredential.fields.map((f) => [f.name, f.secret])).toEqual([
+      ['token', true],
+      ['repository', false],
+    ]);
     expect(githubCredential.createUrl).toBe('https://github.com/settings/personal-access-tokens');
     // In the order of GitHub's token page, alphabetical, so the guide reads down it.
     expect(githubCredential.guide?.permissions.map((p) => p.name)).toEqual([

@@ -38,11 +38,11 @@ export const githubPlugin = definePlugin({
   icon: GITHUB_ICON,
   iconColor: GITHUB_ICON_COLOR,
   resourceNoun: { one: 'repository', other: 'repositories' },
-  version: '5.1.0',
+  version: '5.2.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows a fine-grained token reaches.',
   summary:
-    'One account is one fine-grained personal access token, made at GitHub for the organisation or the user that owns the repositories; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.',
+    "One account is one repository and a fine-grained personal access token made at GitHub for it alone; the repository is the account's one resource. Another repository is another account. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
   manualRevocation:
     'Delete the token at GitHub, signed in as the account that created it: Settings, Developer settings, Personal access tokens, Fine-grained tokens.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/github.md',
@@ -64,7 +64,12 @@ export const githubPlugin = definePlugin({
 export default githubPlugin;
 
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
-export { expiryOf, GITHUB_TOKEN_FIELD, verifyGithubToken } from './credential.ts';
+export {
+  expiryOf,
+  GITHUB_REPOSITORY_FIELD,
+  GITHUB_TOKEN_FIELD,
+  verifyGithubToken,
+} from './credential.ts';
 export { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 export { EXCLUDED_TOOLS, SERVICE_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { EXAMPLE_REPOSITORY, githubExamples } from './examples.ts';
