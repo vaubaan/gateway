@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/restore/
   - apps/gateway/src/server/backup/
   - apps/gateway/src/server/crypto/backup-file.ts
-last_reviewed: 2026-11-15
+last_reviewed: 2026-11-16
 ---
 
 # Store — handbook
@@ -51,6 +51,11 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   reaches it, and `VACUUM INTO` carries it in every backup. It holds no secret (no sealed column),
   so the restore check has nothing to open in it. One writer, `recordSync`
   ([missions](missions.md), Invariants).
+- One `host` account not revoked per person and service: the partial unique index
+  `accounts_one_host_per_person` (0040) on `json_extract(metadata_json, '$.credential_kind')`;
+  `AccountsRepo.create` turns its violation into `HostAccountTakenError`. 0040 revoked the
+  duplicates of earlier builds first (audited by the actor `migration`;
+  [services/vaubaan](services/vaubaan.md)).
 - Audit tables are immutable by trigger; `purgeOlderThan` is the only path that opens the delete
   window. The audit writer throws: audit is not best-effort.
 

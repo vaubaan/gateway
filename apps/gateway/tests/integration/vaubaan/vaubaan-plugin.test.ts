@@ -109,6 +109,23 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     });
   });
 
+  it('connects at once store one Vaubaan account: the store refuses the others, each gets it back', async () => {
+    const actor = await rig.actor(rig.seeded.bob);
+    const started = await Promise.all(
+      [1, 2, 3].map(() => rig.root.accounts.service.start(actor, 'vaubaan')),
+    );
+    const ids = started.map((s) => (s.kind === 'connected' ? s.account.id : s.kind));
+    expect(new Set(ids).size).toBe(1);
+    const held = (await rig.root.store.accounts.list({ service: 'vaubaan' })).filter(
+      (a) => a.owner.id === rig.seeded.bob.id && a.status !== 'revoked',
+    );
+    expect(held.map((a) => a.id)).toEqual([ids[0]]);
+    const created = (await rig.adminEntries('account-created')).filter(
+      (e) => e.object.id === ids[0],
+    );
+    expect(created).toHaveLength(1);
+  });
+
   it('nobody can be given access to a Vaubaan account, nor can it be transferred', async () => {
     const actor = await rig.actor(rig.seeded.ada);
     const started = await rig.root.accounts.service.start(actor, 'vaubaan');

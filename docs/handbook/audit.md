@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/app/(app)/missions/[id]/session/
   - apps/gateway/tests/integration/audit/admin-mutations.test.ts
   - packages/gateway-core/src/audit.ts
-last_reviewed: 2026-11-15
+last_reviewed: 2026-11-16
 ---
 
 # Audit — handbook
@@ -54,6 +54,7 @@ How the record is read (Activity's Overview, Record and Timeline, the activity o
 - **A waiting request on the Timeline** is linked (`/waiting/<id>`) for the mission's creator only; anyone else reads whose answer it waits for (`open_requests[].creator`).
 - **A resource edit and a discovery name the account as object**, so the account filter and owner visibility need no join; a request decision names the request, resolved to its mission at search.
 - **Joins and leaves of future resources name the mission as object** (`mission-resource-joined`, `mission-resource-left`, `after.account_id`), so the mission's creator and members read them; their actor is the human whose act caused them, or `discovery` (`DISCOVERY_ACTOR_ID`, labelled "The gateway’s discovery") for the automatic refresh (hourly or on open; its own `resources-discovered` entries only when it changed something) and the discovery after a creating call — a pseudo-actor like `schedule` and `bootstrap`, never a user row.
+- **A migration writes entries too**: actor `migration` (`MIGRATION_ACTOR_ID`, labelled "A gateway upgrade"), a pseudo-actor like `discovery`, written by SQL at boot. Migration 0040 writes one `account-revoked` per duplicate Vaubaan account it revokes (`after.cause` `duplicate-host-account`, `kept_account_id`, `mission_ids`; [services/vaubaan](services/vaubaan.md)). Its id is a UUIDv7 built in SQL.
 - **`countersAgreeWithAudit` on a one-off mission older than the retention** reports a mismatch that is the retention, not a fault.
 - **The retention timer is single-process**: one sweep awaited at boot before serving, then hourly; a hosted deployment runs `sweep()` from one job. The two purges fail apart and are retried next interval.
 

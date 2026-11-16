@@ -244,6 +244,7 @@ export {
 } from './migrate.ts';
 export type { AppliedMigration, Migration, MigrationResult } from './migrate.ts';
 export {
+  HostAccountTakenError,
   InvariantError,
   MigrationError,
   NotFoundError,

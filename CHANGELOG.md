@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **One Vaubaan account per person, held by the store.** Two connects at once could store two
+  Vaubaan accounts for one person; the store now refuses a second one whatever path writes it,
+  and connecting again still hands back the account the person holds. **Operators: this release
+  carries migration 0040 (schema 40)**, applied at boot. On an instance that already holds such
+  duplicates, it keeps each person's oldest active Vaubaan account and disconnects the others
+  before creating the index. Their missions are not moved: the disconnected account's part of
+  each is lost, as after any disconnect, and a platform management mission that held only that
+  account stops serving until its creator edits it onto the kept account or issues a new one.
+  Each disconnect is in Activity, by "A gateway upgrade", naming the kept account and the
+  missions concerned. Instances without duplicates see no change.
+
 ## [2.0.0-alpha.23] - 2026-11-16
 
 ### Changed

@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/execution/upstream-stage.ts
   - apps/gateway/src/server/execution/retired-door.ts
   - apps/gateway/src/app/mcp/manage/route.ts
-last_reviewed: 2026-11-14
+last_reviewed: 2026-11-16
 ---
 
 # Vaubaan plugin — handbook
@@ -71,6 +71,13 @@ the door still names the right tool. One answer changed: `issued_via` names the 
   reconnect (`ownerActRefusal` → `account-personal`); it is not marked `unowned` when its person
   is deactivated (the derived rule stops its missions) and is not listed among the ownerless
   accounts. Connecting again hands back the person's active account: one per person.
+- **One Vaubaan account per person is held by the store**, not by the connect alone: the partial
+  unique index `accounts_one_host_per_person` (migration 0040) on `(service, owner_user_id)` of
+  the accounts not revoked whose `metadata.credential_kind` is `host`. Whatever path writes one,
+  a second is refused (`HostAccountTakenError`); `connectHost` reads that refusal as "already
+  connected" and hands back the account that won, so two connects at once answer the same
+  account and only one `account-created` entry is written. The scope is per person, never one
+  per gateway; a revoked account frees the slot.
 - The plugin is enabled and disabled like any plugin (`plugins.enabled`); a pin declaring a `host`
   account is refused at boot, and the bundle script skips the plugin (`vaubaan.bundleable: false`).
 - The host's `vaubaan__request_permission` is answered by exact name before the registry;
@@ -135,6 +142,19 @@ refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL
   slice in `classify.ts` (a new verb leaf in `data-model.ts`), a risk or an entry in
   `risk-catalog.yaml` (bump `catalog_version`), then `npm run vaubaan:schemas`. A new need of the
   mission service changes `ports.ts` first, then `compose/vaubaan.ts`.
+
+## Migration 0040: duplicates of an earlier build
+
+An instance that stored two Vaubaan accounts for one person (two connects at once, before the
+index) is resolved at the upgrade, before the index is created: per person, the oldest `active`
+account is kept (else the oldest), and every other one is revoked as a disconnect revokes it.
+Missions are **not moved** to the kept account: the revoked account's part of each is lost, as
+after any disconnect (its card says so, calls through it are refused `account-revoked`), and a
+platform management mission that held only that account serves nothing until its creator edits it
+onto the kept account or issues a new one. Each revocation is one `account-revoked` audit entry by
+the actor `migration` ("A gateway upgrade", `MIGRATION_ACTOR_ID`), whose `after` names
+`kept_account_id` and the `mission_ids` that held the revoked account; the owner reads it in the
+account's activity. To find them: Activity, actor "A gateway upgrade".
 
 ## Migration from the management door
 

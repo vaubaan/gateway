@@ -362,6 +362,15 @@ export const DISCOVERY_ACTOR_ID = 'discovery';
 /** How the gateway's own discovery is named wherever an actor is shown. */
 export const DISCOVERY_ACTOR_LABEL = 'The gateway’s discovery';
 
+/**
+ * The `user_id` of entries a store migration wrote at boot: nobody signed in did it
+ * (migration 0040 revoking a person's second Vaubaan account).
+ */
+export const MIGRATION_ACTOR_ID = 'migration';
+
+/** How a migration is named wherever an actor is shown. */
+export const MIGRATION_ACTOR_LABEL = 'A gateway upgrade';
+
 export interface AdminAuditEntry {
   readonly kind: 'admin';
   readonly ts: string;

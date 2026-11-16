@@ -145,7 +145,7 @@ describe('a backup written before the rename of connection to account', () => {
 
     const store = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
     try {
-      expect(store.schemaVersion).toBe(39);
+      expect(store.schemaVersion).toBe(40);
       expect(await store.accounts.getCredential(ACCOUNT_ID)).toBe(CREDENTIAL);
       expect((await store.accounts.getById(ACCOUNT_ID))?.displayName).toBe('acme');
       // The mission still reaches its account and its resource.
