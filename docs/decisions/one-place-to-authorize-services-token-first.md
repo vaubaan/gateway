@@ -190,3 +190,40 @@ fits.
 #### Keep the wide key first
 
 The default a person accepts without reading becomes the key every mission depends on.
+
+## Amendment 2026-11-16: one GitHub repository per account
+
+### Context
+
+A fine-grained GitHub token always reads every public repository, and GitHub gives it no way to
+list the repositories it was granted: discovery (`GET /user/repos`) listed every repository of the
+user, a dozen where the token was made for one. Hiding the public ones by default (2026-11-14) left
+a page full of repositories the account cannot act on.
+
+### Decision
+
+The owner (Renaud Pelissier) makes **one GitHub account one repository**: the connect form asks
+the token and the repository (`owner/repo`), the check at paste opens it, and that repository is
+the account's one resource. Another repository is another account, with its own token. Accounts
+made before keep the former listing until reconnected; no migration.
+
+### Consequences
+
+- A mission takes one account per service, so it reaches **one GitHub repository**: an agent
+  working on two repositories needs two missions. Accepted knowingly.
+- A leaked or misused token reaches one repository.
+- A call naming a repository of no account of the mission is rejected by the plugin's reader
+  (audited, no `resource-not-in-mission` refusal, since the ref is no resource of the account).
+- The git remote keeps one URL per repository (`/git/github/<owner>/<repo>.git`).
+
+### Rejected alternatives
+
+#### A list of repositories on the form
+
+Fixes the listing and keeps several repositories per mission, but keeps one token over several
+repositories; the owner prefers one key per repository.
+
+#### Keep `/user/repos` and hide public repositories
+
+The page still lists what the token cannot act on, and a public repository in the grant must be
+shown by hand.
