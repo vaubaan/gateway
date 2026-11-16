@@ -22,6 +22,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   never adds a Vaubaan account. A platform mission issued before gains these risks only when its
   creator edits it.
 
+### Changed
+
+- **A mission's keys come first, with every act on a key.** The section "People and keys" is
+  now **Keys** and sits before the permissions. Its creator's one entry is **Add keys**: one
+  dialog to add a teammate (a person who signed in; they generate their own key) or to create
+  a machine key (named, shown once). Generate, replace and revoke your key are on your row; the
+  "···" menu keeps activity, duplicate, leave and stop. The post-issuance page's "Add teammate"
+  and "New machine key" open that dialog on the mission page; old `#people` links still land.
+- **The "···" menu is visible.** Its button is drawn like its neighbours (bordered, same size),
+  on every page, in both themes.
+
 ### Fixed
 
 - **One Vaubaan account per person, held by the store.** Two connects at once could store two

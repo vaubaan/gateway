@@ -160,6 +160,9 @@ guide and the design system are extended, then the screen is built. Rules a comp
 - **Toast** — confirms what the person just did; a failure stays; never the only copy of something
   that matters.
 - **Button** — danger is red words, never a red fill; a control that navigates is a link.
+- **More menu** — its "···" trigger is drawn as a secondary button of the same size as its
+  neighbours, never a faint glyph; it holds acts on the page's object, not the acts of a
+  section that has its own place (a mission's keys are in Keys).
 - **Card** — once per page at most. **Tabs** — never hide the one thing a newcomer needs.
 
 ## 6. Accessibility

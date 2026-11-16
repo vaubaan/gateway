@@ -197,7 +197,9 @@ export const ACTIONS = {
   replaceKey: 'Replace key',
   revokeKey: 'Revoke',
   newMachineKey: 'New machine key',
-  addPeople: 'Add people',
+  /** The one entry of a mission's keys: a teammate, or a machine key. */
+  addKeys: 'Add keys',
+  addTeammate: 'Add teammate',
   setupKit: 'Setup kit',
   editPermissions: 'Edit permissions',
   approve: 'Approve',
@@ -222,7 +224,7 @@ export const SECTIONS = {
   whoHasAccess: 'Who has access',
   sharedWithYou: 'Shared with you',
   yours: 'Yours',
-  peopleAndKeys: 'People and keys',
+  keys: 'Keys',
   permissionsAndUsage: 'Permissions and usage',
   notifications: 'Notifications',
   administrators: 'Administrators',
@@ -301,6 +303,9 @@ export const KEY_WORDS = {
   revoked: 'keys revoked',
   /** A mission that ended before the reader made a key. */
   noneMade: 'no key was made',
+  /** The two choices of "Add keys". */
+  forTeammate: 'A teammate',
+  forMachine: 'A machine key',
 } as const;
 
 /** "Carol's key", "your key", "the machine key nightly". */

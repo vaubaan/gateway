@@ -17,7 +17,9 @@ import {
   KeyHolder,
   KeyMark,
   KeyValue,
+  MenuItem,
   Mono,
+  MoreMenu,
   PageHeader,
   SectionHeading,
   ServiceMark,
@@ -29,7 +31,7 @@ import {
   SummaryLine,
   Tag,
 } from '@/components/ui';
-import { ACTIONS, DOC_PAGES, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
+import { ACTIONS, DOC_PAGES, MISSION_ACTIONS, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
 
 import styles from './design.module.css';
 import { type GalleryIcons, GallerySection, Line, Pile, Specimen } from './specimen';
@@ -217,9 +219,9 @@ export function PageFrameSections({ icons }: { icons: GalleryIcons }) {
               ]}
               primary={<Button variant="primary">{ACTIONS.raise}</Button>}
               more={
-                <Button variant="ghost" aria-label="More actions">
-                  ···
-                </Button>
+                <MoreMenu label="More actions">
+                  <MenuItem>{MISSION_ACTIONS.duplicate}</MenuItem>
+                </MoreMenu>
               }
             />
           )}

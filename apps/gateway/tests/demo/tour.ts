@@ -148,7 +148,7 @@ Things to try
  11. Work on a mission as a team. Alice added Bob as a teammate on
      "${seeded.team.mission.name}" and created the machine key "${seeded.team.named.name}".
      Sign in as Bob: Missions -> "Shared with you" -> that mission. He reads it and
-     cannot change it. Behind "···", "Replace my key": the dialog says his current
+     cannot change it. In "Keys", "Replace key" on his row: the dialog says his current
      key stops at once; his new key is shown once, to him, with the kit; Alice
      never sees it. Copy the export line of the dialog, then ask the gateway
      whose key it is:
@@ -156,7 +156,7 @@ Things to try
      The answer reads "token": { "kind": "member", "holder": "${seeded.team.member.email}" }.
      The machine key answers with its name:
      ${whoseTokenCommand(origin, 'VAUBAAN_CI_TOKEN')}
-     Sign in as Alice: "People and keys" lists Bob and "${seeded.team.named.name}" with what
+     Sign in as Alice: "Keys" lists Bob and "${seeded.team.named.name}" with what
      each key did today; "Everything this mission did" has "Who called", and each
      call of the timeline names its holder. Remove Bob (you type his address):
      his key is refused at once (401, reason "holder-removed"), the others keep

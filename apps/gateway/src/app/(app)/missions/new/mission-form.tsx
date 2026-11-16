@@ -847,8 +847,8 @@ function CreatedView({
             title="Add a teammate"
             description="They sign in and generate their own key; every call they make is in their name. Same permissions, same limits."
             end={
-              <ButtonLink href={`${missionPath}#people`} size="sm">
-                {ACTIONS.addPeople}
+              <ButtonLink href={`${missionPath}?add=teammate#keys`} size="sm">
+                {ACTIONS.addTeammate}
               </ButtonLink>
             }
           />
@@ -856,7 +856,7 @@ function CreatedView({
             title="Add a machine key"
             description="For CI or a shared machine that has no account. Named by you, revoked on its own."
             end={
-              <ButtonLink href={`${missionPath}#people`} size="sm">
+              <ButtonLink href={`${missionPath}?add=machine#keys`} size="sm">
                 {ACTIONS.newMachineKey}
               </ButtonLink>
             }

@@ -250,11 +250,12 @@ test('create a mission card by card on one page, then replace its key and stop i
     'href',
     new RegExp(`/missions/${missionId}/edit\\?custom=.+&action=read$`),
   );
-  // No list of every permission, no stop zone: stop, duplicate and replace key are in "···".
+  // No list of every permission, no stop zone: stop and duplicate are in "···", the acts on
+  // a key in "Keys".
   await expect(page.getByTestId('mission-permissions')).toHaveCount(0);
   await expect(page.getByTestId('mission-stop')).toHaveCount(0);
   await snap(page, 'mission-detail');
-  // The key is a detail of "People and keys".
+  // The key is a detail of "Keys".
   const prefix = token.split('_')[2] ?? '';
   await expect(page.getByText(`vbn_live_${prefix}_…`)).toBeHidden();
   await page.getByTestId('team-section').getByRole('button', { name: 'Show details' }).click();
@@ -268,7 +269,7 @@ test('create a mission card by card on one page, then replace its key and stop i
   await kit.getByRole('button', { name: 'Close' }).click();
 
   // Replace key: it asks first and states the consequence; cancelling changes nothing.
-  await missionMenu(page, 'Replace my key');
+  await page.getByTestId('team-section').getByRole('button', { name: 'Replace my key' }).click();
   const replace = page.getByTestId('replace-key-dialog').filter({ hasText: 'Replace your key?' });
   await expect(replace).toContainText('Your current key stops working at once');
   await expect(replace).toContainText('refused from its next call');
@@ -276,7 +277,7 @@ test('create a mission card by card on one page, then replace its key and stop i
   await replace.getByRole('button', { name: 'Cancel' }).click();
   expect(await checkToken(request, token)).toMatchObject({ outcome: 'verified' });
   // Confirmed: a new key, shown once; the old one is refused.
-  await missionMenu(page, 'Replace my key');
+  await page.getByTestId('team-section').getByRole('button', { name: 'Replace my key' }).click();
   await replace.getByRole('button', { name: 'Replace key' }).click();
   await expect(page.getByTestId('reveal-dialog')).toContainText('Your new key for');
   const rotated = await revealedKey(page);
@@ -298,11 +299,11 @@ test('create a mission card by card on one page, then replace its key and stop i
   await expect(page.getByTestId('mission-state')).toHaveText('stopped');
   // A stopped mission offers nothing that would be refused.
   await page.getByTestId('mission-menu').click();
-  await expect(page.getByRole('menuitem', { name: 'Replace my key' })).toHaveCount(0);
   await expect(page.getByRole('menuitem', { name: 'Stop the mission' })).toHaveCount(0);
   await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Add people' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Replace my key' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add keys' })).toHaveCount(0);
   await expect(page.getByTestId('edit-mission')).toHaveCount(0);
   expect(await checkToken(request, rotated)).toMatchObject({
     outcome: 'retired',

@@ -663,11 +663,16 @@ the (i) itself never leaves the page.
   plane), and hovering the line shows the same content read-only. The trust levels are sent only to
   redraw the screen. **Creating asks nothing**: what is sent is the explicit list (every permission
   by account, with limits and gate), checked again on arrival — a refusal shows beside the cards —;
-  then the key, shown once, with the setup kit. The mission page shows the explicit list read-only. **On a mission**: the creation screen, read-only, with one more column: today's use per
-  macro-action (the permission closest to its limit), each permission's use on hover; its state, a
-  waiting request (the way to answer for the creator; whose answer it waits for, for a teammate),
-  its people and keys with what each did this period, its activity; stop, duplicate and replace key
-  in its menu. **Edit mission** opens the creation screen prefilled (period fixed); its bar says what
+  then the key, shown once, with the setup kit. The mission page shows the explicit list read-only. **On a mission**, in this order: its state and a
+  waiting request (the way to answer for the creator; whose answer it waits for, for a teammate);
+  its **Keys** — who holds one, what each key did this period — before the permissions, since
+  it is short and they are long; then the creation screen, read-only, with one more column:
+  today's use per macro-action (the permission closest to its limit), each permission's use on
+  hover; then its activity and History. Every act on a key lives in Keys: **Add keys**, for the
+  creator, one dialog choosing a teammate (a person who signed in; they generate their own key)
+  or a machine key (named, shown once); generate, replace and revoke on the rows. The "···" menu
+  keeps the acts on the mission itself (activity, duplicate, leave, stop), drawn as a button
+  like its neighbours. **Edit mission** opens the creation screen prefilled (period fixed); its bar says what
   changed, and saving applies at once, back on the mission page that says it was saved.
   **History**: the versions of its configuration, newest first — number, author (a person, a
   mission through its Vaubaan account, or the gateway for a resource the mission created or one

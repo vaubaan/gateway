@@ -3,13 +3,15 @@
  * needs it:
  *
  *   1. what it is and the state it is in (the header: "Edit mission", the setup kit,
- *      and in "···" stop, duplicate, replace my key);
+ *      and in "···" the acts on the mission itself: activity, duplicate, leave, stop);
  *   2. what waits for an answer on this mission, with a link to answer — the
  *      one filled box of the page — or, for a teammate, whose answer it waits for;
- *   3. the creation screen frozen: its name, period and end, then its cards, each
+ *   3. keys: who holds one, with what each key did in the current period, and
+ *      every act on a key ("Add keys", generate, replace, revoke) — before the
+ *      permissions, because it is short and they are long;
+ *   4. the creation screen frozen: its name, period and end, then its cards, each
  *      with one more column, the use of the period per macro-action (the permission
  *      closest to its limit, each permission on hover);
- *   4. people and keys, with what each key did in the current period;
  *   5. activity: a line of counts, the last calls one click away, the whole
  *      record on the mission's activity page;
  *   6. history: the versions of its configuration, newest first, each restorable by
@@ -94,7 +96,13 @@ import { createdBy, missionMark } from '../mission-view';
 import { ActivityTable } from './activity-table';
 import { CheckNow } from './check-now';
 import { HistoryList } from './history-list';
-import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
+import {
+  ActButton,
+  GenerateKeyButton,
+  MissionActsProvider,
+  MissionMenu,
+  type KeyChoice,
+} from './mission-actions';
 import { TeamSection, type HolderCalls } from './team-section';
 
 export const dynamic = 'force-dynamic';
@@ -104,7 +112,8 @@ const LAST_EVENTS = 8;
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edited?: string | string[] }>;
+  /** `add`: "Add keys" opens with the page on that choice (`teammate`, `machine`). */
+  searchParams: Promise<{ edited?: string | string[]; add?: string | string[] }>;
 }
 
 /** What waits on this mission, as the banner shows it. */
@@ -132,6 +141,11 @@ export default async function MissionPage({ params, searchParams }: Props) {
   // Back from "Edit mission": the edit is saved (ADR mission-editable-after-issuance).
   const justEdited = isCreator && query.edited === '1';
   const now = new Date();
+  // From the post-issuance page: "Add teammate" and "New machine key" land on the open dialog.
+  const addOnOpen: KeyChoice | null =
+    isCreator && state.kind !== 'revoked' && (query.add === 'teammate' || query.add === 'machine')
+      ? query.add
+      : null;
   const [team, activity, inbox, context, history] = await Promise.all([
     root.missions.team.team(user, id),
     root.audit.sessions.get(user, id),
@@ -348,7 +362,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
   }
 
   return (
-    <MissionActsProvider team={team} kit={detail.kit}>
+    <MissionActsProvider team={team} kit={detail.kit} addOnOpen={addOnOpen}>
       <PageHeader
         doc={DOC_PAGES.mission}
         crumbs={[{ label: 'Missions', href: ROUTES.missions }, { label: mission.name }]}
@@ -488,7 +502,20 @@ export default async function MissionPage({ params, searchParams }: Props) {
         </div>
       )}
 
-      <div className={styles.block}>
+      <TeamSection
+        team={team}
+        calls={calls}
+        period={period}
+        me={user.id}
+        now={now.toISOString()}
+        addKeys={
+          isCreator && state.kind !== 'revoked' ? (
+            <ActButton act="add-keys">{ACTIONS.addKeys}</ActButton>
+          ) : null
+        }
+      />
+
+      <div className={[styles.afterSection, styles.block].join(' ')}>
         <KeyValue
           items={[
             { term: 'Name', value: mission.name },
@@ -520,19 +547,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
           );
         })}
       </div>
-
-      <TeamSection
-        team={team}
-        calls={calls}
-        period={period}
-        me={user.id}
-        now={now.toISOString()}
-        addPeople={
-          isCreator && state.kind !== 'revoked' ? (
-            <ActButton act="add-people">{ACTIONS.addPeople}</ActButton>
-          ) : null
-        }
-      />
 
       {gitViews.length > 0 && (
         <Section

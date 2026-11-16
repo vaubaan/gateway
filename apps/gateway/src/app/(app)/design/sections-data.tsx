@@ -294,13 +294,9 @@ export function ListSections({ icons }: { icons: GalleryIcons }) {
         >
           {(theme) => (
             <DetailScope id={`design:people:${theme}`}>
-              <SectionHeading
-                title="People and keys"
-                count={PEOPLE.length}
-                note={<DetailToggle />}
-              />
+              <SectionHeading title="Keys" count={PEOPLE.length} note={<DetailToggle />} />
               <DataTable
-                caption="People and keys of the mission"
+                caption="The keys of the mission"
                 columns={PEOPLE_COLUMNS}
                 rows={PEOPLE}
                 rowKey={(p) => p.id}

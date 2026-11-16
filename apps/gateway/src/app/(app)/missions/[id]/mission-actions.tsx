@@ -3,12 +3,14 @@
 /**
  * Everything a person does to a mission from its page (spec §7.8, §7.9 bis),
  * and the dialogs those acts open. One service around the page holds the
- * dialogs, so that the header, the "···" menu and the rows of "People and
- * keys" open the same ones:
+ * dialogs, so that the header, the "···" menu and the section "Keys" open
+ * the same ones. Every act on a key lives in "Keys" (its "Add keys" and its
+ * rows); the "···" menu keeps the acts on the mission itself.
  *
  *   setup kit            the three snippets and the check, with the masked key
- *   add people           the creator picks a teammate among the people who signed in
- *   new machine key      the creator names a key for something that has no account
+ *   add keys             the creator chooses: a teammate among the people who
+ *                        signed in (they generate their own key), or a machine
+ *                        key they name for something that has no account
  *   generate my key      a teammate's first key (nothing stops: no question asked)
  *   replace a key        asks first and states the consequence — the old key
  *                        stops working at once, for whom — then shows the new one, once
@@ -30,6 +32,7 @@ import {
   Input,
   MenuItem,
   MoreMenu,
+  OptionCard,
   Select,
   useToast,
 } from '@/components/ui';
@@ -46,13 +49,13 @@ import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type { MissionTeam, TeamTokenView } from '@/server/missions/team-service';
 import { TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from '@/lib/missions/token-name';
 
+import styles from '../missions.module.css';
 import { KitSteps, RevealDialog, revealedOf, type RevealedKey } from '../bootstrap-kit-view';
 import { useAction } from '@/lib/http/post-json';
 
 type Act =
   | { readonly kind: 'kit' }
-  | { readonly kind: 'add-people' }
-  | { readonly kind: 'machine-key' }
+  | { readonly kind: 'add-keys' }
   | { readonly kind: 'replace-mine' }
   | { readonly kind: 'replace-machine'; readonly token: TeamTokenView }
   | { readonly kind: 'revoke-key'; readonly token: TeamTokenView }
@@ -68,6 +71,9 @@ interface MissionActs {
   generateMine(): void;
 }
 
+/** Who a key added from "Add keys" is for. */
+export type KeyChoice = 'teammate' | 'machine';
+
 const ActsContext = createContext<MissionActs | null>(null);
 
 export function useMissionActs(): MissionActs {
@@ -79,16 +85,22 @@ export function useMissionActs(): MissionActs {
 export function MissionActsProvider({
   team,
   kit,
+  addOnOpen = null,
   children,
 }: {
   team: MissionTeam;
   /** The kit with the masked key; `null` when the reader holds no working key. */
   kit: BootstrapKit | null;
+  /** "Add keys" opened with the page, on this choice (the links of the post-issuance page). */
+  addOnOpen?: KeyChoice | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [act, setAct] = useState<Act | null>(null);
+  const [act, setAct] = useState<Act | null>(addOnOpen ? { kind: 'add-keys' } : null);
+  // A teammate first when someone can be added; a machine key otherwise.
+  const defaultChoice: KeyChoice = team.candidates.length > 0 ? 'teammate' : 'machine';
+  const [choice, setChoice] = useState<KeyChoice>(addOnOpen ?? defaultChoice);
   const { busy, error, setError, run } = useAction();
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
   const [candidate, setCandidate] = useState('');
@@ -111,10 +123,14 @@ export function MissionActsProvider({
     setError(null);
   }
 
-  const open = useCallback((next: Act) => {
-    setError(null);
-    setAct(next);
-  }, []);
+  const open = useCallback(
+    (next: Act) => {
+      setError(null);
+      if (next.kind === 'add-keys') setChoice(defaultChoice);
+      setAct(next);
+    },
+    [defaultChoice, setError],
+  );
 
   /** The answer that carries a key: shown once, then the page reloads its data. */
   function reveal(answer: unknown, title: string, label?: string): boolean {
@@ -242,100 +258,114 @@ export function MissionActsProvider({
       </Dialog>
 
       <Dialog
-        open={act?.kind === 'add-people'}
+        open={act?.kind === 'add-keys'}
         onClose={close}
-        title={ACTIONS.addPeople}
-        description="A teammate works on the mission as it is, with a key of their own that you never see. They cannot change it, add people or answer what its agents ask."
+        title={ACTIONS.addKeys}
+        description="Every key works on the mission as it is: same permissions, same limits. Its calls are recorded under its holder."
         dismissible={!busy}
         hint={WAITING.recorded}
-        testId="add-people-dialog"
+        testId="add-keys-dialog"
         footer={
           <>
-            <Button
-              type="button"
-              variant="primary"
-              loading={busy}
-              disabled={busy || candidate === ''}
-              onClick={() => void addTeammate()}
-            >
-              Add to the mission
-            </Button>
+            {choice === 'teammate' ? (
+              <Button
+                type="button"
+                variant="primary"
+                loading={busy}
+                disabled={busy || candidate === ''}
+                onClick={() => void addTeammate()}
+              >
+                Add to the mission
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="primary"
+                loading={busy}
+                disabled={busy || !team.issuable || machineName === ''}
+                onClick={() => {
+                  void createMachineKey(machineName).then((made) => {
+                    if (made) setKeyName('');
+                  });
+                }}
+              >
+                Create the key
+              </Button>
+            )}
             <Button type="button" variant="ghost" onClick={close} disabled={busy}>
               {ACTIONS.cancel}
             </Button>
           </>
         }
       >
-        {team.candidates.length === 0 ? (
-          <p>
-            Everyone who signed in to this gateway is already on the mission. A person appears here
-            once they have signed in.
-          </p>
+        <div role="radiogroup" aria-label="Who the key is for" className={styles.keyChoice}>
+          <OptionCard
+            name="key-for"
+            value="teammate"
+            checked={choice === 'teammate'}
+            onChange={() => {
+              setError(null);
+              setChoice('teammate');
+            }}
+            disabled={busy}
+            label={KEY_WORDS.forTeammate}
+            description="A person who signed in. They generate their own key, which you never see. They cannot change the mission, add people or answer what its agents ask."
+          />
+          <OptionCard
+            name="key-for"
+            value="machine"
+            checked={choice === 'machine'}
+            onChange={() => {
+              setError(null);
+              setChoice('machine');
+            }}
+            disabled={busy}
+            label={KEY_WORDS.forMachine}
+            description="For CI or a shared machine that has no account. Named by you; the key is shown once, to you: hand it to the machine."
+          />
+        </div>
+        {choice === 'teammate' ? (
+          team.candidates.length === 0 ? (
+            <p data-testid="no-candidate">
+              Everyone who signed in to this gateway is already on the mission. A person appears
+              here once they have signed in.
+            </p>
+          ) : (
+            <Field label="Teammate" htmlFor="mission-teammate" error={error}>
+              <Select
+                id="mission-teammate"
+                value={candidate}
+                onChange={(event) => setCandidate(event.target.value)}
+                data-testid="member-candidate"
+              >
+                <option value="">Choose a person…</option>
+                {team.candidates.map((user) => (
+                  <option key={user.id} value={user.email}>
+                    {user.email}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )
         ) : (
-          <Field label="Teammate" htmlFor="mission-teammate" error={error}>
-            <Select
-              id="mission-teammate"
-              value={candidate}
-              onChange={(event) => setCandidate(event.target.value)}
-              data-testid="member-candidate"
-            >
-              <option value="">Choose a person…</option>
-              {team.candidates.map((user) => (
-                <option key={user.id} value={user.email}>
-                  {user.email}
-                </option>
-              ))}
-            </Select>
+          <Field
+            label="Name"
+            htmlFor="mission-machine-key"
+            shape={`up to ${TOKEN_NAME_MAX_LENGTH} characters`}
+            hint={team.issuable ? TOKEN_NAME_RULE : MISSION_WORDS.notServing}
+            error={error}
+          >
+            <Input
+              id="mission-machine-key"
+              value={keyName}
+              onChange={(event) => setKeyName(event.target.value)}
+              placeholder="CI runner"
+              maxLength={TOKEN_NAME_MAX_LENGTH}
+              autoComplete="off"
+              data-testid="named-token-name"
+            />
           </Field>
         )}
-      </Dialog>
-
-      <Dialog
-        open={act?.kind === 'machine-key'}
-        onClose={close}
-        title={ACTIONS.newMachineKey}
-        description="For CI or a shared machine that has no account. Its calls are recorded under the name you give it. The key is shown once, to you: hand it to the machine."
-        dismissible={!busy}
-        hint={WAITING.recorded}
-        testId="machine-key-dialog"
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="primary"
-              loading={busy}
-              disabled={busy || !team.issuable || machineName === ''}
-              onClick={() => {
-                void createMachineKey(machineName).then((made) => {
-                  if (made) setKeyName('');
-                });
-              }}
-            >
-              Create the key
-            </Button>
-            <Button type="button" variant="ghost" onClick={close} disabled={busy}>
-              {ACTIONS.cancel}
-            </Button>
-          </>
-        }
-      >
-        <Field
-          label="Name"
-          htmlFor="mission-machine-key"
-          shape={`up to ${TOKEN_NAME_MAX_LENGTH} characters`}
-          hint={team.issuable ? TOKEN_NAME_RULE : MISSION_WORDS.notServing}
-          error={error}
-        >
-          <Input
-            id="mission-machine-key"
-            value={keyName}
-            onChange={(event) => setKeyName(event.target.value)}
-            placeholder="CI runner"
-            maxLength={TOKEN_NAME_MAX_LENGTH}
-            autoComplete="off"
-            data-testid="named-token-name"
-          />
-        </Field>
       </Dialog>
 
       <ConfirmDialog
@@ -495,7 +525,7 @@ export function ActButton({
   children,
   variant = 'secondary',
 }: {
-  act: 'kit' | 'add-people' | 'machine-key';
+  act: 'kit' | 'add-keys';
   children: React.ReactNode;
   variant?: 'primary' | 'secondary';
 }) {
@@ -517,7 +547,10 @@ export function GenerateKeyButton() {
   );
 }
 
-/** The rest, behind "···": each item is there only when the server would take the act. */
+/**
+ * The acts on the mission itself, behind "···": each item is there only when
+ * the server would take the act. The acts on a key are in "Keys", not here.
+ */
 export function MissionMenu({
   missionId,
   duplicable,
@@ -529,33 +562,15 @@ export function MissionMenu({
   stoppable: boolean;
 }) {
   const acts = useMissionActs();
-  const { team } = acts;
-  const isCreator = team.role === 'creator';
-  const mine = team.my_token;
+  const isCreator = acts.team.role === 'creator';
   return (
     <MoreMenu label="More actions" testId="mission-menu">
       <MenuItem href={`${ROUTES.missions}/${missionId}/session`}>
         {MISSION_ACTIONS.activity}
       </MenuItem>
-      {isCreator && team.issuable && (
-        <MenuItem onSelect={() => acts.open({ kind: 'machine-key' })}>
-          {ACTIONS.newMachineKey}
-        </MenuItem>
-      )}
-      {team.issuable && mine && (
-        <MenuItem onSelect={() => acts.open({ kind: 'replace-mine' })}>Replace my key</MenuItem>
-      )}
-      {team.issuable && !mine && (
-        <MenuItem onSelect={acts.generateMine}>{MISSION_ACTIONS.generateKey}</MenuItem>
-      )}
       {duplicable && (
         <MenuItem href={`${ROUTES.newMission}?from=${encodeURIComponent(missionId)}`}>
           {MISSION_ACTIONS.duplicate}
-        </MenuItem>
-      )}
-      {mine && (
-        <MenuItem danger onSelect={() => acts.open({ kind: 'revoke-key', token: mine })}>
-          {MISSION_ACTIONS.revokeMyKey}
         </MenuItem>
       )}
       {!isCreator && (

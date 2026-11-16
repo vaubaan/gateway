@@ -1,16 +1,21 @@
 'use client';
 
 /**
- * "People and keys" of a mission (spec §4.2 "Missions", §7.9 bis): who works
- * on it, each with one key, and what that key did in the current period.
+ * "Keys" of a mission (spec §4.2 "Missions", §7.9 bis): who works on it,
+ * each with one key, and what that key did in the current period. It comes
+ * before the permissions: it is short, they are long.
+ *
+ * Every act on a key is here, nowhere else: "Add keys" (a teammate or a
+ * machine key) in the heading, for the creator; generate, replace and revoke
+ * on the rows.
  *
  * One row per holder — the creator, then the teammates in the order they were
  * added, then the machine keys. Three things by default (who, what their key
  * did, the acts on the row); the role and the masked key are details.
  *
- *   the creator   replaces their own key, removes a teammate, revokes or
- *                 replaces any other key;
- *   a teammate    generates and replaces their OWN key, and reads the rest.
+ *   the creator   adds keys, replaces or revokes their own key, removes a
+ *                 teammate, revokes or replaces any other key;
+ *   a teammate    generates, replaces and revokes their OWN key, and reads the rest.
  *
  * A row shows an act only when the server would take it. A key is never shown
  * here beyond its masked form: it was shown once, to the person who made it.
@@ -102,7 +107,7 @@ export function TeamSection({
   period,
   me,
   now,
-  addPeople = null,
+  addKeys = null,
 }: {
   team: MissionTeam;
   calls: readonly HolderCalls[];
@@ -112,8 +117,8 @@ export function TeamSection({
   me: string;
   /** The instant the page was rendered at, so that "2 min" reads the same on both sides. */
   now: string;
-  /** "Add people", for the creator of a mission that is not stopped. */
-  addPeople?: React.ReactNode;
+  /** "Add keys", for the creator of a mission that is not stopped. */
+  addKeys?: React.ReactNode;
 }) {
   const acts = useMissionActs();
   const isCreator = team.role === 'creator';
@@ -251,6 +256,15 @@ export function TeamSection({
               {ACTIONS.replaceKey}
             </Button>
           )}
+          <Button
+            type="button"
+            size="sm"
+            variant="danger"
+            aria-label={MISSION_ACTIONS.revokeMyKey}
+            onClick={() => acts.open({ kind: 'revoke-key', token })}
+          >
+            {ACTIONS.revokeKey}
+          </Button>
         </span>
       );
     }
@@ -313,21 +327,23 @@ export function TeamSection({
 
   return (
     <DetailScope id={`mission:${team.mission.id}:people`}>
+      {/* The anchor of links made before the section was named "Keys". */}
+      <span id="people" aria-hidden="true" />
       <Section
-        id="people"
-        title={SECTIONS.peopleAndKeys}
+        id="keys"
+        title={SECTIONS.keys}
         count={rows.length}
         note={
           <>
             <span className={styles.noteText}>{MISSION_WORDS.sameForEveryone}</span>
             <DetailToggle />
-            {addPeople}
+            {addKeys}
           </>
         }
         testId="team-section"
       >
         <DataTable
-          caption="People and keys of this mission"
+          caption="The keys of this mission"
           columns={columns}
           rows={rows}
           rowKey={(row) => row.id}
