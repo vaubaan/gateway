@@ -74,6 +74,9 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // (Gmail takes an app password, ADR gmail-over-imap-with-an-app-password).
   await expect(page.getByTestId('service-gmail')).toContainText('paste:');
   await expect(page.getByTestId('service-railway')).toContainText('workspace token');
+  // The mocked GitHub's log is shared with the specs run before this one (a seeded
+  // account refreshed by auto-refresh.spec.ts lists `/user/repos`): read this step's calls only.
+  const callsBefore = (await upstreamLog(request)).calls.length;
   await page.getByTestId('service-github').getByRole('link').click();
   await expect(
     page.getByRole('heading', { name: 'Connect a GitHub account', level: 1 }),
@@ -100,7 +103,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('account-missions')).toContainText('No mission uses this account');
   await expect(page.getByTestId('who-has-access').getByRole('row')).toHaveCount(2);
   await snap(page, 'cutover-account');
-  const connected = await upstreamLog(request);
+  const connected = { calls: (await upstreamLog(request)).calls.slice(callsBefore) };
   expect(connected.calls.some((call) => call.url.endsWith('/user'))).toBe(true);
   expect(connected.calls.some((call) => call.url.endsWith(`/repos/${REPOSITORY}`))).toBe(true);
   expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(false);

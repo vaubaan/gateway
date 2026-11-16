@@ -21,6 +21,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **GitHub Projects plugin** (`@vaubaan/plugin-github-projects` 0.1.0): one organization
+  project per account, with a fine-grained token; read the board, add cards, change their
+  fields, remove them, create fields and views. Macro-actions `read`, `track`, `remove`,
+  `shape`.
 - **Notification "an account no longer serves your mission"** to the mission's creator, on
   their channels (Web Push, messaging addresses, mail), when someone else's act took the
   account from a mission that keeps running.

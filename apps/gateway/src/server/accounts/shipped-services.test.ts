@@ -90,6 +90,7 @@ describe('shipped plugins through the generic connect driver', () => {
       'context7',
       'fly',
       'github',
+      'github-projects',
       'gmail',
       'notion',
       'railway',

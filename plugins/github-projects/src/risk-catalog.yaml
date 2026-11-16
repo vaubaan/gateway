@@ -1,0 +1,145 @@
+# Risk catalog of the `github-projects` service.
+#
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
+# Handbook : docs/handbook/services/github-projects.md.
+#
+# 5 risks + 1 fallback (`github-projects.uncategorized-write`). The write
+# patterns do not overlap : adding, changing and removing an item are three
+# separate decisions, and a removal touches `item-delete` alone.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Renaming or removing a risk : forbidden — `deprecated: true` + `replaced_by`.
+service: github-projects
+catalog_version: 1
+catalog_date: 2026-11-16
+
+risks:
+  - id: github-projects.read
+    label: 'Read the project, its fields, views and items'
+    reason: >-
+      Nothing is modified. Item titles and bodies come from issues and pull
+      requests anyone in the organization may write, and land in the agent's
+      context (OWASP LLM01).
+    matches: 'github-projects.project[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+  - id: github-projects.item-add
+    label: 'Add an issue, a pull request or a draft to the project'
+    reason: >-
+      A new card everyone who sees the board sees, removed again in one
+      click. An added issue can come from any repository the token reads.
+    matches: 'github-projects.project[**].item.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+  - id: github-projects.item-write
+    label: "Change an item's fields (status, iteration, dates…)"
+    reason: >-
+      Moves a card or changes what the team reads on it; the previous value
+      can be set back. A mission can be narrowed to one field, such as the
+      status.
+    matches: 'github-projects.project[**].item[**].value[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+  - id: github-projects.item-delete
+    label: 'Remove an item from the project'
+    reason: >-
+      A removed issue or pull request loses every field value it held on the
+      board; a removed draft is deleted with its text. Neither can be
+      restored.
+    matches: 'github-projects.project[**].item[**].delete.W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+  - id: github-projects.board-shape
+    label: 'Create a field or a view'
+    reason: >-
+      A new column or saved view everyone on the board sees. Creating one
+      destroys nothing; GitHub offers no API to remove it, so it is removed
+      by hand on the board.
+    matches:
+      - 'github-projects.project[**].field.W'
+      - 'github-projects.project[**].view.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+
+  # Fallback — touched only by a write no entry above covers ; in no macro-action.
+  - id: github-projects.uncategorized-write
+    label: 'Uncategorized write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission creator who
+      includes it allows the writes this catalog has not reviewed.
+    matches: 'github-projects.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: internal
+
+macro_actions:
+  - id: read
+    label: 'Read the board'
+    description: 'Read the project, its fields, its views and its items.'
+    narrative: >-
+      Reading the board: the project, its fields, the items of a view or of the whole
+      project. Nothing is modified, but the titles and bodies of the linked issues and pull
+      requests are written by people outside the mission and land in the agent's context.
+    entries:
+      - risk_id: github-projects.read
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+  - id: track
+    label: 'Track work'
+    description: 'Add cards and change their fields.'
+    narrative: >-
+      Keeping the board in step with the work: adding the issue or pull request an agent works
+      on, writing a draft, moving a card to another status or iteration. Adding and changing
+      are kept apart so a mission can move cards without filling the board.
+    entries:
+      - risk_id: github-projects.item-add
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github-projects.item-write
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: remove
+    label: 'Remove cards'
+    description: 'Remove items from the project.'
+    narrative: >-
+      Taking cards off the board. A permission of its own because it cannot be undone: an
+      issue loses the values it held on the board, a draft is deleted with its text.
+    entries:
+      - risk_id: github-projects.item-delete
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: shape
+    label: 'Shape the board'
+    description: 'Create fields and views.'
+    narrative: >-
+      Changing how the board is organised: a new field for the whole team, a new saved view.
+      Nothing is lost, but GitHub offers no way to remove them through its API: someone
+      removes them by hand.
+    entries:
+      - risk_id: github-projects.board-shape
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }

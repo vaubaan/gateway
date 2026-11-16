@@ -52,6 +52,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 | Context7        | [`context7.md`](./context7.md)               | `api-key`  | Rewrap of mcp.context7.com; one resource per key.                      |
 | Fly.io          | [`fly.md`](./fly.md)                         | `api-key`  | Organization token; image guard, fresh snapshot, secrets masked.       |
 | GitHub          | [`github.md`](./github.md)                   | `api-key`  | Fine-grained token; also the agents' git remote.                       |
+| GitHub Projects | [`github-projects.md`](./github-projects.md) | `api-key`  | Fine-grained token; one organization project per account.              |
 | Gmail           | [`gmail.md`](./gmail.md)                     | `api-key`  | App password over IMAP; sends over SMTP.                               |
 | Google Calendar | [`google-calendar.md`](./google-calendar.md) | `oauth2`   | Calendar REST API v3; OAuth client held by a broker.                   |
 | Miro            | [`miro.md`](./miro.md)                       | `oauth2`   | Rewrap of Miro's MCP; OAuth client registered by the gateway.          |

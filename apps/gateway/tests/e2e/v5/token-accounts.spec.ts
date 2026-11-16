@@ -127,6 +127,9 @@ test('GitHub: a fine-grained token, its permissions listed, a classic token refu
   const classic = `ghp_${randomBytes(18).toString('hex')}`;
   const field = page.getByLabel(/Fine-grained personal access token/);
   await field.fill(classic);
+  // The repository is required since one account is one repository: fill it, so the
+  // refusal under test is the token's shape, not the browser's empty field.
+  await page.getByLabel(/^Repository/).fill('acme/api');
   await page.getByRole('button', { name: 'Check and connect' }).click();
   await expect(page).toHaveURL(/\/accounts\/new\/github\?notice=/);
   await expect(page.getByLabel(/Fine-grained personal access token/)).toHaveAttribute(

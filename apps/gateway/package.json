@@ -21,6 +21,7 @@
     "@vaubaan/plugin-context7": "*",
     "@vaubaan/plugin-fly": "*",
     "@vaubaan/plugin-github": "*",
+    "@vaubaan/plugin-github-projects": "*",
     "@vaubaan/plugin-gmail": "*",
     "@vaubaan/plugin-google-calendar": "*",
     "@vaubaan/plugin-miro": "*",

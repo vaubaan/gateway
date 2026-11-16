@@ -66,7 +66,9 @@ describe('build-plugin-bundle', () => {
       .filter((r) => !('skipped' in r))
       .map((r) => `${r.id}@${r.version}`)
       .sort();
-    expect(pins.map((pin) => `${pin.id}@${pin.version}`)).toEqual(built);
+    // Both sides sorted as `id@version` strings : the loader orders by id, and an id
+    // that is a prefix of another (`github`, `github-projects`) sorts apart.
+    expect(pins.map((pin) => `${pin.id}@${pin.version}`).sort()).toEqual(built);
   }, 60_000);
 });
 

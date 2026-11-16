@@ -24,6 +24,7 @@ import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
 import context7Plugin from '@vaubaan/plugin-context7';
 import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
+import githubProjectsPlugin from '@vaubaan/plugin-github-projects';
 import gmailPlugin from '@vaubaan/plugin-gmail';
 import googleCalendarPlugin from '@vaubaan/plugin-google-calendar';
 import miroPlugin from '@vaubaan/plugin-miro';
@@ -59,6 +60,7 @@ export const SHIPPED_PLUGINS: readonly ServicePlugin[] = [
   asanaPlugin,
   axonautPlugin,
   outlookPlugin,
+  githubProjectsPlugin,
   // The gateway's own management tools: a host account, bound by the root to the
   // mission service (`compose/vaubaan.ts`; ADR platform-management-is-a-plugin-on-the-execution-door).
   vaubaanPlugin,
