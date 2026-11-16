@@ -2,7 +2,7 @@ import { isUnavailableAccountStatus } from '@vaubaan/gateway-core';
 
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
-import { InvariantError, NotFoundError } from '../errors.ts';
+import { HostAccountTakenError, InvariantError, NotFoundError } from '../errors.ts';
 import type {
   AccountRecord,
   AccountResourceRecord,
@@ -66,6 +66,11 @@ export type AssignOwnerlessResult =
   | { readonly outcome: 'not-ownerless' | 'owner-group-empty' };
 
 export interface AccountsRepo {
+  /**
+   * Stores a new `active` account. `HostAccountTakenError` when it is a `host` account
+   * (`metadata.credential_kind`) and its person already holds one of that service not
+   * revoked (index of migration 0040): nothing was written.
+   */
   create(input: CreateAccountInput): Promise<AccountRecord>;
   getById(id: string): Promise<AccountRecord | null>;
   list(filter?: AccountFilter): Promise<AccountRecord[]>;
@@ -232,8 +237,17 @@ interface ResourceRow {
 }
 
 /** A `host` account (the Vaubaan account): the kind its connect stored. */
-function isHostRecord(record: Pick<AccountRecord, 'metadata'>): boolean {
+function isHostRecord(record: { readonly metadata?: Record<string, unknown> | null }): boolean {
   return record.metadata?.credential_kind === 'host';
+}
+
+/** SQLite's answer to a `UNIQUE` index (a primary key answers `SQLITE_CONSTRAINT_PRIMARYKEY`). */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE'
+  );
 }
 
 const COLUMNS = `id, service, owner_kind, owner_user_id, owner_group_id, display_name, status,
@@ -530,21 +544,30 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
       const owner = principalColumns(input.owner);
       const sealed =
         input.credential !== null ? await sealText(encryptor, id, input.credential) : null;
-      insert.run(
-        id,
-        input.service,
-        owner.kind,
-        owner.userId,
-        owner.groupId,
-        input.displayName,
-        'active',
-        sealed?.blob ?? null,
-        sealed?.keyVersion ?? null,
-        input.credentialExpiresAt ?? null,
-        toJson(input.metadata),
-        now,
-        now,
-      );
+      try {
+        insert.run(
+          id,
+          input.service,
+          owner.kind,
+          owner.userId,
+          owner.groupId,
+          input.displayName,
+          'active',
+          sealed?.blob ?? null,
+          sealed?.keyVersion ?? null,
+          input.credentialExpiresAt ?? null,
+          toJson(input.metadata),
+          now,
+          now,
+        );
+      } catch (err) {
+        // The id is new, so the one unique constraint an insert can meet is the index of
+        // migration 0040: one `host` account not revoked per person and service.
+        if (isUniqueViolation(err) && owner.userId !== null && isHostRecord(input)) {
+          throw new HostAccountTakenError(input.service, owner.userId);
+        }
+        throw err;
+      }
       return requireAccount(id);
     },
     async getById(id) {

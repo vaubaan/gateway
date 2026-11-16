@@ -59,6 +59,7 @@ import { connectFileUrl } from '../plugins/connect-files';
 import { catalogEnvsOf } from '../../lib/missions/catalog-view';
 import { resourceNounOf } from '../../lib/services/resource-noun';
 import type { ResourceMove, ResourceMoveReason, Store } from '../store';
+import { HostAccountTakenError } from '../store/errors';
 import { ownResourceEnv } from '../store/resource-env';
 import { toIso, type Clock } from '../store/clock';
 import type {
@@ -427,6 +428,17 @@ export function ownerActRefusal(
   return null;
 }
 
+/** "Connected" with the host account the person already holds: nothing stored, nothing audited. */
+function handBack(flow: Pick<FlowStart, 'returnTo'>, account: AccountRecord): StartResult {
+  return {
+    kind: 'connected',
+    account,
+    discovery: null,
+    reconnected: false,
+    returnTo: flow.returnTo,
+  };
+}
+
 /** A `host` account: the kind its connect stored (`metadata.credential_kind`). */
 export function isHostAccount(account: Pick<AccountRecord, 'metadata'>): boolean {
   return account.metadata?.credential_kind === 'host';
@@ -655,33 +667,43 @@ export class AccountService {
    * platform-management-is-a-plugin-on-the-execution-door): one button, no
    * secret, nothing to verify, no resource. It belongs to the person who pressed
    * it and is never shared. A person holds one: connecting again hands back the
-   * account they already have.
+   * account they already have. The store holds the rule (migration 0040): of two
+   * connects at once, the second insert is refused and reads the first one back.
    */
   private async connectHost(flow: FlowStart): Promise<StartResult> {
+    const existing = await this.heldHostAccount(flow);
+    if (existing && !flow.reconnectId) return handBack(flow, existing);
+    const secret: CredentialSecret = { kind: 'host', metadata: {} };
+    try {
+      const connected = await this.finalize(flow.actor, flow.plugin, secret, {
+        displayName: flow.displayName,
+        reconnectId: flow.reconnectId,
+        returnTo: flow.returnTo,
+        discovery: 'deferred',
+        metadata: {},
+      });
+      return { kind: 'connected', ...connected };
+    } catch (err) {
+      if (!(err instanceof HostAccountTakenError)) throw err;
+      const held = await this.heldHostAccount(flow);
+      if (!held) throw err;
+      this.deps.logger.info('host account handed back after a concurrent connect', {
+        account_id: held.id,
+        service: flow.plugin.id,
+        user_id: flow.actor.user.id,
+      });
+      return handBack(flow, held);
+    }
+  }
+
+  /** The person's own account of a host service, not revoked (the one a flow reconnects aside). */
+  private async heldHostAccount(flow: FlowStart): Promise<AccountRecord | undefined> {
     const owned = await this.deps.store.accounts.listOwnedBy([
       { kind: 'user', id: flow.actor.user.id },
     ]);
-    const existing = owned.find(
+    return owned.find(
       (c) => c.service === flow.plugin.id && c.status !== 'revoked' && c.id !== flow.reconnectId,
     );
-    if (existing && !flow.reconnectId) {
-      return {
-        kind: 'connected',
-        account: existing,
-        discovery: null,
-        reconnected: false,
-        returnTo: flow.returnTo,
-      };
-    }
-    const secret: CredentialSecret = { kind: 'host', metadata: {} };
-    const connected = await this.finalize(flow.actor, flow.plugin, secret, {
-      displayName: flow.displayName,
-      reconnectId: flow.reconnectId,
-      returnTo: flow.returnTo,
-      discovery: 'deferred',
-      metadata: {},
-    });
-    return { kind: 'connected', ...connected };
   }
 
   private async startOAuth2(

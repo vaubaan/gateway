@@ -53,5 +53,19 @@ export class TokenNotIssuableError extends StoreError {
   }
 }
 
+/**
+ * A second `host` account not revoked was about to be stored for the same person and
+ * service: the unique index of migration 0040 (`accounts_one_host_per_person`) refused it.
+ * The person's account already exists; the caller reads it back.
+ */
+export class HostAccountTakenError extends StoreError {
+  constructor(
+    readonly service: string,
+    readonly ownerUserId: string,
+  ) {
+    super(`user ${ownerUserId} already holds a ${service} account`);
+  }
+}
+
 /** The migration directory or the applied history is inconsistent. */
 export class MigrationError extends StoreError {}
