@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.24] - 2026-11-16
+
 ### Added
 
 - **An agent renames and edits missions (plugin `vaubaan` 0.4.0).** Two tools join the platform
@@ -2935,7 +2937,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.23...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.24...HEAD
+[2.0.0-alpha.24]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.23...v2.0.0-alpha.24
 [2.0.0-alpha.23]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.22...v2.0.0-alpha.23
 [2.0.0-alpha.22]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.21...v2.0.0-alpha.22
 [2.0.0-alpha.21]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.20...v2.0.0-alpha.21
