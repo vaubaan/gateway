@@ -145,8 +145,11 @@ export interface MissionGroundsDeps {
   readonly audit: Pick<AuditRepo, 'appendUnlessLatest'>;
   readonly clock: Clock;
   readonly logger: Logger;
-  /** Told of each mission this act orphaned, once its entry is written (spec §4.2 bis). */
-  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned'>;
+  /**
+   * Told of each mission this act orphaned, and of each that lost an account and keeps
+   * serving, once its entry is written (spec §4.2 bis).
+   */
+  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned' | 'missionAccountLost'>;
 }
 
 /** The two acts that alternate on a mission; the idempotent write compares within them. */
@@ -343,6 +346,7 @@ export class MissionGrounds {
             const act = 'mission-account-lost';
             if (await this.record(mission, act, PART_ACTS, actorId, entry, since)) {
               partsLost.push(mission);
+              this.deps.notifications?.missionAccountLost(mission.id, actorId);
             }
           }
           if (back.length > 0) {

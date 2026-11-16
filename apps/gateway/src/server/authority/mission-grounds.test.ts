@@ -325,6 +325,37 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       ]);
     });
 
+    it('tells the notifications of each mission that lost an account, naming the actor, once', async () => {
+      const told: [string, string][] = [];
+      const notified = createAuthorityModule({
+        store,
+        registry: new PluginRegistry([
+          fakePlugin(),
+          fixturePlugin({ id: 'other', credential: API_KEY_SPEC }),
+        ]),
+        logger: silentLogger,
+        clock,
+        notifications: {
+          missionOrphaned: () => undefined,
+          missionAccountLost: (missionId, actorId) => told.push([missionId, actorId]),
+        },
+      });
+      const acme = await connect(user(ada));
+      const other = await connect(user(ada), 'other');
+      await share(acme, user(bob), [READ]);
+      const granted = await share(other, user(bob), [OTHER_READ]);
+      const m = await mission(bob, [acme, other], [READ, OTHER_READ]);
+
+      const revoking = await notified.grounds.watchAccount(other.id);
+      await store.shares.revoke({ accountId: granted.accountId, shareId: granted.id });
+      await revoking.settle(ada.id);
+      // Settled again by a second watch of the same act: recorded once, told once.
+      const again = await notified.grounds.watchAccount(other.id);
+      await again.settle(ada.id);
+
+      expect(told).toEqual([[m.id, ada.id]]);
+    });
+
     it('a withdrawn access comes back with a new share; a later revocation is a new loss', async () => {
       const acme = await connect(user(ada));
       const other = await connect(user(ada), 'other');

@@ -544,10 +544,29 @@ test('disconnecting one account of a two-account mission takes that account only
   );
   await ines.goto(`/missions/${scenario.mission_id}`);
   await expect(ines.getByTestId('orphan-callout')).toHaveCount(0);
-  const lost = ines.getByTestId('lost-accounts-callout');
-  await expect(lost).toContainText('An account no longer serves this mission');
-  await expect(lost).toContainText(`“${accountName}” was disconnected by its owner`);
-  await expect(lost).toContainText('keeps running on its other accounts');
-  await expect(ines.getByTestId(`account-lost-${scenario.account_id}`)).toBeVisible();
+  // No banner: the account's own card says it, red and folded to one line.
+  const lost = ines.getByTestId(`lost-account-${scenario.account_id}`);
+  await expect(lost.getByTestId('lost-account-summary')).toHaveText(
+    `“${accountName}” was disconnected by its owner; calls through it are refused.`,
+  );
+  await expect(lost.getByText(/keeps running on its other accounts/)).toBeHidden();
+  await lost.getByRole('button', { name: 'Show the details' }).click();
+  await expect(lost.getByText(/keeps running on its other accounts/)).toBeVisible();
+  await expect(lost).toContainText('until you remove it from the mission in Edit mission');
   await snap(ines, 'mission-lost-an-account');
+
+  // ── Edit mission: the creator removes it; the edit is a version ──────────
+  await ines.getByTestId('edit-mission').click();
+  await expect(ines).toHaveURL(new RegExp(`/missions/${scenario.mission_id}/edit$`));
+  const editing = ines.getByTestId(`lost-account-${scenario.account_id}`);
+  await editing.getByRole('button', { name: 'Remove from mission' }).click();
+  await expect(editing.getByTestId('lost-account-summary')).toHaveText(
+    'Removed from the mission when you save.',
+  );
+  await expect(ines.getByTestId('summary')).toContainText(`${accountName} removed`);
+  await ines.getByRole('button', { name: 'Save changes' }).click();
+  await expect(ines).toHaveURL(new RegExp(`/missions/${scenario.mission_id}\\?edited=1$`));
+  await expect(ines.getByTestId(`lost-account-${scenario.account_id}`)).toHaveCount(0);
+  await expect(ines.getByText('Lost an account')).toHaveCount(0);
+  await expect(ines.getByTestId('mission-version-2')).toContainText('Version 2 · Edited');
 });

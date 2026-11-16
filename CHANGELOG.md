@@ -9,6 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **A lost account says so in its own card, and its creator removes it.** When an account of a
+  running mission no longer serves it (disconnected, an access withdrawn), the mission page no
+  longer shows a banner: the account's card turns red and folds to one line ("“vps-rp-skills”
+  was disconnected by its owner; calls through it are refused."), its details one click away.
+  Edit mission now shows that card with **Remove from mission**; saving is an ordinary edit,
+  one version in the History. Nothing removes or hides a lost account on its own, and
+  restoring a version neither brings a removed one back nor takes a lost one out.
+
+### Added
+
+- **Notification "an account no longer serves your mission"** to the mission's creator, on
+  their channels (Web Push, messaging addresses, mail), when someone else's act took the
+  account from a mission that keeps running.
+
 ## [2.0.0-alpha.22] - 2026-11-15
 
 ### Added

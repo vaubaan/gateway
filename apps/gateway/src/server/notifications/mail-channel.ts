@@ -51,6 +51,7 @@ const SUBJECTS: Readonly<Record<NotificationKind, string>> = {
   'request-opened': 'Something waits for you',
   'account-needs-reconnecting': 'Something stopped without you',
   'mission-orphaned': 'Something stopped without you',
+  'mission-account-lost': 'Something stopped without you',
   'mission-revoked': 'Something stopped without you',
   'backup-failed': 'Something stopped without you',
   'master-key-recovery': 'An administrator was named with the master key',

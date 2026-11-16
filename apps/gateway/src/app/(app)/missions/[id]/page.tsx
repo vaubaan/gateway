@@ -78,7 +78,7 @@ import { riskPlanesOf } from '@/lib/services/planes';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 import { missionGitViews } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
-import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
+import { explainLostAccount, explainOrphan } from '@/server/missions/orphan-reason';
 import { toolTitleOf } from '@/server/services/tool-titles';
 import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
@@ -87,7 +87,8 @@ import { CallHeadline } from '../../waiting/parts';
 
 import styles from '../missions.module.css';
 import cardStyles from '../cards/cards.module.css';
-import { detailCards } from '../cards/detail-cards';
+import { detailCards, type DetailCard } from '../cards/detail-cards';
+import { LostAccountCard, type LostAccountView } from '../cards/lost-account-card';
 import { MissionCard } from '../cards/mission-card';
 import { createdBy, missionMark } from '../mission-view';
 import { ActivityTable } from './activity-table';
@@ -173,8 +174,24 @@ export default async function MissionPage({ params, searchParams }: Props) {
 
   const mark = missionMark(state, waiting.length, creatorName, detail.lost.length);
   const orphanExplanation = orphan && explainOrphan(orphan, detail.accounts);
-  // An orphaned mission says why as a whole; a running one says which accounts it lost.
-  const lostExplanation = orphan ? null : explainLost(detail.lost, detail.accounts);
+  // An account that no longer serves the mission says so in its own card, red and folded,
+  // until the creator removes it in Edit mission (no banner, nothing removed on its own).
+  const lostViews = new Map(
+    detail.lost.map((part): [string, LostAccountView] => {
+      const account = detail.accounts.find((c) => c.id === part.account_id);
+      const words = explainLostAccount(part, account?.display_name ?? null, isCreator);
+      return [
+        part.account_id,
+        {
+          account_id: part.account_id,
+          service_label: account?.service_label ?? 'An account',
+          display_name: account?.display_name ?? null,
+          summary: words.summary,
+          lines: words.lines,
+        },
+      ];
+    }),
+  );
   const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
   const period = periodWord(periodSeconds);
 
@@ -269,6 +286,51 @@ export default async function MissionPage({ params, searchParams }: Props) {
     );
   };
 
+  /** One frozen card; a lost account's offers nothing to raise, close or check. */
+  const cardOf = ({ account, card, used, openUntil, lastCheckedAt }: DetailCard, lost: boolean) => {
+    const service = serviceOf(account.service);
+    return (
+      <MissionCard
+        key={card.key}
+        readOnly
+        account={account}
+        card={card}
+        icon={service.icon}
+        planes={service.planes}
+        limitLabel={limitColumn(periodSeconds)}
+        today={{
+          header: capitalize(period),
+          period,
+          used,
+          openUntil,
+          // Closing an opening: the creator, on the rule of every gate edit.
+          closeOpenings:
+            !lost && isCreator && detail.gates_editable ? { missionId: mission.id } : null,
+          raiseHrefs:
+            !lost && raisable
+              ? Object.fromEntries(
+                  account.macro_actions.map((action) => [
+                    action.id,
+                    `${missionPath}/edit?custom=${encodeURIComponent(card.id ?? '')}&action=${encodeURIComponent(action.id)}`,
+                  ]),
+                )
+              : null,
+        }}
+        checked={
+          card.future && !lost ? (
+            <CheckNow
+              missionId={mission.id}
+              accountId={account.id}
+              lastCheckedAt={lastCheckedAt}
+              now={now.toISOString()}
+              canCheck={isCreator && state.kind !== 'revoked'}
+            />
+          ) : null
+        }
+      />
+    );
+  };
+
   const secondary: React.ReactNode[] = [];
   if (editable) {
     secondary.push(
@@ -304,14 +366,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
           <>
             {createdBy(detail.creator.email, isCreator)}{' '}
             <RelativeTime at={mission.createdAt} now={now} testId="mission-created" />
-            {detail.accounts
-              .filter((account) => account.lost)
-              .map((account) => (
-                <span key={account.id} data-testid={`account-lost-${account.id}`}>
-                  {' · '}
-                  {account.service_label} {account.display_name} (no longer serves)
-                </span>
-              ))}
             {' · '}
             {limitsResetEvery(periodSeconds)} ·{' '}
             <span title={mission.expiresAt ?? undefined}>{expiresOn(mission.expiresAt, now)}</span>
@@ -376,20 +430,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
             testId="orphan-callout"
           >
             {orphanExplanation.lines.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </Callout>
-        </div>
-      )}
-
-      {lostExplanation && (
-        <div className={styles.block}>
-          <Callout
-            tone={lostExplanation.final ? 'bad' : 'warn'}
-            title={lostExplanation.title}
-            testId="lost-accounts-callout"
-          >
-            {lostExplanation.lines.map((line) => (
               <p key={line}>{line}</p>
             ))}
           </Callout>
@@ -465,46 +505,18 @@ export default async function MissionPage({ params, searchParams }: Props) {
         />
       </div>
       <div className={[cardStyles.cards, styles.block].join(' ')} data-testid="mission-cards">
-        {cards.map(({ account, card, used, openUntil, lastCheckedAt }) => {
-          const service = serviceOf(account.service);
+        {mission.accounts.map(({ accountId }) => {
+          const ofAccount = cards.filter((c) => c.account.id === accountId);
+          const lost = lostViews.get(accountId);
+          if (!lost) return ofAccount.map((c) => cardOf(c, false));
           return (
-            <MissionCard
-              key={card.key}
-              readOnly
-              account={account}
-              card={card}
-              icon={service.icon}
-              planes={service.planes}
-              limitLabel={limitColumn(periodSeconds)}
-              today={{
-                header: capitalize(period),
-                period,
-                used,
-                openUntil,
-                // Closing an opening: the creator, on the rule of every gate edit.
-                closeOpenings:
-                  isCreator && detail.gates_editable ? { missionId: mission.id } : null,
-                raiseHrefs: raisable
-                  ? Object.fromEntries(
-                      account.macro_actions.map((action) => [
-                        action.id,
-                        `${missionPath}/edit?custom=${encodeURIComponent(card.id ?? '')}&action=${encodeURIComponent(action.id)}`,
-                      ]),
-                    )
-                  : null,
-              }}
-              checked={
-                card.future ? (
-                  <CheckNow
-                    missionId={mission.id}
-                    accountId={account.id}
-                    lastCheckedAt={lastCheckedAt}
-                    now={now.toISOString()}
-                    canCheck={isCreator && state.kind !== 'revoked'}
-                  />
-                ) : null
-              }
-            />
+            <LostAccountCard
+              key={`lost:${accountId}`}
+              lost={lost}
+              icon={ofAccount[0] ? serviceOf(ofAccount[0].account.service).icon : null}
+            >
+              {ofAccount.length > 0 ? ofAccount.map((c) => cardOf(c, true)) : null}
+            </LostAccountCard>
           );
         })}
       </div>

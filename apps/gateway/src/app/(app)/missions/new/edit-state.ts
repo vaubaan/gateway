@@ -10,6 +10,9 @@ import type { IssuanceAccount, MissionDraft, ResolvedDraftAccount } from '@/lib/
 import { draftAccountOf, type MissionSnapshot } from '@/lib/missions/mission-edit';
 import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
+import type { ServiceMarkIcon } from '@/components/ui';
+
+import type { LostAccountView } from '../cards/lost-account-card';
 import {
   draftOf,
   initialFormState,
@@ -54,6 +57,11 @@ export interface EditSource {
   readonly missionId: string;
   readonly revision: string;
   readonly snapshot: MissionSnapshot;
+  /**
+   * The accounts of the mission that no longer serve it, worded: each drawn as a red card
+   * with "Remove from mission"; absent or empty when every account serves.
+   */
+  readonly lost?: readonly (LostAccountView & { readonly icon: ServiceMarkIcon | null })[];
   /** "Raise" of a trust-raise proposal: the edit opens at the new level. */
   readonly raise?: EditRaise & {
     readonly label: string;
@@ -100,18 +108,22 @@ export function initialEditState(
 
 /**
  * The draft an edit sends: the form's, its period the mission's, and the accounts the
- * form cannot show (the creator no longer holds them) carried back as they are, so
- * nothing is removed that the person did not see.
+ * form cannot show as cards (the creator no longer holds them: lost) carried back as
+ * they are, so nothing is removed that the person did not see — but the ones the
+ * person pressed "Remove from mission" on (`removed`), which the draft leaves out.
  */
 export function editDraftOf(
   context: readonly IssuanceAccount[],
   state: FormState,
   snapshot: MissionSnapshot,
   now: Date,
+  removed: ReadonlySet<string> = new Set(),
 ): MissionDraft {
   const draft = draftOf(context, state, now);
   const shown = new Set(context.map((c) => c.id));
-  const carried = snapshot.accounts.filter((c) => !shown.has(c.account_id)).map(draftAccountOf);
+  const carried = snapshot.accounts
+    .filter((c) => !shown.has(c.account_id) && !removed.has(c.account_id))
+    .map(draftAccountOf);
   return {
     ...draft,
     period: snapshot.period,

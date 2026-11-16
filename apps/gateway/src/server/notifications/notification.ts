@@ -15,6 +15,7 @@ export const NOTIFICATION_KINDS = [
   'request-opened',
   'account-needs-reconnecting',
   'mission-orphaned',
+  'mission-account-lost',
   'mission-revoked',
   'backup-failed',
   'master-key-recovery',
@@ -35,6 +36,7 @@ export type NotificationBody = { readonly path: string } & (
     }
   | { readonly kind: 'account-needs-reconnecting'; readonly account: string }
   | { readonly kind: 'mission-orphaned'; readonly mission: string }
+  | { readonly kind: 'mission-account-lost'; readonly mission: string }
   | { readonly kind: 'mission-revoked'; readonly mission: string }
   | { readonly kind: 'backup-failed' }
   | { readonly kind: 'master-key-recovery' }
@@ -84,6 +86,8 @@ function bodyOf(notification: Notification): string {
       return `${line(notification.account)} stopped serving: the service refused its credential. Reconnect it.`;
     case 'mission-orphaned':
       return `${line(notification.mission)} stopped: you no longer hold what it accepted.`;
+    case 'mission-account-lost':
+      return `An account no longer serves ${line(notification.mission)}: calls through it are refused.`;
     case 'mission-revoked':
       return `${line(notification.mission)} was stopped by someone else.`;
     case 'backup-failed':

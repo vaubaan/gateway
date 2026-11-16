@@ -95,6 +95,14 @@ describe('the mission screen in edit mode', () => {
     const draft = editDraftOf(context, state, snapshot, NOW);
     expect(draft.period).toEqual(snapshot.period);
     expect(draft.accounts.map((c) => c.account_id)).toEqual([acme.id, 'conn-lost']);
+
+    // "Remove from mission" on its card: left out, and the edit removes it, nothing else.
+    const removed = editDraftOf(context, state, snapshot, NOW, new Set(['conn-lost']));
+    expect(removed.accounts.map((c) => c.account_id)).toEqual([acme.id]);
+    const judged = judgeEdit({ accounts: context, now: NOW }, snapshot, removed);
+    expect(judged.ok).toBe(true);
+    expect(judged.changes.accounts_removed.map((c) => c.account_id)).toEqual(['conn-lost']);
+    expect(judged.changes.permissions_changed).toEqual([]);
   });
 });
 

@@ -1,7 +1,50 @@
 import { describe, expect, it } from 'vitest';
 
-import { ORPHAN_CAUSES } from '../authority/mission-grounds';
-import { explainOrphan } from './orphan-reason';
+import { ORPHAN_CAUSES, PART_LOSS_CAUSES } from '../authority/mission-grounds';
+import { explainLostAccount, explainOrphan } from './orphan-reason';
+
+describe('explainLostAccount', () => {
+  it('says in one line which account, why, and that its calls are refused, for every cause', () => {
+    for (const cause of PART_LOSS_CAUSES) {
+      const final = cause !== 'access-withdrawn';
+      const explanation = explainLostAccount({ cause, final }, 'vps-rp-skills', true);
+      expect(explanation.summary).toMatch(/calls through it are refused/);
+      expect(explanation.lines.length).toBeGreaterThan(0);
+      expect(explanation.final).toBe(final);
+    }
+  });
+
+  it('words a disconnected account as its owner’s act, for good', () => {
+    const explanation = explainLostAccount(
+      { cause: 'account-revoked', final: true },
+      'vps-rp-skills',
+      true,
+    );
+    expect(explanation.summary).toBe(
+      '“vps-rp-skills” was disconnected by its owner; calls through it are refused.',
+    );
+    expect(explanation.lines.join(' ')).toContain('never comes back');
+    expect(explanation.lines.join(' ')).toContain('until you remove it from the mission');
+  });
+
+  it('tells a teammate that the creator lost the access, and that the creator removes it', () => {
+    const explanation = explainLostAccount(
+      { cause: 'access-withdrawn', final: false },
+      'Depot',
+      false,
+    );
+    expect(explanation.summary).toMatch(
+      /^The creator of this mission no longer has access to “Depot”/,
+    );
+    expect(explanation.lines.join(' ')).toContain('until the creator removes it');
+  });
+
+  it('names an account that no longer exists without a name', () => {
+    expect(explainLostAccount({ cause: 'account-missing', final: true }, null, true).summary).toBe(
+      'This account no longer exists; calls through it are refused.',
+    );
+  });
+});
 
 const ACCOUNTS = [{ id: 'c1', display_name: 'Depot' }];
 

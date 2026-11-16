@@ -21,8 +21,8 @@ export interface AuthorityModuleDeps {
   readonly registry: PluginRegistry;
   readonly logger: Logger;
   readonly clock?: Clock;
-  /** Told of each mission an act orphaned (spec §4.2 bis); default: nobody. */
-  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned'>;
+  /** Told of each mission an act orphaned or took an account from (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned' | 'missionAccountLost'>;
 }
 
 export interface AuthorityModule {

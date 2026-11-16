@@ -13,6 +13,7 @@ import { ButtonLink, Callout, PageHeader } from '@/components/ui';
 import { DOC_PAGES, MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
 import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
+import { explainLostAccount } from '@/server/missions/orphan-reason';
 
 import type { ServiceMarkIcon } from '@/components/ui';
 import { riskPlanesOf, type RiskPlanes } from '@/lib/services/planes';
@@ -94,6 +95,21 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
     if (riskPlanes) planes[service] = riskPlanes;
     icons[service] = plugin ? serviceIconOf(plugin) : null;
   }
+  // The accounts that no longer serve the mission: a red card each, "Remove from mission".
+  const lost = view.lost.map((part) => {
+    const stored = view.snapshot.accounts.find((c) => c.account_id === part.account_id);
+    const plugin = stored ? session.root.registry.get(stored.service)?.plugin : undefined;
+    const name = part.cause === 'account-missing' ? null : (stored?.display_name ?? null);
+    const words = explainLostAccount(part, name, true);
+    return {
+      account_id: part.account_id,
+      service_label: plugin?.displayName ?? stored?.service ?? 'An account',
+      display_name: name,
+      summary: words.summary,
+      lines: words.lines,
+      icon: plugin ? serviceIconOf(plugin) : null,
+    };
+  });
   // "Raise this limit" on the mission page: the edit opens on that macro-action's Custom.
   const customSet = one(query.custom);
   const customAction = one(query.action);
@@ -117,6 +133,7 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
           missionId: view.mission.id,
           revision: view.revision,
           snapshot: view.snapshot,
+          lost,
           ...(offer
             ? {
                 raise: {

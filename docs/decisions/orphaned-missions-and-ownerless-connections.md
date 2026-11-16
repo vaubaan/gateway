@@ -48,3 +48,16 @@ Seen in production: four accounts stopped for a change on a fifth.
 ### A grace period before a lost authority refuses calls
 
 Runs on an authority just withdrawn.
+
+## Amendment 2026-11-16: a lost part stays on the mission until its creator removes it
+
+The owner wants the lost account where it belongs, not above the page. A lost part is never
+removed nor hidden by the gateway, at any age: it stays on the mission, its card red and folded to
+one line, until the creator presses "Remove from mission" in Edit mission, an ordinary edit (creator
+only, one version in the History). A restore never judges a lost part: one the mission carries is
+kept as it stands, whatever the version holds of it; one already removed is left out, never
+brought back. Its creator is notified when another person's act lost it, as for an orphaned
+mission. Rejected: a banner above the mission (the page said it twice and the edit hid the
+account, so it could not be removed); removing a lost part after seven days (a withdrawn access
+that comes back would find nothing to serve); a restore that drops it (a removal the creator did
+not choose).

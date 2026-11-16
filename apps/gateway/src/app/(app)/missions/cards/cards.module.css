@@ -498,3 +498,40 @@
   align-items: center;
   gap: var(--space-1);
 }
+
+/* ── An account that no longer serves the mission: red, folded to one line ── */
+.lostCard {
+  border: 1px solid var(--bad-line);
+  border-radius: var(--radius-lg);
+  background: var(--bad-soft);
+}
+.lostRemoving {
+  border-style: dashed;
+}
+.lostHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) 0;
+}
+.lostLine {
+  margin: var(--space-1) 0 0;
+  padding: 0 var(--space-4);
+  color: var(--bad);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.lostBody {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+.lostDetails {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.lostDetails p {
+  margin: 0 0 var(--space-2);
+}
+.lostBody .cards {
+  margin-top: var(--space-3);
+}

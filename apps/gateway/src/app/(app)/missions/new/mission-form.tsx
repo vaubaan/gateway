@@ -61,6 +61,7 @@ import {
   TERMS,
   TRUST_LEVEL_LABELS,
   TRUST_RAISE_WORDS,
+  LOST_ACCOUNT_WORDS,
 } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type {
@@ -84,6 +85,7 @@ import cardStyles from '../cards/cards.module.css';
 import { AccountPicker, offeredAccounts, type Picking } from '../cards/account-picker';
 import { actionRows, cardDigest, changeSummary, levelMatching } from '../cards/card-model';
 import { CustomModal } from '../cards/custom-modal';
+import { LostAccountCard } from '../cards/lost-account-card';
 import { MissionCard } from '../cards/mission-card';
 import {
   addCard,
@@ -208,6 +210,11 @@ export function MissionForm({
   const [proposalOpen, setProposalOpen] = useState(false);
   const [proposalText, setProposalText] = useState('');
   const [proposalReport, setProposalReport] = useState<MissionPreview | null>(null);
+  // "Remove from mission" on a lost account's card: left out of the draft when saved.
+  const [removedLost, setRemovedLost] = useState<ReadonlySet<string>>(() => new Set());
+  const lostCards = (edit?.lost ?? []).filter(
+    (lost) => !context.some((c) => c.id === lost.account_id),
+  );
 
   const preview = useMemo(
     () => previewDraft({ accounts: context, now }, draftOf(context, state, now)),
@@ -220,10 +227,10 @@ export function MissionForm({
         ? judgeEdit(
             { accounts: context, now },
             edit.snapshot,
-            editDraftOf(context, state, edit.snapshot, now),
+            editDraftOf(context, state, edit.snapshot, now, removedLost),
           )
         : null,
-    [context, state, now, edit],
+    [context, state, now, edit, removedLost],
   );
   const changed = judgement ? hasChanges(judgement.changes) : false;
   const issues = serverIssues.length > 0 ? serverIssues : (judgement?.issues ?? preview.issues);
@@ -272,7 +279,10 @@ export function MissionForm({
     if (!edit) return;
     const answer = await run(
       `/api/missions/${encodeURIComponent(edit.missionId)}/edit`,
-      { draft: editDraftOf(context, state, edit.snapshot, new Date()), revision: edit.revision },
+      {
+        draft: editDraftOf(context, state, edit.snapshot, new Date(), removedLost),
+        revision: edit.revision,
+      },
       { errorOf: refusalOf },
     );
     if (answer.ok) {
@@ -360,11 +370,30 @@ export function MissionForm({
   }
 
   const phrases = edit
-    ? changeSummary(context, opening.state, state, {
-        before: edit.snapshot.expires_at,
-        after: expiresAt,
-      })
+    ? [
+        ...lostCards
+          .filter((lost) => removedLost.has(lost.account_id))
+          .map((lost) =>
+            LOST_ACCOUNT_WORDS.removed(
+              lost.display_name === null
+                ? lost.service_label
+                : `${lost.service_label} · ${lost.display_name}`,
+            ),
+          ),
+        ...changeSummary(context, opening.state, state, {
+          before: edit.snapshot.expires_at,
+          after: expiresAt,
+        }),
+      ]
     : [];
+  function toggleRemoved(accountId: string) {
+    setServerIssues([]);
+    setRemovedLost((was) => {
+      const next = new Set(was);
+      if (!next.delete(accountId)) next.add(accountId);
+      return next;
+    });
+  }
   const digest = state.cards.reduce(
     (sum, card) => {
       const account = accountOf(card);
@@ -609,6 +638,28 @@ export function MissionForm({
         )}
 
         <div className={cardStyles.cards} data-testid="cards">
+          {lostCards.map((lost) => {
+            const removing = removedLost.has(lost.account_id);
+            return (
+              <LostAccountCard
+                key={`lost:${lost.account_id}`}
+                lost={lost}
+                icon={lost.icon}
+                removing={removing}
+                action={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={removing ? 'secondary' : 'danger'}
+                    onClick={() => toggleRemoved(lost.account_id)}
+                    data-testid="remove-lost-account"
+                  >
+                    {removing ? LOST_ACCOUNT_WORDS.keep : LOST_ACCOUNT_WORDS.remove}
+                  </Button>
+                }
+              />
+            );
+          })}
           {state.cards.length === 0 && <p className={styles.quiet}>{CARD_WORDS.nothingYet}</p>}
           {state.cards.map((card) => {
             const account = accountOf(card);

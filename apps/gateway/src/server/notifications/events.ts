@@ -28,6 +28,12 @@ export interface NotificationEvents {
    * creator is told when it was somebody else's act.
    */
   missionOrphaned(missionId: string, actorId: string): void;
+  /**
+   * An account of a mission stopped serving it through the act of `actorId` (disconnected,
+   * an access withdrawn) while the mission keeps running on its others; its creator is told
+   * when it was somebody else's act.
+   */
+  missionAccountLost(missionId: string, actorId: string): void;
   /** A mission was revoked by `actorId`; its creator is told when it was somebody else. */
   missionRevoked(missionId: string, actorId: string): void;
   /** A scheduled backup failed and uploaded nothing. */
@@ -43,6 +49,7 @@ export const NO_NOTIFICATIONS: NotificationEvents = {
   requestOpened: ignore,
   accountNeedsReconnecting: ignore,
   missionOrphaned: ignore,
+  missionAccountLost: ignore,
   missionRevoked: ignore,
   backupFailed: ignore,
   masterKeyRecovered: ignore,

@@ -16,7 +16,7 @@ tracks:
   - apps/gateway/src/components/notifications/
   - apps/gateway/src/app/(app)/settings/notifications/
   - apps/gateway/src/app/api/notifications/
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-16
 ---
 
 # Notifications — handbook
@@ -36,7 +36,7 @@ messaging addresses (a service's incoming webhook) and mail. Spec: [vaubaan-gate
 
 ## Invariants
 
-- **The dispatch points**, each called after its commit, never awaited: `budget/session-service.ts` (`notifyOpened`, a claim or approval request this call created, not one found open), `execution/permission-request.ts`, `accounts/credentials.ts` (only the call whose `markExpired` made the transition), `authority/mission-grounds.ts` (`settle`, so every act that orphans is covered, sign-ins and deactivations included), `missions/mission-service.ts` `revoke`. The dispatch drops a mission orphaned or revoked by its own creator: they know, `backup/scheduled.ts`, `auth/recovery.ts`.
+- **The dispatch points**, each called after its commit, never awaited: `budget/session-service.ts` (`notifyOpened`, a claim or approval request this call created, not one found open), `execution/permission-request.ts`, `accounts/credentials.ts` (only the call whose `markExpired` made the transition), `authority/mission-grounds.ts` (`settle`, so every act that orphans a mission or takes an account from one that keeps running — `mission-account-lost`, once its audit entry is written — is covered, sign-ins and deactivations included), `missions/mission-service.ts` `revoke`. The dispatch drops a mission orphaned, revoked or losing an account by its own creator's act: they know, `backup/scheduled.ts`, `auth/recovery.ts`.
 - **A payload carries no argument**: `notification.ts` has no field for one, the builder is pure, and a property test feeds arbitrary arguments through a refusal. Never add a field of the call to `NotificationBody`.
 - **Best effort, at once, once**: `background.ts` runs at most 4 deliveries, drops past 1000 waiting, never retries. `404`/`410` drops the device (`gone`); any other failure only stamps `last_failure_*`. Nothing reaches the executor.
 - **The endpoint is a capability URL**: sealed in `subscription_blob`, never logged, audited or shown; rows dedupe on its SHA-256, so a person subscribing on a shared browser takes the device over (a `device-removed` entry lands in the former person's trail). At most `DEVICES_MAX` (20) live devices per person: each notification posts to every one.

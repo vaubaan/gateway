@@ -393,6 +393,11 @@ export interface MissionEditView {
   readonly revision: string;
   /** Why the mission cannot be edited now; `null` when it can. */
   readonly blocked: 'revoked' | 'orphaned' | null;
+  /**
+   * The accounts of the mission that no longer serve it: the form shows each as a red
+   * card the creator may remove ("Remove from mission"); nothing else removes it.
+   */
+  readonly lost: readonly MissionLostAccount[];
 }
 
 /** What an edit would do, or why it is refused; writes nothing. */
@@ -1586,8 +1591,9 @@ export class MissionService {
    * draft, and its revision. `null` ("not found") for anyone but the creator.
    */
   async editView(user: Subject, missionId: string): Promise<MissionEditView | null> {
-    const mission = await this.ownMission(user, missionId);
-    if (!mission) return null;
+    const inspected = await this.ownInspected(user, missionId);
+    if (!inspected) return null;
+    const { mission, lost } = inspected;
     const snapshot = await this.snapshotOf(mission);
     return {
       mission,
@@ -1595,6 +1601,11 @@ export class MissionService {
       draft: draftOfSnapshot(snapshot),
       revision: revisionOfRecord(mission),
       blocked: gateEditBlockedBy(mission),
+      lost: lost.map((part) => ({
+        account_id: part.accountId,
+        cause: part.cause,
+        final: isFinalLoss(part.cause),
+      })),
     };
   }
 
