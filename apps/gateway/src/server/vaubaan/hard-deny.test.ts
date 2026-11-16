@@ -11,8 +11,8 @@
  *             and no service; the type assertions below fail `tsc` (the
  *             `type-check` step of CI) the day a forbidden handle is added
  *   imports   no source file of the module imports a forbidden module
- *   surface   the plugin's tools are the seven acts, and none belongs to a
- *             forbidden family; the ports are those seven and nothing else
+ *   surface   the plugin's tools are the nine acts, and none belongs to a
+ *             forbidden family; the ports are those nine and nothing else
  *
  * The fourth reading — the object graph of the ports the real composition
  * root builds — is `tests/integration/vaubaan/hard-deny.test.ts`.
@@ -81,26 +81,38 @@ describe('vaubaan plugin — hard deny, by type', () => {
     expectTypeOf<Extract<Handed | Store['requests'], Forbidden>>().not.toBeNever();
   });
 
-  it('of the mission service the plugin holds seven methods: no edit of a mission, its gates or its limits, no duplication, no token check', () => {
+  it('of the mission service the plugin holds ten methods: the creator’s whole edit, but no gate, limit or permission-request path, no duplication, no token check', () => {
     expectTypeOf<keyof VaubaanMissions>().toEqualTypeOf<
-      'issuanceContext' | 'preview' | 'issue' | 'rotate' | 'revoke' | 'list' | 'get'
+      | 'issuanceContext'
+      | 'preview'
+      | 'issue'
+      | 'editView'
+      | 'previewEdit'
+      | 'edit'
+      | 'rotate'
+      | 'revoke'
+      | 'list'
+      | 'get'
     >();
+    // The edit is the creator's "Edit mission", judged under their authority and one
+    // version in the History (ADR platform-management-is-a-plugin-on-the-execution-door,
+    // amendment 2026-11-16); nothing that moves a gate, a limit or answers a request.
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('setGate');
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('setLimits');
-    // An agent never changes a live mission (ADR mission-editable-after-issuance).
-    expectTypeOf<VaubaanMissions>().not.toHaveProperty('edit');
-    expectTypeOf<VaubaanMissions>().not.toHaveProperty('previewEdit');
-    expectTypeOf<VaubaanMissions>().not.toHaveProperty('editView');
+    expectTypeOf<VaubaanMissions>().not.toHaveProperty('restore');
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('changePermissions');
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('duplicate');
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('draftFrom');
     expectTypeOf<VaubaanMissions>().not.toHaveProperty('verifyToken');
     expect([...VAUBAAN_MISSION_METHODS].sort()).toEqual([
+      'edit',
+      'editView',
       'get',
       'issuanceContext',
       'issue',
       'list',
       'preview',
+      'previewEdit',
       'revoke',
       'rotate',
     ]);
@@ -185,13 +197,15 @@ describe('vaubaan plugin — hard deny, by surface', () => {
     'proxy',
   ];
 
-  it('the tools are the seven acts, in order, prefixed `vaubaan__`', () => {
+  it('the tools are the nine acts, in order, prefixed `vaubaan__`', () => {
     expect(vaubaanTools.map((tool) => tool.name)).toEqual([
       'vaubaan__list_my_accounts',
       'vaubaan__get_catalog',
       'vaubaan__list_my_missions',
       'vaubaan__preview_policy',
       'vaubaan__issue_mission',
+      'vaubaan__rename_mission',
+      'vaubaan__edit_mission',
       'vaubaan__rotate_mission_token',
       'vaubaan__revoke_mission',
     ]);

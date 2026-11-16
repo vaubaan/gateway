@@ -13,13 +13,20 @@
 import { ACT, type VaubaanActName } from '@vaubaan/plugin-vaubaan/identity';
 import { z } from 'zod';
 
-import { missionDraftSchema } from '../missions';
+import { MISSION_NAME_MAX_LENGTH, missionDraftSchema } from '../missions';
 
 const missionId = z
   .string()
   .min(1)
   .max(300)
   .describe('Id of one of the user’s missions, as `list_my_missions` returns it.');
+
+/** A draft naming the mission it edits: the whole mission after the edit. */
+const editDraft = missionDraftSchema.extend({
+  mission_id: missionId.describe(
+    'Id of one of the user’s missions, as `list_my_missions` returns it: the mission the draft edits.',
+  ),
+});
 
 export const VAUBAAN_INPUTS = {
   listMyAccounts: z
@@ -57,8 +64,26 @@ export const VAUBAAN_INPUTS = {
         .describe('Also list revoked and expired missions (left out by default).'),
     })
     .strict(),
-  previewPolicy: missionDraftSchema,
+  previewPolicy: missionDraftSchema.extend({
+    mission_id: missionId
+      .optional()
+      .describe(
+        'Preview an edit of this mission instead of an issuance: the draft is the whole mission after the edit.',
+      ),
+  }),
   issueMission: missionDraftSchema,
+  renameMission: z
+    .object({
+      mission_id: missionId,
+      name: z
+        .string()
+        .min(1)
+        .max(MISSION_NAME_MAX_LENGTH)
+        .regex(/\S/, 'The name is blank.')
+        .describe('The new name, as the user will read it: not empty, at most 120 characters.'),
+    })
+    .strict(),
+  editMission: editDraft,
   rotateMissionToken: z.object({ mission_id: missionId }).strict(),
   revokeMission: z.object({ mission_id: missionId }).strict(),
 } as const satisfies Record<VaubaanActName, z.ZodType>;

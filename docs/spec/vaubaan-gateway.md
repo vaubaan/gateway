@@ -564,15 +564,19 @@ other; the tools then act **in the name of the mission's creator**, within their
 - **Issue** (`vaubaan__issue_mission`) a mission. The creator is the calling mission's creator,
   never the agent; the new mission names the calling one as the mission that prepared it. The answer
   holds the token, revealed once, and the bootstrap kit.
+- **Rename** (`vaubaan__rename_mission`) or **edit** (`vaubaan__edit_mission`) any of the creator's
+  missions, as their own "Edit mission" does: one version in the History, by the calling mission,
+  within the creator's authority now and refused whole beyond it; `vaubaan__preview_policy` with a
+  `mission_id` previews the edit.
 - **Rotate** (`vaubaan__rotate_mission_token`) the token of a mission the calling mission issued
   (another is refused `mission-not-issued-here`); **revoke** (`vaubaan__revoke_mission`) any of the
   creator's missions.
 - **The self rule**, checked by the host at every call whatever the stored selection says: a mission
-  issued here never carries a Vaubaan account (`vaubaan-account-not-allowed`); the calling mission
-  never rotates nor revokes itself (`self-not-allowed`); only the creator's own key or a machine key
+  issued or edited here never carries a Vaubaan account (`vaubaan-account-not-allowed`); the calling
+  mission never renames, edits, rotates nor revokes itself (`self-not-allowed`); only the creator's own key or a machine key
   calls these tools — a teammate's key is refused (`teammate-key-not-allowed`).
-- **Never exposed**: answering a request; opening a gate, extending a budget, changing a mission's
-  limits or permissions, resetting a period; connecting, sharing, transferring or revoking an
+- **Never exposed**: answering a request; opening a gate, extending a budget or changing a mission's
+  limits or permissions other than by a whole edit judged as above; resetting a period; connecting, sharing, transferring or revoking an
   account; executing another service's tool; adding members or making named tokens.
 - The plugin's `execute` is composed by the host from the mission service, never through the SDK;
   a plugin declaring a host account loads only bundled with the image, never from a pin. The host's

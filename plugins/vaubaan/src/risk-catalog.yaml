@@ -15,7 +15,7 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 #
-# 5 risks + 1 fallback, one per act a person tells apart. Every act is done in the
+# 7 risks + 1 fallback, one per act a person tells apart. Every act is done in the
 # name of the mission's creator and never beyond their authority: a mission issued
 # here can accept only what they hold, and the host refuses a mission that would
 # carry a Vaubaan account, or act on the calling mission itself. No environment :
@@ -24,15 +24,21 @@
 #   read-setup          row 1  names, ids and policies; no secret leaves (keys are masked)
 #   read-missions       row 1  same
 #   mission-issue       row 2  the answer carries a new mission key (`data: secret`)
+#   mission-rename      row 1  a name, nothing else; renamed back in one call
+#   mission-edit        row 2  one edit may widen a mission to everything the person holds
+#                              on every account (`blast: account`); edited back, or a
+#                              version restored, in one act
 #   mission-key-rotate  row 2  the answer carries the new key (`data: secret`)
 #   mission-revoke      row 3  the mission cannot come back; a new one is issued at a price
 #                              (the agent stops, a person hands the new key over)
 #
 # catalog_version 1 (2026-11-14) : first catalog, from the seven tools of the retired
 # management door (ADR platform-management-is-a-plugin-on-the-execution-door).
+# catalog_version 2 (2026-11-16) : `mission-rename` and `mission-edit`, in "Prepare missions"
+# (ADR amendment 2026-11-16: the door's lack of an edit was inherited, not decided).
 service: vaubaan
-catalog_version: 1
-catalog_date: 2026-11-14
+catalog_version: 2
+catalog_date: 2026-11-16
 
 risks:
   - id: vaubaan.read-setup
@@ -79,6 +85,37 @@ risks:
       data: secret #              the answer carries the new mission key
       cost: free
       visibility: internal
+
+  - id: vaubaan.mission-rename
+    label: 'Rename one of my missions'
+    reason: >-
+      Changes the name of one of the person's missions, as they read it in the
+      interface and its History. Nothing else moves: permissions, limits, keys and
+      the agent's work are untouched. A mission cannot rename itself here.
+    matches: 'vaubaan.mission[**].rename.W'
+    vector:
+      reversibility: reversible # renamed back in one call
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.mission-edit
+    label: 'Change one of my missions'
+    reason: >-
+      Changes a mission after issuance, as "Edit mission" does in the interface: its
+      accounts, resources, permissions, limits and end, within the person's authority
+      and never beyond it. One edit can widen a mission to everything the person holds,
+      or narrow it under the agent working on it. Each edit is one version in the
+      mission's History; a mission cannot edit itself here, and an edit never adds a
+      Vaubaan account.
+    matches: 'vaubaan.mission[**].edit.W'
+    vector:
+      reversibility: reversible # edited back, or a version restored, in one act
+      blast: account #            the reach of a mission is every account it may hold
+      data: metadata
+      cost: free
+      visibility: team #          the agent working on the mission sees it change
 
   - id: vaubaan.mission-key-rotate
     label: 'Replace the key of a mission this mission issued'
@@ -137,13 +174,20 @@ macro_actions:
         rate_limit: { max: 60, window_seconds: 60 }
   - id: prepare
     label: 'Prepare missions'
-    description: 'Issue a mission in my name.'
+    description: 'Issue a mission in my name; rename or change my missions.'
     narrative: >-
-      Issuing a mission for another agent: the person is its creator, it holds only what
-      they hold, and they answer its requests. The answer carries the mission's key, which
-      is why the person sees each issuance before it happens at the careful level.
+      Issuing a mission for another agent, renaming one, or changing one after issuance:
+      the person is the creator, a mission holds only what they hold, and they answer its
+      requests. Issuing hands over a key and an edit can widen a mission, which is why the
+      person sees each before it happens at the careful level; a new name runs freely.
     entries:
       - risk_id: vaubaan.mission-issue
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vaubaan.mission-rename
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vaubaan.mission-edit
         quota: 10
         rate_limit: { max: 5, window_seconds: 60 }
   - id: rotate

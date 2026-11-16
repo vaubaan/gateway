@@ -145,6 +145,8 @@ export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,
   tokenHolderOf,
+  type EditPreviewResult,
+  type EditResult,
   type IssueOptions,
   type IssueResult,
   type LimitReachedResult,
@@ -154,6 +156,7 @@ export {
   type MissionDetail,
   type MissionDetailAccount,
   type MissionDetailRisk,
+  type MissionEditView,
   type MissionIssuedAudit,
   type MissionOrphanReason,
   type MissionOverview,
@@ -200,8 +203,10 @@ export {
   defaultResources,
   previewAccount,
   previewDraft,
+  MISSION_NAME_MAX_LENGTH,
   uncoveredOf,
 } from '../../lib/missions/preview';
+export { hasChanges, type MissionChanges } from '../../lib/missions/mission-edit';
 export { explainOrphan, type OrphanExplanation } from './orphan-reason';
 export { summarize } from '../../lib/missions/summary';
 export {

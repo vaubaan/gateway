@@ -9,9 +9,11 @@
  * that could do it. `VaubaanModuleDeps` lists two ports — next to a logger —
  * and nothing else:
  *
- *   missions   seven methods of the mission service: read, preview, issue,
- *              rotate, revoke — not `setGate`, not `duplicate`, not
- *              `verifyToken`, not `edit`
+ *   missions   ten methods of the mission service: read, preview, issue,
+ *              the edit of a mission (`editView`, `previewEdit`, `edit`: the
+ *              creator's "Edit mission", one version each), rotate, revoke —
+ *              not `setGate`, not `setLimits`, not `changePermissions`, not
+ *              `duplicate`, not `verifyToken`
  *   catalog    the shipped catalogs and macro-actions, as plain data
  *
  * The composition root builds each port as an object of closures
@@ -31,13 +33,25 @@ import type { CatalogRisk, MissionService } from '../missions';
 
 /**
  * The part of the mission service the acts may use, each method called with
- * the calling mission's creator as the actor. `issue`, `rotate` and `revoke`
- * receive the calling mission, so a mission records who issued it and the audit
- * names it.
+ * the calling mission's creator as the actor. `issue`, `edit`, `rotate` and
+ * `revoke` receive the calling mission, so a mission records who issued it, a
+ * version who wrote it, and the audit names it. An edit reaches what the
+ * creator's own "Edit mission" reaches — bounded by their authority now — and
+ * nothing a gate, a limit or a permission request alone would (ADR amendment
+ * 2026-11-16).
  */
 export type VaubaanMissions = Pick<
   MissionService,
-  'issuanceContext' | 'preview' | 'issue' | 'rotate' | 'revoke' | 'list' | 'get'
+  | 'issuanceContext'
+  | 'preview'
+  | 'issue'
+  | 'editView'
+  | 'previewEdit'
+  | 'edit'
+  | 'rotate'
+  | 'revoke'
+  | 'list'
+  | 'get'
 >;
 
 /** The names of `VaubaanMissions`, for the composition root and the tests. */
@@ -45,6 +59,9 @@ export const VAUBAAN_MISSION_METHODS = [
   'issuanceContext',
   'preview',
   'issue',
+  'editView',
+  'previewEdit',
+  'edit',
   'rotate',
   'revoke',
   'list',

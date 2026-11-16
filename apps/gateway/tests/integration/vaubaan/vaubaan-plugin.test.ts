@@ -14,9 +14,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type {
   AccountsAnswer,
+  EditedMissionAnswer,
+  EditPreviewAnswer,
   IssuedMissionAnswer,
+  MissionReadView,
   MissionsAnswer,
   PreviewView,
+  RenamedMissionAnswer,
   RevokedMissionAnswer,
   RotatedTokenAnswer,
 } from '../../../src/server/vaubaan';
@@ -42,6 +46,8 @@ const VAUBAAN_TOOLS = [
   'vaubaan__list_my_missions',
   'vaubaan__preview_policy',
   'vaubaan__issue_mission',
+  'vaubaan__rename_mission',
+  'vaubaan__edit_mission',
   'vaubaan__rotate_mission_token',
   'vaubaan__revoke_mission',
 ];
@@ -80,7 +86,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     return answer.data;
   }
 
-  it('lists the seven tools beside the permission request, each with a description and an input schema', async () => {
+  it('lists the nine tools beside the permission request, each with a description and an input schema', async () => {
     const agent = await rig.agentOf(ADA);
     const { tools } = await agent.client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(
@@ -299,6 +305,155 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     });
   });
 
+  describe('renaming and editing (ADR amendment 2026-11-16)', () => {
+    /** The stored draft of a mission, as `list_my_missions` with `mission_id` answers it. */
+    async function draftOf(agent: Agent, missionId: string) {
+      const listed = await agent.call<MissionsAnswer>('list_my_missions', {
+        mission_id: missionId,
+      });
+      const draft = (listed.data.missions[0] as MissionReadView).draft;
+      if (!draft) throw new Error('no draft for the creator');
+      return draft as unknown as Record<string, unknown> & {
+        accounts: Record<string, unknown>[];
+      };
+    }
+
+    it('renames a mission: one version authored by the calling mission, one entry naming it', async () => {
+      const agent = await rig.agentOf(ADA);
+      const issued = await issue(agent, draftOn(github, ['github.read-code']));
+      const id = issued.mission.mission_id;
+      const renamed = await agent.call<RenamedMissionAnswer>('rename_mission', {
+        mission_id: id,
+        name: 'Fix the flaky test, then the docs',
+      });
+      expect(renamed.data).toEqual({
+        mission_id: id,
+        name: 'Fix the flaky test, then the docs',
+        renamed: true,
+      });
+      expect((await rig.root.store.missions.getById(id))?.name).toBe(
+        'Fix the flaky test, then the docs',
+      );
+      const versions = await rig.root.store.missionVersions.list(id);
+      expect(versions.map((v) => v.cause)).toEqual(['edit', 'issued']);
+      expect(versions[0]).toMatchObject({
+        author: { kind: 'mission', missionId: agent.missionId, userId: rig.seeded.ada.id },
+      });
+      const entries = (await rig.adminEntries('mission-changed')).filter((e) => e.object.id === id);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        user_id: rig.seeded.ada.id,
+        via_mission_id: agent.missionId,
+      });
+      // The key keeps working: a name moves nothing the agent may do.
+      expect(await executionSays(issued.token.secret)).toBe('ok');
+      const blank = await agent.call<Refused>('rename_mission', { mission_id: id, name: '   ' });
+      expect(blank.data.error.code).toBe('invalid-arguments');
+      await agent.close();
+    });
+
+    it('edits from the stored draft, previewed first; beyond the authority it is refused whole', async () => {
+      await shareWithBob();
+      const agent = await rig.agentOf(BOB);
+      const issued = await issue(agent, draftOn(github, ['github.read-code']));
+      const id = issued.mission.mission_id;
+      const draft = await draftOf(agent, id);
+      const account = draft.accounts[0]!;
+      const line = (risk_id: string) => ({
+        risk_id,
+        quota: 20,
+        rate_limit: { max: 5, window_seconds: 60 },
+        gate: 'auto',
+      });
+      const policy = account.policy as unknown[];
+
+      // ── Beyond Bob's share: refused whole, nothing written ──
+      const wider = {
+        ...draft,
+        accounts: [{ ...account, policy: [...policy, line(NOT_SHARED)] }],
+      };
+      const previewed = await agent.call<EditPreviewAnswer>('preview_policy', {
+        ...wider,
+        mission_id: id,
+      });
+      expect(previewed.data).toMatchObject({ mission_id: id, ok: false });
+      expect(previewed.data.uncovered).toEqual([
+        { account_id: github, service: 'github', risk_ids: [NOT_SHARED] },
+      ]);
+      const refused = await agent.call<Refused>('edit_mission', { ...wider, mission_id: id });
+      expect(refused.data.error).toMatchObject({
+        code: 'draft-refused',
+        uncovered: [{ account_id: github, service: 'github', risk_ids: [NOT_SHARED] }],
+      });
+      expect(await rig.root.store.missionVersions.list(id)).toHaveLength(1);
+
+      // ── Within it: previewed ok, applied as one version by the calling mission ──
+      const within = {
+        ...draft,
+        accounts: [{ ...account, policy: [...policy, line('github.create-pr')] }],
+      };
+      const ok = await agent.call<EditPreviewAnswer>('preview_policy', {
+        ...within,
+        mission_id: id,
+      });
+      expect(ok.data).toMatchObject({ ok: true, uncovered: [] });
+      const edited = await agent.call<EditedMissionAnswer>('edit_mission', {
+        ...within,
+        mission_id: id,
+      });
+      expect(edited.isError).toBe(false);
+      expect(edited.data).toMatchObject({ mission_id: id, changed: true });
+      const versions = await rig.root.store.missionVersions.list(id);
+      expect(versions).toHaveLength(2);
+      expect(versions[0]).toMatchObject({
+        cause: 'edit',
+        author: { kind: 'mission', missionId: agent.missionId, userId: rig.seeded.bob.id },
+      });
+      const [entry] = (await rig.adminEntries('mission-changed')).filter((e) => e.object.id === id);
+      expect(entry).toMatchObject({ via_mission_id: agent.missionId });
+      expect(await executionSays(issued.token.secret)).toBe('ok');
+      await agent.close();
+    });
+
+    it('an edit never adds a Vaubaan account, and the calling mission never renames nor edits itself', async () => {
+      const agent = await rig.agentOf(ADA);
+      const issued = await issue(agent, draftOn(github, ['github.read-code']));
+      const draft = await draftOf(agent, issued.mission.mission_id);
+      const answer = await agent.call<Refused>('edit_mission', {
+        ...draft,
+        mission_id: issued.mission.mission_id,
+        accounts: [
+          ...draft.accounts,
+          { account_id: agent.accountId, trust_levels: { read: 'careful' } },
+        ],
+      });
+      expect(answer.data.error.code).toBe('vaubaan-account-not-allowed');
+      const self = { mission_id: agent.missionId };
+      const renamed = await agent.call<Refused>('rename_mission', { ...self, name: 'Me' });
+      expect(renamed.data.error).toMatchObject({ code: 'self-not-allowed', ...self });
+      const own = await agent.call<Refused>('edit_mission', { ...draft, ...self });
+      expect(own.data.error).toMatchObject({ code: 'self-not-allowed', ...self });
+      expect(await rig.adminEntries('mission-changed')).toEqual([]);
+      await agent.close();
+    });
+
+    it('a mission of another user is not found, for a rename as for an edit', async () => {
+      const ada = await rig.agentOf(ADA);
+      const issued = await issue(ada, draftOn(github, ['github.read-code']));
+      const bob = await rig.agentOf(BOB);
+      const id = issued.mission.mission_id;
+      const renamed = await bob.call<Refused>('rename_mission', { mission_id: id, name: 'Mine' });
+      expect(renamed.data.error.code).toBe('mission-not-found');
+      const edited = await bob.call<Refused>('edit_mission', {
+        ...draftOn(github, ['github.read-code']),
+        mission_id: id,
+      });
+      expect(edited.data.error.code).toBe('mission-not-found');
+      await ada.close();
+      await bob.close();
+    });
+  });
+
   describe('rotating and revoking', () => {
     it('rotates the key of a mission it issued: the old one stops, the entry names the calling mission', async () => {
       const agent = await rig.agentOf(ADA);
@@ -415,6 +570,32 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
       expect(asked.protocolError).toBe(true);
       expect(asked.code).toBe('approval-required');
       expect(await rig.adminEntries('mission-issued')).toHaveLength(1); // the platform mission
+      await agent.close();
+    });
+
+    it('at Careful, a rename runs freely and an edit asks the person first, like issuing', async () => {
+      const agent = await rig.agentOf(ADA, {
+        read: 'careful',
+        prepare: 'careful',
+        rotate: 'careful',
+        stop: 'careful',
+      });
+      const human = await rig.root.missions.service.issue(
+        rig.seeded.ada,
+        draftOn(github, ['github.read-code']) as never,
+      );
+      if (!human.ok) throw new Error('the human issuance was refused');
+      const renamed = await agent.call('rename_mission', {
+        mission_id: human.mission.id,
+        name: 'Renamed at Careful',
+      });
+      expect(renamed.isError).toBe(false);
+      const asked = await agent.call('edit_mission', {
+        ...draftOn(github, ['github.read-code']),
+        mission_id: human.mission.id,
+      });
+      expect(asked.protocolError).toBe(true);
+      expect(asked.code).toBe('approval-required');
       await agent.close();
     });
 

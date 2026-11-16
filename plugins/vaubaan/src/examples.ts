@@ -11,7 +11,7 @@ import { TOOL } from './identity.ts';
 /** A mission id as `list_my_missions` returns it (UUIDv7). */
 export const EXAMPLE_MISSION_ID = '0193a4f2-7c1e-7b3a-9d2f-5e6a7b8c9d0e';
 
-/** A draft as `preview_policy` and `issue_mission` take it. */
+/** A draft as `preview_policy`, `issue_mission` and `edit_mission` (with `mission_id`) take it. */
 export const EXAMPLE_DRAFT = {
   name: 'Fix the flaky test',
   period: { kind: 'one-off' },
@@ -37,8 +37,20 @@ export const vaubaanExamples: ToolSamples = samplesOn([], {
     { args: { mission_id: EXAMPLE_MISSION_ID, include_closed: true } },
     { args: { mission_id: 42 }, expectDenied: true },
   ],
-  [TOOL.previewPolicy]: [{ args: EXAMPLE_DRAFT }],
+  [TOOL.previewPolicy]: [
+    { args: EXAMPLE_DRAFT },
+    { args: { ...EXAMPLE_DRAFT, mission_id: EXAMPLE_MISSION_ID } },
+    { args: { ...EXAMPLE_DRAFT, mission_id: 42 }, expectDenied: true },
+  ],
   [TOOL.issueMission]: [{ args: EXAMPLE_DRAFT }],
+  [TOOL.renameMission]: [
+    { args: { mission_id: EXAMPLE_MISSION_ID, name: 'Fix the flaky test, then the docs' } },
+    { args: { name: 'No mission named' }, expectDenied: true },
+  ],
+  [TOOL.editMission]: [
+    { args: { ...EXAMPLE_DRAFT, mission_id: EXAMPLE_MISSION_ID } },
+    { args: EXAMPLE_DRAFT, expectDenied: true },
+  ],
   [TOOL.rotateMissionToken]: [
     { args: { mission_id: EXAMPLE_MISSION_ID } },
     { args: {}, expectDenied: true },

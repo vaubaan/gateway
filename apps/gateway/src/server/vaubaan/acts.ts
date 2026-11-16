@@ -1,11 +1,12 @@
 /**
- * `VaubaanActs` — the seven acts of the `vaubaan` plugin (spec §4.1 bis), each a
+ * `VaubaanActs` — the nine acts of the `vaubaan` plugin (spec §4.1 bis), each a
  * thin, typed projection of the mission service with the **calling mission's
  * creator as the actor**:
  *
  *   read      `listMyAccounts`, `getCatalog`, `listMyMissions`
- *   preview   `previewPolicy` — writes nothing
- *   mutate    `issueMission`, `rotateMissionToken`, `revokeMission`
+ *   preview   `previewPolicy` — of an issuance, or of an edit; writes nothing
+ *   mutate    `issueMission`, `renameMission`, `editMission`,
+ *             `rotateMissionToken`, `revokeMission`
  *
  * Authority is never decided here. `previewDraft` (missions) says what a draft
  * may accept from the user's *current* authority — owner, or the union of their
@@ -13,15 +14,19 @@
  * calling mission along and words the answers. A mission issued here has the
  * user as creator, records the issuing mission (`issued_via`) and leaves a
  * `mission-issued` entry naming it; `rotate` and `revoke` leave theirs the same
- * way.
+ * way. A rename or an edit is the creator's "Edit mission" (`MissionService.edit`):
+ * one version in the History, authored by the calling mission, one
+ * `mission-changed` entry naming it.
  *
  * **The self rule** (ADR platform-management-is-a-plugin-on-the-execution-door)
  * is checked here, at every call, whatever the stored selection says — like
  * `isSelfResource` for the instance's own hosting:
  *
- *   - a draft carrying a `vaubaan` account is refused (`vaubaan-account-not-allowed`):
- *     a mission issued here never prepares missions itself;
- *   - the calling mission never rotates or revokes itself (`self-not-allowed`);
+ *   - a draft carrying a `vaubaan` account is refused (`vaubaan-account-not-allowed`),
+ *     at issuance and at an edit: a mission issued or edited here never prepares
+ *     missions itself;
+ *   - the calling mission never renames, edits, rotates or revokes itself
+ *     (`self-not-allowed`);
  *   - `rotate_mission_token` reaches only the missions the calling mission issued.
  *
  * There is no method for anything else, and the ports this class is built from
@@ -34,10 +39,16 @@ import type { Logger } from '../logging';
 import {
   MISSION_TOKEN_ENV,
   maskedToken,
+  hasChanges,
   type BootstrapKit,
+  type EditResult,
   type IssuanceAccount,
   type LimitReachedResult,
+  type MissionChanges,
   type MissionDraft,
+  type MissionEditView,
+  type PreviewIssue,
+  type PreviewNotice,
 } from '../missions';
 import type { VaubaanCatalog, VaubaanMissions } from './ports';
 import {
@@ -53,6 +64,7 @@ import {
   type MissionView,
   type OrphanView,
   type PreviewView,
+  type UncoveredView,
 } from './views';
 
 /** The service id of the gateway's own account: a mission issued here never carries one. */
@@ -71,6 +83,7 @@ export const VAUBAAN_REFUSAL_CODES = [
   'mission-not-found',
   'mission-inactive',
   'mission-not-issued-here',
+  'mission-changed-meanwhile',
   'unknown-service',
   'unknown-account',
   'instance-limit-reached',
@@ -95,8 +108,14 @@ export interface AccountsAnswer {
   readonly accounts: readonly AccountView[];
 }
 
+/**
+ * One mission read by its id: for its creator, also the mission as a draft — the
+ * starting point of `edit_mission` — or `null` for a mission they are only a member of.
+ */
+export type MissionReadView = MissionDetailView & { readonly draft: MissionDraft | null };
+
 export interface MissionsAnswer {
-  readonly missions: readonly (MissionView | MissionDetailView)[];
+  readonly missions: readonly (MissionView | MissionReadView)[];
   /** Revoked and expired missions left out; pass `include_closed` to see them. */
   readonly hidden_closed: number;
 }
@@ -131,6 +150,37 @@ export interface IssuedMissionAnswer {
   readonly policy: PreviewView['policy'];
   readonly summary: PreviewView['summary'];
   readonly notices: PreviewView['notices'];
+}
+
+/** What an edit of a mission would do (`preview_policy` with `mission_id`); writes nothing. */
+export interface EditPreviewAnswer {
+  readonly mission_id: string;
+  /** True when `edit_mission` would accept this draft unchanged. */
+  readonly ok: boolean;
+  /** Why the edit cannot be applied as written; only about what it moves. */
+  readonly issues: readonly PreviewIssue[];
+  readonly notices: readonly PreviewNotice[];
+  /** Accepted risks outside the user's authority, per account. */
+  readonly uncovered: readonly UncoveredView[];
+  /** What the edit moves; all empty for a draft equal to the mission. */
+  readonly changes: MissionChanges;
+}
+
+export interface EditedMissionAnswer {
+  readonly mission_id: string;
+  readonly name: string;
+  /** False when the draft was the mission as it stands: nothing was written. */
+  readonly changed: boolean;
+  readonly changes: MissionChanges;
+  /** The open requests of the mission the edit made moot, now closed. */
+  readonly requests_closed: readonly string[];
+}
+
+export interface RenamedMissionAnswer {
+  readonly mission_id: string;
+  readonly name: string;
+  /** False when the mission already had this name: nothing was written. */
+  readonly renamed: boolean;
 }
 
 export interface RotatedTokenAnswer {
@@ -173,11 +223,18 @@ function tokenView(token: { secret: string; prefix: string }): RevealedTokenView
   };
 }
 
-/** The instance's ceiling of active missions refuses the issuance (spec §4.3 bis). */
-function instanceLimitRefusal(message: string, limit: LimitReachedResult['limit']): ActRefusal {
+/**
+ * The instance's ceiling of active missions refuses the issuance, or a new end
+ * that would revive an ended mission (spec §4.3 bis).
+ */
+function instanceLimitRefusal(
+  message: string,
+  limit: LimitReachedResult['limit'],
+  outcome: 'issued' | 'changed' = 'issued',
+): ActRefusal {
   return {
     code: 'instance-limit-reached',
-    message: `${message} Nothing was issued.`,
+    message: `${message} Nothing was ${outcome}.`,
     hint: 'The draft is fine: the gateway holds as many active missions as its operator allows. Ask the user to revoke a mission they no longer need, or the operator of the gateway to raise the ceiling, then issue again.',
     count: limit.count,
     ceiling: limit.limit,
@@ -203,22 +260,85 @@ function draftRefusal(preview: PreviewView): ActRefusal {
 }
 
 /** A draft naming a Vaubaan account: refused whole, whatever else it says. */
-function vaubaanAccountRefusal(accountIds: readonly string[]): ActRefusal {
+function vaubaanAccountRefusal(
+  accountIds: readonly string[],
+  outcome: 'issued' | 'changed' = 'issued',
+): ActRefusal {
   return {
     code: 'vaubaan-account-not-allowed',
-    message: 'A mission issued by a mission never carries a Vaubaan account. Nothing was issued.',
+    message: `A mission issued or edited by a mission never carries a Vaubaan account. Nothing was ${outcome}.`,
     hint: 'Remove the Vaubaan account from the draft: the mission you prepare works on the services, not on missions. Only the user gives a mission a Vaubaan account, in the web interface.',
     account_ids: accountIds,
   };
 }
 
+/** What an act does to a mission, as its refusals word it. */
+type MissionVerb = 'renamed' | 'edited' | 'rotated' | 'revoked';
+
 /** The calling mission named itself. */
-function selfRefusal(missionId: string, act: 'rotated' | 'revoked'): ActRefusal {
+function selfRefusal(missionId: string, act: MissionVerb): ActRefusal {
   return {
     code: 'self-not-allowed',
     message: `Mission "${missionId}" is the mission making this call: it is never ${act} through its own key.`,
-    hint: 'The user rotates or revokes this mission in the web interface, on the mission’s page.',
+    hint: 'The user renames, edits, rotates or revokes this mission in the web interface, on the mission’s page.',
     mission_id: missionId,
+  };
+}
+
+/** The mission moved between the read of its revision and the write: nothing was written. */
+function changedMeanwhile(missionId: string): ActRefusal {
+  return {
+    code: 'mission-changed-meanwhile',
+    message: `Mission "${missionId}" changed while this call ran. Nothing was changed.`,
+    hint: 'Read it again with `vaubaan__list_my_missions` and `mission_id` (its `draft`), apply your change to it, and call again.',
+    mission_id: missionId,
+  };
+}
+
+/** The accepted risks outside the authority, from an edit's issues (`exceeds-authority`). */
+function uncoveredOfIssues(
+  issues: readonly PreviewIssue[],
+  context: readonly IssuanceAccount[],
+): UncoveredView[] {
+  return issues
+    .filter((issue) => issue.code === 'exceeds-authority' && issue.account_id !== undefined)
+    .map((issue) => ({
+      account_id: issue.account_id ?? '',
+      service: context.find((c) => c.id === issue.account_id)?.service ?? '',
+      risk_ids: issue.risk_ids ?? [],
+    }));
+}
+
+/** The refusal of an edit the mission service judged: its issues, what it would move. */
+function editRefusal(
+  missionId: string,
+  issues: readonly PreviewIssue[],
+  changes: MissionChanges,
+  uncovered: readonly UncoveredView[],
+): ActRefusal {
+  const beyond = uncovered.length > 0;
+  return {
+    code: 'draft-refused',
+    message: beyond
+      ? 'The edit accepts risks outside the user’s authority. Nothing was changed.'
+      : 'The edit cannot be applied as written. Nothing was changed.',
+    hint: beyond
+      ? 'Remove the ids listed in `uncovered` (or ask the user to obtain a wider share from the account’s owner in the interface), fix the other `issues` if any, then call `vaubaan__preview_policy` with `mission_id` until it answers `ok: true`.'
+      : 'Fix every entry of `issues`, then call `vaubaan__preview_policy` with `mission_id` until it answers `ok: true`.',
+    mission_id: missionId,
+    uncovered,
+    issues,
+    changes,
+  };
+}
+
+/** What the mission service could not read as an edit (the schema read it first: rare). */
+function invalidEdit(problems: readonly string[]): ActRefusal {
+  return {
+    code: 'invalid-arguments',
+    message: 'The draft is not an edit of the mission. Nothing was changed.',
+    hint: 'Fix every entry of `issues`, as the tool’s input schema in `tools/list` describes it.',
+    issues: problems.map((message) => ({ path: '', message })),
   };
 }
 
@@ -325,8 +445,15 @@ export class VaubaanActs {
     if (input.mission_id !== undefined) {
       const detail = await this.deps.missions.get(user, input.mission_id);
       if (!detail) return refused(missionNotFound(input.mission_id));
+      // The draft an edit starts from: the creator's alone, like the edit itself.
+      const edit =
+        detail.role === 'creator'
+          ? await this.deps.missions.editView(user, detail.mission.id)
+          : null;
       return done({
-        missions: [missionDetailView(detail, viewer, maskedToken)],
+        missions: [
+          { ...missionDetailView(detail, viewer, maskedToken), draft: edit?.draft ?? null },
+        ],
         hidden_closed: 0,
       });
     }
@@ -343,12 +470,40 @@ export class VaubaanActs {
   // Preview
   // ───────────────────────────────────────────────────────────────────────────
 
-  /** What passes, what exceeds the user's authority, what the mission could call. Writes nothing. */
+  /**
+   * What passes, what exceeds the user's authority, what the mission could call.
+   * With `mission_id`, the preview of an edit of that mission instead — the
+   * creator's own (`previewEdit`), so it judges exactly as `editMission` will.
+   * Writes nothing.
+   */
   async previewPolicy(
     caller: VaubaanCaller,
-    draft: MissionDraft,
-  ): Promise<ActOutcome<PreviewView>> {
-    return done(previewView(await this.deps.missions.preview({ id: caller.userId }, draft)));
+    input: MissionDraft & { readonly mission_id?: string | undefined },
+  ): Promise<ActOutcome<PreviewView | EditPreviewAnswer>> {
+    const { mission_id: missionId, ...draft } = input;
+    const user = { id: caller.userId };
+    if (missionId === undefined) {
+      return done(previewView(await this.deps.missions.preview(user, draft)));
+    }
+    const target = await this.#editable(caller, missionId, 'edited');
+    if (!target.ok) return target;
+    const id = target.data.mission.id;
+    const result = await this.deps.missions.previewEdit(user, id, {
+      draft,
+      revision: target.data.revision,
+    });
+    if (result.reason === 'not-found') return refused(missionNotFound(missionId));
+    if (result.reason === 'inactive') return refused(inactive(id, result.state, null, 'edited'));
+    if (result.reason === 'invalid-edit') return refused(invalidEdit(result.problems));
+    const context = await this.deps.missions.issuanceContext(user);
+    return done({
+      mission_id: id,
+      ok: result.ok,
+      issues: result.issues,
+      notices: result.notices,
+      uncovered: uncoveredOfIssues(result.issues, context),
+      changes: result.changes,
+    });
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -411,6 +566,128 @@ export class VaubaanActs {
   }
 
   /**
+   * Renames one of the user's missions: an edit of the name alone, through the
+   * creator's own "Edit mission" — the mission's draft as it stands with the new
+   * name — so it is one version in the History, authored by the calling mission,
+   * and one `mission-changed` entry naming it. Never the calling mission itself.
+   */
+  async renameMission(
+    caller: VaubaanCaller,
+    input: { readonly mission_id: string; readonly name: string },
+  ): Promise<ActOutcome<RenamedMissionAnswer>> {
+    const target = await this.#editable(caller, input.mission_id, 'renamed');
+    if (!target.ok) {
+      this.log('rename_mission', caller, target.refusal.code, input.mission_id);
+      return target;
+    }
+    const view = target.data;
+    const result = await this.#applyEdit(caller, view, { ...view.draft, name: input.name });
+    this.log(
+      'rename_mission',
+      caller,
+      result.ok ? 'renamed' : result.refusal.code,
+      view.mission.id,
+    );
+    if (!result.ok) return result;
+    return done({
+      mission_id: result.data.mission_id,
+      name: result.data.name,
+      renamed: result.data.changed,
+    });
+  }
+
+  /**
+   * Edits one of the user's missions as their "Edit mission" does: the draft is
+   * the whole mission after the edit, judged under their authority now and
+   * refused whole when it exceeds it (`uncovered`), never narrowed. A draft
+   * naming a Vaubaan account is refused before anything else; the calling
+   * mission is never edited. One version in the History, authored by the calling
+   * mission; one `mission-changed` entry naming it.
+   */
+  async editMission(
+    caller: VaubaanCaller,
+    input: MissionDraft & { readonly mission_id: string },
+  ): Promise<ActOutcome<EditedMissionAnswer>> {
+    const { mission_id: missionId, ...draft } = input;
+    const target = await this.#editable(caller, missionId, 'edited');
+    if (!target.ok) {
+      this.log('edit_mission', caller, target.refusal.code, missionId);
+      return target;
+    }
+    const view = target.data;
+    const context = await this.deps.missions.issuanceContext({ id: caller.userId });
+    const vaubaan = vaubaanAccountsOf(draft, context);
+    if (vaubaan.length > 0) {
+      this.log('edit_mission', caller, 'vaubaan-account-not-allowed', view.mission.id);
+      return refused(vaubaanAccountRefusal(vaubaan, 'changed'));
+    }
+    const result = await this.#applyEdit(caller, view, draft, context);
+    this.log('edit_mission', caller, result.ok ? 'edited' : result.refusal.code, view.mission.id);
+    return result;
+  }
+
+  /**
+   * The mission the calling mission may rename or edit: one the user created,
+   * not the calling mission, neither revoked nor orphaned (an expired one is:
+   * a new end revives it, within the instance's ceiling).
+   */
+  async #editable(
+    caller: VaubaanCaller,
+    missionId: string,
+    verb: 'renamed' | 'edited',
+  ): Promise<ActOutcome<MissionEditView>> {
+    // `null` for a mission of another user and for one the user is only a member of.
+    const view = await this.deps.missions.editView({ id: caller.userId }, missionId);
+    if (!view) return refused(missionNotFound(missionId));
+    if (view.mission.id === caller.missionId) return refused(selfRefusal(view.mission.id, verb));
+    if (view.blocked) return refused(inactive(view.mission.id, view.blocked, null, verb));
+    return done(view);
+  }
+
+  /** `MissionService.edit` from the revision just read, in the calling mission's name. */
+  async #applyEdit(
+    caller: VaubaanCaller,
+    view: MissionEditView,
+    draft: MissionDraft,
+    context?: readonly IssuanceAccount[],
+  ): Promise<ActOutcome<EditedMissionAnswer>> {
+    const user = { id: caller.userId };
+    const id = view.mission.id;
+    const result: EditResult = await this.deps.missions.edit(
+      user,
+      id,
+      { draft, revision: view.revision },
+      { issuedBy: { missionId: caller.missionId } },
+    );
+    if (result.ok) {
+      return done({
+        mission_id: result.mission.id,
+        name: result.mission.name,
+        changed: hasChanges(result.changes),
+        changes: result.changes,
+        requests_closed: result.requests_closed,
+      });
+    }
+    switch (result.reason) {
+      case 'not-found':
+        return refused(missionNotFound(id));
+      case 'inactive':
+        return refused(inactive(id, result.state, null, 'edited'));
+      case 'invalid-edit':
+        return refused(invalidEdit(result.problems));
+      case 'conflict':
+        return refused(changedMeanwhile(id));
+      case 'limit-reached':
+        return refused(instanceLimitRefusal(result.message, result.limit, 'changed'));
+      case 'refused': {
+        const accounts = context ?? (await this.deps.missions.issuanceContext(user));
+        const uncovered = uncoveredOfIssues(result.issues, accounts);
+        return refused(editRefusal(id, result.issues, result.changes, uncovered));
+      }
+    }
+  }
+
+  /**
    * A new token for a mission the calling mission issued; the previous one
    * stops working. A mission of the user it did not issue — the human's own,
    * another mission's, an app's — is refused: the answer carries the new token,
@@ -443,6 +720,7 @@ export class VaubaanActs {
           detail.mission.id,
           detail.state.kind,
           missionView(detail, { missionId: caller.missionId }, maskedToken).orphan,
+          'rotated',
         ),
       );
     }
@@ -453,7 +731,7 @@ export class VaubaanActs {
       if (result.reason === 'not-found') return refused(missionNotFound(input.mission_id));
       if (result.reason === 'not-issued-by-mission')
         return refused(notIssuedHere(input.mission_id));
-      return refused(inactive(input.mission_id, result.state, null));
+      return refused(inactive(input.mission_id, result.state, null, 'rotated'));
     }
     this.log('rotate_mission_token', caller, 'rotated', result.mission.id);
     return done({
@@ -516,6 +794,7 @@ function inactive(
   missionId: string,
   state: MissionStateName,
   orphan: OrphanView | null,
+  verb: 'renamed' | 'edited' | 'rotated',
 ): ActRefusal {
   const why: Readonly<Record<MissionStateName, string>> = {
     active: 'is active',
@@ -525,7 +804,7 @@ function inactive(
   };
   return {
     code: 'mission-inactive',
-    message: `Mission "${missionId}" ${why[state]}; its token is not rotated.`,
+    message: `Mission "${missionId}" ${why[state]}; ${verb === 'rotated' ? 'its token is not rotated' : `it is not ${verb}`}.`,
     hint:
       state === 'orphaned'
         ? 'The mission serves calls again, with the same token, when the authority returns (the account’s owner shares it again, in the interface): you cannot restore it here. To close it for good use `vaubaan__revoke_mission`; to work now, issue a new mission within what `vaubaan__list_my_accounts` shows.'

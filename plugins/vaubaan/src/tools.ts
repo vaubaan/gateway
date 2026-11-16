@@ -1,6 +1,7 @@
 /**
  * MCP tools of the `vaubaan` service: the seven acts of the retired management
- * door, with the names, arguments and answers it published, prefixed `vaubaan__`.
+ * door, with the names, arguments and answers it published, and the two it never
+ * had (`rename_mission`, `edit_mission`), prefixed `vaubaan__`.
  *
  * Handbook : docs/handbook/services/vaubaan.md.
  *
@@ -25,7 +26,7 @@ import schemas from './tool-schemas.json' with { type: 'json' };
 
 /** What an agent reads first: the order of the calls and the rules, in one place. */
 const ORDER_OF_CALLS =
-  'Order of the calls: `vaubaan__list_my_accounts` (what the user may put in a mission) → `vaubaan__get_catalog` (the risks and macro-actions of a service) → `vaubaan__preview_policy` until it answers `ok: true` → `vaubaan__issue_mission`.';
+  'Order of the calls: `vaubaan__list_my_accounts` (what the user may put in a mission) → `vaubaan__get_catalog` (the risks and macro-actions of a service) → `vaubaan__preview_policy` until it answers `ok: true` → `vaubaan__issue_mission`. To change one: `vaubaan__list_my_missions` with `mission_id` (its `draft`) → `vaubaan__preview_policy` with that `mission_id` → `vaubaan__edit_mission`.';
 
 const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
   listMyAccounts: [
@@ -45,20 +46,31 @@ const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
   ].join(' '),
   listMyMissions: [
     'Lists the missions of the user, newest first — the ones they created (`role: creator`) and the ones another user shared with them as a member (`role: member`, read-only here) —: state (`active`, `expired`, `orphaned`, `revoked`), `orphan` — why an orphaned mission lost its authority and whether it can come back —, `lost_accounts` — accounts that no longer serve a mission still running on its others (revoked for good, or access withdrawn) —, policy with what is left of each quota this period, the current period of the session, the masked token prefix, and `issued_via`: the mission whose agent issued it (`this_mission` when it is the mission making this call), or the app that issued it before the management door was retired.',
-    'With `mission_id`, returns that mission with its accounts and the resources it reaches.',
+    'With `mission_id`, returns that mission with its accounts and the resources it reaches, and — for a mission the user created — `draft`: the mission as a draft, the starting point of `vaubaan__edit_mission` (keep each resource set’s `id`: a set given without it is a new set, with fresh counters).',
     '`resource_selections` lists, per account, its resource sets: each an explicit list of resources of one environment (`env`), with `future` when the resources that later appear in that environment join it.',
     'Reading only: a budget cannot be extended, a period reset or a gate changed from here — the user does that in the web interface, when the executing agent hands them the URL of a refusal.',
   ].join(' '),
   previewPolicy: [
     'Checks a mission draft, issuing nothing. Answers `ok`, the `issues` that block it, `uncovered` — the accepted risks outside the user’s authority, per account —, and `policy`: exactly what the mission could call, with the budget of each risk.',
     'Rules: explicit RiskIds only, no wildcard, no pattern, no "everything" risk; one account per service; per account `trust_levels` alone (they write the policy; `left_out` says what they leave out), or `everything_i_hold: true` alone — only when the user asks for a mission as wide as their authority there; show them the notice `everything-i-hold-expanded` before you issue —, or `policy` with a quota and a rate limit for every risk; an environment-qualified id needs a selected resource labelled with that environment; `period` and `expires_at` are mandatory (`expires_at` may be null).',
-    "Resources: `{ scope: 'all' }` (default) — known now, a resource discovered later is not reached, except one the mission itself creates through the gateway; `{ scope: 'selected', resource_refs: [...] }`; `{ scope: 'account' }` — `all` with `future: true`: use it only when the task operates the whole account, and say so to the user. A set holds one environment: an account's selection is split per environment, a mixed set is refused (`resource-set-mixed-env`), an unlabelled one where risks depend on it (`resource-unlabelled`).",
+    "Resources: `{ scope: 'all' }` (default) — known now, a resource discovered later is not reached, except one the mission itself creates through the gateway; `{ scope: 'selected', resource_refs: [...] }`; `{ scope: 'account' }` — `all` with `future: true`: only when the task operates the whole account; say so to the user. A set holds one environment: an account's selection is split per environment, a mixed set is refused (`resource-set-mixed-env`), an unlabelled one where risks depend on it (`resource-unlabelled`).",
     'Call it until `ok` is true, then pass the same draft to `vaubaan__issue_mission`. A risk listed in `uncovered` cannot be obtained here: remove it, or tell the user.',
+    'With `mission_id`, previews an edit of that mission (see `vaubaan__edit_mission`).',
   ].join(' '),
   issueMission: [
     'Issues a mission from a draft that `vaubaan__preview_policy` accepts. The creator is the user, not you: the mission appears under their name, marked as prepared by the mission making this call, and they alone answer the requests it raises (claims for more budget, approvals of gated actions) in the web interface.',
     'The answer contains `token.secret` — the mission token, shown this once and never again — and `bootstrap_kit`: the environment variable, the MCP configuration and the instruction block to give the agent that will execute the mission. Do not write the token anywhere but where the kit says.',
     "A draft that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. A draft that carries a Vaubaan account is refused (`vaubaan-account-not-allowed`): a mission issued here never prepares missions itself. Issue the narrowest mission that does the task: the mission and its width are visible to the user. The mission stores the explicit list the preview showed, never a macro-action, a trust level or `everything-i-hold`: a later change of the catalog or of the user’s authority does not widen it. `future: true` (or `resources: { scope: 'account' }`) adds the resources that later appear in each set's environment.",
+  ].join(' '),
+  renameMission: [
+    'Renames one of the user’s missions: the name they read in the web interface and in the mission’s History. Nothing else changes — permissions, limits, keys, the agent’s work.',
+    'Same rules as a name at issuance: not empty, at most 120 characters. The change is one version in the mission’s History, marked as made by the mission making this call.',
+    'A mission the user is only a member of is not found. This mission never renames itself here (`self-not-allowed`): the user does, in the web interface. A revoked or orphaned mission is not renamed (`mission-inactive`).',
+  ].join(' '),
+  editMission: [
+    'Changes one of the user’s missions after issuance, as "Edit mission" does in the web interface: name, accounts, resources, permissions with their limits and gates, and end — never the period. The draft is the whole mission after the edit, in the shape `vaubaan__issue_mission` takes: start from `draft` in `vaubaan__list_my_missions` with `mission_id`, change what the task needs, and check it with `vaubaan__preview_policy` and the same `mission_id`.',
+    'It applies at once to the same keys, session and counters: consumed stays consumed, an added permission starts at zero, a removed one is refused from the next call, and requests a removal makes moot are closed. The answer lists what changed (`changes`); the edit is one version in the mission’s History, marked as made by the mission making this call.',
+    'An edit that exceeds the user’s authority is refused whole, with `uncovered`; nothing is narrowed silently. A draft that carries a Vaubaan account is refused (`vaubaan-account-not-allowed`). This mission never edits itself here (`self-not-allowed`); a mission the user is only a member of is not found; a revoked or orphaned mission is not edited (`mission-inactive`). Widen a mission only as far as the task needs: the user sees every version.',
   ].join(' '),
   rotateMissionToken: [
     'Replaces the token of an active mission that this mission issued (`issued_via.this_mission` in `vaubaan__list_my_missions`): the previous token stops working at once, the mission, its policy, its session and its budget are unchanged.',
@@ -102,6 +114,8 @@ export const vaubaanToolTitles: Readonly<Record<string, string>> = {
   [TOOL.listMyMissions]: 'List my missions',
   [TOOL.previewPolicy]: 'Preview a mission',
   [TOOL.issueMission]: 'Issue a mission',
+  [TOOL.renameMission]: 'Rename a mission',
+  [TOOL.editMission]: 'Change a mission',
   [TOOL.rotateMissionToken]: 'Replace a mission’s key',
   [TOOL.revokeMission]: 'Revoke a mission',
 };

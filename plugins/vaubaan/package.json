@@ -1,9 +1,9 @@
 {
   "name": "@vaubaan/plugin-vaubaan",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway plugin for the gateway itself — prepare, rotate and revoke missions from a mission (host account, bundled only)",
+  "description": "Vaubaan Gateway plugin for the gateway itself — prepare, change, rotate and revoke missions from a mission (host account, bundled only)",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts",
