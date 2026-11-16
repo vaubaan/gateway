@@ -1650,8 +1650,11 @@ export class MissionService {
    * The creator edits the mission after issuance, without limit on what moves but its
    * period (ADR mission-editable-after-issuance): `{ draft, revision }`, the edited
    * draft and the revision of the mission it was made from. Creator only — anyone
-   * else is "not found" — and no delegated variant: the management door is not handed
-   * this method. Revoked and orphaned missions are not edited; an expired one is.
+   * else is "not found". Through the `vaubaan` plugin (`options.issuedBy`) the
+   * calling mission acts for its creator: the version it leaves names that mission
+   * as its author and the audit entry carries `via_mission_id` (ADR
+   * platform-management-is-a-plugin-on-the-execution-door, amendment 2026-11-16).
+   * Revoked and orphaned missions are not edited; an expired one is.
    *
    * Judged by issuance's own check on what moves (`judgeEdit`): the creation's preview
    * under the creator's authority now, its issues kept when they are about something
@@ -1663,7 +1666,12 @@ export class MissionService {
    * mission then reads `orphaned` and serves nothing, as an issuance racing the same
    * revocation would.
    */
-  async edit(user: Subject, missionId: string, raw: unknown): Promise<EditResult> {
+  async edit(
+    user: Subject,
+    missionId: string,
+    raw: unknown,
+    options: IssueOptions = {},
+  ): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
     const { mission, snapshot, judgement, revision } = judged;
@@ -1671,7 +1679,9 @@ export class MissionService {
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
     }
-    return this.writeEdit(user, mission, snapshot, judgement, revision);
+    return this.writeEdit(user, mission, snapshot, judgement, revision, {
+      ...(options.issuedBy ? { viaMissionId: options.issuedBy.missionId } : {}),
+    });
   }
 
   /**
@@ -1685,8 +1695,9 @@ export class MissionService {
     snapshot: MissionSnapshot,
     judgement: EditJudgement,
     revision: string,
-    restoredFrom?: number,
+    stamp: { readonly restoredFrom?: number; readonly viaMissionId?: string } = {},
   ): Promise<EditResult> {
+    const { restoredFrom, viaMissionId } = stamp;
     const { after, changes } = judgement;
     if (!hasChanges(changes)) return { ok: true, mission, changes, requests_closed: [] };
     if (revivesEndedMission(mission, after.expires_at, this.deps.clock.now())) {
@@ -1697,6 +1708,7 @@ export class MissionService {
     const written = await this.deps.store.missions.edit(mission.id, {
       actorUserId: user.id,
       ...(restoredFrom !== undefined ? { restoredFrom } : {}),
+      ...(viaMissionId !== undefined ? { viaMissionId } : {}),
       unchanged: (current) => revisionOfRecord(current) === revision,
       name: after.name,
       expiresAt: after.expires_at,
@@ -1734,9 +1746,11 @@ export class MissionService {
         requests_closed: closed,
         ...(restoredFrom !== undefined ? { restored_from: restoredFrom } : {}),
       },
+      via_mission_id: viaMissionId ?? null,
     });
     this.deps.logger.info(restoredFrom === undefined ? 'mission edited' : 'mission restored', {
       mission_id: mission.id,
+      ...(viaMissionId !== undefined ? { via_mission_id: viaMissionId } : {}),
       ...(restoredFrom !== undefined ? { restored_from: restoredFrom } : {}),
       accounts_added: changes.accounts_added.length,
       accounts_removed: changes.accounts_removed.length,
@@ -1802,7 +1816,7 @@ export class MissionService {
       snapshot,
       restored.judgement,
       revisionOfRecord(mission),
-      number,
+      { restoredFrom: number },
     );
     if (!written.ok) return written.reason === 'refused' ? { ...written, dropped } : written;
     if (!hasChanges(written.changes)) {

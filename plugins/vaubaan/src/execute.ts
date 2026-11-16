@@ -91,7 +91,7 @@ export function createVaubaanExecute(ports: VaubaanPorts): VaubaanHostExecute {
     const act = actOf(tool);
     if (act === null) throw new Error(`${SERVICE_ID}: unknown tool '${tool}'`);
     try {
-      // nosemgrep: unsafe-dynamic-method -- `act` is a key of the closed `ACT` table (`actOf` answers `null` for any other name, refused above), and `ports` is a frozen object of exactly those seven functions (`VAUBAAN_PORT_NAMES`)
+      // nosemgrep: unsafe-dynamic-method -- `act` is a key of the closed `ACT` table (`actOf` answers `null` for any other name, refused above), and `ports` is a frozen object of exactly those nine functions (`VAUBAAN_PORT_NAMES`)
       return toolResultOf(await ports[act](ctx.caller, args));
     } catch (err) {
       ctx.logger?.error('vaubaan tool failed', {

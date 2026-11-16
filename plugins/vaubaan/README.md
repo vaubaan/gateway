@@ -18,7 +18,9 @@ Handbook (the model, the self rule, the refusals and the reasons behind them):
 ## Tools
 
 The seven tools of the retired management door, same arguments and answers,
-prefixed `vaubaan__`:
+and two it never had (rename and edit, the creator's own "Edit mission"),
+prefixed `vaubaan__`. `vaubaan__preview_policy` with a `mission_id` previews an
+edit of that mission:
 
 | Tool                            | Risk                         | Macro-action     |
 | ------------------------------- | ---------------------------- | ---------------- |
@@ -27,6 +29,8 @@ prefixed `vaubaan__`:
 | `vaubaan__preview_policy`       | `vaubaan.read-setup`         | Read my setup    |
 | `vaubaan__list_my_missions`     | `vaubaan.read-missions`      | Read my setup    |
 | `vaubaan__issue_mission`        | `vaubaan.mission-issue`      | Prepare missions |
+| `vaubaan__rename_mission`       | `vaubaan.mission-rename`     | Prepare missions |
+| `vaubaan__edit_mission`         | `vaubaan.mission-edit`       | Prepare missions |
 | `vaubaan__rotate_mission_token` | `vaubaan.mission-key-rotate` | Rotate a key     |
 | `vaubaan__revoke_mission`       | `vaubaan.mission-revoke`     | Stop missions    |
 
@@ -39,6 +43,8 @@ accounts   account[<id>]           an account the person may build a mission fro
 catalogs   catalog[<service>]     the risk catalog of a service
 missions   mission[<id>]           a mission of the person
              ├─ issue              verb leaf: a new mission issued
+             ├─ rename             verb leaf: its name changed
+             ├─ edit               verb leaf: changed after issuance
              ├─ token              verb leaf: its key replaced
              └─ revoke             verb leaf: stopped for good
 ```

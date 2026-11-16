@@ -443,14 +443,14 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'vaubaan-plugin-hard-deny',
     statement:
-      'The `vaubaan` plugin cannot answer a request, open a gate, touch an account or a share, or execute another tool: nothing of the instance but seven mission methods and static catalogs is reachable from its ports. A mission never rotates nor revokes itself, a mission it issues never holds a Vaubaan account, and rotation reaches only the missions the calling mission issued.',
+      'The `vaubaan` plugin cannot answer a request, open a gate, touch an account or a share, or execute another tool: nothing of the instance but ten mission methods (the creator’s own edit among them; no path that moves a gate or a limit alone) and static catalogs is reachable from its ports. A mission never renames, edits, rotates nor revokes itself, a mission it issues or edits never holds a Vaubaan account, and rotation reaches only the missions the calling mission issued.',
     source: 'spec §4.1 bis, §6; ADR platform-management-is-a-plugin-on-the-execution-door',
     proofs: [
       {
         file: `${INTEGRATION}/vaubaan/hard-deny.test.ts`,
         tests: [
           'nothing of the instance is reachable from the ports or the bound execute',
-          'the mission port is a frozen object of exactly the seven methods, bound to the service',
+          'the mission port is a frozen object of exactly the ten methods, bound to the service',
         ],
       },
       {
@@ -459,6 +459,7 @@ export const INVARIANTS: readonly Invariant[] = [
           'rotates only what this mission issued',
           'never rotates nor revokes itself, whatever its policy allows',
           'a mission issued here never carries a Vaubaan account (the self rule)',
+          'an edit never adds a Vaubaan account, and the calling mission never renames nor edits itself',
         ],
       },
     ],

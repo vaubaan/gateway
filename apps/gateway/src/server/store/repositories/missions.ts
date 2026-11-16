@@ -401,6 +401,12 @@ export interface MissionEditInput {
    * leaves says so. Absent for an ordinary edit.
    */
   readonly restoredFrom?: number;
+  /**
+   * The mission whose key made the edit through the `vaubaan` plugin, for the creator
+   * (`actorUserId`): the version it leaves names that mission as its author. Absent
+   * for an edit by the person.
+   */
+  readonly viaMissionId?: string;
 }
 
 export interface MissionEditResult {
@@ -1503,7 +1509,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         versions.recordSync(
           id,
           input.restoredFrom === undefined
-            ? { cause: 'edit', author: byPerson(actorUserId) }
+            ? {
+                cause: 'edit',
+                author:
+                  input.viaMissionId !== undefined
+                    ? { kind: 'mission', missionId: input.viaMissionId, userId: actorUserId }
+                    : byPerson(actorUserId),
+              }
             : {
                 cause: 'rollback',
                 author: byPerson(actorUserId),

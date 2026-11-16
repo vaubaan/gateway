@@ -57,3 +57,32 @@ Breaks the plugin contract (a plugin knows neither the mission nor the budget) a
 ### Rename to "Platform MCP" and document its risks by hand
 
 The one Reference page whose source would not be a catalog.
+
+## Amendment 2026-11-16: missions are renamed and edited from a mission
+
+### Context
+
+The plugin copied the seven tools of the retired door, which predated mission edit after issuance
+([mission-editable-after-issuance](mission-editable-after-issuance.md), 2026-10-26). The absence of
+an edit was inherited, not decided: an agent could issue, rotate and revoke a mission, but had to
+revoke and reissue it (a new key handed over by a person) to change a name or a permission.
+
+### Decision
+
+Two tools join: `vaubaan__rename_mission` (risk `vaubaan.mission-rename`, row 1) and
+`vaubaan__edit_mission` (risk `vaubaan.mission-edit`, row 2), both in **Prepare missions**: at
+Careful a rename runs freely and an edit asks first, like issuing. Both go through the creator's own
+"Edit mission" (`MissionService.edit`): same key, one version in the History authored by the calling
+mission, one `mission-changed` entry with `via_mission_id`, bounded by the creator's authority now
+and refused whole (`uncovered`) beyond it. `vaubaan__preview_policy` takes an optional `mission_id`
+to preview the edit. The self rule is unchanged and covers both: the calling mission neither renames
+nor edits itself, and an edit never adds a Vaubaan account. The host ports gain `editView`,
+`previewEdit` and `edit`; `setGate`, `setLimits`, `changePermissions`, `restore`, `duplicate` and
+`verifyToken` stay out.
+
+### Consequences
+
+- A gate or a limit moves from a mission only inside a whole edit, judged as at issuance; nothing
+  answers a request or opens a gate alone.
+- Catalog version 2; plugin 0.4.0. A platform mission issued before keeps its explicit list: it gains
+  the new risks only when its creator edits it.

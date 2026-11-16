@@ -9,9 +9,12 @@
  *
  *   list_my_accounts    vaubaan.account[*].R
  *   preview_policy         vaubaan.account[*].R          (reads the authority, writes nothing)
+ *                          + vaubaan.mission[<id>].R      with `mission_id`: the preview of an edit
  *   get_catalog            vaubaan.catalog[<service>].R
  *   list_my_missions       vaubaan.mission[<id> | *].R
  *   issue_mission          vaubaan.mission[*].issue.W
+ *   rename_mission         vaubaan.mission[<id>].rename.W
+ *   edit_mission           vaubaan.mission[<id>].edit.W
  *   rotate_mission_token   vaubaan.mission[<id>].token.W
  *   revoke_mission         vaubaan.mission[<id>].revoke.W
  *
@@ -48,6 +51,14 @@ export function idOf(value: unknown): string | null {
     : null;
 }
 
+/** The verb leaf of each act that changes one named mission. */
+const VERB_LEAF = {
+  renameMission: 'rename',
+  editMission: 'edit',
+  rotateMissionToken: 'token',
+  revokeMission: 'revoke',
+} as const;
+
 function slice(path: readonly SliceSegment[], action: 'R' | 'W'): Slice {
   return { service: SERVICE_ID, path, action };
 }
@@ -65,8 +76,14 @@ export function classifyVaubaan(
 
   switch (act) {
     case 'listMyAccounts':
-    case 'previewPolicy':
       return { slices: [slice([name('account'), ANY_IDENT], 'R')] };
+    case 'previewPolicy': {
+      const authority = slice([name('account'), ANY_IDENT], 'R');
+      if (args.mission_id === undefined) return { slices: [authority] };
+      const id = idOf(args.mission_id);
+      if (id === null) return { denied: MALFORMED_MISSION_ID };
+      return { slices: [authority, slice([name('mission'), identSegment(id)], 'R')] };
+    }
     case 'getCatalog': {
       const service = idOf(args.service);
       if (service === null) return { denied: MALFORMED_SERVICE };
@@ -82,12 +99,13 @@ export function classifyVaubaan(
     }
     case 'issueMission':
       return { slices: [slice([name('mission'), ANY_IDENT, name('issue')], 'W')] };
+    case 'renameMission':
+    case 'editMission':
     case 'rotateMissionToken':
     case 'revokeMission': {
       const id = idOf(args.mission_id);
       if (id === null) return { denied: MALFORMED_MISSION_ID };
-      const verb = act === 'rotateMissionToken' ? 'token' : 'revoke';
-      return { slices: [slice([name('mission'), identSegment(id), name(verb)], 'W')] };
+      return { slices: [slice([name('mission'), identSegment(id), name(VERB_LEAF[act])], 'W')] };
     }
   }
 }

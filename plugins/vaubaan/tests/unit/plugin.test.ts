@@ -42,6 +42,8 @@ const RISK = {
   readSetup: `${SERVICE_ID}.read-setup`,
   readMissions: `${SERVICE_ID}.read-missions`,
   issue: `${SERVICE_ID}.mission-issue`,
+  rename: `${SERVICE_ID}.mission-rename`,
+  edit: `${SERVICE_ID}.mission-edit`,
   rotate: `${SERVICE_ID}.mission-key-rotate`,
   revoke: `${SERVICE_ID}.mission-revoke`,
 } as const;
@@ -109,7 +111,7 @@ describe('vaubaan catalog — the macro-actions at each trust level', () => {
     ]);
   });
 
-  test('Careful: the setup is read freely; issuing, re-keying and stopping a mission ask first', () => {
+  test('Careful: the setup is read and a mission renamed freely; issuing, editing, re-keying and stopping a mission ask first', () => {
     const policy = policyFromMacroActions(vaubaanPlugin, {
       read: 'careful',
       prepare: 'careful',
@@ -121,12 +123,14 @@ describe('vaubaan catalog — the macro-actions at each trust level', () => {
       [RISK.readSetup]: 'auto',
       [RISK.readMissions]: 'auto',
       [RISK.issue]: 'approval',
+      [RISK.rename]: 'auto',
+      [RISK.edit]: 'approval',
       [RISK.rotate]: 'approval',
       [RISK.revoke]: 'approval',
     });
   });
 
-  test('Trusting: issuing and re-keying run freely, stopping a mission still asks', () => {
+  test('Trusting: issuing, renaming, editing and re-keying run freely, stopping a mission still asks', () => {
     const policy = policyFromMacroActions(vaubaanPlugin, {
       prepare: 'trusting',
       rotate: 'trusting',
@@ -135,6 +139,8 @@ describe('vaubaan catalog — the macro-actions at each trust level', () => {
     const gates = Object.fromEntries(policy.map((line) => [line.risk_id, line.gate]));
     expect(gates).toEqual({
       [RISK.issue]: 'auto',
+      [RISK.rename]: 'auto',
+      [RISK.edit]: 'auto',
       [RISK.rotate]: 'auto',
       [RISK.revoke]: 'approval',
     });
@@ -153,6 +159,16 @@ describe('classifyVaubaan', () => {
       `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].R`,
     ]);
     expect(slices(TOOL.issueMission, { name: 'x' })).toEqual([`${SERVICE_ID}.mission[*].issue.W`]);
+    expect(slices(TOOL.previewPolicy, { name: 'x', mission_id: EXAMPLE_MISSION_ID })).toEqual([
+      `${SERVICE_ID}.account[*].R`,
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].R`,
+    ]);
+    expect(slices(TOOL.renameMission, { mission_id: EXAMPLE_MISSION_ID, name: 'y' })).toEqual([
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].rename.W`,
+    ]);
+    expect(slices(TOOL.editMission, { mission_id: EXAMPLE_MISSION_ID, name: 'x' })).toEqual([
+      `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].edit.W`,
+    ]);
     expect(slices(TOOL.rotateMissionToken, { mission_id: EXAMPLE_MISSION_ID })).toEqual([
       `${SERVICE_ID}.mission[${EXAMPLE_MISSION_ID}].token.W`,
     ]);
@@ -169,6 +185,9 @@ describe('classifyVaubaan', () => {
       true,
     );
     expect(classifyVaubaan(TOOL.rotateMissionToken, {})).toEqual({ denied: MALFORMED_MISSION_ID });
+    expect(classifyVaubaan(TOOL.editMission, { name: 'x' })).toEqual({
+      denied: MALFORMED_MISSION_ID,
+    });
   });
 });
 

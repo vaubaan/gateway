@@ -10,8 +10,10 @@
  *   accounts   the accounts the person may build a mission from (their own and
  *              the ones shared with them), with their resources;
  *   catalogs   the risk catalog of a service the gateway ships;
- *   missions   the person's missions, with three verb leaves: `issue` (a new
- *              mission), `token` (its key replaced), `revoke` (stopped for good).
+ *   missions   the person's missions, with five verb leaves: `issue` (a new
+ *              mission), `rename` (its name changed), `edit` (its accounts,
+ *              resources, permissions or end changed), `token` (its key replaced),
+ *              `revoke` (stopped for good).
  *
  * The account itself carries no resource: a call names no resource of the
  * mission, so nothing is `envScopable`, and the gateway has no environment.
@@ -64,6 +66,19 @@ export const vaubaanDataModel: DataModel = {
           parent: 'mission',
           cardinalities: ['one'],
           description: 'Verb leaf: a new mission issued in the person’s name.',
+        },
+        {
+          name: 'rename',
+          parent: 'mission',
+          cardinalities: ['one'],
+          description: 'Verb leaf: the name of a mission changed, nothing else.',
+        },
+        {
+          name: 'edit',
+          parent: 'mission',
+          cardinalities: ['one'],
+          description:
+            'Verb leaf: a mission changed after issuance — its accounts, resources, permissions, limits or end — within the person’s authority.',
         },
         {
           name: 'token',

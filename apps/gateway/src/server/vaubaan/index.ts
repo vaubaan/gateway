@@ -78,7 +78,7 @@ function portOf<S extends z.ZodType>(
   };
 }
 
-/** The seven ports, as a frozen object of closures over the acts: nothing else is reachable. */
+/** The nine ports, as a frozen object of closures over the acts: nothing else is reachable. */
 export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
   const acts = new VaubaanActs({
     missions: deps.missions,
@@ -98,6 +98,12 @@ export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
     ),
     issueMission: portOf(VAUBAAN_INPUTS.issueMission, (caller, draft) =>
       acts.issueMission(caller, draft),
+    ),
+    renameMission: portOf(VAUBAAN_INPUTS.renameMission, (caller, input) =>
+      acts.renameMission(caller, input),
+    ),
+    editMission: portOf(VAUBAAN_INPUTS.editMission, (caller, input) =>
+      acts.editMission(caller, input),
     ),
     rotateMissionToken: portOf(VAUBAAN_INPUTS.rotateMissionToken, (caller, input) =>
       acts.rotateMissionToken(caller, input),
@@ -121,8 +127,12 @@ export {
   type ActRefusal,
   type BootstrapKitView,
   type AccountsAnswer,
+  type EditedMissionAnswer,
+  type EditPreviewAnswer,
   type IssuedMissionAnswer,
+  type MissionReadView,
   type MissionsAnswer,
+  type RenamedMissionAnswer,
   type RevealedTokenView,
   type RevokedMissionAnswer,
   type RotatedTokenAnswer,

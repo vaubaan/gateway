@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **An agent renames and edits missions (plugin `vaubaan` 0.4.0).** Two tools join the platform
+  management mission: `vaubaan__rename_mission` (risk `vaubaan.mission-rename`) and
+  `vaubaan__edit_mission` (risk `vaubaan.mission-edit`), both in **Prepare missions**. At Careful a
+  rename runs freely and an edit asks the person first, like issuing. An edit is the creator's own
+  "Edit mission": same key, one version in the History marked as made by the calling mission,
+  within the creator's authority and refused whole beyond it. `vaubaan__preview_policy` takes an
+  optional `mission_id` to preview an edit, and `vaubaan__list_my_missions` with `mission_id`
+  answers the mission as a `draft` to edit. A mission never renames nor edits itself, and an edit
+  never adds a Vaubaan account. A platform mission issued before gains these risks only when its
+  creator edits it.
+
 ### Fixed
 
 - **One Vaubaan account per person, held by the store.** Two connects at once could store two

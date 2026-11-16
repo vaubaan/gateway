@@ -1,6 +1,6 @@
 /**
  * `VaubaanActs` and the ports on recorded mission services: every act is
- * performed **as the calling mission's creator**, the three mutations carry the
+ * performed **as the calling mission's creator**, the five mutations carry the
  * calling mission, the self rule holds whatever the mission service would
  * allow, and nothing is decided here that the mission service did not decide.
  * The behaviour against the real services, authority and store, through the
@@ -14,7 +14,14 @@ import type { RiskId } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { silentLogger } from '../logging';
-import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } from '../missions';
+import type {
+  MissionChanges,
+  MissionDetail,
+  MissionDraft,
+  MissionEditView,
+  MissionOverview,
+  MissionPreview,
+} from '../missions';
 import { explainOrphan } from '../missions/orphan-reason';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
 import { previewDraft } from '../../lib/missions/preview';
@@ -87,6 +94,11 @@ function rig(
       record('rotate', [user, id, rotateOptions], { ok: false, reason: 'not-found' } as const),
     revoke: (user, id, revokeOptions) =>
       record('revoke', [user, id, revokeOptions], { ok: false, reason: 'not-found' } as const),
+    editView: (user, id) => record('editView', [user, id], null),
+    previewEdit: (user, id, raw) =>
+      record('previewEdit', [user, id, raw], { ok: false, reason: 'not-found' } as const),
+    edit: (user, id, raw, editOptions) =>
+      record('edit', [user, id, raw, editOptions], { ok: false, reason: 'not-found' } as const),
     list: (user) => record('list', [user], [] as MissionOverview[]),
     get: (user, id) => record('get', [user, id], null),
     ...options.missions,
@@ -118,9 +130,12 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     await tools.listMyMissions(ACTOR, { mission_id: 'm1' });
     await tools.previewPolicy(ACTOR, DRAFT);
     await tools.issueMission(ACTOR, DRAFT);
+    await tools.previewPolicy(ACTOR, { ...DRAFT, mission_id: 'm1' });
+    await tools.renameMission(ACTOR, { mission_id: 'm1', name: 'N' });
+    await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm1' });
     await tools.rotateMissionToken(ACTOR, { mission_id: 'm1' });
     await tools.revokeMission(ACTOR, { mission_id: 'm1' });
-    expect(calls.length).toBeGreaterThanOrEqual(8);
+    expect(calls.length).toBeGreaterThanOrEqual(11);
     for (const call of calls) {
       expect(call.args[0], call.method).toEqual({ id: ACTOR.userId });
     }
@@ -165,13 +180,308 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
       await tools.listMyMissions(ACTOR, { mission_id: 'm-of-bob' }),
       await tools.rotateMissionToken(ACTOR, { mission_id: 'm-of-bob' }),
       await tools.revokeMission(ACTOR, { mission_id: 'm-of-bob' }),
+      await tools.renameMission(ACTOR, { mission_id: 'm-of-bob', name: 'N' }),
+      await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm-of-bob' }),
+      await tools.previewPolicy(ACTOR, { ...DRAFT, mission_id: 'm-of-bob' }),
     ]) {
       expect(outcome).toMatchObject({
         ok: false,
         refusal: { code: 'mission-not-found', mission_id: 'm-of-bob' },
       });
     }
-    expect(calls.some((call) => call.method === 'rotate' || call.method === 'revoke')).toBe(false);
+    expect(
+      calls.some((call) => ['rotate', 'revoke', 'edit', 'previewEdit'].includes(call.method)),
+    ).toBe(false);
+  });
+
+  describe('rename and edit are the creator’s own "Edit mission", in the calling mission’s name', () => {
+    const NO_CHANGE: MissionChanges = {
+      name: null,
+      expires_at: null,
+      accounts_added: [],
+      accounts_removed: [],
+      resource_sets_added: 0,
+      resource_sets_removed: 0,
+      resources: [],
+      permissions_added: [],
+      permissions_removed: [],
+      permissions_changed: [],
+    };
+    const STORED: MissionDraft = {
+      ...DRAFT,
+      name: 'Old name',
+      accounts: [{ account_id: 'conn-acme', trust_levels: { read: 'careful' } }],
+    };
+    /** The creator's edit form of mission `id`, as `editView` returns it. */
+    const editViewOf = (id = 'm1', blocked: MissionEditView['blocked'] = null): MissionEditView =>
+      ({
+        mission: { id, name: STORED.name },
+        snapshot: {},
+        draft: STORED,
+        revision: 'rev-1',
+        blocked,
+        lost: [],
+      }) as unknown as MissionEditView;
+    type EditAnswer = Awaited<ReturnType<VaubaanMissions['edit']>>;
+    const edited = (name: string, changes: MissionChanges = NO_CHANGE): EditAnswer =>
+      ({
+        ok: true,
+        mission: { id: 'm1', name },
+        changes,
+        requests_closed: [],
+      }) as unknown as EditAnswer;
+
+    it('rename edits the stored draft with the new name only, from its revision, naming the calling mission', async () => {
+      const renamed = { ...NO_CHANGE, name: { before: 'Old name', after: 'New name' } };
+      const { tools, calls } = rig({
+        missions: {
+          editView: async () => editViewOf(),
+          edit: async (...args) => {
+            calls.push({ method: 'edit', args });
+            return edited('New name', renamed);
+          },
+        },
+      });
+      const outcome = await tools.renameMission(ACTOR, { mission_id: 'm1', name: 'New name' });
+      expect(outcome).toEqual({
+        ok: true,
+        data: { mission_id: 'm1', name: 'New name', renamed: true },
+      });
+      const edit = calls.find((call) => call.method === 'edit');
+      expect(edit?.args).toEqual([
+        { id: ACTOR.userId },
+        'm1',
+        { draft: { ...STORED, name: 'New name' }, revision: 'rev-1' },
+        { issuedBy: { missionId: ACTOR.missionId } },
+      ]);
+    });
+
+    it('edit applies the draft without its mission id, from the revision just read, naming the calling mission', async () => {
+      const added = { ...NO_CHANGE, permissions_added: [{ risk_id: 'acme.read' }] };
+      const { tools, calls } = rig({
+        missions: {
+          editView: async () => editViewOf(),
+          edit: async (...args) => {
+            calls.push({ method: 'edit', args });
+            return edited('Tidy the staging space', added as unknown as MissionChanges);
+          },
+        },
+      });
+      const outcome = await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm1' });
+      expect(outcome).toMatchObject({
+        ok: true,
+        data: { mission_id: 'm1', changed: true, requests_closed: [] },
+      });
+      const edit = calls.find((call) => call.method === 'edit');
+      expect(edit?.args).toEqual([
+        { id: ACTOR.userId },
+        'm1',
+        { draft: DRAFT, revision: 'rev-1' },
+        { issuedBy: { missionId: ACTOR.missionId } },
+      ]);
+    });
+
+    it('a draft equal to the mission answers `renamed: false`', async () => {
+      const { tools } = rig({
+        missions: { editView: async () => editViewOf(), edit: async () => edited('Old name') },
+      });
+      expect(await tools.renameMission(ACTOR, { mission_id: 'm1', name: 'Old name' })).toEqual({
+        ok: true,
+        data: { mission_id: 'm1', name: 'Old name', renamed: false },
+      });
+    });
+
+    it('the calling mission never renames nor edits itself, nor previews its own edit; the service is not reached', async () => {
+      const { tools, calls } = rig({
+        missions: { editView: async () => editViewOf(ACTOR.missionId) },
+      });
+      for (const [act, verb] of [
+        [() => tools.renameMission(ACTOR, { mission_id: ACTOR.missionId, name: 'N' }), 'renamed'],
+        [() => tools.editMission(ACTOR, { ...DRAFT, mission_id: ACTOR.missionId }), 'edited'],
+        [() => tools.previewPolicy(ACTOR, { ...DRAFT, mission_id: ACTOR.missionId }), 'edited'],
+      ] as const) {
+        const outcome = await act();
+        expect(outcome).toMatchObject({
+          ok: false,
+          refusal: { code: 'self-not-allowed', mission_id: ACTOR.missionId },
+        });
+        expect(outcome.ok ? '' : outcome.refusal.message).toContain(verb);
+      }
+      expect(calls.some((call) => call.method === 'edit' || call.method === 'previewEdit')).toBe(
+        false,
+      );
+    });
+
+    it('an edit carrying a Vaubaan account is refused before the service is reached, by id or by service', async () => {
+      const vaubaan = { ...acmeAccount(), id: 'conn-vaubaan', service: 'vaubaan' };
+      const { tools, calls } = rig({
+        extra: [vaubaan],
+        missions: { editView: async () => editViewOf() },
+      });
+      for (const account of [{ account_id: 'conn-vaubaan' }, { service: 'vaubaan' }]) {
+        const outcome = await tools.editMission(ACTOR, {
+          ...STORED,
+          mission_id: 'm1',
+          accounts: [...STORED.accounts, { ...account, trust_levels: { read: 'careful' } }],
+        });
+        expect(outcome).toMatchObject({
+          ok: false,
+          refusal: { code: 'vaubaan-account-not-allowed' },
+        });
+        expect(outcome.ok ? '' : outcome.refusal.message).toContain('Nothing was changed');
+      }
+      expect(calls.some((call) => call.method === 'edit')).toBe(false);
+    });
+
+    it.each(['revoked', 'orphaned'] as const)(
+      'a %s mission is neither renamed nor edited: mission-inactive, the service is not reached',
+      async (state) => {
+        const { tools, calls } = rig({
+          missions: { editView: async () => editViewOf('m1', state) },
+        });
+        for (const outcome of [
+          await tools.renameMission(ACTOR, { mission_id: 'm1', name: 'N' }),
+          await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm1' }),
+        ]) {
+          expect(outcome).toMatchObject({
+            ok: false,
+            refusal: { code: 'mission-inactive', mission_id: 'm1', state },
+          });
+        }
+        expect(calls.some((call) => call.method === 'edit')).toBe(false);
+      },
+    );
+
+    it('an edit beyond the authority is refused whole, with the uncovered list the service’s issues name', async () => {
+      const { tools } = rig({
+        missions: {
+          editView: async () => editViewOf(),
+          edit: async () => ({
+            ok: false,
+            reason: 'refused',
+            issues: [
+              {
+                code: 'exceeds-authority',
+                message: 'Beyond.',
+                account_id: 'conn-acme',
+                risk_ids: ['acme.admin'],
+              },
+            ],
+            changes: NO_CHANGE,
+          }),
+        },
+      });
+      expect(await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm1' })).toMatchObject({
+        ok: false,
+        refusal: {
+          code: 'draft-refused',
+          mission_id: 'm1',
+          uncovered: [{ account_id: 'conn-acme', service: 'acme', risk_ids: ['acme.admin'] }],
+          changes: NO_CHANGE,
+        },
+      });
+    });
+
+    it('the service’s other answers keep their codes: a race, the ceiling, a vanished mission', async () => {
+      const message = 'This gateway holds 3 active missions; its ceiling is 3.';
+      const answers: [EditAnswer, Record<string, unknown>][] = [
+        [
+          { ok: false, reason: 'conflict' },
+          { code: 'mission-changed-meanwhile', mission_id: 'm1' },
+        ],
+        [
+          {
+            ok: false,
+            reason: 'limit-reached',
+            message,
+            limit: { ceiling: 'active-missions', count: 3, limit: 3, message },
+          } as unknown as EditAnswer,
+          { code: 'instance-limit-reached', message: `${message} Nothing was changed.` },
+        ],
+        [{ ok: false, reason: 'not-found' }, { code: 'mission-not-found' }],
+        [{ ok: false, reason: 'inactive', state: 'revoked' }, { code: 'mission-inactive' }],
+        [
+          { ok: false, reason: 'invalid-edit', problems: ['draft.x'] },
+          { code: 'invalid-arguments' },
+        ],
+      ];
+      for (const [answer, refusal] of answers) {
+        const { tools } = rig({
+          missions: { editView: async () => editViewOf(), edit: async () => answer },
+        });
+        expect(await tools.editMission(ACTOR, { ...DRAFT, mission_id: 'm1' })).toMatchObject({
+          ok: false,
+          refusal,
+        });
+      }
+    });
+
+    it('preview with `mission_id` is the creator’s preview of an edit: what moves, what is uncovered; nothing written', async () => {
+      const { tools, calls } = rig({
+        missions: {
+          editView: async () => editViewOf(),
+          previewEdit: async (...args) => {
+            calls.push({ method: 'previewEdit', args });
+            return {
+              ok: false,
+              issues: [
+                {
+                  code: 'exceeds-authority',
+                  message: 'Beyond.',
+                  account_id: 'conn-acme',
+                  risk_ids: ['acme.admin'],
+                },
+              ],
+              notices: [],
+              changes: NO_CHANGE,
+              revision: 'rev-1',
+            };
+          },
+        },
+      });
+      const outcome = await tools.previewPolicy(ACTOR, { ...DRAFT, mission_id: 'm1' });
+      expect(outcome).toMatchObject({
+        ok: true,
+        data: {
+          mission_id: 'm1',
+          ok: false,
+          uncovered: [{ account_id: 'conn-acme', service: 'acme', risk_ids: ['acme.admin'] }],
+          changes: NO_CHANGE,
+        },
+      });
+      expect(calls.find((call) => call.method === 'previewEdit')?.args).toEqual([
+        { id: ACTOR.userId },
+        'm1',
+        { draft: DRAFT, revision: 'rev-1' },
+      ]);
+      expect(calls.some((call) => call.method === 'edit' || call.method === 'preview')).toBe(false);
+    });
+
+    it('a mission read by its id carries its draft for its creator, none for a member', async () => {
+      const detail = (role: 'creator' | 'member') =>
+        ({
+          mission: { id: 'm1', name: 'M', accounts: [], policy: [], issuedByMissionId: null },
+          state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
+          role,
+          creator: { id: 'user-ada', email: 'ada@example.com' },
+          orphan: null,
+          lost: [],
+          token: null,
+          issued_via: null,
+          accounts: [],
+          policy: [],
+        }) as unknown as MissionDetail;
+      for (const [role, draft] of [
+        ['creator', STORED],
+        ['member', null],
+      ] as const) {
+        const { tools } = rig({
+          missions: { get: async () => detail(role), editView: async () => editViewOf() },
+        });
+        const outcome = await tools.listMyMissions(ACTOR, { mission_id: 'm1' });
+        expect(outcome.ok && outcome.data.missions[0]).toMatchObject({ draft });
+      }
+    });
   });
 
   describe('rotate reaches only the missions this mission issued (docs/spec/vaubaan-gateway.md §6)', () => {
@@ -877,6 +1187,11 @@ describe('tool definitions and results', () => {
     expect(text.list_my_accounts).toContain('Order of the calls');
     expect(text.issue_mission).toContain('`vaubaan-account-not-allowed`');
     expect(text.rotate_mission_token).toContain('`self-not-allowed`');
+    expect(text.rename_mission).toContain('`self-not-allowed`');
+    expect(text.edit_mission).toContain('`self-not-allowed`');
+    expect(text.edit_mission).toContain('`vaubaan-account-not-allowed`');
+    expect(text.edit_mission).toContain('nothing is narrowed silently');
+    expect(text.preview_policy).toContain('With `mission_id`, previews an edit');
     expect(text.issue_mission).toContain('The creator is the user, not you');
     expect(text.issue_mission).toContain('shown this once');
     expect(text.issue_mission).toContain('they alone answer the requests');
@@ -901,6 +1216,21 @@ describe('tool definitions and results', () => {
       preview.inputSchema.safeParse(whole({ scope: 'account', resource_ids: ['r1'] })).success,
     ).toBe(false);
     expect(preview.inputSchema.safeParse(whole({ scope: 'everything' })).success).toBe(false);
+    // A preview may name the mission it would edit; an edit must.
+    expect(preview.inputSchema.safeParse({ ...DRAFT, mission_id: 'm1' }).success).toBe(true);
+    expect(VAUBAAN_INPUTS.editMission.safeParse({ ...DRAFT, mission_id: 'm1' }).success).toBe(true);
+    expect(VAUBAAN_INPUTS.editMission.safeParse(DRAFT).success).toBe(false);
+    expect(
+      VAUBAAN_INPUTS.editMission.safeParse({ ...DRAFT, mission_id: 'm1', force: true }).success,
+    ).toBe(false);
+    // A name follows issuance's rule: not empty, not blank, at most 120 characters.
+    const rename = (name: string) =>
+      VAUBAAN_INPUTS.renameMission.safeParse({ mission_id: 'm1', name }).success;
+    expect(rename('Fix the docs')).toBe(true);
+    expect(rename('x'.repeat(120))).toBe(true);
+    expect(rename('x'.repeat(121))).toBe(false);
+    expect(rename('')).toBe(false);
+    expect(rename('   ')).toBe(false);
     const revoke = { inputSchema: VAUBAAN_INPUTS.revokeMission };
     expect(revoke.inputSchema.safeParse({ mission_id: 'm1' }).success).toBe(true);
     expect(revoke.inputSchema.safeParse({ mission_id: 'm1', force: true }).success).toBe(false);

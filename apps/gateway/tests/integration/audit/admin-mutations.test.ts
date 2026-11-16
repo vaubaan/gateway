@@ -1674,6 +1674,39 @@ const RULES: Readonly<Record<string, Rule>> = {
       }),
     writes: { act: 'mission-issued', object: 'mission', actor: 'alice', viaMission: true },
   },
+  'VaubaanActs.renameMission': {
+    kind: 'mutation',
+    target: vaubaanActs,
+    prepare: async (rig) => ({ mission: await rig.issue(), caller: await rig.platformCaller() }),
+    drive: (rig, prepared: { mission: MissionRecord; caller: VaubaanCaller }) =>
+      rig.root.vaubaan.ports.renameMission(prepared.caller, {
+        mission_id: prepared.mission.id,
+        name: 'Renamed by an agent',
+      }),
+    writes: { act: 'mission-changed', object: 'mission', actor: 'alice', viaMission: true },
+  },
+  'VaubaanActs.editMission': {
+    kind: 'mutation',
+    target: vaubaanActs,
+    // The draft an agent edits is the stored one, as `list_my_missions` answers it.
+    prepare: async (rig) => {
+      const mission = await rig.issue();
+      const caller = await rig.platformCaller();
+      const view = await rig.root.missions.service.editView({ id: caller.userId }, mission.id);
+      if (!view) throw new Error('no edit view for the creator');
+      return { mission, caller, draft: view.draft };
+    },
+    drive: (
+      rig,
+      prepared: { mission: MissionRecord; caller: VaubaanCaller; draft: Record<string, unknown> },
+    ) =>
+      rig.root.vaubaan.ports.editMission(prepared.caller, {
+        ...prepared.draft,
+        name: 'Edited by an agent',
+        mission_id: prepared.mission.id,
+      }),
+    writes: { act: 'mission-changed', object: 'mission', actor: 'alice', viaMission: true },
+  },
   'VaubaanActs.rotateMissionToken': {
     kind: 'mutation',
     target: vaubaanActs,
@@ -1762,6 +1795,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'local-link-created',
       'local-password-changed',
       'local-password-changed',
+      'mission-changed',
+      'mission-changed',
       'mission-changed',
       'mission-changed',
       'mission-issued',

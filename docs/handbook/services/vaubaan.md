@@ -20,21 +20,24 @@ Careful — and the agent calls the `vaubaan__*` tools on `/mcp` with that missi
 [platform-management-is-a-plugin-on-the-execution-door](../../decisions/platform-management-is-a-plugin-on-the-execution-door.md).
 Rules common to every plugin: [services README](README.md).
 
-The seven tools keep the names, arguments and answers of the retired management door
+Seven tools keep the names, arguments and answers of the retired management door
 (`list_my_accounts`, `get_catalog`, `list_my_missions`, `preview_policy`, `issue_mission`,
 `rotate_mission_token`, `revoke_mission`), prefixed `vaubaan__`, so an agent instruction written for
 the door still names the right tool. One answer changed: `issued_via` names the issuing mission
-(`mission_id`, `mission_name`, `this_mission`) where it named the OAuth client.
+(`mission_id`, `mission_name`, `this_mission`) where it named the OAuth client. Two came later
+(ADR amendment 2026-11-16): `rename_mission` and `edit_mission`, the creator's own "Edit mission";
+`preview_policy` with `mission_id` previews an edit, and `list_my_missions` with `mission_id` answers
+the mission as a `draft` to edit.
 
 ## Start here
 
 - [`plugins/vaubaan/src/ports.ts`](../../../plugins/vaubaan/src/ports.ts) — what the plugin is
-  given: seven acts, each `(caller, args) → answer`; `VaubaanCaller` is the calling mission, its
+  given: nine acts, each `(caller, args) → answer`; `VaubaanCaller` is the calling mission, its
   creator and the key's holder.
 - [`plugins/vaubaan/src/execute.ts`](../../../plugins/vaubaan/src/execute.ts) — the declared
   `execute` refuses every call; `createVaubaanExecute(ports)` is the one the host runs.
 - [`apps/gateway/src/server/compose/vaubaan.ts`](../../../apps/gateway/src/server/compose/vaubaan.ts)
-  — the ports built as frozen objects of closures over seven mission-service methods and the
+  — the ports built as frozen objects of closures over ten mission-service methods and the
   catalogs; `hostExecutes` handed to the execution door.
 - [`apps/gateway/src/server/vaubaan/acts.ts`](../../../apps/gateway/src/server/vaubaan/acts.ts) —
   the acts and the self rule; `inputs.ts` the zod schemas; `views.ts` the snake_case answers.
@@ -47,19 +50,28 @@ the door still names the right tool. One answer changed: `issued_via` names the 
   other (key, accepted risks, budget, gates, audit) before an act runs; the act then works in the
   name of the mission's **creator**, within their current authority. The SDK contract is untouched
   but for the `host` credential kind; the caller exists only in the host's context type.
-- **The hard deny is the dependency list**: the host module holds two ports (seven mission-service
-  methods — not `setGate`, `edit`, `duplicate`, `verifyToken` — and the catalogs as data) and a
+- **The hard deny is the dependency list**: the host module holds two ports (ten mission-service
+  methods — `edit` with its reads `editView` and `previewEdit`, but not `setGate`, `setLimits`,
+  `changePermissions`, `restore`, `duplicate`, `verifyToken` — and the catalogs as data) and a
   logger. `server/vaubaan/hard-deny.test.ts` (types, imports) and
   `tests/integration/vaubaan/hard-deny.test.ts` (object graph of the real root) hold it.
 - **The self rule, at every call, whatever the stored selection says** (like `isSelfResource`):
   a draft naming a Vaubaan account, by id or by service, is refused before any preview
-  (`vaubaan-account-not-allowed`); the calling mission is never rotated nor revoked through its own
-  key (`self-not-allowed`); a teammate's key is refused before the arguments are read
+  (`vaubaan-account-not-allowed`), at issuance and at an edit; the calling mission is never renamed,
+  edited, rotated nor revoked through its own key (`self-not-allowed`), nor is its edit previewed; a teammate's key is refused before the arguments are read
   (`teammate-key-not-allowed`) — the acts reach the creator's whole authority, wider than the
   mission a teammate was added to. A machine key (made by the creator) passes.
 - `rotate_mission_token` reaches only the missions the calling mission issued
   (`missions.issued_by_mission_id`); `MissionService.rotate` checks it again
-  (`not-issued-by-mission`). `revoke_mission` reaches every mission of the creator.
+  (`not-issued-by-mission`). `revoke_mission`, `rename_mission` and `edit_mission` reach every
+  mission of the creator (`editView` is `null` for a member).
+- **A rename is an edit of the name alone**: the act reads `editView` (the draft and its revision)
+  and sends `MissionService.edit` that draft with the new name. Rename and edit both pass
+  `issuedBy`: the version they leave is authored `{ kind: 'mission' }` (History "by <mission>"),
+  the `mission-changed` entry carries `via_mission_id`. The edit is applied from the revision read
+  in the same call, so the agent sends no revision; a write racing it is
+  `mission-changed-meanwhile`. An edit of the whole mission needs the stored set `id`s, which only
+  the `draft` of `list_my_missions` gives: a set sent without its id is a new set, fresh counters.
 - The mission it issues names the calling one (`issued_by_mission_id`), and the admin entry of every
   act stores it in `audit.mission_id` (`via_mission_id`): the act is also in the calling mission's
   activity, beside the call entry.
@@ -85,22 +97,25 @@ the door still names the right tool. One answer changed: `issued_via` names the 
 
 ## The catalog, row by row
 
-Five risks and the fallback, one per act a person tells apart; no environment (the gateway has
+Seven risks and the fallback, one per act a person tells apart; no environment (the gateway has
 none). Rows are read from the five facts by the decision tree
 ([gateway-risk-model](../../spec/gateway-risk-model.md) §4):
 
-| Risk                         | Facts that decide                               | Row | Why                                                                                     |
-| ---------------------------- | ----------------------------------------------- | --- | --------------------------------------------------------------------------------------- |
-| `vaubaan.read-setup`         | reversible, metadata, internal                  | 1   | names, ids and permissions; no key or account secret ever leaves                        |
-| `vaubaan.read-missions`      | reversible, metadata, internal                  | 1   | a key is shown by its masked prefix only                                                |
-| `vaubaan.mission-issue`      | reversible, **`data: secret`**                  | 2   | the answer carries a new mission key, which the agent can hand on; revoked in one click |
-| `vaubaan.mission-key-rotate` | reversible, **`data: secret`**                  | 2   | the answer carries the new key and cuts off whoever held the old one                    |
-| `vaubaan.mission-revoke`     | **`reversibility: costly`**, `visibility: team` | 3   | cannot be undone; the work resumes only on a new mission whose key a person hands over  |
+| Risk                         | Facts that decide                               | Row | Why                                                                                      |
+| ---------------------------- | ----------------------------------------------- | --- | ---------------------------------------------------------------------------------------- |
+| `vaubaan.read-setup`         | reversible, metadata, internal                  | 1   | names, ids and permissions; no key or account secret ever leaves                         |
+| `vaubaan.read-missions`      | reversible, metadata, internal                  | 1   | a key is shown by its masked prefix only                                                 |
+| `vaubaan.mission-issue`      | reversible, **`data: secret`**                  | 2   | the answer carries a new mission key, which the agent can hand on; revoked in one click  |
+| `vaubaan.mission-rename`     | reversible, metadata, internal                  | 1   | a name only; nothing the agent may do moves                                              |
+| `vaubaan.mission-edit`       | reversible, **`blast: account`**, team          | 2   | one edit may widen a mission to all the person holds; edited back or restored in one act |
+| `vaubaan.mission-key-rotate` | reversible, **`data: secret`**                  | 2   | the answer carries the new key and cuts off whoever held the old one                     |
+| `vaubaan.mission-revoke`     | **`reversibility: costly`**, `visibility: team` | 3   | cannot be undone; the work resumes only on a new mission whose key a person hands over   |
 
-Macro-actions: **Read my setup** (both reads; preview is a read of the authority), **Prepare
-missions** (issue), **Rotate a key**, **Stop missions** (revoke). Rotate is apart from Prepare
-because it cuts off an agent holding the old key. At Careful the reads run freely and every write
-asks the person first; at Trusting issuing and rotating run freely and stopping still asks.
+Macro-actions: **Read my setup** (both reads; preview is a read of the authority, of a mission
+too with `mission_id`), **Prepare missions** (issue, rename, edit), **Rotate a key**, **Stop
+missions** (revoke). Rotate is apart from Prepare because it cuts off an agent holding the old key.
+At Careful the reads and a rename run freely and every other write asks the person first; at
+Trusting issuing, editing and rotating run freely and stopping still asks.
 `tests/unit/plugin.test.ts` of the plugin pins these gates.
 
 ## Refusals of the tools
@@ -109,20 +124,21 @@ A "no" of an act is a tool error (`isError: true`, `structuredContent.error`), s
 correct itself; a "no" of the door (risk not accepted, budget, approval) is the door's structured
 refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL_CODES`, both ways:
 
-| `error.code`                  | When                                                                                         | Extra fields                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------- |
-| `invalid-arguments`           | the arguments do not match the tool's input schema                                           | `issues`                         |
-| `draft-refused`               | `issue_mission` on a draft the preview does not accept                                       | `uncovered`, `issues`, `preview` |
-| `vaubaan-account-not-allowed` | `issue_mission` on a draft that names a Vaubaan account                                      | `account_ids`                    |
-| `self-not-allowed`            | `rotate_mission_token` or `revoke_mission` on the calling mission                            | `mission_id`                     |
-| `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key            |                                  |
-| `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change) | `mission_id`                     |
-| `mission-inactive`            | `rotate_mission_token` on a revoked, expired or orphaned mission                             | `mission_id`, `state`, `orphan`  |
-| `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                        | `mission_id`                     |
-| `unknown-service`             | `get_catalog` on a service the instance does not ship                                        | `services`                       |
-| `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                  | `account_id`                     |
-| `instance-limit-reached`      | `issue_mission` while the instance holds as many active missions as `limits.active_missions` | `count`, `ceiling`               |
-| `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details               |                                  |
+| `error.code`                  | When                                                                                          | Extra fields                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `invalid-arguments`           | the arguments do not match the tool's input schema                                            | `issues`                                                     |
+| `draft-refused`               | `issue_mission` or `edit_mission` on a draft the preview does not accept                      | `uncovered`, `issues`, `preview` (issue) or `changes` (edit) |
+| `vaubaan-account-not-allowed` | `issue_mission` or `edit_mission` on a draft that names a Vaubaan account                     | `account_ids`                                                |
+| `self-not-allowed`            | any tool naming the calling mission but `list_my_missions`                                    | `mission_id`                                                 |
+| `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key             |                                                              |
+| `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change)  | `mission_id`                                                 |
+| `mission-inactive`            | rotate on a revoked, expired or orphaned mission; rename or edit on a revoked or orphaned one | `mission_id`, `state`, `orphan`                              |
+| `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                         | `mission_id`                                                 |
+| `mission-changed-meanwhile`   | `rename_mission` or `edit_mission` raced another write of the mission; nothing was changed    | `mission_id`                                                 |
+| `unknown-service`             | `get_catalog` on a service the instance does not ship                                         | `services`                                                   |
+| `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                   | `account_id`                                                 |
+| `instance-limit-reached`      | `issue_mission`, or a new end reviving an ended mission, at `limits.active_missions`          | `count`, `ceiling`                                           |
+| `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details                |                                                              |
 
 ## Traps
 

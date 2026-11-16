@@ -116,27 +116,42 @@ describe('vaubaan plugin — hard deny, on the object graph of the real root', (
     expect(found).toContain('root.execution.pipeline');
   });
 
-  it('the ports are a frozen object of the seven acts, and nothing else', () => {
+  it('the ports are a frozen object of the nine acts, and nothing else', () => {
     const { ports } = root.vaubaan;
     expect(Object.isFrozen(ports)).toBe(true);
     expect(Object.keys(ports).sort()).toEqual(
       [
+        'editMission',
         'getCatalog',
         'issueMission',
         'listMyAccounts',
         'listMyMissions',
         'previewPolicy',
+        'renameMission',
         'revokeMission',
         'rotateMissionToken',
       ].sort(),
     );
   });
 
-  it('the mission port is a frozen object of exactly the seven methods, bound to the service', async () => {
+  it('the mission port is a frozen object of exactly the ten methods, bound to the service', async () => {
     const port = vaubaanMissionsOf(root.missions.service);
     expect(Object.keys(port).sort()).toEqual([...VAUBAAN_MISSION_METHODS].sort());
     expect(Object.isFrozen(port)).toBe(true);
-    for (const forbidden of ['setGate', 'duplicate', 'draftFrom', 'verifyToken', 'deps']) {
+    // `edit` (with `editView`, `previewEdit`) is in, by the ADR amendment of 2026-11-16: the
+    // creator's own "Edit mission". What moves a gate or a limit alone, a duplication and the
+    // token check stay out.
+    expect(['edit', 'editView', 'previewEdit'].every((method) => method in port)).toBe(true);
+    for (const forbidden of [
+      'setGate',
+      'setLimits',
+      'changePermissions',
+      'restore',
+      'duplicate',
+      'draftFrom',
+      'verifyToken',
+      'deps',
+    ]) {
       expect(forbidden in port, forbidden).toBe(false);
     }
     expect(Object.getPrototypeOf(port)).toBe(Object.prototype);

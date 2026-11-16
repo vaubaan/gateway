@@ -36,11 +36,11 @@ export const vaubaanPlugin = definePlugin({
   icon: VAUBAAN_ICON,
   iconColor: VAUBAAN_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.3.0',
+  version: '0.4.0',
   description:
-    'Let an agent prepare missions for other agents: read your accounts and the catalogs, preview, issue, rotate and revoke missions in your name.',
+    'Let an agent prepare missions for other agents: read your accounts and the catalogs, preview, issue, rename, change, rotate and revoke missions in your name.',
   summary:
-    'One account is your own place on this gateway: it holds no secret, belongs to you and is never shared. It has no resource: a mission on it reaches your accounts, the catalogs and your missions, always within your authority. A mission prepared here never carries a Vaubaan account, and a mission never rotates or revokes itself. There is no environment.',
+    'One account is your own place on this gateway: it holds no secret, belongs to you and is never shared. It has no resource: a mission on it reaches your accounts, the catalogs and your missions, always within your authority. A mission prepared or changed here never carries a Vaubaan account, and a mission never renames, changes, rotates or revokes itself. There is no environment.',
   manualRevocation:
     'Nothing to remove anywhere else: disconnecting the Vaubaan account in Accounts stops every mission on it.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/vaubaan.md',
