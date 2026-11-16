@@ -350,12 +350,12 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     expect(href).toBeDefined();
     const page = await (await bob.get(href ?? '/missions')).text();
     expect(page).toContain('data-testid="shared-with-me"');
-    expect(page).toContain('People and keys');
+    expect(page).toContain('id="keys-title"');
     expect(page).toContain('Replace my key');
     expect(page).toContain(CI_TOKEN_NAME);
     // Nothing of the creator's controls.
     expect(page).not.toContain('Stop the mission');
-    expect(page).not.toContain('Add people');
+    expect(page).not.toContain('Add keys');
     expect(page).not.toContain('New machine key');
     // No secret on any page: the named token's and Alice's are shown nowhere to him.
     for (const secret of [demo.ciToken, demo.missionToken]) {

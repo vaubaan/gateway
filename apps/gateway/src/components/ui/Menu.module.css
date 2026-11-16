@@ -2,21 +2,37 @@
   position: relative;
   display: inline-flex;
 }
+/* Drawn as a secondary Button of the same size, so that it reads as one of its
+   neighbours in a page header, not as a faint glyph beside them. */
 .button {
+  position: relative;
   display: grid;
   place-items: center;
   width: var(--control-md);
   height: var(--control-md);
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  background: none;
-  color: var(--ink-2);
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 .button:hover,
 .button[aria-expanded='true'] {
   background: var(--fill);
-  color: var(--ink);
+}
+/* The three dots of the icon are points: a heavier stroke makes them read at 16 px. */
+.button svg {
+  stroke-width: 3;
+}
+/* 30 px to the eye, 32 px to the pointer, as a Button (style guide §6). */
+.button::after {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
 }
 .panel {
   position: absolute;

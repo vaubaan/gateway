@@ -268,9 +268,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // She can still stop it; nothing that would be refused is offered (no key can be made now).
   await joan.getByTestId('mission-menu').click();
   await expect(joan.getByRole('menuitem', { name: 'Stop the mission' })).toBeVisible();
-  await expect(joan.getByRole('menuitem', { name: 'Replace my key' })).toHaveCount(0);
-  await expect(joan.getByRole('menuitem', { name: 'New machine key' })).toHaveCount(0);
   await joan.keyboard.press('Escape');
+  await expect(
+    joan.getByTestId('team-section').getByRole('button', { name: 'Replace my key' }),
+  ).toHaveCount(0);
   await snap(joan, 'mission-orphaned');
   const missionUrl = joan.url();
 
@@ -313,9 +314,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await joan.goto(missionUrl);
   await expect(joan.getByTestId('orphan-callout')).toHaveCount(0);
   await expect(joan.getByTestId('mission-state')).toHaveCount(0);
-  await joan.getByTestId('mission-menu').click();
-  await expect(joan.getByRole('menuitem', { name: 'Replace my key' })).toBeVisible();
-  await joan.keyboard.press('Escape');
+  await expect(
+    joan.getByTestId('team-section').getByRole('button', { name: 'Replace my key' }),
+  ).toBeVisible();
   // The activity kept its history across the gap: the two calls served are still there.
   await joan.getByRole('link', { name: 'Everything this mission did' }).click();
   await expect(joan).toHaveURL(/\/activity\/timeline\?mission=/);

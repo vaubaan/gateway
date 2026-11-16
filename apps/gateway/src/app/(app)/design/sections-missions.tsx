@@ -85,7 +85,6 @@ export function MissionSections() {
               <Button>{ACTIONS.setupKit}</Button>
               <MoreMenu>
                 <MenuItem>{MISSION_ACTIONS.activity}</MenuItem>
-                <MenuItem>{ACTIONS.newMachineKey}</MenuItem>
                 <MenuItem note="Its creator alone can copy it" disabled>
                   {MISSION_ACTIONS.duplicate}
                 </MenuItem>

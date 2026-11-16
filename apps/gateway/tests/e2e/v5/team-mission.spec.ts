@@ -136,31 +136,49 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
 
   // ── …and makes it a team: a teammate, and a machine key for the CI ──────
   const team = ines.getByTestId('team-section');
-  await expect(team.getByRole('heading', { name: /People and keys/ })).toBeVisible();
+  await expect(team.getByRole('heading', { name: /^Keys/ })).toBeVisible();
+  // The keys come before the permissions: short first, long after.
+  const keysTop = (await team.boundingBox())?.y ?? Infinity;
+  const cardsTop = (await ines.getByTestId('mission-cards').boundingBox())?.y ?? -Infinity;
+  expect(keysTop).toBeLessThan(cardsTop);
+  // Every act on a key is in the section, none in "···".
+  await ines.getByTestId('mission-menu').click();
+  for (const name of ['New machine key', 'Replace my key', 'Generate my key', 'Revoke my key']) {
+    await expect(ines.getByRole('menuitem', { name })).toHaveCount(0);
+  }
+  await ines.keyboard.press('Escape');
   await expect(personRow(ines, E2E_SHARE_OWNER.email)).toContainText('you · creator');
-  await ines.getByRole('button', { name: 'Add people' }).click();
-  const addPeople = ines.getByTestId('add-people-dialog');
-  await expect(addPeople).toContainText('a key of their own that you never see');
-  await addPeople.getByTestId('member-candidate').selectOption(E2E_SHARE_TARGET.email);
-  await addPeople.getByRole('button', { name: 'Add to the mission' }).click();
+  await team.getByRole('button', { name: 'Add keys' }).click();
+  const addKeys = ines.getByTestId('add-keys-dialog');
+  await expect(addKeys.getByRole('radio', { name: /A teammate/ })).toBeChecked();
+  await expect(addKeys).toContainText('They generate their own key, which you never see');
+  await snap(ines, 'team-add-keys');
+  await addKeys.getByTestId('member-candidate').selectOption(E2E_SHARE_TARGET.email);
+  await addKeys.getByRole('button', { name: 'Add to the mission' }).click();
   const joanRow = personRow(ines, E2E_SHARE_TARGET.email);
   await expect(joanRow).toContainText('no key yet');
   // Once on the mission she is no longer offered.
-  await ines.getByRole('button', { name: 'Add people' }).click();
+  await team.getByRole('button', { name: 'Add keys' }).click();
   await expect(
-    addPeople.getByTestId('member-candidate').getByRole('option', { name: E2E_SHARE_TARGET.email }),
+    addKeys.getByTestId('member-candidate').getByRole('option', { name: E2E_SHARE_TARGET.email }),
   ).toHaveCount(0);
-  await addPeople.getByRole('button', { name: 'Cancel' }).click();
+  await addKeys.getByRole('button', { name: 'Cancel' }).click();
 
-  await missionMenu(ines, 'New machine key');
-  const machineKey = ines.getByTestId('machine-key-dialog');
-  await expect(machineKey).toContainText('has no account');
-  await machineKey.getByTestId('named-token-name').fill(CI);
-  await machineKey.getByRole('button', { name: 'Create the key' }).click();
+  // "New machine key" of the post-issuance page lands on the same dialog, on a machine key.
+  await ines.goto(`${missionUrl}?add=machine#keys`);
+  await expect(addKeys.getByRole('radio', { name: /A machine key/ })).toBeChecked();
+  await expect(addKeys).toContainText('has no account');
+  await addKeys.getByTestId('named-token-name').fill(CI);
+  await addKeys.getByRole('button', { name: 'Create the key' }).click();
   const ciToken = await keyOfDialog(ines, `Machine key “${CI}” for “${MISSION}”`);
+  await ines.goto(missionUrl);
   await expect(machineRow(ines, CI)).toContainText('machine key');
-  await expect(team.getByRole('heading', { name: /People and keys/ })).toContainText('3');
+  await expect(team.getByRole('heading', { name: /^Keys/ })).toContainText('3');
   await snap(ines, 'team-creator');
+  // Both themes: the "···" button reads as one of its neighbours.
+  await ines.emulateMedia({ colorScheme: 'dark' });
+  await snap(ines, 'team-creator-dark');
+  await ines.emulateMedia({ colorScheme: 'light' });
 
   // ── The acts of a row do not depend on hovering ─────────────────────────
   // With a pointer they are drawn when the row is pointed at — and when the keyboard
@@ -234,13 +252,16 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(joan.getByTestId('shared-with-me')).toContainText(E2E_SHARE_OWNER.email);
   await expect(joan.getByTestId('shared-with-me')).toContainText('with your own key');
   // She sees what she may do and nothing that would be refused: none of the creator's acts.
-  await expect(joan.getByRole('button', { name: 'Add people' })).toHaveCount(0);
+  await expect(joan.getByRole('button', { name: 'Add keys' })).toHaveCount(0);
   await joan.getByTestId('mission-menu').click();
-  for (const name of ['Stop the mission', 'New machine key', 'Duplicate', 'Replace my key']) {
+  for (const name of ['Stop the mission', 'Duplicate', 'Generate my key', 'Replace my key']) {
     await expect(joan.getByRole('menuitem', { name })).toHaveCount(0);
   }
-  await expect(joan.getByRole('menuitem', { name: 'Generate my key' })).toBeVisible();
+  await expect(joan.getByRole('menuitem', { name: 'Leave the mission' })).toBeVisible();
   await joan.keyboard.press('Escape');
+  await expect(
+    personRow(joan, E2E_SHARE_TARGET.email).getByRole('button', { name: 'Generate my key' }),
+  ).toBeVisible();
   await expect(joan.getByRole('button', { name: /^Remove / })).toHaveCount(0);
   await expect(joan.getByRole('button', { name: /^Revoke the / })).toHaveCount(0);
   await expect(joan.getByRole('button', { name: /^Replace the machine key/ })).toHaveCount(0);
@@ -430,7 +451,9 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   // ── Each key stops on its own ───────────────────────────────────────────
   // Joan replaces hers: she is asked first, then the old one is refused, with the
   // reason; the others are served.
-  await missionMenu(joan, 'Replace my key');
+  await personRow(joan, E2E_SHARE_TARGET.email)
+    .getByRole('button', { name: 'Replace my key' })
+    .click();
   const replace = joan.getByTestId('replace-key-dialog').filter({ hasText: 'Replace your key?' });
   await expect(replace).toContainText('Your current key stops working at once');
   await expect(replace).toContainText('The 2 other keys keep working.');
@@ -482,13 +505,13 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   // ── A teammate leaves by themselves ─────────────────────────────────────
   // Ines adds Joan again; Joan generates a key, then leaves: she types the mission's
   // name, her key is refused at once, and the mission is gone for her.
-  await ines.getByRole('button', { name: 'Add people' }).click();
+  await ines.getByRole('button', { name: 'Add keys' }).click();
   await ines
-    .getByTestId('add-people-dialog')
+    .getByTestId('add-keys-dialog')
     .getByTestId('member-candidate')
     .selectOption(E2E_SHARE_TARGET.email);
   await ines
-    .getByTestId('add-people-dialog')
+    .getByTestId('add-keys-dialog')
     .getByRole('button', { name: 'Add to the mission' })
     .click();
   await expect(personRow(ines, E2E_SHARE_TARGET.email)).toContainText('no key yet');

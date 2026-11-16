@@ -199,7 +199,7 @@ export function permissionRow(scope: Page | Locator, riskId: string): Locator {
   return scope.locator(`[data-permission="${riskId}"]`);
 }
 
-/** The row of a key holder in "People and keys": `member:<email>` or `machine:<name>`. */
+/** The row of a key holder in "Keys": `member:<email>` or `machine:<name>`. */
 export function holderRow(page: Page, id: string): Locator {
   return page.getByTestId('team-table').locator(`tr[data-row="${id}"]`);
 }
