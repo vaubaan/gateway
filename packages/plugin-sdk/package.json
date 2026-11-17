@@ -52,7 +52,7 @@
   },
   "scripts": {
     "type-check": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node scripts/build.ts",
     "prepack": "npm run build && node scripts/publish-manifest.ts apply",
     "postpack": "node scripts/publish-manifest.ts restore"
   },

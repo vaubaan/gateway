@@ -19,8 +19,12 @@
 //   docs/connect/       the screenshots of the connect guide, when the plugin has any
 //                       (`GUIDE_SCREENSHOT_DIR`; the host serves them from the pin)
 //
+//   vaubaan-manifest.json  the sha256 of every other file (what a signature covers)
+//
 // then imports the bundle under plain Node in a child process and checks that its
-// default export is a plugin of that id and version (the smoke test).
+// default export is a plugin of that id and version (the smoke test). The build itself
+// is `buildArchive` of @vaubaan/plugin-cli, the same one a plugin author runs as
+// `vaubaan-plugin build`; this script adds the repository's ids, licence and --all.
 //
 // A plugin whose dependency needs a native addon declares in its package.json
 //   "vaubaan": { "bundleable": false, "reason": "<one line>" }
@@ -28,63 +32,34 @@
 // `--all` takes every plugin of plugins/ but _template. Exit 1 when a bundleable plugin
 // fails to build or to import; the release workflow runs this before publishing the
 // images (deploy/docker/plugin.Dockerfile).
-import { execFileSync } from 'node:child_process';
-import {
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+
+import { archivePackage, buildArchive, notBundleableReason } from '@vaubaan/plugin-cli';
+
+export { notBundleableReason };
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGINS = join(ROOT, 'plugins');
 const SDK_MANIFEST = join(ROOT, 'packages/plugin-sdk/package.json');
-const SDK_PACKAGE = '@vaubaan/plugin-sdk';
 const TEMPLATE = '_template';
 const USAGE = 'usage: node scripts/build-plugin-bundle.mjs (<id>… | --all) [--out <dir>]';
-// esbuild's ESM output has no `require`; a CommonJS dependency that requires a Node
-// builtin needs one (the same shim every Node ESM bundle carries).
-const REQUIRE_SHIM =
-  "import { createRequire as __vaubaanCreateRequire } from 'node:module';\n" +
-  'const require = __vaubaanCreateRequire(import.meta.url);';
 
 export class BundleError extends Error {}
 
 /**
- * The package.json of a bundle, from the plugin's own. Pure.
- * @param {{ name: string, version: string }} manifest the plugin's package.json
+ * The package.json of a bundled plugin's archive: the repository names every plugin
+ * `@vaubaan/plugin-<id>` under the project's licence. Pure.
+ * @param {{ name: string, version: string, description?: string, license?: string }} manifest the plugin's package.json
  * @param {string} id
  * @param {string} sdkVersion
  */
 export function bundleManifest(manifest, id, sdkVersion) {
-  return {
-    name: `@vaubaan/plugin-${id}`,
-    version: manifest.version,
-    description: manifest.description,
-    type: 'module',
-    exports: { '.': './index.js' },
-    peerDependencies: { [SDK_PACKAGE]: `^${sdkVersion}` },
-    license: 'Apache-2.0',
-  };
-}
-
-/**
- * `null` when the plugin can be bundled, else the reason it declares. Pure.
- * @param {{ vaubaan?: { bundleable?: unknown, reason?: unknown } }} manifest
- * @returns {string | null}
- */
-export function notBundleableReason(manifest) {
-  const vaubaan = manifest.vaubaan;
-  if (typeof vaubaan !== 'object' || vaubaan === null) return null;
-  if (vaubaan.bundleable !== false) return null;
-  const reason = vaubaan.reason;
-  return typeof reason === 'string' && reason !== '' ? reason : 'declared not bundleable';
+  return archivePackage(
+    { ...manifest, name: `@vaubaan/plugin-${id}`, license: manifest.license ?? 'Apache-2.0' },
+    sdkVersion,
+  );
 }
 
 /**
@@ -133,26 +108,6 @@ export function allPluginIds() {
 }
 
 /**
- * Imports the bundle under plain Node and returns its default export's id and version.
- * @param {string} entry
- * @returns {{ id: unknown, version: unknown }}
- */
-function smoke(entry) {
-  const code =
-    'const m = await import(process.argv[1]);' +
-    "const p = m.default; if (!p || typeof p !== 'object') throw new Error('no default export');" +
-    'process.stdout.write(JSON.stringify({ id: p.id, version: p.version }));';
-  const out = execFileSync(
-    process.execPath,
-    ['--input-type=module', '-e', code, pathToFileURL(entry).href],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  /** @type {{ id: unknown, version: unknown }} */
-  const loaded = JSON.parse(out);
-  return loaded;
-}
-
-/**
  * Builds one plugin's bundle into `<out>/<id>/`. Returns what was built, or the
  * reason it was skipped.
  * @param {string} id
@@ -160,66 +115,26 @@ function smoke(entry) {
  */
 export async function buildPluginBundle(id, { out, sdkVersion, esbuild }) {
   const source = join(PLUGINS, id);
-  const manifestPath = join(source, 'package.json');
-  if (!existsSync(manifestPath)) throw new BundleError(`${id}: no plugins/${id}/package.json`);
-  const manifest = readJson(manifestPath);
-  const reason = notBundleableReason(manifest);
-  if (reason !== null) return { id, skipped: reason };
-
-  const target = join(out, id);
-  rmSync(target, { recursive: true, force: true });
-  mkdirSync(target, { recursive: true });
-  const entry = join(target, 'index.js');
+  if (!existsSync(join(source, 'package.json'))) {
+    throw new BundleError(`${id}: no plugins/${id}/package.json`);
+  }
+  let result;
   try {
-    await esbuild.build({
-      entryPoints: [join(source, 'src/index.ts')],
-      outfile: entry,
-      bundle: true,
-      platform: 'node',
-      format: 'esm',
-      target: 'node26',
-      banner: { js: REQUIRE_SHIM },
-      legalComments: 'eof',
-      logLevel: 'silent',
+    result = await buildArchive({
+      pluginDir: source,
+      outDir: join(out, id),
+      esbuild,
+      sdkVersion,
+      licenseFile: join(ROOT, 'LICENSE'),
     });
   } catch (err) {
-    /** @type {string[]} */
-    const errors = Array.isArray(err.errors)
-      ? err.errors.map((/** @type {{ text: string }} */ e) => e.text)
-      : [String(err.message)];
-    throw new BundleError(`${id}: esbuild refused the bundle: ${errors.join('; ')}`);
+    throw new BundleError(`${id}: ${err.message}`);
   }
-  for (const file of readdirSync(join(source, 'src'))) {
-    if (file.endsWith('.yaml')) copyFileSync(join(source, 'src', file), join(target, file));
+  if ('skipped' in result) return { id, skipped: result.skipped };
+  if (result.id !== id) {
+    throw new BundleError(`${id}: the bundle's plugin is ${result.id}, expected ${id}`);
   }
-  writeFileSync(
-    join(target, 'package.json'),
-    `${JSON.stringify(bundleManifest(manifest, id, sdkVersion), null, 2)}\n`,
-  );
-  copyFileSync(join(ROOT, 'LICENSE'), join(target, 'LICENSE'));
-  if (existsSync(join(source, 'README.md'))) {
-    copyFileSync(join(source, 'README.md'), join(target, 'README.md'));
-  }
-  // The connect guide's screenshots (`GUIDE_SCREENSHOT_DIR` of the SDK), served by the
-  // host from the pin's directory (/reference/<id>/connect/<file>).
-  const connectDir = join('docs', 'connect');
-  if (existsSync(join(source, connectDir))) {
-    cpSync(join(source, connectDir), join(target, connectDir), { recursive: true });
-  }
-
-  let loaded;
-  try {
-    loaded = smoke(entry);
-  } catch (err) {
-    const stderr = typeof err.stderr === 'string' ? err.stderr.trim().split('\n').at(-1) : '';
-    throw new BundleError(`${id}: the bundle does not import under node: ${stderr || err.message}`);
-  }
-  if (loaded.id !== id || loaded.version !== manifest.version) {
-    throw new BundleError(
-      `${id}: the bundle's plugin is ${String(loaded.id)} ${String(loaded.version)}, expected ${id} ${manifest.version}`,
-    );
-  }
-  return { id, version: manifest.version, path: target };
+  return { id, version: result.version, path: result.path };
 }
 
 async function main() {

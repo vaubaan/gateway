@@ -65,6 +65,11 @@ and their agent can do most of it.
 
 ## 7. Open questions
 
+- Data migrations, decided 2026-11-17, contract still to write before the SDK's first stable
+  version: a plugin declares the format version of its account and resource data and the oldest it
+  reads; its migrations are pure and forward only; the instance stores a migrated form beside the
+  original, never in place, so going back to an older version reads the original; a version only
+  adds fields, and an older one ignores the fields it does not know.
 - The SDK's first stable version, so a plugin survives the gateway's minor versions; planned before
   the kit is opened to the public.
 - Domain, Security and Tests sections, to write with the first build of the kit.

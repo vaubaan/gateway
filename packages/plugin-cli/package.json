@@ -1,0 +1,20 @@
+{
+  "name": "@vaubaan/plugin-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The command line of a Vaubaan Gateway plugin author: build the plugin's archive",
+  "license": "Apache-2.0",
+  "bin": {
+    "vaubaan-plugin": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "esbuild": "0.28.2"
+  }
+}

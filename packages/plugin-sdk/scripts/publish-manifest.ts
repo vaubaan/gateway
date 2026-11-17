@@ -20,15 +20,30 @@ import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } fro
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { INLINED } from './build.ts';
+
 const PACKAGE = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST = join(PACKAGE, 'package.json');
 const KEPT = join(PACKAGE, 'package.repo.json');
 
 interface Manifest {
+  dependencies?: Record<string, string>;
   exports?: unknown;
   types?: unknown;
   publishConfig?: { exports?: Record<string, { types: string; default: string }>; types?: string };
   [key: string]: unknown;
+}
+
+/**
+ * The published `dependencies`: the workspace packages `build.ts` compiles into `dist/`
+ * are left out, they ship inside the package. Pure.
+ */
+export function publishedDependencies(
+  dependencies: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(dependencies ?? {}).filter(([name]) => !(name in INLINED)),
+  );
 }
 
 function apply(): void {
@@ -45,6 +60,7 @@ function apply(): void {
   const { exports: _exports, types: _types, ...config } = publishConfig ?? {};
   const out: Manifest = {
     ...rest,
+    dependencies: publishedDependencies(manifest.dependencies),
     exports: published,
     ...(publishConfig?.types ? { types: publishConfig.types } : {}),
     publishConfig: config,
@@ -56,7 +72,9 @@ function restore(): void {
   if (existsSync(KEPT)) renameSync(KEPT, MANIFEST);
 }
 
-const command = process.argv[2];
-if (command === 'apply') apply();
-else if (command === 'restore') restore();
-else throw new Error('usage: node scripts/publish-manifest.ts apply | restore');
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const command = process.argv[2];
+  if (command === 'apply') apply();
+  else if (command === 'restore') restore();
+  else throw new Error('usage: node scripts/publish-manifest.ts apply | restore');
+}

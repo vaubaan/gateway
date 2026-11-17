@@ -13,11 +13,12 @@ tracks:
   - packages/shared/src/brand.ts
   - packages/shared/src/versions-feed.ts
   - scripts/build-plugin-bundle.mjs
+  - packages/plugin-cli/
   - scripts/publish-plugin-images.sh
   - scripts/plugin-release-plan.mjs
   - deploy/docker/plugin.Dockerfile
   - deploy/docker/plugin.Dockerfile.dockerignore
-last_reviewed: 2026-11-13
+last_reviewed: 2026-11-17
 ---
 
 # Plugin loading — handbook
@@ -38,7 +39,8 @@ until they land, this handbook describes the code as it is.
 - [`plugins/loader.ts`](../../apps/gateway/src/server/plugins/loader.ts) — one pin directory read, checked, imported.
 - [`plugins/inventory.ts`](../../apps/gateway/src/server/plugins/inventory.ts) — the pin wins, `plugins.enabled`, the accounts check.
 - [`updates/index.ts`](../../apps/gateway/src/server/updates/index.ts) — the daily read of `versions.json`; `root.updates`.
-- [`scripts/build-plugin-bundle.mjs`](../../scripts/build-plugin-bundle.mjs) — the bundle a pin is; the release workflow runs it.
+- [`packages/plugin-cli/src/archive.ts`](../../packages/plugin-cli/src/archive.ts) — `buildArchive`, the archive a pin is (`vaubaan-plugin build` for an author): the bundle, its YAML, its `package.json` under the plugin's own name and licence, and `vaubaan-manifest.json`, the sha256 of every other file, which a signature will cover.
+- [`scripts/build-plugin-bundle.mjs`](../../scripts/build-plugin-bundle.mjs) — the repository's plugins through `buildArchive` (`--all`, the project's `LICENSE`); the release workflow runs it.
 - `apps/gateway/src/app/admin/(guarded)/plugins/` — Administration › Plugins: `page.tsx` reads `root.plugins`, `root.updates`, the account counts and the badges; `plugins-view.tsx` says it; `check/route.ts` is "Check now" (`updates/handlers.ts`, not audited: it changes nothing).
 - `apps/gateway/src/app/(app)/reference/frame.tsx` — `PinnedTag`, the "pinned" tag the Reference shows from the inventory.
 - [`apps/website/src/app/versions.json/route.ts`](../../apps/website/src/app/versions.json/route.ts) — the feed instances read, built at build time by `content/versions-feed.ts` ([website](website.md)).
@@ -62,7 +64,7 @@ until they land, this handbook describes the code as it is.
 - **Tests never read the feed**: `validEnv()` sets `VAUBAAN_UPDATES_CHECK=false`. A test that wants the check sets it back and injects `updatesFetch` (`RootDeps`).
 - **`RootDeps.buildRegistry`** bypasses the loader: the inventory then lists the injected plugins as bundled, and no pin is read. `reseal` runs `loadPlugins` like the root, so a pin that stops the boot stops it too (exit 78).
 - **The e2e instance never reads the feed** (`VAUBAAN_UPDATES_CHECK=false` in `ephemeral-instance.ts`): Administration › Plugins shows no notice there, only "the versions check is off". A notice is tested on the view (`tests/unit/app/admin-plugins.test.tsx`).
-- **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: the script copies `src/*.yaml`, and `docs/connect/` (the connect guide's screenshots, which the host serves from `<pin>/docs/connect/`; a pin built before 2026-11-13 has none and its images answer 404). A plugin reading another file needs the script taught.
+- **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: `buildArchive` copies `src/*.yaml`, and `docs/connect/` (the connect guide's screenshots, which the host serves from `<pin>/docs/connect/`; a pin built before 2026-11-13 has none and its images answer 404). A plugin reading another file needs `buildArchive` taught.
 - **A native addon cannot be bundled** (esbuild has no `.node` loader): the plugin declares `"vaubaan": { "bundleable": false, "reason": … }` (today `ssh`) and stays image-only.
 - **The plugin image's context** is filtered by `plugin.Dockerfile.dockerignore` (BuildKit reads it before the root `.dockerignore`, which excludes `dist/`).
 - **A plugin image version never moves**: a gateway release skips versions already on GHCR; a `plugin-<id>-v<version>` tag on an existing version fails.

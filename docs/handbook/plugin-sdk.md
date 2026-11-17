@@ -111,19 +111,26 @@ not a rename: it is the broker protocol's word.
 
 ## Publication
 
-The package is publishable, not published. `npm pack --workspace @vaubaan/plugin-sdk` builds
-`dist/` (`tsconfig.build.json`: JavaScript and declarations, `.ts` imports rewritten) and packs
-`dist/`, `README.md` and `package.json` only. Inside the repository `exports` point at `src/*.ts`;
-`prepack` swaps in the published manifest (`publishConfig.exports` → `dist/`,
-`scripts/publish-manifest.ts`) and `postpack` restores it — npm does not apply `publishConfig.exports`
-itself. A stray `package.repo.json` means a pack died between the two: `node
-scripts/publish-manifest.ts restore`.
+The package is publishable, not published. `npm pack --workspace @vaubaan/plugin-sdk` runs
+`prepack`: `scripts/build.ts` builds `dist/`, then `scripts/publish-manifest.ts apply` swaps in the
+published manifest (`publishConfig.exports` → `dist/`); `postpack` restores the repository's —
+npm does not apply `publishConfig.exports` itself. A stray `package.repo.json` means a pack died
+between the two: `node scripts/publish-manifest.ts restore`.
 
-Its dependencies `@vaubaan/shared` and `@vaubaan/policy-engine` are workspace packages with
-`exports` on TypeScript sources and version `0.0.0`: published as they are, the SDK cannot be
-installed. Either publish both too, or inline them. **Recommended: inline them** (bundle the
-JavaScript the SDK uses and roll up its declarations at build): publishing both would make two more APIs public contracts with
-versions of their own, while plugin authors only ever write against the SDK.
+`@vaubaan/shared` and `@vaubaan/policy-engine` ship **inside** the package, never as
+dependencies: they are private workspace packages whose `exports` are TypeScript sources, and
+publishing them would make two more public contracts. `build.ts` compiles the SDK
+(`tsconfig.build.json`) and both of them (`tsconfig.build.shared.json`,
+`tsconfig.build.policy-engine.json`) into `dist/` and `dist/internal/<name>/`, then rewrites every
+import of them in the emitted JavaScript and declarations to a relative path, and every relative
+`.ts` import of a declaration file to `.js` (`rewriteRelativeImportExtensions` rewrites the
+JavaScript only). It fails when an `@vaubaan/*` import is left. `apply` drops both from the
+published `dependencies`, leaving `js-yaml`. A new workspace dependency of the SDK must be added to
+`INLINED` and given its `tsconfig.build.<name>.json`, or the build fails.
+
+The proof it installs: `npm pack` it, install the tarball in an empty directory with
+`typescript`, `vitest` and `@types/node`, copy `plugins/_template/src` and `tests` there, and run
+`tsc --noEmit` (`NodeNext`, `skipLibCheck: false`) and `vitest run`.
 
 ## Traps
 

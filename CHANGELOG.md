@@ -17,6 +17,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   access). New risk `github.issue-write` (slice `issue[N].edit.W`), in the macro-action `propose`
   (catalog version 15). Token permission: Issues (read and write), already asked. Missions issued
   before gain it only when their creator edits them.
+- **A plugin is written and built outside this repository.** `npm pack` of `@vaubaan/plugin-sdk`
+  now carries `@vaubaan/shared` and `@vaubaan/policy-engine` inside it, so the tarball installs in
+  an empty directory and a plugin compiles and runs its tests against it. A new package,
+  `@vaubaan/plugin-cli`, builds a plugin's archive (`vaubaan-plugin build`) under the plugin's own
+  name and licence, with `vaubaan-manifest.json`, the sha256 of every file; the repository's
+  plugin bundles are built by it too. Neither package is published yet.
 
 ## [2.0.0-alpha.24] - 2026-11-16
 

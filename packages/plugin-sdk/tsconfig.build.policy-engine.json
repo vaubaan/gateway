@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "rootDir": "../policy-engine/src",
+    "outDir": "dist/internal/policy-engine"
+  },
+  "include": ["../policy-engine/src/**/*"],
+  "exclude": ["node_modules", "dist", "../policy-engine/src/**/*.test.ts"]
+}

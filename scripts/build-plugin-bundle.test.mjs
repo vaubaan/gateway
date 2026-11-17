@@ -55,6 +55,11 @@ describe('build-plugin-bundle', () => {
         license: 'Apache-2.0',
       });
       expect(readFileSync(join(result.path, 'risk-catalog.yaml'), 'utf8')).toContain('risks');
+      const archive = JSON.parse(readFileSync(join(result.path, 'vaubaan-manifest.json'), 'utf8'));
+      expect(archive).toMatchObject({ id: result.id, version: result.version });
+      expect(Object.keys(archive.files)).toEqual(
+        expect.arrayContaining(['index.js', 'package.json', 'risk-catalog.yaml', 'LICENSE']),
+      );
     }
     expect(results.find((r) => r.id === 'ssh')).toMatchObject({ skipped: expect.any(String) });
   });
