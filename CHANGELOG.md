@@ -24,6 +24,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   name and licence, with `vaubaan-manifest.json`, the sha256 of every file; the repository's
   plugin bundles are built by it too. Neither package is published yet.
 
+### Security
+
+- **Next.js 16.4.6** (from 16.4.3), for GHSA-mfr8-8qww-v76h (moderate: information disclosure
+  across root params through `unstable_cache()` and `'use cache'`). The gateway and the website
+  use neither, so no instance was exposed; `next build` refused to run on the affected version.
+
 ## [2.0.0-alpha.24] - 2026-11-16
 
 ### Added

@@ -45,7 +45,7 @@
     "geist": "^1.8.2",
     "jose": "6.2.13",
     "libsodium-wrappers-sumo": "^0.8.4",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "nodemailer": "^10.2.1",
     "openid-client": "^6.8.8",
     "react": "19.3.1",
