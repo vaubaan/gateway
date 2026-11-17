@@ -53,6 +53,7 @@ export const GITHUB_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
       TOOL.searchIssues,
       TOOL.addIssueComment,
       TOOL.addLabels,
+      TOOL.updateIssue,
     ],
   },
   // GitHub grants Metadata (read) to every fine-grained token by itself.

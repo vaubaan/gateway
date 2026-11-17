@@ -402,6 +402,41 @@ describe('classifyGithub — PRs, comments, releases', () => {
     ]);
   });
 
+  test('update_issue → issue[N].edit.W, for a title, a body, a type or several', () => {
+    for (const fields of [
+      { title: 'New' },
+      { body: '' },
+      { type: 'Bug' },
+      { type: null },
+      { title: 'New', body: 'b' },
+    ]) {
+      const r = classifyGithub(
+        'github__update_issue',
+        { ...baseArgs, issue_number: 69, ...fields },
+        resources,
+      );
+      expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].issue[69].edit.W`]);
+    }
+  });
+
+  test.each([
+    ['neither title nor body', {}],
+    ['a blank title', { title: '  ' }],
+    ['a title over 256 characters', { title: 'x'.repeat(257) }],
+    ['a multi-line title', { title: 'a\nb' }],
+    ['a body that is not text', { body: 7 }],
+    ['a body over 65536 characters', { body: 'x'.repeat(65537) }],
+    ['a blank type', { type: ' ' }],
+    ['a type that is not a name', { type: { value: 'Bug' } }],
+  ])('update_issue refuses %s', (_label, fields) => {
+    const r = classifyGithub(
+      'github__update_issue',
+      { ...baseArgs, issue_number: 1, ...fields },
+      resources,
+    );
+    expect(r).toHaveProperty('denied');
+  });
+
   test('add_labels : a name the slice grammar cannot carry is "any", never repaired', () => {
     const r = classifyGithub(
       'github__add_labels',

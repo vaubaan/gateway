@@ -125,6 +125,14 @@ export const githubDataModel: DataModel = {
             '`issue[N].comment.W`).',
         },
         {
+          name: 'edit',
+          parent: 'issue',
+          cardinalities: ['one'],
+          description:
+            'Synthetic verb leaf — `update_issue` rewrites the title, body or type of the ' +
+            'issue. Its own leaf, so that it is neither a comment nor a label.',
+        },
+        {
           name: 'comment',
           parent: 'issue',
           cardinalities: ['one', 'unbounded'],

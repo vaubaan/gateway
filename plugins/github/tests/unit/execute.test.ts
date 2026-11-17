@@ -189,6 +189,68 @@ describe('execute — rules and release tools', () => {
   });
 });
 
+describe('execute — update_issue', () => {
+  const route = {
+    method: 'PATCH',
+    url: 'https://api.github.com/repos/acme/app/issues/69',
+    body: {
+      number: 69,
+      title: 'New title',
+      body: 'New body',
+      state: 'open',
+      html_url: 'https://github.com/acme/app/issues/69',
+      updated_at: '2026-11-17T10:00:00Z',
+      user: { login: 'someone' },
+      labels: [{ name: 'bug' }],
+      type: { id: 3, name: 'Task', color: 'blue' },
+    },
+  };
+
+  test('PATCHes the trimmed title and the body, and answers the issue as it now reads', async () => {
+    const fetch = mockFetch([route]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__update_issue', {
+      owner: 'acme',
+      repo: 'app',
+      issue_number: 69,
+      title: '  New title ',
+      body: 'New body',
+      type: ' Task',
+    });
+    expect(fetch.calls[0]!.json).toEqual({ title: 'New title', body: 'New body', type: 'Task' });
+    expect(JSON.parse(text(result))).toEqual({
+      number: 69,
+      title: 'New title',
+      body: 'New body',
+      type: 'Task',
+      state: 'open',
+      html_url: 'https://github.com/acme/app/issues/69',
+      updated_at: '2026-11-17T10:00:00Z',
+    });
+  });
+
+  test('sends only the fields given : an empty body clears the description, the title is left', async () => {
+    const fetch = mockFetch([route]);
+    await githubPlugin.execute(executeCtx(fetch), 'github__update_issue', {
+      owner: 'acme',
+      repo: 'app',
+      issue_number: 69,
+      body: '',
+    });
+    expect(fetch.calls[0]!.json).toEqual({ body: '' });
+  });
+
+  test('type null removes the type : it is sent, not taken for absent', async () => {
+    const fetch = mockFetch([route]);
+    await githubPlugin.execute(executeCtx(fetch), 'github__update_issue', {
+      owner: 'acme',
+      repo: 'app',
+      issue_number: 69,
+      type: null,
+    });
+    expect(fetch.calls[0]!.json).toEqual({ type: null });
+  });
+});
+
 describe('execute — merge_pull_request is bound to the declared base', () => {
   const repo = { owner: 'acme', repo: 'app' };
   const pullUrl = 'https://api.github.com/repos/acme/app/pulls/7';

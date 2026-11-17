@@ -88,6 +88,12 @@ export const githubExamples: ToolSamples = samplesOn([EXAMPLE_REPOSITORY], {
     { args: { ...repo, issue_number: 1, labels: ['e2e'] } },
     { args: { ...repo, issue_number: 1, labels: ['bug', 'needs review'] } },
   ],
+  [TOOL.updateIssue]: [
+    { args: { ...repo, issue_number: 1, title: 't' } },
+    { args: { ...repo, issue_number: 1, body: '' } },
+    { args: { ...repo, issue_number: 1, type: null } },
+    { args: { ...repo, issue_number: 1, issue_title: 't' }, expectDenied: true },
+  ],
   [TOOL.listWorkflows]: [{ args: { ...repo } }],
   [TOOL.listWorkflowRuns]: [{ args: { ...repo } }, { args: { ...repo, workflow_id: 'ci.yml' } }],
   [TOOL.listWorkflowJobs]: [

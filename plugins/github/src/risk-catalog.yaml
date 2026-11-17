@@ -3,7 +3,7 @@
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/services/github.md.
 #
-# 17 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
+# 18 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
 # `matches` is one slice pattern or a list ; the risk is touched when at
 # least one pattern intersects the concrete slice the classifier emitted.
 # Bracket lists mix exact names and globs (`[main,master,release-*]`).
@@ -32,9 +32,12 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 14 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 15 (2026-11-17) : `github.issue-write` (tool `update_issue`, slice
+# `issue[N].edit.W`), in
+# the macro-action `propose`.
 service: github
-catalog_version: 14
-catalog_date: 2026-11-13
+catalog_version: 15
+catalog_date: 2026-11-17
 
 risks:
   # ---------------------------------------------------------------
@@ -222,6 +225,20 @@ risks:
       named labels.
     matches:
       - 'github.repo[**].issue[**].label[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+  - id: github.issue-write
+    label: 'Edit the title, body or type of an issue'
+    reason: >-
+      Replaces what a person wrote, in front of every reader of the issue ;
+      subscribers are not notified. GitHub keeps the body's edit history and
+      shows a title change in the timeline, so the former text can be put back.
+    matches:
+      - 'github.repo[**].issue[**].edit.W'
     vector:
       reversibility: reversible
       blast: single
@@ -438,7 +455,7 @@ macro_actions:
         rate_limit: { max: 30, window_seconds: 60 }
   - id: propose
     label: 'Propose'
-    description: 'Work branches, push, pull requests, comments and labels.'
+    description: 'Work branches, push, pull requests, issues, comments and labels.'
     narrative: >-
       The coding agent's loop. Everything lands on branches named feature/*, fix/*, chore/*… and
       can be reverted; nothing reaches production until a person merges. Two acts are kept apart
@@ -460,6 +477,9 @@ macro_actions:
         quota: 200
         rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: github.label-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.issue-write
         quota: 200
         rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: github.branch-delete

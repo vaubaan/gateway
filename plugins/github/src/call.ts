@@ -239,6 +239,41 @@ function readLabels(value: unknown): string[] | null {
   return out;
 }
 
+/** Longest issue title GitHub accepts (characters). */
+export const MAX_ISSUE_TITLE_LENGTH = 256;
+/** Longest issue body GitHub accepts (characters). */
+export const MAX_ISSUE_BODY_LENGTH = 65536;
+
+/**
+ * A new issue title, trimmed : 1 to `MAX_ISSUE_TITLE_LENGTH` characters, no
+ * control character or line separator (GitHub refuses an empty title).
+ */
+function issueTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const title = value.trim();
+  if (title.length === 0 || title.length > MAX_ISSUE_TITLE_LENGTH) return null;
+  return UNPRINTABLE.test(title) ? null : title;
+}
+
+/**
+ * A new issue body : any text up to `MAX_ISSUE_BODY_LENGTH` characters, sent
+ * as given. An empty string is a body : it clears the description.
+ */
+function issueBody(value: unknown): string | null {
+  return typeof value === 'string' && value.length <= MAX_ISSUE_BODY_LENGTH ? value : null;
+}
+
+/** Longest issue type name accepted (characters). */
+export const MAX_ISSUE_TYPE_LENGTH = 256;
+
+/** An issue type, by name, trimmed : printable, 1 to `MAX_ISSUE_TYPE_LENGTH` characters. */
+function issueTypeName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  if (name.length === 0 || name.length > MAX_ISSUE_TYPE_LENGTH) return null;
+  return UNPRINTABLE.test(name) ? null : name;
+}
+
 /** Default of `max_bytes` on `get_job_logs` : 64 KiB, enough for the end of a failed step. */
 export const JOB_LOG_DEFAULT_BYTES = 64 * 1024;
 /** Most bytes of a job log one call returns (1 MiB). */
@@ -323,6 +358,16 @@ export type RepoCall = { readonly target: RepoTarget } & (
       readonly issueNumber: number;
       /** Trimmed names : one slice each, and the body GitHub receives. */
       readonly labels: readonly string[];
+    }
+  | {
+      readonly tool: typeof TOOL.updateIssue;
+      readonly issueNumber: number;
+      /** The new title, trimmed ; unchanged when absent. */
+      readonly title: string | undefined;
+      /** The new body, as given ; unchanged when absent. */
+      readonly body: string | undefined;
+      /** The issue type by name, `null` to remove it ; unchanged when absent. */
+      readonly type: string | null | undefined;
     }
   | {
       readonly tool: typeof TOOL.listWorkflowRuns;
@@ -478,6 +523,38 @@ export function readGithubCall(
       const labels = readLabels(args.labels);
       if (labels === null) return denied(tool, `requires ${LABELS_SHAPE}`);
       return { tool, target, issueNumber, labels };
+    }
+    case TOOL.updateIssue: {
+      const issueNumber = positiveInteger(args.issue_number);
+      if (issueNumber === null) return denied(tool, "requires 'issue_number'");
+      // `body: ''` is a value (it clears the description), not an absent argument.
+      const title = optional(args.title, issueTitle);
+      if (title === null) {
+        return denied(
+          tool,
+          `'title' must be 1 to ${MAX_ISSUE_TITLE_LENGTH} printable characters once trimmed`,
+        );
+      }
+      const body = args.body === undefined || args.body === null ? undefined : issueBody(args.body);
+      if (body === null) {
+        return denied(tool, `'body' must be text of at most ${MAX_ISSUE_BODY_LENGTH} characters`);
+      }
+      // `type: null` removes the type : only an omitted `type` leaves it.
+      let type: string | null | undefined;
+      if (args.type === null) type = null;
+      else if (args.type !== undefined) {
+        type = issueTypeName(args.type);
+        if (type === null) {
+          return denied(
+            tool,
+            `'type' must be an issue type name of 1 to ${MAX_ISSUE_TYPE_LENGTH} printable characters, or null to remove it`,
+          );
+        }
+      }
+      if (title === undefined && body === undefined && type === undefined) {
+        return denied(tool, "requires 'title', 'body' or 'type'");
+      }
+      return { tool, target, issueNumber, title, body, type };
     }
     case TOOL.listWorkflowRuns: {
       const workflowId = optional(args.workflow_id, workflowRef);

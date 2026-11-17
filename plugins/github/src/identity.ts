@@ -23,7 +23,7 @@ export const SERVICE_ID = 'github';
 export const TOOL_PREFIX = `${SERVICE_ID}__` as const;
 
 /**
- * The tool names : the 28 MCP tools in the order `tools.ts` declares them,
+ * The tool names : the 29 MCP tools in the order `tools.ts` declares them,
  * then the git remote's two, which are never in `tools/list` (the host's git
  * door calls them, spec §4.1 ter).
  */
@@ -44,6 +44,7 @@ export const TOOL = {
   createPullRequest: `${TOOL_PREFIX}create_pull_request`,
   addIssueComment: `${TOOL_PREFIX}add_issue_comment`,
   addLabels: `${TOOL_PREFIX}add_labels`,
+  updateIssue: `${TOOL_PREFIX}update_issue`,
   listWorkflows: `${TOOL_PREFIX}list_workflows`,
   listWorkflowRuns: `${TOOL_PREFIX}list_workflow_runs`,
   listWorkflowJobs: `${TOOL_PREFIX}list_workflow_jobs`,

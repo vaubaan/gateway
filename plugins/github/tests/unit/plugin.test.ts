@@ -41,12 +41,12 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('28 tools declared, all prefixed ; the names are those of identity.ts', () => {
+  test('29 tools declared, all prefixed ; the names are those of identity.ts', () => {
     expect(TOOL_PREFIX).toBe(toolPrefixFor(SERVICE_ID));
     expect(githubPlugin.id).toBe(SERVICE_ID);
-    expect(githubPlugin.tools).toHaveLength(28);
+    expect(githubPlugin.tools).toHaveLength(29);
     for (const t of githubPlugin.tools) expect(t.name.startsWith(TOOL_PREFIX)).toBe(true);
-    // The 28 MCP tools, then the git remote's two.
+    // The 29 MCP tools, then the git remote's two.
     expect([
       ...githubPlugin.tools.map((t) => t.name),
       githubPlugin.gitRemote.fetchTool,
@@ -62,8 +62,8 @@ describe('github plugin — structural kit', () => {
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin);
-    // The 28 MCP tools and the git remote's two.
-    expect(report.toolsChecked).toBe(30);
+    // The 29 MCP tools and the git remote's two.
+    expect(report.toolsChecked).toBe(31);
     // The 17 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
@@ -76,6 +76,7 @@ describe('github plugin — structural kit', () => {
       'github.create-pr',
       'github.comment-write',
       'github.label-write',
+      'github.issue-write',
       'github.create-release',
       'github.delete-release',
       'github.branch-protection-write',
@@ -100,7 +101,7 @@ describe('github plugin — structural kit', () => {
       resources,
       context: (fetch, missionResources) => executeCtx(fetch, missionResources),
     });
-    expect(report.toolsChecked).toBe(28);
+    expect(report.toolsChecked).toBe(29);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'branch',
@@ -130,7 +131,7 @@ describe('github plugin — structural kit', () => {
 
   test('the fallback is the one catalog risk the samples leave out', () => {
     const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
-    expect(named).toHaveLength(19);
+    expect(named).toHaveLength(20);
     expect(githubCatalog.catalog.risks.filter((r) => r.fallback).map((r) => r.id)).toEqual([
       'github.uncategorized-write',
     ]);
@@ -162,14 +163,14 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, propose, ship, administer ; catalog version 14', () => {
+  test('read, propose, ship, administer ; catalog version 15', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
       'propose',
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(14);
+    expect(githubCatalog.catalog.catalog_version).toBe(15);
   });
 
   test('read at Careful : code and metadata run freely, the global search asks first', () => {
@@ -189,6 +190,7 @@ describe('github catalog — macro-actions at a trust level', () => {
       'github.create-pr',
       'github.comment-write',
       'github.label-write',
+      'github.issue-write',
     ]) {
       expect(propose[id], id).toBe('auto');
     }

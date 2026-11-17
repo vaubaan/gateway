@@ -185,6 +185,16 @@ export async function dispatchGithubTool(
       });
       return labelNames(data);
     }
+    case TOOL.updateIssue: {
+      const { data } = await octokit.rest.issues.update({
+        ...repo,
+        issue_number: call.issueNumber,
+        ...(call.title === undefined ? {} : { title: call.title }),
+        ...(call.body === undefined ? {} : { body: call.body }),
+        ...(call.type === undefined ? {} : { type: call.type }),
+      });
+      return issueSummary(data);
+    }
     case TOOL.mergePullRequest: {
       await assertPullRequestTargetsDeclaredBase(octokit, call);
       const { data } = await octokit.rest.pulls.merge({
@@ -384,6 +394,19 @@ function labelNames(data: unknown): unknown {
     .map((label) => label.name)
     .filter((name) => typeof name === 'string');
   return { labels: names };
+}
+
+/**
+ * GitHub's answer to `update_issue` — the whole issue, with its author,
+ * labels, reactions and URLs — cut down to what the edit changed. GitHub
+ * drops a type change silently when the person behind the token lacks push
+ * access : the answered `type` is what the issue really carries.
+ */
+function issueSummary(data: unknown): unknown {
+  if (!isRecord(data)) return data;
+  const { number, title, body, state, html_url, updated_at } = data;
+  const type = isRecord(data.type) && typeof data.type.name === 'string' ? data.type.name : null;
+  return { number, title, body, type, state, html_url, updated_at };
 }
 
 /** The objects of a list, or none when `value` is not a list. */

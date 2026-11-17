@@ -28,6 +28,7 @@ export const githubToolTitles: Readonly<Record<string, string>> = {
   [TOOL.createPullRequest]: 'Open a pull request',
   [TOOL.addIssueComment]: 'Comment on an issue or pull request',
   [TOOL.addLabels]: 'Add labels to an issue or pull request',
+  [TOOL.updateIssue]: 'Edit the title, body or type of an issue',
   [TOOL.listWorkflows]: 'List workflows',
   [TOOL.listWorkflowRuns]: 'List workflow runs',
   [TOOL.listWorkflowJobs]: 'List the jobs of a workflow run',

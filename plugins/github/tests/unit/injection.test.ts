@@ -319,6 +319,7 @@ const POSITIONS: readonly Position[] = [
       ['github__get_issue', 'issue_number', {}],
       ['github__add_issue_comment', 'issue_number', { body: 'hi' }],
       ['github__add_labels', 'issue_number', { labels: ['e2e'] }],
+      ['github__update_issue', 'issue_number', { title: 't' }],
       ['github__delete_release', 'release_id', {}],
     ] as const
   ).map(([tool, key, extra]): Position => ({

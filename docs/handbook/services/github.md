@@ -3,7 +3,7 @@ title: GitHub plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-11-16
+last_reviewed: 2026-11-17
 ---
 
 # GitHub plugin — handbook
@@ -70,6 +70,11 @@ env-scoped. Rules common to every plugin: [services README](README.md).
 - `add_labels` with `labels: []` would remove every label at GitHub: the grammar asks 1 to 20 names.
   A label is case-insensitive at GitHub, not in a slice: `E2E` on a mission narrowed to
   `label[e2e]` is refused (fail closed), and a missing label is created, not refused.
+- `update_issue` is classified on its own verb leaf `issue[N].edit.W`: a pattern ending in `.W`
+  covers the subtree beneath it, so `issue[**].W` would have made every comment and label an
+  issue edit too. `type: null` removes the type (an omitted `type` leaves it), `body: ''` clears
+  the description. GitHub **drops a type change silently** when the token's user lacks push
+  access: the answer carries the type the issue really has, read it.
 - `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run` are retired (risk model §7.2): the plugin's `excludedTools` (`EXCLUDED_TOOLS`, `identity.ts`), refused by name.
 
 ## Outside the repo

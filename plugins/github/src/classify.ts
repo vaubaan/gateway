@@ -202,7 +202,7 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
       return dedup(out);
     }
 
-    // ── Writes — PRs / comments / labels ───────────────────────────────────
+    // ── Writes — PRs / issues / comments / labels ──────────────────────────
     case TOOL.createPullRequest:
       return [
         build(`${repo}.pull_request.W`),
@@ -223,6 +223,11 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
           build(`${repo}.issue[${call.issueNumber}].label[${identOrAny(name)}].W`),
         ),
       );
+
+    case TOOL.updateIssue:
+      // Its own verb leaf : `issue[N].W` would also match the comments and
+      // labels beneath the issue (a pattern's trailing `.W` spans the subtree).
+      return [build(`${repo}.issue[${call.issueNumber}].edit.W`)];
 
     // ── Writes — releases ──────────────────────────────────────────────────
     case TOOL.createRelease:

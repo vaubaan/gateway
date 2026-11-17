@@ -9,6 +9,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub: `github__update_issue` edits an issue's title, body or type.** An absent field is left
+  unchanged, an empty body clears the description, `type: null` removes the issue type. It
+  answers the issue as it now reads, type included (GitHub ignores a type change without push
+  access). New risk `github.issue-write` (slice `issue[N].edit.W`), in the macro-action `propose`
+  (catalog version 15). Token permission: Issues (read and write), already asked. Missions issued
+  before gain it only when their creator edits them.
+
 ## [2.0.0-alpha.24] - 2026-11-16
 
 ### Added

@@ -13,7 +13,13 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-import { MAX_LABEL_LENGTH, MAX_LABELS_PER_CALL } from './call.ts';
+import {
+  MAX_ISSUE_BODY_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+  MAX_ISSUE_TYPE_LENGTH,
+  MAX_LABEL_LENGTH,
+  MAX_LABELS_PER_CALL,
+} from './call.ts';
 import { TOOL } from './identity.ts';
 
 const repoArgs = {
@@ -203,6 +209,36 @@ export const githubTools: readonly McpToolDeclaration[] = [
         },
       },
       required: ['owner', 'repo', 'issue_number', 'labels'],
+    },
+  },
+  {
+    name: TOOL.updateIssue,
+    description:
+      "Edit the title, the body or the type of an issue. An absent field is left unchanged; an empty body clears the description; type null removes the issue's type. Returns the issue as it now reads, type included: GitHub drops a type change silently when the token's user lacks push access.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        issue_number: { type: 'number' },
+        title: {
+          type: 'string',
+          minLength: 1,
+          maxLength: MAX_ISSUE_TITLE_LENGTH,
+          description: `The new title, at most ${MAX_ISSUE_TITLE_LENGTH} characters; blanks around it are trimmed.`,
+        },
+        body: {
+          type: 'string',
+          maxLength: MAX_ISSUE_BODY_LENGTH,
+          description: 'The new body (Markdown), replacing the whole description.',
+        },
+        type: {
+          type: ['string', 'null'],
+          maxLength: MAX_ISSUE_TYPE_LENGTH,
+          description:
+            "An issue type of the repository's organization, by name (e.g. Bug, Task); null removes the type.",
+        },
+      },
+      required: ['owner', 'repo', 'issue_number'],
     },
   },
   // Read - ci (workflows + their runs)

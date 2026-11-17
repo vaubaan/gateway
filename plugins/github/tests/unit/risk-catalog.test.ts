@@ -206,6 +206,13 @@ const OTHER_WRITES: readonly Row[] = [
     { ...repo, issue_number: 1, labels: ['good first issue', 'e2e'] },
     ['label-write'],
   ],
+  // Editing an issue is neither a comment nor a label beneath it.
+  [
+    'update_issue',
+    'title and body',
+    { ...repo, issue_number: 1, title: 't', body: 'b' },
+    ['issue-write'],
+  ],
   // Publishing and deleting are two risks with two patterns : neither requires the other.
   ['create_release', 'release and tag', { ...repo, tag_name: 'v1.0.0' }, ['create-release']],
   ['delete_release', 'one', { ...repo, release_id: 1 }, ['delete-release']],

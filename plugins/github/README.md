@@ -25,7 +25,7 @@ ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contrac
 | `src/identity.ts`         | `SERVICE_ID` and `TOOL`, every tool name: the one place they are written.                                |
 | `src/risk-catalog.yaml`   | The risks, the fallback and the macro-actions. Loaded by the SDK at boot; the only catalog artefact.     |
 | `src/data-model.ts`       | Planes `repo` (branch → file / commit; tag, release, PR, issue, workflow → run → job) and `search`.      |
-| `src/tools.ts`            | 28 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                     |
+| `src/tools.ts`            | 29 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                     |
 | `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.     |
 | `src/classify.ts`         | Pure `(tool, args, resources) → slices \| denied`. The security-critical file.                           |
 | `src/credential.ts`       | The token `CredentialSpec` and its check at paste (`verifyGithubToken`).                                 |
@@ -75,6 +75,9 @@ refactor/*` it touches `feature-branch-write`; any other branch name falls
   (`issue[N].label[<name>].W`, `[*]` for a name the slice grammar cannot
   carry): a mission can be narrowed to named labels. An empty list is refused
   (GitHub reads it as "remove every label").
+- `update_issue` touches `issue-write` (`issue[N].edit.W`, a verb leaf so that
+  it covers neither comments nor labels): the title, the body, the type or
+  several; an absent field is left unchanged, at least one is required.
 - `mint-install-token-clone` / `-push` are deprecated (they belonged to the
   removed GitHub App); no call touches them.
 
@@ -82,12 +85,12 @@ A creator ticks macro-actions, each at a trust level (Careful / Trusting /
 Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
-| Macro-action | What it covers                                           | Its risks                                                                                                                         |
-| ------------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `read`       | Code, metadata and global search.                        | `read-code`, `read-meta`, `search-global`                                                                                         |
-| `propose`    | Work branches, push, pull requests, comments and labels. | `feature-branch-write`, `git-push`, `bulk-file-write`, `create-pr`, `comment-write`, `label-write`, `branch-delete`, `force-push` |
-| `ship`       | Merge on protected branches, tags and releases.          | `merge-protected`, `tag-write`, `create-release`, `delete-release`                                                                |
-| `administer` | Branch protection and workflow files.                    | `branch-protection-write`, `workflow-write-via-file`                                                                              |
+| Macro-action | What it covers                                                   | Its risks                                                                                                                                        |
+| ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read`       | Code, metadata and global search.                                | `read-code`, `read-meta`, `search-global`                                                                                                        |
+| `propose`    | Work branches, push, pull requests, issues, comments and labels. | `feature-branch-write`, `git-push`, `bulk-file-write`, `create-pr`, `comment-write`, `label-write`, `issue-write`, `branch-delete`, `force-push` |
+| `ship`       | Merge on protected branches, tags and releases.                  | `merge-protected`, `tag-write`, `create-release`, `delete-release`                                                                               |
+| `administer` | Branch protection and workflow files.                            | `branch-protection-write`, `workflow-write-via-file`                                                                                             |
 
 `force-push`, `branch-delete`, protected merges, tags, releases and
 `administer` ask first below Autonomous; `delete-release` is left out at
