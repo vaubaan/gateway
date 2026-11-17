@@ -16,7 +16,7 @@ import {
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import { composePlugins, type PluginInventoryEntry } from './inventory';
-import { readPinnedPlugins, type PinReadOptions } from './loader';
+import { readPinnedPlugins, type PinnedPlugin, type PinReadOptions } from './loader';
 
 export {
   bundledInventory,
@@ -44,6 +44,8 @@ export {
   sdkInRange,
   type PinManifest,
   type PinnedPlugin,
+  type PinReadOptions,
+  readPluginDirectory,
 } from './loader';
 
 /** Every plugin the instance knows, as `GatewayRoot.plugins` exposes it. */
@@ -66,6 +68,8 @@ export interface LoadPluginsOptions {
   readonly sdkVersion?: string;
   /** Tests: a fake `import()`. */
   readonly importEntry?: PinReadOptions['importEntry'];
+  /** The installed versions this start loads (`loadInstalled`); none by default. */
+  readonly installed?: readonly PinnedPlugin[];
 }
 
 /**
@@ -86,7 +90,12 @@ export async function loadPlugins(
           sdkVersion: options.sdkVersion ?? SDK_VERSION,
           importEntry: options.importEntry,
         });
-  const set = composePlugins({ bundled: options.bundled, pinned, enabled });
+  const set = composePlugins({
+    bundled: options.bundled,
+    pinned,
+    installed: options.installed ?? [],
+    enabled,
+  });
   const registry = createRegistry(set.plugins);
   logInventory(logger, set.inventory);
   return { registry, inventory: { dir, entries: set.inventory } };
@@ -95,6 +104,13 @@ export async function loadPlugins(
 /** One line per pin and one for the plugins left out: a pin is never silent (ADR). */
 function logInventory(logger: Logger, inventory: readonly PluginInventoryEntry[]): void {
   for (const entry of inventory) {
+    if (entry.origin === 'installed') {
+      const replaces = entry.replaces === null ? '' : ` (replaces the image's ${entry.replaces})`;
+      logger.info(`plugin ${entry.id} ${entry.version} installed from ${entry.path}${replaces}`, {
+        plugin: entry.id,
+      });
+      continue;
+    }
     if (entry.origin !== 'pinned') continue;
     const replaces = entry.replaces === null ? '' : ` (replaces bundled ${entry.replaces})`;
     logger.info(`plugin ${entry.id} ${entry.version} pinned from ${entry.path}${replaces}`, {
@@ -112,3 +128,17 @@ function logInventory(logger: Logger, inventory: readonly PluginInventoryEntry[]
     });
   }
 }
+export {
+  examplesProblem,
+  INSTALLED_DIR_NAME,
+  installedDirFor,
+  installedFolderProblem,
+  InstallRefusal,
+  loadInstalled,
+  storeArchive,
+  type InstalledLoad,
+  type InstalledOutcome,
+  type InstalledVersion,
+  type InstallRefusalCode,
+  type StoredArchive,
+} from './installed';

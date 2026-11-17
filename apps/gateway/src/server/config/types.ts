@@ -251,6 +251,10 @@ export interface PluginsConfig {
   readonly dir: string | null;
   /** The plugin ids the instance registers, in the order given; `null`: every plugin it knows. */
   readonly enabled: readonly string[] | null;
+  /** The plugin ids an administrator may install without a signature; none by default. */
+  readonly allowUnsigned: readonly string[];
+  /** Start with the image's and the pinned versions only, ignoring installed ones. */
+  readonly safeMode: boolean;
 }
 
 /** The published versions feed (`updates.*`, spec §4.3). */

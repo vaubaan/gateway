@@ -1730,6 +1730,11 @@ const RULES: Readonly<Record<string, Rule>> = {
       }),
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice', viaMission: true },
   },
+  // Read: the plugins of the instance; nothing changes.
+  'VaubaanPluginActs.pluginStatus': READ,
+  'VaubaanPluginActs.uploadPlugin': exempt(
+    'writes `plugin-uploaded` through the install service (tests/integration/plugins); the rig keeps its store in memory, where nothing is installed',
+  ),
   'VaubaanActs.revokeMission': {
     kind: 'mutation',
     target: vaubaanActs,

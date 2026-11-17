@@ -35,12 +35,15 @@ import type { RequestsModule } from '../requests';
 import type { SharesModule } from '../shares';
 import type { Store } from '../store';
 import { VaubaanActs } from './acts';
+import { VaubaanPluginActs } from './plugin-acts';
 import {
   VAUBAAN_DEPENDENCIES,
   VAUBAAN_MISSION_METHODS,
   type VaubaanMissions,
   type VaubaanModuleDeps,
+  type VaubaanPlugins,
 } from './ports';
+import type { PluginInstallService } from '../plugins/install-service';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -65,12 +68,21 @@ type Forbidden =
   | Store
   | Store[keyof Store]
   | MissionService
-  | PluginRegistry;
+  | PluginRegistry
+  | PluginInstallService;
 
 describe('vaubaan plugin — hard deny, by type', () => {
-  it('the module depends on two ports and a logger, and on nothing else', () => {
-    expectTypeOf<keyof VaubaanModuleDeps>().toEqualTypeOf<'missions' | 'catalog' | 'logger'>();
-    expect([...VAUBAAN_DEPENDENCIES].sort()).toEqual(['catalog', 'logger', 'missions']);
+  it('the module depends on three ports and a logger, and on nothing else', () => {
+    expectTypeOf<keyof VaubaanModuleDeps>().toEqualTypeOf<
+      'missions' | 'catalog' | 'plugins' | 'logger'
+    >();
+    expect([...VAUBAAN_DEPENDENCIES].sort()).toEqual(['catalog', 'logger', 'missions', 'plugins']);
+  });
+
+  it('the plugins port reads, uploads an inert archive and names a page; nothing activates', () => {
+    expectTypeOf<keyof VaubaanPlugins>().toEqualTypeOf<
+      'isAdministrator' | 'upload' | 'activationUrl' | 'status'
+    >();
   });
 
   it('no dependency is a service, a module or a repository of a forbidden family', () => {
@@ -146,7 +158,14 @@ describe('vaubaan plugin — hard deny, by imports', () => {
   );
 
   it('the module has its source files', () => {
-    expect(sources.sort()).toEqual(['acts.ts', 'index.ts', 'inputs.ts', 'ports.ts', 'views.ts']);
+    expect(sources.sort()).toEqual([
+      'acts.ts',
+      'index.ts',
+      'inputs.ts',
+      'plugin-acts.ts',
+      'ports.ts',
+      'views.ts',
+    ]);
   });
 
   it.each(sources)('%s imports no forbidden module, only the allowed ones', (name) => {
@@ -164,9 +183,22 @@ describe('vaubaan plugin — hard deny, by imports', () => {
   it('the wiring narrows the mission service and the registry, and reaches the door by a type only', () => {
     const wiring = importsOf(join(HERE, '../compose/vaubaan.ts'));
     const siblings = wiring.filter((spec) => spec.startsWith('../')).map((spec) => spec.slice(3));
-    expect(siblings.sort()).toEqual(['execution', 'logging', 'missions', 'vaubaan']);
+    expect(siblings.sort()).toEqual([
+      'auth/administrators',
+      'execution',
+      'logging',
+      'missions',
+      'plugins',
+      'plugins/install-service',
+      'store',
+      'vaubaan',
+    ]);
     const source = readFileSync(join(HERE, '../compose/vaubaan.ts'), 'utf8');
     expect(source).toContain("import type { HostComposedExecute } from '../execution';");
+    // The services the plugins port closes over are named by a type only: built elsewhere.
+    for (const spec of ['auth/administrators', 'plugins', 'plugins/install-service', 'store']) {
+      expect(source, spec).toMatch(new RegExp(`import type \\{[^}]*\\} from '\\.\\./${spec}';`));
+    }
   });
 });
 
@@ -197,7 +229,7 @@ describe('vaubaan plugin — hard deny, by surface', () => {
     'proxy',
   ];
 
-  it('the tools are the nine acts, in order, prefixed `vaubaan__`', () => {
+  it('the tools are the eleven acts, in order, prefixed `vaubaan__`', () => {
     expect(vaubaanTools.map((tool) => tool.name)).toEqual([
       'vaubaan__list_my_accounts',
       'vaubaan__get_catalog',
@@ -208,6 +240,8 @@ describe('vaubaan plugin — hard deny, by surface', () => {
       'vaubaan__edit_mission',
       'vaubaan__rotate_mission_token',
       'vaubaan__revoke_mission',
+      'vaubaan__upload_plugin',
+      'vaubaan__plugin_status',
     ]);
     expect(Object.values(TOOL)).toEqual(vaubaanTools.map((tool) => tool.name));
     expect([...VAUBAAN_PORT_NAMES].sort()).toEqual(Object.keys(ACT).sort());
@@ -223,9 +257,9 @@ describe('vaubaan plugin — hard deny, by surface', () => {
     }
   });
 
-  it('the class behind the ports has one public method per act and no other', () => {
-    const methods = Object.getOwnPropertyNames(VaubaanActs.prototype).filter(
-      (name) => name !== 'constructor',
+  it('the classes behind the ports have one public method per act and no other', () => {
+    const methods = [VaubaanActs.prototype, VaubaanPluginActs.prototype].flatMap((proto) =>
+      Object.getOwnPropertyNames(proto).filter((name) => name !== 'constructor'),
     );
     expect(methods.filter((name) => name !== 'log').sort()).toEqual([...VAUBAAN_PORT_NAMES].sort());
   });

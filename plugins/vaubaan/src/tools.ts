@@ -78,6 +78,14 @@ const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
     'The answer contains the new `token.secret`, shown this once, and the bootstrap kit.',
     'Use it when a token leaked or was lost. A revoked or expired mission is not rotated: issue a new one. An orphaned mission is not rotated either: it refuses every call until the user’s authority returns, and its token then works again.',
   ].join(' '),
+  uploadPlugin: [
+    'Uploads the archive of a plugin to this instance (`archive_base64`: the bytes of the `.tgz` that `vaubaan-plugin build` writes, in base64; at most 16 MB). Only when the user is an administrator of the instance (`administrator-only` otherwise).',
+    'The archive is checked without running any of its code and stays inert: the answer gives `activation_url`, the page where an administrator reads the permissions it adds and activates it. It then starts on trial at the next start of the instance. You never activate, roll back nor remove a plugin: hand the URL to the user.',
+    'An archive this gateway does not read, built for another SDK, unsigned and not allowed by the configuration, or using an id of the image is refused (`plugin-refused`, with `reason`).',
+  ].join(' '),
+  pluginStatus: [
+    'Lists the plugins this instance runs (`plugins`: id, version, origin — the image, installed here, or pinned by the operator) and every installed version (`installed`: state, trust, why it did not load). Only when the user is an administrator of the instance.',
+  ].join(' '),
   revokeMission: [
     'Ends one of the user’s missions for good: its token is refused from now on. It cannot be undone; a new mission must be issued.',
     'Use it when the task is finished or the token leaked. An orphaned mission can be revoked too: that closes it for good. It does not touch the user’s accounts, shares or other missions. This mission never revokes itself here (`self-not-allowed`): the user does, in the web interface.',
@@ -118,4 +126,6 @@ export const vaubaanToolTitles: Readonly<Record<string, string>> = {
   [TOOL.editMission]: 'Change a mission',
   [TOOL.rotateMissionToken]: 'Replace a mission’s key',
   [TOOL.revokeMission]: 'Revoke a mission',
+  [TOOL.uploadPlugin]: 'Upload a plugin',
+  [TOOL.pluginStatus]: 'Read the installed plugins',
 };

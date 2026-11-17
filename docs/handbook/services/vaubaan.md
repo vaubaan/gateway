@@ -27,7 +27,13 @@ the door still names the right tool. One answer changed: `issued_via` names the 
 (`mission_id`, `mission_name`, `this_mission`) where it named the OAuth client. Two came later
 (ADR amendment 2026-11-16): `rename_mission` and `edit_mission`, the creator's own "Edit mission";
 `preview_policy` with `mission_id` previews an edit, and `list_my_missions` with `mission_id` answers
-the mission as a `draft` to edit.
+the mission as a `draft` to edit. Two more (plugin 0.5.0; ADR
+[plugins-activated-by-an-administrator-on-trial](../../decisions/plugins-activated-by-an-administrator-on-trial.md)):
+`upload_plugin` hands over an archive, which stays pending, and `plugin_status` reads the plugins
+of the instance — both refused `administrator-only` unless the mission's creator is an
+administrator. They reach the install service through a third port, `plugins`
+(`compose/vaubaan.ts` `vaubaanPluginsOf`: four closures; nothing that activates, refuses, rolls back
+or removes a plugin), and live in `server/vaubaan/plugin-acts.ts`.
 
 ## Start here
 
@@ -124,21 +130,23 @@ A "no" of an act is a tool error (`isError: true`, `structuredContent.error`), s
 correct itself; a "no" of the door (risk not accepted, budget, approval) is the door's structured
 refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL_CODES`, both ways:
 
-| `error.code`                  | When                                                                                          | Extra fields                                                 |
-| ----------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `invalid-arguments`           | the arguments do not match the tool's input schema                                            | `issues`                                                     |
-| `draft-refused`               | `issue_mission` or `edit_mission` on a draft the preview does not accept                      | `uncovered`, `issues`, `preview` (issue) or `changes` (edit) |
-| `vaubaan-account-not-allowed` | `issue_mission` or `edit_mission` on a draft that names a Vaubaan account                     | `account_ids`                                                |
-| `self-not-allowed`            | any tool naming the calling mission but `list_my_missions`                                    | `mission_id`                                                 |
-| `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key             |                                                              |
-| `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change)  | `mission_id`                                                 |
-| `mission-inactive`            | rotate on a revoked, expired or orphaned mission; rename or edit on a revoked or orphaned one | `mission_id`, `state`, `orphan`                              |
-| `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                         | `mission_id`                                                 |
-| `mission-changed-meanwhile`   | `rename_mission` or `edit_mission` raced another write of the mission; nothing was changed    | `mission_id`                                                 |
-| `unknown-service`             | `get_catalog` on a service the instance does not ship                                         | `services`                                                   |
-| `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                   | `account_id`                                                 |
-| `instance-limit-reached`      | `issue_mission`, or a new end reviving an ended mission, at `limits.active_missions`          | `count`, `ceiling`                                           |
-| `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details                |                                                              |
+| `error.code`                  | When                                                                                                                                  | Extra fields                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `invalid-arguments`           | the arguments do not match the tool's input schema                                                                                    | `issues`                                                     |
+| `draft-refused`               | `issue_mission` or `edit_mission` on a draft the preview does not accept                                                              | `uncovered`, `issues`, `preview` (issue) or `changes` (edit) |
+| `vaubaan-account-not-allowed` | `issue_mission` or `edit_mission` on a draft that names a Vaubaan account                                                             | `account_ids`                                                |
+| `self-not-allowed`            | any tool naming the calling mission but `list_my_missions`                                                                            | `mission_id`                                                 |
+| `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key                                                     |                                                              |
+| `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change)                                          | `mission_id`                                                 |
+| `mission-inactive`            | rotate on a revoked, expired or orphaned mission; rename or edit on a revoked or orphaned one                                         | `mission_id`, `state`, `orphan`                              |
+| `mission-not-issued-here`     | `rotate_mission_token` on a mission the calling mission did not issue                                                                 | `mission_id`                                                 |
+| `mission-changed-meanwhile`   | `rename_mission` or `edit_mission` raced another write of the mission; nothing was changed                                            | `mission_id`                                                 |
+| `unknown-service`             | `get_catalog` on a service the instance does not ship                                                                                 | `services`                                                   |
+| `unknown-account`             | `get_catalog` with a `account_id` the user holds nothing on                                                                           | `account_id`                                                 |
+| `instance-limit-reached`      | `issue_mission`, or a new end reviving an ended mission, at `limits.active_missions`                                                  | `count`, `ceiling`                                           |
+| `administrator-only`          | `upload_plugin`, `plugin_status`: the mission's creator is not an administrator of the instance                                       | —                                                            |
+| `plugin-refused`              | `upload_plugin`: the archive is not one this gateway reads, built for another SDK, unsigned and not allowed, or of an id of the image | `reason`: the upload's problem code                          |
+| `internal-error`              | a port threw (logged `vaubaan tool failed`); the message never carries details                                                        |                                                              |
 
 ## Traps
 

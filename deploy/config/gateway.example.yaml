@@ -295,10 +295,17 @@
 # instance registers; absent, every bundled and pinned plugin. A pin built for
 # another SDK range, two pins of one id, an unknown id here, or accounts of a
 # plugin no longer registered stop the start (deploy/README.md "Pin a plugin").
-# env: VAUBAAN_PLUGINS_DIR, VAUBAAN_PLUGINS_ENABLED (comma-separated)
+# `allow_unsigned` lists the plugins an administrator may install without a signature
+# (none by default; no interface sets it). `safe_mode: true` starts with the image's and
+# the pinned versions only, ignoring what was installed in Administration › Plugins: the
+# way back when the interface cannot be reached.
+# env: VAUBAAN_PLUGINS_DIR, VAUBAAN_PLUGINS_ENABLED, VAUBAAN_PLUGINS_ALLOW_UNSIGNED
+# (comma-separated), VAUBAAN_PLUGINS_SAFE_MODE
 # plugins:
 #   dir: /plugins
 #   enabled: [github, notion]
+#   allow_unsigned: [crm]
+#   safe_mode: false
 
 # The versions check: at start and daily, a GET of the published versions feed that
 # carries nothing about this instance; Administration › Plugins shows what is behind

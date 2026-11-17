@@ -27,7 +27,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts",
-    "./git": "./src/git/index.ts"
+    "./git": "./src/git/index.ts",
+    "./archive": "./src/archive/index.ts"
   },
   "files": [
     "dist"
@@ -47,6 +48,10 @@
       "./git": {
         "types": "./dist/git/index.d.ts",
         "default": "./dist/git/index.js"
+      },
+      "./archive": {
+        "types": "./dist/archive/index.d.ts",
+        "default": "./dist/archive/index.js"
       }
     }
   },

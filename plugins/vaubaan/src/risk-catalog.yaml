@@ -15,7 +15,7 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 #
-# 7 risks + 1 fallback, one per act a person tells apart. Every act is done in the
+# 9 risks + 1 fallback, one per act a person tells apart. Every act is done in the
 # name of the mission's creator and never beyond their authority: a mission issued
 # here can accept only what they hold, and the host refuses a mission that would
 # carry a Vaubaan account, or act on the calling mission itself. No environment :
@@ -31,14 +31,20 @@
 #   mission-key-rotate  row 2  the answer carries the new key (`data: secret`)
 #   mission-revoke      row 3  the mission cannot come back; a new one is issued at a price
 #                              (the agent stops, a person hands the new key over)
+#   plugin-read         row 1  ids, versions and states of the plugins
+#   plugin-upload       row 2  an archive lands on the volume, inert; refused and deleted in
+#                              one click; it runs only once an administrator activates it
 #
 # catalog_version 1 (2026-11-14) : first catalog, from the seven tools of the retired
 # management door (ADR platform-management-is-a-plugin-on-the-execution-door).
 # catalog_version 2 (2026-11-16) : `mission-rename` and `mission-edit`, in "Prepare missions"
 # (ADR amendment 2026-11-16: the door's lack of an edit was inherited, not decided).
+# catalog_version 3 (2026-11-17) : `plugin-read` and `plugin-upload`, in "Install plugins"
+# (ADR plugins-activated-by-an-administrator-on-trial): only for a mission an
+# administrator created; an upload is inert until activated in the browser.
 service: vaubaan
-catalog_version: 2
-catalog_date: 2026-11-16
+catalog_version: 3
+catalog_date: 2026-11-17
 
 risks:
   - id: vaubaan.read-setup
@@ -145,6 +151,35 @@ risks:
       cost: free
       visibility: team #          the agent that worked on it stops
 
+  - id: vaubaan.plugin-read
+    label: 'Read the plugins of the instance'
+    reason: >-
+      Shows the agent which plugins the instance runs and every version an administrator
+      installed, with its state and why one did not load. Only for a mission an
+      administrator created.
+    matches: 'vaubaan.plugin[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+
+  - id: vaubaan.plugin-upload
+    label: 'Upload a plugin to the instance'
+    reason: >-
+      Lets the agent hand over the archive of a plugin it built. The archive is checked
+      without running any of its code and stays inert: an administrator reads what it
+      changes and activates it in the browser, and it starts on trial at the next start.
+      Only for a mission an administrator created.
+    matches: 'vaubaan.plugin[**].upload.W'
+    vector:
+      reversibility: reversible # refused and deleted in one click
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team #          every administrator sees it waiting
+
   # Fallback — must exist, exactly once. No tool of this plugin classifies to it.
   - id: vaubaan.uncategorized-write
     label: 'Uncategorized write'
@@ -200,6 +235,21 @@ macro_actions:
     entries:
       - risk_id: vaubaan.mission-key-rotate
         quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: plugins
+    label: 'Install plugins'
+    description: 'Upload a plugin I built; read the plugins of the instance.'
+    narrative: >-
+      Handing over a plugin the agent built, for an administrator to activate: the archive
+      waits, inert, until a person reads what it changes and activates it in the browser.
+      Only a mission an administrator created may do it, and none of these tools activates,
+      rolls back or removes a plugin.
+    entries:
+      - risk_id: vaubaan.plugin-read
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: vaubaan.plugin-upload
+        quota: 10
         rate_limit: { max: 2, window_seconds: 60 }
   - id: stop
     label: 'Stop missions'

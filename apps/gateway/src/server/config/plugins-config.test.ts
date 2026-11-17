@@ -23,7 +23,12 @@ function issuesOf(env: Record<string, string>): string[] {
 describe('plugins.*', () => {
   it('pins nothing and registers every plugin by default', () => {
     const { config } = loadInstanceConfig({ env: validEnv() });
-    expect(config.plugins).toEqual({ dir: null, enabled: null });
+    expect(config.plugins).toEqual({
+      dir: null,
+      enabled: null,
+      allowUnsigned: [],
+      safeMode: false,
+    });
   });
 
   it('reads the directory and the enabled ids, once each', () => {
@@ -33,7 +38,12 @@ describe('plugins.*', () => {
         VAUBAAN_PLUGINS_ENABLED: 'github, notion,github',
       }),
     });
-    expect(config.plugins).toEqual({ dir: '/plugins', enabled: ['github', 'notion'] });
+    expect(config.plugins).toEqual({
+      dir: '/plugins',
+      enabled: ['github', 'notion'],
+      allowUnsigned: [],
+      safeMode: false,
+    });
   });
 
   it('reads a blank list as unset: every plugin', () => {

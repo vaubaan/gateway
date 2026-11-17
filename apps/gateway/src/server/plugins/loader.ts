@@ -198,7 +198,17 @@ function errorText(err: unknown): string {
   return String(err);
 }
 
-/** Reads, checks and imports the pin in `path`. */
+/**
+ * Reads, checks and imports the plugin in `path`: a pin, or an installed version
+ * (`installed.ts`). Throws a `ConfigError` naming the directory.
+ */
+export async function readPluginDirectory(
+  path: string,
+  options: PinReadOptions,
+): Promise<PinnedPlugin> {
+  return readPin(path, options);
+}
+
 async function readPin(path: string, options: PinReadOptions): Promise<PinnedPlugin> {
   const manifest = await readManifest(path);
   if (!sdkInRange(options.sdkVersion, manifest.sdkRange)) {

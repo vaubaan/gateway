@@ -441,6 +441,7 @@ describe('audit search: visibility, filters, paging', () => {
       ['request-refused', 'request', claim.result.request_id ?? ''],
       ['approval-granted', 'request', approval.result.request_id ?? ''],
       ['config-changed', 'instance-config', 'telemetry'],
+      ['plugin-uploaded', 'plugin', 'a'.repeat(64)],
       ['user-deactivated', 'user', rig.seeded.bob.id],
       // Objects that are gone, or were never created: the id, no label.
       ['share-revoked', 'share', 'no-such-share'],
@@ -483,6 +484,7 @@ describe('audit search: visibility, filters, paging', () => {
       ['request', 'the limit of Ship the billing page'],
       ['request', 'a call of Ship the billing page'],
       ['instance-config', null],
+      ['plugin', null],
       ['user', 'bob@example.com'],
       ['share', null],
       ['group', null],
@@ -504,6 +506,7 @@ describe('audit search: visibility, filters, paging', () => {
       'oauth-client': true,
       user: true,
       'instance-config': true,
+      plugin: true,
     };
     expect([...covered].sort()).toEqual(Object.keys(every).sort());
   });

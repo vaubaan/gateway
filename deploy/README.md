@@ -245,7 +245,7 @@ plugin contract, catalog ids), and how a release is cut:
 
 ## Pin a plugin
 
-Every plugin ships in the image. To run another version of one — a fix released before the next
+Every plugin ships in the image; an administrator can also install one (next section). To run another version of one — a fix released before the next
 gateway release, or the former version kept while missions are reviewed — pin it: a pinned plugin
 replaces the bundled plugin of the same id, in either direction. The gateway never downloads code;
 the pin is your own artefact ([ADR](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md)).
@@ -291,6 +291,25 @@ with a permission request. At start and daily the instance reads the published v
 request that carries nothing about it; `VAUBAAN_UPDATES_CHECK=false` turns it off) and
 Administration says which plugin is behind, which version an advisory names, and which pin is older
 than what the image bundles.
+
+## Install a plugin from Administration
+
+An administrator can also install a plugin without touching the image: Administration › Plugins ›
+Install a plugin uploads the archive `vaubaan-plugin build` writes. It stays inert until an
+administrator activates it, typing its id; it then starts **on trial** at the next start: if it
+does not load, the previous version stays and the page says why
+([ADR](../docs/decisions/plugins-activated-by-an-administrator-on-trial.md)). Archives are kept on
+the data volume, beside the store (`/data/plugins/<sha256>/`), the active version and two previous
+ones.
+
+- **Restart now** ends the process with exit code **75** for its supervisor to start it again:
+  Compose's `restart: unless-stopped` and Railway's on-failure policy do. Elsewhere, restart the
+  instance yourself.
+- Until signatures are verified, only the ids `plugins.allow_unsigned`
+  (`VAUBAAN_PLUGINS_ALLOW_UNSIGNED=crm`) names can be installed, and never an id of the image.
+- **`VAUBAAN_PLUGINS_SAFE_MODE=true`** starts with the image's and pinned versions only, ignoring
+  every installed one: the way back when the interface cannot be reached. Remove it once the
+  instance answers again.
 
 ## Running the image without Compose
 

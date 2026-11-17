@@ -5,8 +5,8 @@
  * last line saying when and where the feed was read. Pure: no root, no request, so a
  * unit test renders it over invented views.
  *
- * Nothing here installs, updates or removes anything (ADR
- * plugins-bundled-or-pinned-by-the-operator): the one form re-reads the feed.
+ * Installing is `install-view.tsx` (ADR plugins-activated-by-an-administrator-on-trial);
+ * the form of this part re-reads the feed.
  */
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/settings/settings.module.css';
@@ -28,6 +28,8 @@ import { servicePath } from '@/lib/services/links';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
 import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
+
+import { InstallSection, type InstallView } from './install-view';
 import type { ValidationStatus } from '@/server/telemetry';
 import {
   UPDATES_CHECK_ACTION,
@@ -55,6 +57,8 @@ export interface PluginsView {
   readonly feedUrl: string;
   readonly report: UpdatesReport | null;
   readonly failure: UpdatesFailure | null;
+  /** Installing plugins here; absent in views of earlier tests. */
+  readonly install?: InstallView;
 }
 
 /** The plugin's display name, or its id when the inventory does not know it. */
@@ -64,6 +68,18 @@ function nameOf(lines: readonly PluginLine[], id: string): string {
 
 function Origin({ entry }: { entry: PluginInventoryEntry }) {
   if (entry.origin === 'bundled') return <>{PLUGIN_WORDS.bundled}</>;
+  if (entry.origin === 'installed') {
+    return (
+      <>
+        {PLUGIN_WORDS.installed}
+        {entry.replaces !== null && (
+          <>
+            , {PLUGIN_WORDS.replacesImage} <Mono>{entry.replaces}</Mono>
+          </>
+        )}
+      </>
+    );
+  }
   return (
     <>
       {PLUGIN_WORDS.pinnedFrom} <Mono>{entry.path ?? '?'}</Mono>
@@ -251,6 +267,7 @@ export function PluginsPage({ view }: { view: PluginsView }) {
         title={SETTINGS_PAGES.plugins.title}
         lede={SETTINGS_PAGES.plugins.lede}
       />
+      {view.install && <InstallSection view={view.install} />}
       {reportsSomething(view.report) && <FeedNotices report={view.report} lines={view.lines} />}
       <Section
         title={PLUGIN_WORDS.listTitle}

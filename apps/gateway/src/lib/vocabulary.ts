@@ -859,6 +859,12 @@ export const ACT_WORDS = {
   'address-added': 'received notifications at a messaging address',
   'address-removed': 'removed a messaging address from their notifications',
   'mail-notifications-changed': 'switched their mail notifications',
+  'plugin-uploaded': 'uploaded a plugin',
+  'plugin-activated': 'activated a plugin version',
+  'plugin-refused': 'refused a plugin version',
+  'plugin-followed-image': 'set a plugin back to the image’s version',
+  'plugin-trial-ended': 'ended the trial of a plugin version',
+  'instance-restarted': 'restarted the instance',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
@@ -1111,8 +1117,82 @@ export const PLUGIN_WORDS = {
     'not-a-feed': 'the answer was not a versions feed this gateway reads',
   },
   changes:
-    'Nothing here installs, updates or removes a plugin: a plugin changes when the operator changes the image or the plugins directory, then restarts.',
+    'A plugin installed here runs from the next start, on trial. A plugin pinned in the plugins directory changes when the operator changes the directory, then restarts.',
   howToPin: 'How to pin a plugin',
+  installed: 'installed here',
+  replacesImage: 'replaces the image’s',
+} as const;
+
+/**
+ * Installing plugins on Administration › Plugins (ADR
+ * plugins-activated-by-an-administrator-on-trial; spec §4.2). A plugin id, a version and
+ * a digest are printed with `Mono` by the page, never inside these words.
+ */
+export const INSTALL_WORDS = {
+  uploadTitle: 'Install a plugin',
+  uploadLede:
+    'Upload the archive of a plugin (the .tgz that vaubaan-plugin build writes). Nothing of it runs until an administrator activates it.',
+  archiveLabel: 'Plugin archive',
+  upload: 'Upload',
+  noDataDirectory:
+    'This instance keeps its store in memory: a plugin can be pinned in the plugins directory, not installed here.',
+  versionsTitle: 'Installed versions',
+  states: {
+    pending: 'waiting for activation',
+    trial: 'starts on trial at the next start',
+    active: 'active',
+    previous: 'kept to go back to',
+    failed: 'did not load',
+    refused: 'refused',
+    removed: 'removed',
+  },
+  trust: {
+    unsigned: 'not signed',
+    vaubaan: 'signed by Vaubaan',
+    signer: 'signed by',
+  },
+  notVaubaan:
+    'This plugin is not published by Vaubaan. Once active, its code runs inside the gateway, with access to every account of this instance.',
+  uploadedBy: 'uploaded',
+  viaMission: 'by an agent',
+  running: 'Running now:',
+  notRunning: 'Not running on this instance yet.',
+  added: 'New permissions',
+  deprecated: 'Deprecated permissions',
+  unknownToIt: 'Permissions this version does not know (kept, inert)',
+  none: 'none',
+  accounts: (n: number) => `${formatNumber(n)} connected ${n === 1 ? 'account' : 'accounts'}`,
+  typeToConfirm: (id: string) => `Type ${id} to confirm`,
+  activate: 'Activate at the next start',
+  goBack: 'Go back to this version at the next start',
+  refuse: 'Refuse',
+  followImage: 'Stop using the installed version',
+  restartTitle: 'A restart applies the change',
+  restartLede:
+    'A version marked for a trial starts at the next start. If it does not load, the previous version stays and this page says why.',
+  restart: 'Restart now',
+  done: {
+    uploaded: 'Uploaded. It runs nothing until it is activated.',
+    activated: 'Marked to start on trial at the next start.',
+    refused: 'Refused and deleted.',
+    'followed-image': 'The installed version is no longer used from the next start.',
+    restarting: 'Restarting: this page answers again once the instance is back.',
+  },
+  problems: {
+    'no-archive': 'Choose an archive to upload.',
+    'archive-too-large': 'The archive is larger than 16 MB.',
+    'archive-invalid': 'This is not a plugin archive this gateway reads',
+    'sdk-out-of-range': 'The plugin was built for another version of the SDK',
+    'catalog-invalid': 'The plugin’s risk catalog is invalid',
+    'id-mismatch': 'The archive does not agree with itself',
+    'no-data-directory': 'Nothing can be installed on a store in memory',
+    'unsigned-not-allowed': 'The plugin is not signed',
+    'reserved-id': 'Only Vaubaan may publish a plugin of this id',
+    'not-found': 'No such version',
+    'wrong-state': 'This version cannot change that way now',
+    'confirmation-mismatch': 'The id typed does not match',
+    'accounts-depend': 'Accounts still use this plugin',
+  },
 } as const;
 
 /**

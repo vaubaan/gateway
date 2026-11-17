@@ -10,6 +10,7 @@ export {
   SDK_PACKAGE,
   archivePackage,
   buildArchive,
+  filesOf,
   manifestOf,
   notBundleableReason,
   outsideManifest,

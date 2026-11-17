@@ -28,6 +28,8 @@ import {
   DISCOVERY_ACTOR_LABEL,
   MIGRATION_ACTOR_ID,
   MIGRATION_ACTOR_LABEL,
+  STARTUP_ACTOR_ID,
+  STARTUP_ACTOR_LABEL,
   type AdminAct,
   type AdminObjectType,
   type AuditDecision,
@@ -634,6 +636,8 @@ async function objectLabel(
     case 'oauth-client':
     case 'delegation':
     case 'instance-config':
+    case 'plugin':
+      // A plugin version is named by its digest, a plugin by its id: what `after` says.
       // The id is the name: `idp`, `telemetry`, `bootstrap`; `provider-app:<id>` in entries of earlier builds (the OAuth clients per service, retired).
       return null;
   }
@@ -650,6 +654,7 @@ async function actorView(userId: string, names: NameCache): Promise<AuditAdminVi
     return { id: userId, email: null, label: DISCOVERY_ACTOR_LABEL };
   if (userId === MIGRATION_ACTOR_ID)
     return { id: userId, email: null, label: MIGRATION_ACTOR_LABEL };
+  if (userId === STARTUP_ACTOR_ID) return { id: userId, email: null, label: STARTUP_ACTOR_LABEL };
   const email = await names.email(userId);
   return { id: userId, email, label: email ?? userId };
 }

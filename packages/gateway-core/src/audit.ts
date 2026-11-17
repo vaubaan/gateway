@@ -308,6 +308,24 @@ export type AdminAct =
   /** A person switched mail notifications on or off: `before` / `after` carry `{ on }`.
    *  Never the address. */
   | 'mail-notifications-changed'
+  /** A plugin archive was uploaded and is pending (ADR
+   *  plugins-activated-by-an-administrator-on-trial). Object: the version (its digest);
+   *  `after` carries the plugin, version, digest, state and trust. `via_mission_id` when an
+   *  agent uploaded it. */
+  | 'plugin-uploaded'
+  /** A version was marked to start on trial at the next start (an activation, or going
+   *  back to a kept version). `before` / `after` carry its summary. */
+  | 'plugin-activated'
+  /** A pending version was refused; its files are deleted. */
+  | 'plugin-refused'
+  /** A plugin follows the image again: its installed version is no longer active.
+   *  Object: the plugin id. */
+  | 'plugin-followed-image'
+  /** What a start made of a version on trial: `after` carries `{ outcome, failure? }`.
+   *  Written by the gateway at start (`STARTUP_ACTOR_ID`). */
+  | 'plugin-trial-ended'
+  /** An administrator restarted the instance from Administration › Plugins. */
+  | 'instance-restarted'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -319,7 +337,9 @@ export type AdminObjectType =
   | 'group'
   | 'oauth-client'
   | 'user'
-  | 'instance-config';
+  | 'instance-config'
+  /** An installed plugin version (by its digest) or a plugin (by its id). */
+  | 'plugin';
 
 /**
  * The `user_id` of administrative entries written by the bootstrap operator:
@@ -370,6 +390,15 @@ export const MIGRATION_ACTOR_ID = 'migration';
 
 /** How a migration is named wherever an actor is shown. */
 export const MIGRATION_ACTOR_LABEL = 'A gateway upgrade';
+
+/**
+ * The `user_id` of entries the gateway wrote while starting: what a plugin version on
+ * trial became (ADR plugins-activated-by-an-administrator-on-trial).
+ */
+export const STARTUP_ACTOR_ID = 'startup';
+
+/** How the start is named wherever an actor is shown. */
+export const STARTUP_ACTOR_LABEL = 'The gateway’s start';
 
 export interface AdminAuditEntry {
   readonly kind: 'admin';

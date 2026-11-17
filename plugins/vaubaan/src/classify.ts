@@ -17,6 +17,8 @@
  *   edit_mission           vaubaan.mission[<id>].edit.W
  *   rotate_mission_token   vaubaan.mission[<id>].token.W
  *   revoke_mission         vaubaan.mission[<id>].revoke.W
+ *   upload_plugin          vaubaan.plugin[*].upload.W
+ *   plugin_status          vaubaan.plugin[*].R
  *
  * The arguments are refused here only where the slice needs them (an undeclared
  * argument, a missing or malformed id); the host reads every argument again with
@@ -97,6 +99,10 @@ export function classifyVaubaan(
       if (id === null) return { denied: MALFORMED_MISSION_ID };
       return { slices: [slice([name('mission'), identSegment(id)], 'R')] };
     }
+    case 'uploadPlugin':
+      return { slices: [slice([name('plugin'), ANY_IDENT, name('upload')], 'W')] };
+    case 'pluginStatus':
+      return { slices: [slice([name('plugin'), ANY_IDENT], 'R')] };
     case 'issueMission':
       return { slices: [slice([name('mission'), ANY_IDENT, name('issue')], 'W')] };
     case 'renameMission':

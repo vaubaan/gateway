@@ -15,6 +15,7 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@vaubaan/plugin-sdk": "*",
     "esbuild": "0.28.2"
   }
 }

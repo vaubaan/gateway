@@ -15,7 +15,13 @@ import type { ServicePlugin } from '@vaubaan/plugin-sdk';
 import { ConfigError, envNamesFor, type ConfigIssue } from '../config';
 import type { PinnedPlugin } from './loader';
 
-export type PluginOrigin = 'bundled' | 'pinned';
+/**
+ * Where the version loaded comes from: the image (`bundled`, its preinstalled version),
+ * an archive an administrator installed (`installed`), or the operator's plugins
+ * directory (`pinned`). The pin wins over an installed version, which wins over the
+ * image's (spec §5).
+ */
+export type PluginOrigin = 'bundled' | 'installed' | 'pinned';
 
 /** One plugin the instance knows, registered or not: a line of Administration › Plugins. */
 export interface PluginInventoryEntry {
@@ -25,11 +31,11 @@ export interface PluginInventoryEntry {
   /** The version loaded: the pin's when pinned. */
   readonly version: string;
   readonly origin: PluginOrigin;
-  /** The bundled version a pin replaces; `null` for a bundled plugin or a pin of a plugin the image does not bundle. */
+  /** The image's version a pin or an installed version replaces; `null` for the image's own, or a plugin the image does not bundle. */
   readonly replaces: string | null;
   /** Registered: `plugins.enabled` is unset or names it. */
   readonly enabled: boolean;
-  /** The pin's directory; `null` for a bundled plugin. */
+  /** The pin's or the installed version's directory; `null` for a bundled plugin. */
   readonly path: string | null;
 }
 
@@ -44,6 +50,8 @@ export interface PluginSet {
 export interface PluginSetInput {
   readonly bundled: readonly ServicePlugin[];
   readonly pinned: readonly PinnedPlugin[];
+  /** The installed versions this start loads, one per id (`loadInstalled`). */
+  readonly installed?: readonly PinnedPlugin[];
   /** `plugins.enabled`; `null`: every plugin. */
   readonly enabled: readonly string[] | null;
 }
@@ -67,14 +75,18 @@ function bundledEntry(plugin: ServicePlugin): Known {
   };
 }
 
-function pinnedEntry(pin: PinnedPlugin, replaced: ServicePlugin | undefined): Known {
+function pinnedEntry(
+  pin: PinnedPlugin,
+  replaced: ServicePlugin | undefined,
+  origin: 'pinned' | 'installed' = 'pinned',
+): Known {
   return {
     plugin: pin.plugin,
     entry: {
       id: pin.id,
       name: pin.plugin.displayName,
       version: pin.version,
-      origin: 'pinned',
+      origin,
       replaces: replaced?.version ?? null,
       path: pin.path,
     },
@@ -101,16 +113,26 @@ export function composePlugins(input: PluginSetInput): PluginSet {
   }
   if (duplicates.length > 0) throw new ConfigError(duplicates);
 
+  const installed = new Map<string, PinnedPlugin>();
+  for (const version of input.installed ?? []) {
+    if (!pins.has(version.id)) installed.set(version.id, version);
+  }
   const bundledIds = new Set(input.bundled.map((plugin) => plugin.id));
+  const added = [
+    ...[...pins.values()].map((pin) => ({ pin, origin: 'pinned' as const })),
+    ...[...installed.values()].map((pin) => ({ pin, origin: 'installed' as const })),
+  ];
   const known: Known[] = [
     ...input.bundled.map((plugin) => {
       const pin = pins.get(plugin.id);
-      return pin ? pinnedEntry(pin, plugin) : bundledEntry(plugin);
+      if (pin) return pinnedEntry(pin, plugin);
+      const version = installed.get(plugin.id);
+      return version ? pinnedEntry(version, plugin, 'installed') : bundledEntry(plugin);
     }),
-    ...[...pins.values()]
-      .filter((pin) => !bundledIds.has(pin.id))
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((pin) => pinnedEntry(pin, undefined)),
+    ...added
+      .filter(({ pin }) => !bundledIds.has(pin.id))
+      .sort((a, b) => a.pin.id.localeCompare(b.pin.id))
+      .map(({ pin, origin }) => pinnedEntry(pin, undefined, origin)),
   ];
 
   const enabled = input.enabled === null ? null : new Set(input.enabled);

@@ -734,14 +734,20 @@ const PLUGIN_ID_SHAPE = /^[a-z][a-z0-9-]*$/;
  */
 function readPlugins(r: Reader): PluginsConfig {
   const dir = r.string('plugins.dir')?.trim() ?? null;
-  const path = 'plugins.enabled';
+  const safeMode = r.bool(keySpec('plugins.safe_mode'));
+  const allowUnsigned = pluginIds(r, 'plugins.allow_unsigned') ?? [];
+  return { dir, enabled: pluginIds(r, 'plugins.enabled'), allowUnsigned, safeMode };
+}
+
+/** A list of plugin ids, deduplicated; `null` when absent or empty. */
+function pluginIds(r: Reader, path: string): string[] | null {
   const listed = r.stringList(path);
-  if (listed.length === 0) return { dir, enabled: null };
+  if (listed.length === 0) return null;
   const malformed = listed.filter((id) => !PLUGIN_ID_SHAPE.test(id));
   if (malformed.length > 0) {
     r.issues.add(path, `not plugin ids: ${malformed.map(show).join(', ')}`, envNamesFor(path));
   }
-  return { dir, enabled: [...new Set(listed)] };
+  return [...new Set(listed)];
 }
 
 /** `updates.*`: the versions check, on by default, and its https feed. */

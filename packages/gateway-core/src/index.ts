@@ -47,6 +47,8 @@ export {
   DISCOVERY_ACTOR_LABEL,
   MIGRATION_ACTOR_ID,
   MIGRATION_ACTOR_LABEL,
+  STARTUP_ACTOR_ID,
+  STARTUP_ACTOR_LABEL,
 } from './audit.ts';
 export type {
   AdminAct,

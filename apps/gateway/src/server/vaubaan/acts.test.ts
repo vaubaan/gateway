@@ -31,7 +31,7 @@ import { toolResultOf, vaubaanTools, type VaubaanCaller } from '@vaubaan/plugin-
 import { VAUBAAN_REFUSAL_CODES, VaubaanActs } from './acts';
 import { createVaubaanPorts } from './index';
 import { toolSchemasDocument, VAUBAAN_INPUTS } from './inputs';
-import type { VaubaanCatalog, VaubaanMissions } from './ports';
+import type { VaubaanCatalog, VaubaanMissions, VaubaanPlugins } from './ports';
 import { catalogView, accountView, missionView, previewView, uncoveredOfPreview } from './views';
 
 /** The calling mission, Ada's, called with her own key. */
@@ -62,6 +62,14 @@ interface Call {
   readonly method: string;
   readonly args: readonly unknown[];
 }
+
+/** A plugins port whose caller is never an administrator: the mission acts never reach it. */
+const NO_PLUGINS: VaubaanPlugins = {
+  isAdministrator: async () => false,
+  upload: async () => ({ ok: false, code: 'never', message: 'never' }),
+  activationUrl: (digest) => `https://gateway.example.com/admin/plugins#version-${digest}`,
+  status: async () => ({ plugins: [], installed: [] }),
+};
 
 function rig(
   options: {
@@ -117,7 +125,12 @@ function rig(
         : null,
   };
   const tools = new VaubaanActs({ missions, catalog, logger: silentLogger });
-  const ports = createVaubaanPorts({ missions, catalog, logger: silentLogger });
+  const ports = createVaubaanPorts({
+    missions,
+    catalog,
+    plugins: NO_PLUGINS,
+    logger: silentLogger,
+  });
   return { tools, ports, calls, account };
 }
 

@@ -31,11 +31,17 @@ import {
   type ServiceCatalog,
   type VaubaanCatalog,
   type VaubaanMissions,
+  type VaubaanPlugins,
 } from '../vaubaan';
+import type { AdministratorsService } from '../auth/administrators';
+import type { PluginInventoryEntry } from '../plugins';
+import type { PluginInstallService } from '../plugins/install-service';
+import type { Store } from '../store';
 
 export interface VaubaanWiringDeps {
   readonly missions: MissionService;
   readonly registry: PluginRegistry;
+  readonly plugins: VaubaanPlugins;
   readonly logger: Logger;
 }
 
@@ -97,10 +103,62 @@ export function vaubaanCatalogOf(registry: PluginRegistry): VaubaanCatalog {
   });
 }
 
+/**
+ * The plugins of the instance as the plugin acts may use them, on a plain object of
+ * four closures: whether a user is an administrator, an upload (inert), the activation
+ * page's address, the status. The install service itself is never handed over: nothing
+ * reachable from the plugin activates, refuses, rolls back or removes a plugin.
+ */
+export function vaubaanPluginsOf(deps: {
+  readonly install: PluginInstallService;
+  readonly administrators: AdministratorsService;
+  readonly users: Store['users'];
+  readonly entries: readonly PluginInventoryEntry[];
+  readonly publicUrl: URL;
+}): VaubaanPlugins {
+  const { install, administrators, users, entries, publicUrl } = deps;
+  return Object.freeze({
+    isAdministrator: async (userId: string) => {
+      const user = await users.getById(userId);
+      return user !== null && (await administrators.isAdministrator(user));
+    },
+    upload: async (bytes: Uint8Array, actor: { userId: string; viaMissionId: string }) => {
+      const result = await install.upload(bytes, actor);
+      return result.ok
+        ? {
+            ok: true as const,
+            version: {
+              pluginId: result.version.pluginId,
+              version: result.version.version,
+              digest: result.version.digest,
+            },
+          }
+        : { ok: false as const, code: result.code, message: result.message };
+    },
+    activationUrl: (digest: string) => new URL(`/admin/plugins#version-${digest}`, publicUrl).href,
+    status: async () => ({
+      plugins: entries
+        .filter((entry) => entry.enabled)
+        .map((entry) => ({ plugin: entry.id, version: entry.version, origin: entry.origin })),
+      installed: (await install.list())
+        .filter((v) => v.state !== 'removed')
+        .map((v) => ({
+          plugin: v.pluginId,
+          version: v.version,
+          digest: v.digest,
+          state: v.state,
+          trust: v.trust,
+          failure: v.failure,
+        })),
+    }),
+  });
+}
+
 export function wireVaubaanPlugin(deps: VaubaanWiringDeps): VaubaanPluginModule {
   const ports = createVaubaanPorts({
     missions: vaubaanMissionsOf(deps.missions),
     catalog: vaubaanCatalogOf(deps.registry),
+    plugins: deps.plugins,
     logger: deps.logger,
   });
   // Bound only when the configuration enables the plugin: otherwise no account of it

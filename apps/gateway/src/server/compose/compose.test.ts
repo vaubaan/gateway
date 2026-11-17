@@ -6,7 +6,7 @@ import { validEnv } from '../../../tests/support/config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
-import { RegistryCatalogIndex } from './registry';
+import { DeferredCatalogIndex } from './registry';
 import {
   buildRoot,
   getRoot,
@@ -36,7 +36,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(40);
+    expect(root.store.schemaVersion).toBe(41);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
@@ -68,7 +68,7 @@ describe('buildRoot', () => {
       },
     });
     expect(seenEncryptor).toBe(root.encryptor);
-    expect(seenCatalog).toBeInstanceOf(RegistryCatalogIndex);
+    expect(seenCatalog).toBeInstanceOf(DeferredCatalogIndex);
     expect(seenCatalog!.has('acme.read-things')).toBe(true);
     expect(seenCatalog!.has('acme[staging].thing-write')).toBe(true);
     expect(seenCatalog!.has('acme[dev].thing-write')).toBe(false);

@@ -965,5 +965,20 @@
     },
     "required": ["mission_id"],
     "additionalProperties": false
-  }
+  },
+  "upload_plugin": {
+    "type": "object",
+    "properties": {
+      "archive_base64": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 22369624,
+        "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+        "description": "The bytes of the plugin archive (the .tgz `vaubaan-plugin build` writes), in base64: at most 16 MB once decoded."
+      }
+    },
+    "required": ["archive_base64"],
+    "additionalProperties": false
+  },
+  "plugin_status": { "type": "object", "properties": {}, "additionalProperties": false }
 }

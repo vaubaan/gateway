@@ -52,6 +52,25 @@ export const vaubaanDataModel: DataModel = {
       ],
     },
     {
+      slug: 'plugins',
+      description: 'The plugins of the instance, as an administrator installs them.',
+      entities: [
+        {
+          name: 'plugin',
+          parent: null,
+          cardinalities: ['one', 'unbounded'],
+          description: 'A plugin of the instance: its running version and its installed ones.',
+        },
+        {
+          name: 'upload',
+          parent: 'plugin',
+          cardinalities: ['one'],
+          description:
+            'Verb leaf: an archive uploaded, inert until an administrator activates it in the browser.',
+        },
+      ],
+    },
+    {
       slug: 'missions',
       description: "The person's missions.",
       entities: [

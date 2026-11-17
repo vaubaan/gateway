@@ -52,12 +52,14 @@ import { toolTitleOf } from '../services/tool-titles';
 import {
   bundledInventory,
   checkAccountsServed,
+  installedDirFor,
   loadPlugins,
   unservedServices,
   type LoadedPlugins,
   type PluginInventory,
   type PluginInventoryEntry,
 } from '../plugins';
+import { SDK_VERSION } from '@vaubaan/plugin-sdk';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
@@ -71,21 +73,26 @@ import {
   type UpdatesTimers,
 } from '../updates';
 import type { Store } from '../store';
-import type { Clock } from '../store/clock';
+import { systemClock, type Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import {
   checkBrokeredPlugins,
   checkHostToolNames,
   checkSelfResources,
+  DeferredCatalogIndex,
+  KeptCatalogIndex,
   RegistryCatalogIndex,
 } from './registry';
+import { startInstalledPlugins } from './installed-plugins';
+import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
+import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
   PROCESS_MOUNT_FACTS,
   type MountFacts,
 } from './key-placement';
-import { wireVaubaanPlugin, type VaubaanPluginModule } from './vaubaan';
+import { vaubaanPluginsOf, wireVaubaanPlugin, type VaubaanPluginModule } from './vaubaan';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
@@ -111,6 +118,13 @@ export interface GatewayRoot {
    * and "Check now" of Administration › Plugins.
    */
   readonly updates: UpdatesModule & { readonly handlers: UpdatesHandlers };
+  /** Installing plugins from Administration › Plugins and the `vaubaan` tools (ADR plugins-activated-by-an-administrator-on-trial). */
+  readonly pluginInstall: {
+    readonly service: PluginInstallService;
+    readonly handlers: PluginHandlers;
+    /** `<data dir>/plugins`; `null` for a store in memory. */
+    readonly dir: string | null;
+  };
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
@@ -196,6 +210,8 @@ export interface RootDeps {
   readonly updatesFetch?: typeof fetch;
   /** The versions check's timers (tests drive them by hand). */
   readonly updatesTimers?: UpdatesTimers;
+  /** Ends the process for its supervisor to restart it; default: exit 75 once the root closed. */
+  readonly requestRestart?: (close: () => Promise<void>) => void;
   /** The automatic refresh's timers (tests drive them by hand). */
   readonly refreshTimers?: RefreshTimers;
   /** Outbound HTTP to the browsers' push services (tests inject a fake; default: `fetch`). */
@@ -238,26 +254,58 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
 
   const encryptor = await createEncryptor(config.encryption);
 
-  // The registry comes first: the store checks every persisted RiskId
-  // against the loaded catalogs.
-  const { registry, inventory } = await buildPlugins(config, logger, deps.buildRegistry);
   logRetiredKeys(config, logger);
-  checkSelfResources(config, registry);
-  checkBrokeredPlugins(registry);
-  checkHostToolNames(registry);
-
-  const store = await (deps.openStore ?? openEmbeddedStore)({
-    config,
-    logger,
-    encryptor,
-    catalog: new RegistryCatalogIndex(registry),
-  });
+  // The store opens before the plugins: the installed versions are read from it (ADR
+  // plugins-activated-by-an-administrator-on-trial). It checks every persisted RiskId
+  // against the loaded catalogs, through an index filled once they are loaded; nothing
+  // writes before that.
+  const catalog = new DeferredCatalogIndex();
+  const store = await (deps.openStore ?? openEmbeddedStore)({ config, logger, encryptor, catalog });
 
   // Everything opened from here on is registered as it opens (the store
   // handle, then each timer), so a late failure closes it: `getRoot` retries
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
+    const { registry, inventory, installedDir } = await buildPlugins(
+      config,
+      logger,
+      store,
+      deps.buildRegistry,
+    );
+    checkSelfResources(config, registry);
+    checkBrokeredPlugins(registry);
+    checkHostToolNames(registry);
+    catalog.fill(
+      new KeptCatalogIndex(
+        new RegistryCatalogIndex(registry),
+        await store.pluginVersions.keptRiskIds(),
+      ),
+    );
+    const pluginInstall = createPluginInstallService({
+      versions: store.pluginVersions,
+      dir: installedDir,
+      sdkVersion: SDK_VERSION,
+      allowUnsigned: new Set(config.plugins.allowUnsigned),
+      reservedIds: () => new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id)),
+      running: (pluginId) => {
+        const registered = registry.get(pluginId);
+        const entry = inventory.entries.find((e) => e.id === pluginId);
+        if (!registered || !entry) return null;
+        return {
+          version: entry.version,
+          origin: entry.origin,
+          riskIds: registered.catalog.entries.map(({ entry }) => entry.id),
+        };
+      },
+      providedOtherwise: (pluginId) =>
+        SHIPPED_PLUGINS.some((plugin) => plugin.id === pluginId) ||
+        inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
+      accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
+      audit: store.auditWriter,
+      clock: systemClock,
+      logger,
+    });
     // Accounts of a service no registered plugin serves stop the boot (ADR
     // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or dropped by an image.
     checkAccountsServed(
@@ -278,6 +326,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         masterKeyGenerated,
         encryptor,
         pluginEntries: inventory.entries,
+        pluginInstall,
       },
       deps,
       opened,
@@ -293,6 +342,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     });
     opened.push(() => updates.stop());
     updates.start();
+    const closeRoot = () => closeAll(opened);
+    const requestRestart = deps.requestRestart ?? defaultRestart;
     const root: GatewayRoot = {
       config,
       configFile,
@@ -309,10 +360,23 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
           updates,
         }),
       },
+      pluginInstall: {
+        service: pluginInstall,
+        dir: installedDir,
+        handlers: createPluginHandlers({
+          publicUrl: config.publicUrl,
+          authenticator: modules.auth.authenticator,
+          install: pluginInstall,
+          logger,
+          audit: store.auditWriter,
+          clock: systemClock,
+          requestRestart: () => requestRestart(closeRoot),
+        }),
+      },
       ...modules,
       build,
       startedAt: new Date(),
-      close: () => closeAll(opened),
+      close: closeRoot,
     };
     logger.info('composition root ready', {
       store: store.kind,
@@ -327,20 +391,47 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   }
 }
 
-/** The plugins of this start: `loadPlugins` by default, or an injected registry alone. */
+/**
+ * Exit code 75 (EX_TEMPFAIL) once the root closed: a supervisor that restarts on failure
+ * (`restart: unless-stopped`, Railway's on-failure) starts the instance again, which
+ * loads the versions marked for a trial (deploy/README.md).
+ */
+function defaultRestart(close: () => Promise<void>): void {
+  void close().finally(() => process.exit(75));
+}
+
+/**
+ * The plugins of this start: the image's, the installed versions the store marks
+ * (`startInstalledPlugins`) and the operator's pins (`loadPlugins`); or an injected
+ * registry alone.
+ */
 async function buildPlugins(
   config: InstanceConfig,
   logger: Logger,
+  store: Store,
   buildRegistry: RootDeps['buildRegistry'],
-): Promise<LoadedPlugins> {
+): Promise<LoadedPlugins & { readonly installedDir: string | null }> {
   if (buildRegistry) {
     const registry = await buildRegistry(config, logger);
     return {
       registry,
       inventory: { dir: null, entries: bundledInventory(registry.all().map((r) => r.plugin)) },
+      installedDir: installedDirFor(config.store.path),
     };
   }
-  return loadPlugins(config, logger, { bundled: SHIPPED_PLUGINS });
+  const installed = await startInstalledPlugins({
+    config,
+    store,
+    audit: store.auditWriter,
+    clock: systemClock,
+    logger,
+    sdkVersion: SDK_VERSION,
+  });
+  const loaded = await loadPlugins(config, logger, {
+    bundled: SHIPPED_PLUGINS,
+    installed: installed.plugins,
+  });
+  return { ...loaded, installedDir: installed.dir };
 }
 
 /**
@@ -490,6 +581,8 @@ interface RootBase {
   readonly encryptor: Encryptor;
   /** Every plugin known, bundled or pinned: where a plugin's own files are read from. */
   readonly pluginEntries: readonly PluginInventoryEntry[];
+  /** Installing plugins: the `vaubaan` plugin acts reach it through a narrow port. */
+  readonly pluginInstall: PluginInstallService;
 }
 
 type RootModules = Pick<
@@ -763,7 +856,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
   // The gateway's own management tools, bound to the mission service through ports
   // (`compose/vaubaan.ts`); the execution door runs them like any plugin's.
-  const vaubaan = wireVaubaanPlugin({ missions: missions.service, registry, logger });
+  const vaubaan = wireVaubaanPlugin({
+    missions: missions.service,
+    registry,
+    logger,
+    plugins: vaubaanPluginsOf({
+      install: base.pluginInstall,
+      administrators: auth.administrators,
+      users: store.users,
+      entries: pluginEntries,
+      publicUrl: config.publicUrl,
+    }),
+  });
   const execution = createExecutionModule({
     config,
     store,

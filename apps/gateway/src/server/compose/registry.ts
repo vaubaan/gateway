@@ -152,3 +152,42 @@ export function checkBrokeredPlugins(registry: PluginRegistry): void {
   const problems = brokeredPluginProblems(registry.all().map((r) => r.plugin));
   if (problems.length > 0) throw new PluginRegistryError(problems);
 }
+
+/**
+ * A `CatalogIndex` the store opens with before the plugins are loaded: the installed
+ * versions are read from the store, so the registry exists only once it is open. The
+ * store consults the index on writes alone; one before `fill` is a bug, and throws.
+ */
+export class DeferredCatalogIndex implements CatalogIndex {
+  private inner: CatalogIndex | null = null;
+
+  fill(index: CatalogIndex): void {
+    this.inner = index;
+  }
+
+  has(riskId: RiskId): boolean {
+    if (this.inner === null)
+      throw new Error('the catalog index is read before the plugins are loaded');
+    return this.inner.has(riskId);
+  }
+}
+
+/**
+ * The registry's ids, and the base ids of every installed version still kept (ADR
+ * plugins-activated-by-an-administrator-on-trial): after going back to an older
+ * version, a mission holding a permission only the newer one knows can still be saved;
+ * the older classifier never emits it, so it stays inert.
+ */
+export class KeptCatalogIndex implements CatalogIndex {
+  constructor(
+    private readonly registry: CatalogIndex,
+    private readonly kept: ReadonlySet<string>,
+  ) {}
+
+  has(riskId: RiskId): boolean {
+    if (this.registry.has(riskId)) return true;
+    // A wildcard, a sentinel or a malformed id is known to no catalog, kept or not.
+    if (parseRiskId(riskId) === null) return false;
+    return this.kept.has(baseRiskId(riskId));
+  }
+}

@@ -394,6 +394,12 @@ const KEY_TABLE = [
   // `VAUBAAN_PLUGINS_DIR=/plugins`, elsewhere nothing is pinned unless configured.
   { path: 'plugins.dir', env: 'VAUBAAN_PLUGINS_DIR', kind: 'string' },
   { path: 'plugins.enabled', env: 'VAUBAAN_PLUGINS_ENABLED', kind: 'list' },
+  // The ids an administrator may install without a signature (ADR
+  // plugin-signature-sets-the-trust-level): no interface sets them.
+  { path: 'plugins.allow_unsigned', env: 'VAUBAAN_PLUGINS_ALLOW_UNSIGNED', kind: 'list' },
+  // A start with the image's versions only, ignoring what was installed (ADR
+  // plugins-activated-by-an-administrator-on-trial): the way back without the interface.
+  { path: 'plugins.safe_mode', env: 'VAUBAAN_PLUGINS_SAFE_MODE', kind: 'bool', default: false },
   // The published versions feed, read at start and daily; a GET carrying nothing
   // about the instance (`server/updates`).
   { path: 'updates.check', env: 'VAUBAAN_UPDATES_CHECK', kind: 'bool', default: true },

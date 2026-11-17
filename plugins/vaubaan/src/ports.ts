@@ -5,7 +5,8 @@
  *
  * A plugin knows neither the mission nor the budget, and this one is no
  * exception in what it is *given*: nine acts, each a function of the caller
- * and the call's arguments, implemented by the host over its mission service.
+ * and the call's arguments, implemented by the host over its mission service
+ * and, for the two plugin acts, a port that uploads an inert archive and reads status.
  * There is no port to answer a request, open a gate, extend a budget, reset a
  * period, connect, share or revoke an account, or call another service's tool:
  * none of that is reachable from here, whatever the arguments say. The host
@@ -72,6 +73,8 @@ export const VAUBAAN_PORT_NAMES = [
   'editMission',
   'rotateMissionToken',
   'revokeMission',
+  'uploadPlugin',
+  'pluginStatus',
 ] as const satisfies readonly VaubaanActName[];
 
 /**

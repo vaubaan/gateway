@@ -7,7 +7,7 @@
  * group, or call another service's tool — whatever the arguments say. That is
  * not enforced by checks inside the acts: the module is *not handed* anything
  * that could do it. `VaubaanModuleDeps` lists two ports — next to a logger —
- * and nothing else:
+ * and nothing else (and, for the two plugin acts, a third, `plugins`, below):
  *
  *   missions   ten methods of the mission service: read, preview, issue,
  *              the edit of a mission (`editView`, `previewEdit`, `edit`: the
@@ -30,6 +30,7 @@ import type { MacroAction } from '@vaubaan/shared';
 
 import type { Logger } from '../logging';
 import type { CatalogRisk, MissionService } from '../missions';
+import type { PluginStatusAnswer } from './plugin-acts';
 
 /**
  * The part of the mission service the acts may use, each method called with
@@ -87,9 +88,36 @@ export interface VaubaanCatalog {
   get(service: string): ServiceCatalog | null;
 }
 
+/**
+ * The plugins of the instance as the plugin acts may use them (ADR
+ * plugins-activated-by-an-administrator-on-trial): whether the creator is an
+ * administrator, an upload that stays inert, the status. Nothing that activates,
+ * refuses, rolls back or removes a plugin, nor changes the trusted signers.
+ */
+export interface VaubaanPlugins {
+  isAdministrator(userId: string): Promise<boolean>;
+  upload(
+    bytes: Uint8Array,
+    actor: { readonly userId: string; readonly viaMissionId: string },
+  ): Promise<
+    | {
+        readonly ok: true;
+        readonly version: {
+          readonly pluginId: string;
+          readonly version: string;
+          readonly digest: string;
+        };
+      }
+    | { readonly ok: false; readonly code: string; readonly message: string }
+  >;
+  activationUrl(digest: string): string;
+  status(): Promise<PluginStatusAnswer>;
+}
+
 export interface VaubaanModuleDeps {
   readonly missions: VaubaanMissions;
   readonly catalog: VaubaanCatalog;
+  readonly plugins: VaubaanPlugins;
   readonly logger: Logger;
 }
 
@@ -97,5 +125,6 @@ export interface VaubaanModuleDeps {
 export const VAUBAAN_DEPENDENCIES = [
   'missions',
   'catalog',
+  'plugins',
   'logger',
 ] as const satisfies readonly (keyof VaubaanModuleDeps)[];

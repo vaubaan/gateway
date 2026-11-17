@@ -16,6 +16,7 @@ import {
   ARCHIVE_MANIFEST_FORMAT,
   archivePackage,
   buildArchive,
+  filesOf,
   manifestOf,
   notBundleableReason,
   outsideManifest,
@@ -24,6 +25,7 @@ import {
   run,
   type ArchiveManifest,
 } from '../../src/index.ts';
+import { readArchive } from '@vaubaan/plugin-sdk/archive';
 
 const TEMPLATE = fileURLToPath(new URL('../../../../plugins/_template', import.meta.url));
 const SDK_VERSION = (
@@ -47,6 +49,14 @@ describe('buildArchive', () => {
 
   it('builds the plugin and reads its id from the bundle', () => {
     expect(result).toMatchObject({ id: 'template', version: '0.2.0' });
+  });
+
+  it('packs the same files into the archive an administrator uploads', () => {
+    const archive = readArchive(readFileSync(join(out, 'template.tgz')));
+    expect(archive.manifest).toMatchObject({ id: 'template', version: '0.2.0' });
+    expect([...archive.files.keys()].sort()).toEqual(
+      [...filesOf(join(out, 'template')).keys()].sort(),
+    );
   });
 
   it('writes the package under the plugin’s own name and licence, with the SDK range found', () => {
@@ -88,7 +98,7 @@ describe('buildArchive', () => {
       error: (line) => lines.push(line),
     });
     expect(code).toBe(0);
-    expect(lines).toEqual([`built template 0.2.0 → ${join(out, 'cli')}`]);
+    expect(lines).toEqual([`built template 0.2.0 → ${join(out, 'cli')}.tgz`]);
   });
 });
 

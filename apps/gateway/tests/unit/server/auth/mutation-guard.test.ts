@@ -469,6 +469,28 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   'updates.handlers.checkNow': form('operator', 303, (rig, headers) =>
     rig.root.updates.handlers.checkNow(post('/admin/plugins/check', headers, {})),
   ),
+  // A store in memory installs nothing: each act answers its problem, still guarded first.
+  'pluginInstall.handlers.upload': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.upload(post('/admin/plugins/upload', headers, {})),
+  ),
+  'pluginInstall.handlers.activate': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.activate(
+      post('/admin/plugins/activate', headers, { digest: 'a'.repeat(64), confirm: 'acme' }),
+    ),
+  ),
+  'pluginInstall.handlers.refuse': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.refuse(
+      post('/admin/plugins/refuse', headers, { digest: 'a'.repeat(64) }),
+    ),
+  ),
+  'pluginInstall.handlers.followImage': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.followImage(
+      post('/admin/plugins/follow-image', headers, { plugin: 'acme' }),
+    ),
+  ),
+  'pluginInstall.handlers.restart': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.restart(post('/admin/plugins/restart', headers, {})),
+  ),
   'instance.handlers.setName': form('operator', 303, (rig, headers) =>
     rig.root.instance.handlers.setName(
       post('/api/admin/instance-name', headers, { name: 'Acme prod' }),
@@ -648,6 +670,7 @@ const SURFACES = [
   'users',
   'notifications',
   'updates',
+  'pluginInstall',
 ] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');

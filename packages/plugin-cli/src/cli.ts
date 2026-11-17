@@ -70,7 +70,7 @@ export async function run(
       io.error(`not built: the plugin declares itself not bundleable (${result.skipped})`);
       return 1;
     }
-    io.log(`built ${result.id} ${result.version} → ${result.path}`);
+    io.log(`built ${result.id} ${result.version} → ${result.archive}`);
     return 0;
   } catch (err) {
     io.error(err instanceof ArchiveError ? err.message : String(err));

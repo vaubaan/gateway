@@ -33,6 +33,8 @@ export const ACT = {
   editMission: 'edit_mission',
   rotateMissionToken: 'rotate_mission_token',
   revokeMission: 'revoke_mission',
+  uploadPlugin: 'upload_plugin',
+  pluginStatus: 'plugin_status',
 } as const;
 
 export type VaubaanActName = keyof typeof ACT;
@@ -48,6 +50,8 @@ export const TOOL = {
   editMission: `${TOOL_PREFIX}${ACT.editMission}`,
   rotateMissionToken: `${TOOL_PREFIX}${ACT.rotateMissionToken}`,
   revokeMission: `${TOOL_PREFIX}${ACT.revokeMission}`,
+  uploadPlugin: `${TOOL_PREFIX}${ACT.uploadPlugin}`,
+  pluginStatus: `${TOOL_PREFIX}${ACT.pluginStatus}`,
 } as const satisfies Record<VaubaanActName, string>;
 
 /** The act a tool name stands for, or `null` for a name of no tool of this plugin. */

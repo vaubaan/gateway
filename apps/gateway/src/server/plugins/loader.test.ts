@@ -240,10 +240,14 @@ describe('loadPlugins', () => {
       redact: (s) => s,
       write: (_level, line) => lines.push(line),
     });
-    const { registry, inventory } = await loadPlugins({ plugins: { dir, enabled: null } }, logger, {
-      bundled: [bundled.acmePlugin],
-      sdkVersion: SDK,
-    });
+    const { registry, inventory } = await loadPlugins(
+      { plugins: { dir, enabled: null, allowUnsigned: [], safeMode: false } },
+      logger,
+      {
+        bundled: [bundled.acmePlugin],
+        sdkVersion: SDK,
+      },
+    );
     expect(registry.require('acme').plugin.version).toBe('1.2.4');
     expect(inventory.entries).toEqual([
       {
@@ -263,7 +267,7 @@ describe('loadPlugins', () => {
 
   it('reads no directory when plugins.dir is unset', async () => {
     const { registry, inventory } = await loadPlugins(
-      { plugins: { dir: null, enabled: null } },
+      { plugins: { dir: null, enabled: null, allowUnsigned: [], safeMode: false } },
       quiet,
       {
         bundled: [],

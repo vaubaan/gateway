@@ -55,6 +55,11 @@ export const vaubaanExamples: ToolSamples = samplesOn([], {
     { args: { mission_id: EXAMPLE_MISSION_ID } },
     { args: {}, expectDenied: true },
   ],
+  [TOOL.uploadPlugin]: [
+    { args: { archive_base64: 'H4sIAAAAAAAAA+3BAQ0AAADCoPdPbQ8HFAAAAAAAAAAAAAAA' } },
+    { args: { archive_base64: 'x', name: 'extra' }, expectDenied: true },
+  ],
+  [TOOL.pluginStatus]: [{ args: {} }],
   [TOOL.revokeMission]: [
     { args: { mission_id: EXAMPLE_MISSION_ID } },
     { args: { mission_id: EXAMPLE_MISSION_ID, reason: 'done' }, expectDenied: true },

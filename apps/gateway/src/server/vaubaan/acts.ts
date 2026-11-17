@@ -87,6 +87,8 @@ export const VAUBAAN_REFUSAL_CODES = [
   'unknown-service',
   'unknown-account',
   'instance-limit-reached',
+  'administrator-only',
+  'plugin-refused',
 ] as const;
 export type VaubaanRefusalCode = (typeof VAUBAAN_REFUSAL_CODES)[number];
 

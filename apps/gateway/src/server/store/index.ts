@@ -55,6 +55,10 @@ import {
   createNotificationMailRepo,
   type NotificationMailRepo,
 } from './repositories/notification-mail.ts';
+import {
+  createPluginVersionsRepo,
+  type PluginVersionsRepo,
+} from './repositories/plugin-versions.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
 import { createSecondFactorsRepo, type SecondFactorsRepo } from './repositories/second-factors.ts';
@@ -112,6 +116,8 @@ export interface Store {
   readonly webSessions: WebSessionsRepo;
   /** Every sealed column, for the master-key re-seal (`reseal` command). */
   readonly sealedBlobs: SealedBlobsRepo;
+  /** The versions of installed plugins (migration 0041). */
+  readonly pluginVersions: PluginVersionsRepo;
   readonly auditWriter: AuditWriter;
   /** Highest migration version applied. */
   readonly schemaVersion: number;
@@ -172,6 +178,7 @@ export function openStore(options: StoreOptions): Store {
     config: createConfigRepo(ctx),
     webSessions: createWebSessionsRepo(ctx),
     sealedBlobs: createSealedBlobsRepo(ctx),
+    pluginVersions: createPluginVersionsRepo(ctx),
     auditWriter: new SqliteAuditWriter(audit),
     schemaVersion: currentVersion,
     db,

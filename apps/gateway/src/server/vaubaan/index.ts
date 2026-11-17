@@ -22,6 +22,7 @@ import {
 import type { z } from 'zod';
 
 import { VaubaanActs, type ActOutcome } from './acts';
+import { VaubaanPluginActs } from './plugin-acts';
 import { VAUBAAN_INPUTS } from './inputs';
 import type { VaubaanModuleDeps } from './ports';
 
@@ -85,6 +86,10 @@ export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
     catalog: deps.catalog,
     logger: deps.logger.child({ component: 'vaubaan-plugin' }),
   });
+  const pluginActs = new VaubaanPluginActs({
+    plugins: deps.plugins,
+    logger: deps.logger.child({ component: 'vaubaan-plugin' }),
+  });
   const ports: VaubaanPorts = {
     listMyAccounts: portOf(VAUBAAN_INPUTS.listMyAccounts, (caller) => acts.listMyAccounts(caller)),
     getCatalog: portOf(VAUBAAN_INPUTS.getCatalog, (caller, input) =>
@@ -111,6 +116,10 @@ export function createVaubaanPorts(deps: VaubaanModuleDeps): VaubaanPorts {
     revokeMission: portOf(VAUBAAN_INPUTS.revokeMission, (caller, input) =>
       acts.revokeMission(caller, input),
     ),
+    uploadPlugin: portOf(VAUBAAN_INPUTS.uploadPlugin, (caller, input) =>
+      pluginActs.uploadPlugin(caller, input),
+    ),
+    pluginStatus: portOf(VAUBAAN_INPUTS.pluginStatus, (caller) => pluginActs.pluginStatus(caller)),
   };
   const extra = Object.keys(ports).filter(
     (key) => !(VAUBAAN_PORT_NAMES as readonly string[]).includes(key),
@@ -147,7 +156,13 @@ export {
   type VaubaanCatalog,
   type VaubaanMissions,
   type VaubaanModuleDeps,
+  type VaubaanPlugins,
 } from './ports';
+export {
+  MAX_ARCHIVE_BASE64,
+  type PluginStatusAnswer,
+  type UploadedPluginAnswer,
+} from './plugin-acts';
 export {
   catalogView,
   accountView,

@@ -16,14 +16,15 @@ import { currentSetup, servedInSetupMode, SETUP_PAGE } from './server/setup/stat
 const NONCE_BYTES = 16;
 
 /**
- * Every path but the git remote's (`/git/…`, spec §4.1 ter). Next clones and
- * buffers the body of every request the proxy runs on, up to
- * `proxyClientMaxBodySize`, and truncates what is beyond: the pack of a push
- * would be held in memory and cut. The git remote answers no browser, so it
- * needs none of the headers set here. A literal: Next reads it at build time.
+ * Every path but the git remote's (`/git/…`, spec §4.1 ter) and the upload of a plugin
+ * archive (`/admin/plugins/upload`). Next clones and buffers the body of every request
+ * the proxy runs on, up to `proxyClientMaxBodySize`, and truncates what is beyond: the
+ * pack of a push, or an archive (up to 16 MB), would be held in memory and cut. Neither
+ * answers a page: the git remote answers no browser, the upload a redirect, so they need
+ * none of the headers set here. A literal: Next reads it at build time.
  */
 export const config = {
-  matcher: ['/((?!git/).*)'],
+  matcher: ['/((?!git/|admin/plugins/upload$).*)'],
 };
 
 export function proxy(request: NextRequest): NextResponse {

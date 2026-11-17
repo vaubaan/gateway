@@ -13,6 +13,8 @@
 
 import type { AdminAct, AdminObjectType, AuditDecision, AuditEntry } from '@vaubaan/gateway-core';
 import { GATES } from '@vaubaan/shared';
+
+import type { PluginTrust, PluginVersionState } from './plugin-versions.ts';
 import type {
   GroupSource,
   MissionStatus,
@@ -141,6 +143,12 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'address-added': true,
   'address-removed': true,
   'mail-notifications-changed': true,
+  'plugin-uploaded': true,
+  'plugin-activated': true,
+  'plugin-refused': true,
+  'plugin-followed-image': true,
+  'plugin-trial-ended': true,
+  'instance-restarted': true,
   'config-changed': true,
 });
 
@@ -154,4 +162,21 @@ export const ADMIN_OBJECT_TYPES = membersOf<AdminObjectType>({
   'oauth-client': true,
   user: true,
   'instance-config': true,
+  plugin: true,
+});
+
+export const PLUGIN_VERSION_STATES = membersOf<PluginVersionState>({
+  pending: true,
+  trial: true,
+  active: true,
+  previous: true,
+  failed: true,
+  refused: true,
+  removed: true,
+});
+
+export const PLUGIN_TRUSTS = membersOf<PluginTrust>({
+  unsigned: true,
+  vaubaan: true,
+  signer: true,
 });

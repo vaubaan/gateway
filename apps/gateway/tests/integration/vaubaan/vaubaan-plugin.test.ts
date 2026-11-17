@@ -50,6 +50,8 @@ const VAUBAAN_TOOLS = [
   'vaubaan__edit_mission',
   'vaubaan__rotate_mission_token',
   'vaubaan__revoke_mission',
+  'vaubaan__upload_plugin',
+  'vaubaan__plugin_status',
 ];
 
 type Refused = { readonly error: VaubaanRefusal };
@@ -86,7 +88,7 @@ describe('vaubaan plugin — the tools of a platform management mission', () => 
     return answer.data;
   }
 
-  it('lists the nine tools beside the permission request, each with a description and an input schema', async () => {
+  it('lists the eleven tools beside the permission request, each with a description and an input schema', async () => {
     const agent = await rig.agentOf(ADA);
     const { tools } = await agent.client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(

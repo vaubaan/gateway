@@ -14,6 +14,7 @@ import { ACT, type VaubaanActName } from '@vaubaan/plugin-vaubaan/identity';
 import { z } from 'zod';
 
 import { MISSION_NAME_MAX_LENGTH, missionDraftSchema } from '../missions';
+import { MAX_ARCHIVE_BASE64 } from './plugin-acts';
 
 const missionId = z
   .string()
@@ -86,6 +87,19 @@ export const VAUBAAN_INPUTS = {
   editMission: editDraft,
   rotateMissionToken: z.object({ mission_id: missionId }).strict(),
   revokeMission: z.object({ mission_id: missionId }).strict(),
+  uploadPlugin: z
+    .object({
+      archive_base64: z
+        .string()
+        .min(1)
+        .max(MAX_ARCHIVE_BASE64)
+        .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Not base64.')
+        .describe(
+          'The bytes of the plugin archive (the .tgz `vaubaan-plugin build` writes), in base64: at most 16 MB once decoded.',
+        ),
+    })
+    .strict(),
+  pluginStatus: z.object({}).strict(),
 } as const satisfies Record<VaubaanActName, z.ZodType>;
 
 export type VaubaanInput<A extends VaubaanActName> = z.infer<(typeof VAUBAAN_INPUTS)[A]>;

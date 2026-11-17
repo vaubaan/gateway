@@ -16,8 +16,10 @@ import { openMemoryStore } from '../../../src/server/store';
 import type { RootDeps } from '../../../src/server/compose/root';
 
 /** `RootDeps` slice that opens the store in memory instead of on disk. */
-export const memoryStoreDeps: Pick<RootDeps, 'openStore'> = {
+export const memoryStoreDeps: Pick<RootDeps, 'openStore' | 'requestRestart'> = {
   openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog }),
+  // "Restart now" never ends the test process.
+  requestRestart: () => undefined,
 };
 
 const FAKE_CATALOG: RiskCatalog = {

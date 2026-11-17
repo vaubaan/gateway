@@ -9,6 +9,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **An administrator installs a plugin from Administration › Plugins.** Upload the archive
+  `vaubaan-plugin build` writes (`.tgz`, now packed beside its folder): it is checked without
+  running any of its code and stays inert. Activating it, by typing the plugin's id after reading
+  the permissions it adds or deprecates, takes effect at the next start, **on trial**: a version
+  that does not load, or whose own examples do not classify, gives way to the previous one and the
+  instance starts. An administrator goes back to a kept version (the active one, two previous, and
+  the image's), refuses a pending one, lets a plugin follow the image again, and restarts the
+  instance (exit 75, for the supervisor). Every act is audited. Archives live beside the store
+  (`<data dir>/plugins/<sha256>`, migration 0041) and are checked against their manifest at every
+  start. Until signatures are verified, only the ids of the new `plugins.allow_unsigned` can be
+  installed, never an id of the image. `plugins.safe_mode` starts without any installed plugin.
+  A mission keeps saving a permission only a kept newer version knows.
+- **An agent hands over the plugin it built (plugin `vaubaan` 0.5.0).** Two tools join the
+  platform management mission, in a new macro-action **Install plugins**:
+  `vaubaan__upload_plugin` (risk `vaubaan.plugin-upload`, asks first at Careful) uploads an archive,
+  which stays pending and answers the address where an administrator activates it, and
+  `vaubaan__plugin_status` (risk `vaubaan.plugin-read`) lists the plugins the instance runs and every
+  installed version. Both are refused (`administrator-only`) unless the mission's creator is an
+  administrator; no tool activates, rolls back or removes a plugin. A platform mission issued
+  before gains them only when its creator edits it.
+
 ## [2.0.0-alpha.25] - 2026-11-17
 
 ### Added

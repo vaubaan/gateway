@@ -116,7 +116,7 @@ describe('vaubaan plugin — hard deny, on the object graph of the real root', (
     expect(found).toContain('root.execution.pipeline');
   });
 
-  it('the ports are a frozen object of the nine acts, and nothing else', () => {
+  it('the ports are a frozen object of the eleven acts, and nothing else', () => {
     const { ports } = root.vaubaan;
     expect(Object.isFrozen(ports)).toBe(true);
     expect(Object.keys(ports).sort()).toEqual(
@@ -130,6 +130,8 @@ describe('vaubaan plugin — hard deny, on the object graph of the real root', (
         'renameMission',
         'revokeMission',
         'rotateMissionToken',
+        'uploadPlugin',
+        'pluginStatus',
       ].sort(),
     );
   });

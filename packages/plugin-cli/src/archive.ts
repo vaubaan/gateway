@@ -14,12 +14,14 @@
  *   docs/connect/          the connect guide's screenshots, served by the host
  *   vaubaan-manifest.json  the sha256 of every other file: what a signature covers
  *
+ * and the same files packed beside it as `<out>.tgz` (`@vaubaan/plugin-sdk/archive`), the
+ * one file an administrator uploads.
+ *
  * The bundle is imported under plain Node before the manifest is written (the smoke
  * test): its default export must be a plugin whose version is the package's.
  */
 
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   cpSync,
@@ -34,14 +36,20 @@ import {
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import {
+  ARCHIVE_MANIFEST_FILE,
+  ARCHIVE_MANIFEST_FORMAT,
+  manifestOfFiles,
+  outsideManifest,
+  packArchive,
+  type ArchiveManifest,
+} from '@vaubaan/plugin-sdk/archive';
+
 import type * as Esbuild from 'esbuild';
 
 /** The package a plugin is written against; its version is the archive's SDK range. */
 export const SDK_PACKAGE = '@vaubaan/plugin-sdk';
-/** The file of the archive that lists the digest of every other file. */
-export const ARCHIVE_MANIFEST_FILE = 'vaubaan-manifest.json';
-/** The format of {@link ARCHIVE_MANIFEST_FILE}. */
-export const ARCHIVE_MANIFEST_FORMAT = 'vaubaan-plugin-manifest/v1';
+export { ARCHIVE_MANIFEST_FILE, ARCHIVE_MANIFEST_FORMAT, outsideManifest, type ArchiveManifest };
 /** Where a plugin keeps its connect guide's screenshots (`GUIDE_SCREENSHOT_DIR` of the SDK). */
 const CONNECT_DIR = join('docs', 'connect');
 
@@ -74,15 +82,6 @@ export interface ArchivePackage {
   readonly license: string;
 }
 
-/** The archive's manifest: the digest of every file but itself and a signature. */
-export interface ArchiveManifest {
-  readonly format: typeof ARCHIVE_MANIFEST_FORMAT;
-  readonly id: string;
-  readonly version: string;
-  /** Path inside the archive (`/`-separated) → hex sha256, sorted by path. */
-  readonly files: Readonly<Record<string, string>>;
-}
-
 /** The archive's `package.json`, from the plugin's own. Pure. */
 export function archivePackage(manifest: PluginPackage, sdkVersion: string): ArchivePackage {
   return {
@@ -105,11 +104,6 @@ export function notBundleableReason(manifest: Pick<PluginPackage, 'vaubaan'>): s
   return typeof reason === 'string' && reason !== '' ? reason : 'declared not bundleable';
 }
 
-/** Whether a file of the archive is left out of its manifest (itself, a signature). */
-export function outsideManifest(path: string): boolean {
-  return path === ARCHIVE_MANIFEST_FILE || path.endsWith('.sig') || path.endsWith('.sig.json');
-}
-
 function filesUnder(dir: string, root: string = dir): string[] {
   return readdirSync(dir)
     .flatMap((name) => {
@@ -119,17 +113,18 @@ function filesUnder(dir: string, root: string = dir): string[] {
     .map((path) => path.split(sep).join('/'));
 }
 
+/** Every file of a directory, by its `/`-separated path inside it. */
+export function filesOf(dir: string): Map<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>();
+  for (const path of filesUnder(dir).sort()) {
+    files.set(path, readFileSync(join(dir, ...path.split('/'))));
+  }
+  return files;
+}
+
 /** The manifest of an archive directory, every file hashed. */
 export function manifestOf(dir: string, id: string, version: string): ArchiveManifest {
-  const files: Record<string, string> = {};
-  for (const path of filesUnder(dir)
-    .filter((p) => !outsideManifest(p))
-    .sort()) {
-    files[path] = createHash('sha256')
-      .update(readFileSync(join(dir, ...path.split('/'))))
-      .digest('hex');
-  }
-  return { format: ARCHIVE_MANIFEST_FORMAT, id, version, files };
+  return manifestOfFiles(filesOf(dir), id, version);
 }
 
 /**
@@ -183,7 +178,14 @@ export interface BuildArchiveOptions {
 
 export type BuildArchiveResult =
   | { readonly skipped: string }
-  | { readonly id: string; readonly version: string; readonly path: string };
+  | {
+      readonly id: string;
+      readonly version: string;
+      /** The archive's directory. */
+      readonly path: string;
+      /** The same files packed: `<path>.tgz`, what an administrator uploads. */
+      readonly archive: string;
+    };
 
 /** Builds one plugin's archive into `outDir`. */
 export async function buildArchive(options: BuildArchiveOptions): Promise<BuildArchiveResult> {
@@ -201,6 +203,7 @@ export async function buildArchive(options: BuildArchiveOptions): Promise<BuildA
 
   const target = resolve(options.outDir);
   rmSync(target, { recursive: true, force: true });
+  rmSync(`${target}.tgz`, { force: true });
   mkdirSync(target, { recursive: true });
   const entry = join(target, 'index.js');
   try {
@@ -259,5 +262,7 @@ export async function buildArchive(options: BuildArchiveOptions): Promise<BuildA
     join(target, ARCHIVE_MANIFEST_FILE),
     `${JSON.stringify(manifestOf(target, loaded.id, manifest.version), null, 2)}\n`,
   );
-  return { id: loaded.id, version: manifest.version, path: target };
+  const archive = `${target}.tgz`;
+  writeFileSync(archive, packArchive(filesOf(target)));
+  return { id: loaded.id, version: manifest.version, path: target, archive };
 }

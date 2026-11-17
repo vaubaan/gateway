@@ -46,6 +46,8 @@ const RISK = {
   edit: `${SERVICE_ID}.mission-edit`,
   rotate: `${SERVICE_ID}.mission-key-rotate`,
   revoke: `${SERVICE_ID}.mission-revoke`,
+  pluginRead: `${SERVICE_ID}.plugin-read`,
+  pluginUpload: `${SERVICE_ID}.plugin-upload`,
 } as const;
 
 function slices(tool: string, args: Record<string, unknown>): string[] {
@@ -102,11 +104,12 @@ describe('vaubaan plugin — structural kit', () => {
 });
 
 describe('vaubaan catalog — the macro-actions at each trust level', () => {
-  test('four macro-actions, every risk but the fallback in exactly one', () => {
+  test('five macro-actions, every risk but the fallback in exactly one', () => {
     expect(vaubaanCatalog.catalog.macro_actions?.map((action) => action.id)).toEqual([
       'read',
       'prepare',
       'rotate',
+      'plugins',
       'stop',
     ]);
   });
