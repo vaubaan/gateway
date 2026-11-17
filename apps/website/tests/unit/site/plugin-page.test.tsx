@@ -122,7 +122,7 @@ describe('the rendered page, in ten sections', () => {
     expect(words(hero)).toContain(`GitHub ${github.version}`);
     expect(words(hero)).toContain(github.description);
     expect(words(hero)).toMatch(
-      /17 permissions · 4 macro-actions · \d+ tools and the git remote · /,
+      /18 permissions · 4 macro-actions · \d+ tools and the git remote · /,
     );
   });
 

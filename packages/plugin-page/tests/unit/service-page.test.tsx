@@ -140,7 +140,7 @@ describe('the page, in eight sections', () => {
     expect(hero).toContain('class="pp-svc"');
     expect(words(hero)).toContain(`GitHub ${github.version}`);
     expect(words(hero)).toContain(github.description);
-    expect(words(hero)).toMatch(/17 permissions · 4 macro-actions · \d+ tools and the git remote/);
+    expect(words(hero)).toMatch(/18 permissions · 4 macro-actions · \d+ tools and the git remote/);
   });
 
   it('never says "tier" nor "severity", for any plugin', () => {
@@ -234,7 +234,7 @@ describe('1 · the model', () => {
   it('draws the planes and entities of the data model, the resource highlighted', () => {
     const github = byId('github');
     const model = section(html('github'), 'model');
-    expect(words(model)).toContain('1 plane, 22 things.');
+    expect(words(model)).toContain('1 plane, 23 things.');
     for (const entity of github.dataModel.planes.flatMap((p) => p.entities)) {
       expect(model, entity.name).toContain(`${entity.name}`);
     }
@@ -347,7 +347,7 @@ describe('3 · the map', () => {
     const github = byId('github');
     const map = mapOf(github);
     const ids = new Set(map.rows.flatMap((r) => r.cells.flat().map((c) => c.riskId)));
-    expect(ids.size).toBe(17);
+    expect(ids.size).toBe(18);
     expect(ids.has('github.uncategorized-write')).toBe(false);
     for (const row of map.rows) {
       for (const chip of row.cells.flat()) {

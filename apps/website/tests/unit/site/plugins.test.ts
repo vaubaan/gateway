@@ -352,7 +352,7 @@ describe('the plugin catalog of the site', () => {
   it('opens each page with the counts: 17 GitHub permissions, neither the fallback nor the retired', () => {
     const github = byId('github');
     expect(github.counts).toEqual({
-      permissions: 17,
+      permissions: 18,
       macroActions: github.macroActions.length,
       tools: github.tools.length,
       excludedTools: github.excludedTools.length,
