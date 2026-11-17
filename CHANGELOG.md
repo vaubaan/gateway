@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.25] - 2026-11-17
+
 ### Added
 
 - **GitHub (plugin 5.3.0): `github__update_issue` edits an issue's title, body or type.** An absent field is left
@@ -2958,7 +2960,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.24...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.25...HEAD
+[2.0.0-alpha.25]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.24...v2.0.0-alpha.25
 [2.0.0-alpha.24]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.23...v2.0.0-alpha.24
 [2.0.0-alpha.23]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.22...v2.0.0-alpha.23
 [2.0.0-alpha.22]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.21...v2.0.0-alpha.22
