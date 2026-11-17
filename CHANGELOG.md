@@ -11,7 +11,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
-- **GitHub: `github__update_issue` edits an issue's title, body or type.** An absent field is left
+- **GitHub (plugin 5.3.0): `github__update_issue` edits an issue's title, body or type.** An absent field is left
   unchanged, an empty body clears the description, `type: null` removes the issue type. It
   answers the issue as it now reads, type included (GitHub ignores a type change without push
   access). New risk `github.issue-write` (slice `issue[N].edit.W`), in the macro-action `propose`
