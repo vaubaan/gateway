@@ -1,10 +1,15 @@
 ---
-title: Plugins are bundled with the image or pinned by the operator in a directory; the pin wins, nothing is fetched at run time
+title: A plugin is a self-contained archive an operator can pin in a directory; the pin wins and a bad one stops the boot
 status: accepted
 date: 2026-11-05
 ---
 
-# Plugins are bundled with the image or pinned by the operator in a directory; the pin wins, nothing is fetched at run time
+# A plugin is a self-contained archive an operator can pin in a directory; the pin wins and a bad one stops the boot
+
+Where plugins come from, and how an instance installs and activates them besides the operator's
+directory, is decided by [plugin-catalog-rebuilt-from-source](./plugin-catalog-rebuilt-from-source.md)
+and [plugins-activated-by-an-administrator-on-trial](./plugins-activated-by-an-administrator-on-trial.md)
+(2026-11-17), which replace this record's bundled tier and its "nothing is fetched" rule.
 
 ## Context
 
@@ -62,12 +67,6 @@ the credential, so it is in the trusted computing base whatever the way it was d
   the release notes say to disconnect or pin first, which is what a major means.
 
 ## Rejected alternatives
-
-### A package manager in the gateway, plugins installed from the interface
-
-Code fetched at run time into the process that holds the credentials, with the registry outage
-and the signature verification that come with it; the OCI image already is the operator's
-pinned, signed, scanned artefact.
 
 ### One SDK instance shared through a resolve hook
 

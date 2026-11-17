@@ -1,12 +1,12 @@
 {
   "version": "6",
-  "harnessVersion": "2.3.0",
+  "harnessVersion": "2.4.0",
   "engines": [
     "claude-code",
     "codex-cli",
     "opencode"
   ],
-  "renderedAt": "2026-11-10T13:02:40.665Z",
+  "renderedAt": "2026-11-17T15:14:57.467Z",
   "files": [
     ".agents/skills/decision-record-writer/SKILL.md",
     ".agents/skills/doc-audit/SKILL.md",
@@ -45,7 +45,8 @@
     ".opencode/commands/test-plan.md",
     ".opencode/commands/workflow.md",
     "AGENTS.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "docs/intents/README.md"
   ],
   "fileHashes": {
     ".claude/skills/decision-record-writer/SKILL.md": "33293e2bc462e7fcac14f439749b4dc7cf5d7ee44849e1cc702d9e71f67c0863",
@@ -84,7 +85,8 @@
     ".opencode/commands/spec.md": "c809502114670893ec72083d69448439a931207acd8ae69d912b491a553087d1",
     ".opencode/commands/test-plan.md": "a08b9037d6fa9dd7baa1ceaf656a395b301e58236ddf17926f79bbd0deb1122c",
     ".opencode/commands/workflow.md": "769b18667fdc004de7293cdf2ea0ddd0491bd3df5a109f943ebe779090a023df",
-    "AGENTS.md": "b33f1824b4e102ed92275785960892cd7305425197fd0d0688fe3cd48fad340b",
-    "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
+    "AGENTS.md": "3f52d9c172326f40b609989492d094e48b01e5638ada4f6cbb01e860eee9b77c",
+    "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
+    "docs/intents/README.md": "42aae9ac1e338f36b70c89326c8dbb6e0721159e3bcb08fd31913fc0774e5c43"
   }
 }

@@ -10,11 +10,13 @@ This file describes **how to work in this project**. The **business context** (w
 - `docs/decisions/<slug>.md` — ADRs: structural choices and rejected alternatives.
 - `docs/tests/integration-tests.md` & `e2e-tests.md` — test scope, stack, conventions, known gaps.
 - `docs/workflow/coding-workflow.md` — CI, branches, PR, release. How this team works: follow it.
+- `docs/intents/<intent>.md` — user intents, one tree per level-1 intent, anchored to the code. `docs/intents/README.md` is the generated index.
 
 ## Doc-first
 
 The order is: **understand the docs → fill the gaps → code → update the docs → commit**. If the docs are silent or stale on something you change, fill the gap upfront with the doc-skill writers — not downstream, not after the fact.
 
+- Visible change of behavior → a `proposed` intent first (`/intent <verb + object>`), never the code first.
 - Missing spec for a subsystem you touch → **do not code**, report the gap.
 - Implicit structural decision in your changes → an ADR (`/decision`).
 - Changed feature behavior → update the matching handbook (`/handbook`).

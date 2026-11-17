@@ -25,6 +25,12 @@ last_reviewed: 2026-11-13
 How the registry is composed at boot from the bundled plugins and the operator's pins, and how the
 instance learns what is behind. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3, §5, §7.11;
 ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-pinned-by-the-operator.md).
+Decided, not yet built (2026-11-17): the catalog
+[plugin-catalog-rebuilt-from-source](../decisions/plugin-catalog-rebuilt-from-source.md) and
+installation on the instance
+[plugins-activated-by-an-administrator-on-trial](../decisions/plugins-activated-by-an-administrator-on-trial.md),
+signatures [plugin-signature-sets-the-trust-level](../decisions/plugin-signature-sets-the-trust-level.md);
+until they land, this handbook describes the code as it is.
 
 ## Start here
 

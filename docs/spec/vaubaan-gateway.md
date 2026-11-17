@@ -34,7 +34,9 @@ in the interface, the code, the store and the protocol:
 - **service** — the third-party product a plugin connects to (a code host, a mailbox…); a sign-in provider stays
   explicit (IdP).
 - **plugin** — only the code package: installed, pinned, built with the SDK, with its reference
-  page.
+  page. The **catalog** is the public list every published plugin comes from; the **socle** is the
+  catalog versions an instance has by default; a plugin's **trust level** is what its verified
+  signature says of who built it (§5).
 
 For the other words, tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration
 keys spell the protocol's words, and so does this spec where it states a rule. The interface speaks
@@ -201,6 +203,10 @@ carries, a callback registered at a service).
 - **Audit** — one immutable entry per MCP call, allowed or refused, and per administrative act (§8).
 - **Plugin report** — an anonymous, opt-in report of a tool's outcome to the community collector
   (§9).
+- **Archive** — the one file a plugin version ships as: the built plugin, its risk catalog, the
+  digests of its files and its signature; what an administrator uploads or installs (§4.2, §5).
+- **Signer** — who signed an archive: the catalog (trust level "Vaubaan"), or a key the instance's
+  administrators named as trusted (§5).
 
 ## 1. Vision
 
@@ -568,6 +574,10 @@ other; the tools then act **in the name of the mission's creator**, within their
   missions, as their own "Edit mission" does: one version in the History, by the calling mission,
   within the creator's authority now and refused whole beyond it; `vaubaan__preview_policy` with a
   `mission_id` previews the edit.
+- **Plugins** (`vaubaan__upload_plugin`, `vaubaan__plugin_status`), only when the creator is an
+  administrator of the instance: upload a plugin archive, which stays inert until an administrator
+  activates it in the interface (§4.2, Administration › Plugins); read each plugin's versions,
+  trust level, pending activation and the updates available.
 - **Rotate** (`vaubaan__rotate_mission_token`) the token of a mission the calling mission issued
   (another is refused `mission-not-issued-here`); **revoke** (`vaubaan__revoke_mission`) any of the
   creator's missions.
@@ -577,9 +587,10 @@ other; the tools then act **in the name of the mission's creator**, within their
   calls these tools — a teammate's key is refused (`teammate-key-not-allowed`).
 - **Never exposed**: answering a request; opening a gate, extending a budget or changing a mission's
   limits or permissions other than by a whole edit judged as above; resetting a period; connecting, sharing, transferring or revoking an
-  account; executing another service's tool; adding members or making named tokens.
+  account; executing another service's tool; adding members or making named tokens; activating,
+  rolling back or removing a plugin, or changing the trusted signers.
 - The plugin's `execute` is composed by the host from the mission service, never through the SDK;
-  a plugin declaring a host account loads only bundled with the image, never from a pin. The host's
+  a plugin declaring a host account is compiled into the server, never loaded from an archive. The host's
   own tool `vaubaan__request_permission` is answered by exact name before the registry, which refuses
   a plugin tool of the same name.
 - The retired management door, `/mcp/manage`, answers 404 with a hint to this plugin.
@@ -767,14 +778,31 @@ the (i) itself never leaves the page.
     runs a sign-in in another window and connects nobody. Changing the source of a service leaves
     the accounts connected through the former one working and is confirmed with that consequence;
     a changed public URL marks an own client as to re-register at the service;
-  - **plugins**: every plugin the instance knows, with its version, where it comes from (bundled
-    with the image, or pinned by the operator in the plugins directory, replacing the bundled
-    version when both exist), whether the configuration enables it, how many accounts it serves,
-    and its community validation. The page says what the published versions feed reports: a
-    gateway or plugin version behind the released one, a version an advisory names with the
-    version that fixes it, and a pin older than what the image bundles. Nothing is installed,
-    updated or removed from here: a plugin changes when the operator changes the image or the
-    directory ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
+  - **plugins**: every plugin the instance knows, with its active version, its **trust level**
+    (signed by Vaubaan; signed by a signer this instance trusts, named; unsigned, allowed by the
+    configuration — a modified or invalid archive never gets this far), where it comes from
+    (preinstalled in the image, installed here, or pinned by the operator in the plugins
+    directory), whether it follows the image or is held at a version, the versions kept, whether
+    the configuration enables it, how many accounts it serves, and its community validation. From
+    the published versions feed the page says what is behind, what an advisory names with the
+    version that fixes it, and a pin older than the image's version, and offers to install a
+    catalog version in one click.
+    An administrator **uploads** an archive or **installs** one from the catalog; either stays
+    **pending**, inert, until an administrator **activates** it, shown its trust level and digest,
+    what it replaces, the permissions it adds or deprecates against the active version, the
+    missions using the service and the permissions none of them holds — and for an older version,
+    the accounts connected a way it does not offer and the permissions it does not know, which stay
+    stored and inert. Activating is confirmed by typing the plugin's id and takes effect at the
+    next start, which the page can trigger. The version starts **on trial**: it becomes active
+    once loaded and its own examples classified; otherwise the previous version is restored and the
+    failure shown here. An administrator also **rolls back** to a kept version, sets a plugin to
+    **follow the image** again, **removes** an installed plugin no account uses, opts a plugin into
+    **automatic security patches** (Vaubaan-signed patch versions that fix an advisory, started on
+    trial, every administrator notified), and manages the **trusted signers** (adding one is
+    confirmed by typing its name and notifies every administrator). The instance keeps, per plugin,
+    the active version, the two previous ones and the image's. An id the catalog or the socle uses
+    is activated only signed by Vaubaan
+    ([ADR](../decisions/plugins-activated-by-an-administrator-on-trial.md));
   - teams (local ones); telemetry; the instance's name. Other
     §4.3 keys are shown, not edited; the name and the telemetry opt-in are set here unless the
     configuration sets them (then read-only). Every interface change is audited.
@@ -850,14 +878,18 @@ committed:
   instance backs nothing up (§6);
 - the **telemetry level** (§9) and the collector URL;
 - optionally, the **plugins directory** (`plugins.dir`, the image's `/plugins`) where the
-  operator pins plugins, one directory each, and **`plugins.enabled`**, the ids the instance
-  registers (unset: every bundled and pinned plugin). A pinned plugin replaces a bundled one of the
-  same id. A pinned plugin built for another SDK range, a duplicate, or a service the store holds
+  operator pins plugins, one directory each; **`plugins.enabled`**, the ids the instance
+  registers (unset: every plugin it has); **`plugins.allow_unsigned`**, the ids the instance may
+  activate without a signature — the only way an unsigned plugin runs, which no interface sets;
+  and **`plugins.safe_mode`**, a start with the image's versions only, ignoring what was installed
+  here, the way back when the interface cannot be reached. A pinned plugin replaces an installed
+  or preinstalled one of the same id. A pinned plugin built for another SDK range, a duplicate, or a service the store holds
   accounts for and no registered plugin serves, stops the start with a message naming it
   ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
 - the **versions check** (`updates.check`, on by default; `updates.feed_url`): at start and daily,
   the instance reads the published versions feed — a request carrying nothing about the instance —
-  and compares locally; the result is shown in Administration › Plugins, nothing is downloaded;
+  and compares locally; the result is shown in Administration › Plugins; nothing is downloaded but
+  the catalog archive an administrator chooses to install;
 - the **documentation base** (`docs.url`, default `https://vaubaan.com/docs`): where the
   documentation link inside the (i) of every page header points;
 - optionally, the instance's **name**: 1 to 64 characters, no control characters, a label never
@@ -940,13 +972,24 @@ values.
   and guide; a key pair the instance generates; or the service's sign-in), how to withdraw the grant
   on revocation (or where a person removes it), how to discover resources and which tools create
   one, and its macro-actions. Contribution: [CONTRIBUTING](../../CONTRIBUTING.md),
-  [plugins/README](../../plugins/README.md). A plugin reaches an instance in one of two ways:
-  **bundled** with the image, versioned and released with the gateway, or **pinned** by the
-  operator in the plugins directory, as a self-contained bundle the release workflow publishes as
-  an image per plugin and version. The pin wins over the bundled plugin of the same id. A plugin
-  runs in the process with the credential: whatever its way in, it is trusted code the operator
-  chose, never code fetched at run time
-  ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)).
+  [plugins/README](../../plugins/README.md). Writing one:
+  [plugin-authoring](./plugin-authoring.md). Every published plugin comes from one public
+  **catalog**: a declaration per plugin naming its source and exact revision, added by a reviewed
+  change; the catalog rebuilds each declared revision itself and signs the archive, so "signed by
+  Vaubaan" means built by the catalog from reviewed source
+  ([ADR](../decisions/plugin-catalog-rebuilt-from-source.md)). The **socle** is a list of catalog
+  versions the project owner chooses, preinstalled in the image; only the management plugin and a
+  plugin that cannot be archived are compiled into the server. A **private** plugin is built
+  outside the catalog and signed with its author's own key, which an instance trusts by naming it
+  a signer; its existence is published nowhere. A plugin reaches an instance preinstalled,
+  installed by an administrator (uploaded, or from the catalog in one click), or pinned by the
+  operator in the plugins directory, the pin winning over the others of its id
+  ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)). It runs in the process with
+  the credential, so it runs only once an administrator activated it or the operator placed it,
+  and its archive is checked against its signature at every start; a signature says who built the
+  plugin, never that it is harmless
+  ([ADR](../decisions/plugins-activated-by-an-administrator-on-trial.md),
+  [ADR](../decisions/plugin-signature-sets-the-trust-level.md)).
 - **Sign-in providers** — authenticate humans with subject, verified email and, for a directory,
   groups. Trusted for their own issuer's identities only, never for authorization.
 - **Push services and messaging services** — reached outbound, without an account: a push service
@@ -1136,16 +1179,18 @@ platform mission; it never holds a Vaubaan account.
 A service changes its API overnight; every call of that plugin fails upstream. The agent sees the
 service's error and says so; nothing is counted against the budget. The mission's holder reads in
 Activity that the calls fail at the service, not at the policy, and has nothing to change. The
-community ships a new plugin version; an advisory names it when the fix is a security one. The
-administrator learns it in Administration › Plugins from the versions feed, with nothing
-installed by the gateway, and chooses the moment: a new image for a bundled plugin, a new pin in
-the plugins directory for a pinned one, each the operator's own artefact. The instance restarts;
-missions, accounts, policies and the audit are untouched. The agent replays the call. Either it
+plugin's author publishes a new version through the catalog; an advisory names it when the fix is
+a security one. The administrator learns it in Administration › Plugins from the versions feed and
+chooses the moment: they install it in one click, read what it adds against the active version and
+activate it. The instance restarts with it on trial and returns to the previous version by itself
+if it does not load; a plugin opted into automatic security patches does the same alone and
+notifies the administrators, and a pinned plugin changes when the operator changes the directory.
+Missions, accounts, policies and the audit are untouched. The agent replays the call. Either it
 runs, or the new version classifies it under a permission the mission does not hold and the call
 is refused with a permission request the holder answers in the interface (§3.3 bis), or the
 service now wants another grant and the account runs nothing until its owner reconnects it
-(§7.2). A version is never pushed to an instance, and a loaded version never widens what a mission
-may do.
+(§7.2). A version never reaches an instance without an administrator's choice, and neither a newer nor
+an older version ever widens what a mission may do.
 
 ## 8. Audit
 
