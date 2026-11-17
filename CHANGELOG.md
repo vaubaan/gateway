@@ -9,6 +9,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Security
+
+- **picomatch GHSA-fc5q-39xc-vjpf (high, ReDoS) reviewed and allowlisted until 2026-12-17.** It is
+  reached only through the website's build tooling, never shipped in the gateway image, and no
+  patched version exists yet. It had stopped the 2.0.0-alpha.25 release at its audit gate.
+
 ## [2.0.0-alpha.25] - 2026-11-17
 
 ### Added
