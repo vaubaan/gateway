@@ -11,9 +11,11 @@
  *   2. ESLint and Prettier on the changed files;
  *   3. the Vitest tests related to the changed files (`vitest --changed`), and the
  *      structural tests, which read the whole tree and no import ties to a change;
- *   4. the harness linters on the docs, and the workflows (actionlint with shellcheck,
+ *   4. when the Next config, the gateway's dependencies or the Dockerfile changed, the
+ *      Next build and the tests that read its standalone output (skipped without it);
+ *   5. the harness linters on the docs, and the workflows (actionlint with shellcheck,
  *      the version CI fetches, from its Docker image) when one changed;
- *   5. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
+ *   6. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
  *      the Semgrep image and the semgrep/semgrep-rules commit ci.yml pins, cloned once
  *      into the ignored .semgrep-rules/), over the whole tree: a rule finds what a
  *      changed file breaks elsewhere too.
@@ -140,6 +142,28 @@ step('vitest (structural rules over the tree)', process.execPath, [
   'apps/gateway/tests/unit/structural',
 ]);
 step('harness lint', 'npx', ['vaubaan-harness', 'lint']);
+
+// What only a Next build shows (the standalone tree the image copies): built and checked,
+// as CI's e2e job does, when the build's inputs changed.
+const BUILD_INPUTS = /^(apps\/gateway\/(next\.config\.ts|package\.json)|deploy\/docker\/)/;
+if (changed.some((path) => BUILD_INPUTS.test(path))) {
+  step('next build of the gateway', 'npm', [
+    'run',
+    '-s',
+    'build',
+    '--workspace',
+    '@vaubaan/gateway-app',
+  ]);
+  step('vitest (the standalone output and the demo)', process.execPath, [
+    'node_modules/vitest/vitest.mjs',
+    'run',
+    '--project',
+    'shared',
+    '--no-isolate',
+    'apps/gateway/tests/integration/standalone-',
+    'apps/gateway/tests/integration/demo/',
+  ]);
+}
 
 /** The actionlint version CI fetches (scripts/fetch-tool.sh), or null. */
 function actionlintVersion() {
