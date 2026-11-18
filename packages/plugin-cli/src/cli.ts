@@ -2,6 +2,10 @@
 /**
  * `vaubaan-plugin` — the plugin author's command line (spec plugin-authoring §1).
  *
+ *   vaubaan-plugin init <dir> --id <id> [--name <name>]  a new plugin project (init.ts)
+ *   vaubaan-plugin try <tool> [<json args>] [--resources ref[:env],…] [--accept <risk>,…]
+ *                      [--trust careful|trusting|autonomous]
+ *                                                       one call, decided without a gateway (try.ts)
  *   vaubaan-plugin build [<plugin dir>] [--out <dir>]   the archive: <out>/ and <out>.tgz
  *   vaubaan-plugin keygen [--out <name>]                 a company key: <name>.key.pem, <name>.pub.pem
  *   vaubaan-plugin sign <archive dir> --key <file>       vaubaan-manifest.json.sig.json, then <dir>.tgz again
@@ -9,7 +13,7 @@
  *
  * `build` writes the default `dist/plugin` inside the plugin's folder. A signature lands
  * beside the manifest and is packed with it: what an administrator uploads is the `.tgz`.
- * Exit 1 when a step is refused; 2 on a usage error.
+ * Exit 1 when a step is refused (for `try`: the call is not allowed); 2 on a usage error.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -26,15 +30,34 @@ import {
 } from '@vaubaan/plugin-sdk/archive';
 
 import { ArchiveError, buildArchive, filesOf } from './archive.ts';
+import { initProject } from './init.ts';
+import { TRUST_LEVELS, tryProjectCall, type TrustLevel } from './try.ts';
 
 export const USAGE = [
-  'usage: vaubaan-plugin build [<plugin dir>] [--out <dir>]',
+  'usage: vaubaan-plugin init <dir> --id <id> [--name <display name>]',
+  "       vaubaan-plugin try <tool> ['<json args>'] [--resources ref[:env],…] [--accept <risk id>,…] [--trust careful|trusting|autonomous]",
+  '       vaubaan-plugin build [<plugin dir>] [--out <dir>]',
   '       vaubaan-plugin keygen [--out <name>]',
   '       vaubaan-plugin sign <archive dir> --key <private key file>',
   '       vaubaan-plugin pack <archive dir> [--out <file>]',
 ].join('\n');
 
 export type Command =
+  | {
+      readonly name: 'init';
+      readonly dir: string;
+      readonly id: string;
+      readonly displayName: string | undefined;
+    }
+  | {
+      readonly name: 'try';
+      readonly pluginDir: string;
+      readonly tool: string;
+      readonly args: string | undefined;
+      readonly resources: string | undefined;
+      readonly accept: string | undefined;
+      readonly trust: TrustLevel | undefined;
+    }
   | { readonly name: 'build'; readonly pluginDir: string; readonly out: string }
   | { readonly name: 'keygen'; readonly out: string }
   | { readonly name: 'sign'; readonly dir: string; readonly key: string }
@@ -68,6 +91,34 @@ function split(
 export function parseCommand(argv: readonly string[], cwd: string): Command {
   const [name, ...rest] = argv;
   switch (name) {
+    case 'init': {
+      const { positionals, options } = split(rest, ['--id', '--name']);
+      const id = options.get('--id');
+      if (positionals.length !== 1 || id === undefined) throw new UsageError(USAGE);
+      return {
+        name,
+        dir: resolve(cwd, positionals[0] as string),
+        id,
+        displayName: options.get('--name'),
+      };
+    }
+    case 'try': {
+      const { positionals, options } = split(rest, ['--resources', '--accept', '--trust']);
+      if (positionals.length < 1 || positionals.length > 2) throw new UsageError(USAGE);
+      const trust = options.get('--trust');
+      if (trust !== undefined && !(TRUST_LEVELS as readonly string[]).includes(trust)) {
+        throw new UsageError(`--trust is one of ${TRUST_LEVELS.join(', ')}\n${USAGE}`);
+      }
+      return {
+        name,
+        pluginDir: cwd,
+        tool: positionals[0] as string,
+        args: positionals[1],
+        resources: options.get('--resources'),
+        accept: options.get('--accept'),
+        trust: trust as TrustLevel | undefined,
+      };
+    }
     case 'build': {
       const { positionals, options } = split(rest, ['--out']);
       if (positionals.length > 1) throw new UsageError(USAGE);
@@ -107,6 +158,28 @@ function pack(dir: string, out: string): string {
 
 async function execute(command: Command, io: { log: (line: string) => void }): Promise<number> {
   switch (command.name) {
+    case 'init': {
+      const result = initProject({
+        dir: command.dir,
+        id: command.id,
+        ...(command.displayName === undefined ? {} : { displayName: command.displayName }),
+      });
+      io.log(`plugin ${result.id}: ${result.files} files → ${result.dir}`);
+      io.log('next: npm install && npm run check, then open your coding agent there (AGENTS.md)');
+      return 0;
+    }
+    case 'try': {
+      const report = await tryProjectCall({
+        pluginDir: command.pluginDir,
+        tool: command.tool,
+        ...(command.args === undefined ? {} : { args: command.args }),
+        ...(command.resources === undefined ? {} : { resources: command.resources }),
+        ...(command.accept === undefined ? {} : { accept: command.accept }),
+        ...(command.trust === undefined ? {} : { trust: command.trust }),
+      });
+      for (const line of report.lines) io.log(line);
+      return report.allowed ? 0 : 1;
+    }
     case 'build': {
       const result = await buildArchive({ pluginDir: command.pluginDir, outDir: command.out });
       if ('skipped' in result) {

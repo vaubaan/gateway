@@ -24,4 +24,15 @@ export type {
   PluginPackage,
 } from './archive.ts';
 export { parseCommand, run, USAGE } from './cli.ts';
+export {
+  initProject,
+  namesOf,
+  PLUGIN_ID,
+  renameTemplate,
+  SCAFFOLD_DEV_DEPENDENCIES,
+  SCAFFOLD_VERSION,
+} from './init.ts';
+export type { InitOptions, InitResult, PluginNames } from './init.ts';
+export { loadProjectPlugin, TRUST_LEVELS, tryCall, tryProjectCall } from './try.ts';
+export type { TryOptions, TryReport, TrustLevel } from './try.ts';
 export type { Command } from './cli.ts';

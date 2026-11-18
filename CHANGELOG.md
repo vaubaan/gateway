@@ -11,6 +11,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **A plugin author starts a project in one command.** `vaubaan-plugin init <dir> --id <id>`
+  writes a standalone plugin project, outside the gateway's repository: the template plugin
+  renamed to the id, its tests passing before any change (`npm run check`), and the instructions
+  and skills a coding agent follows to model the service, write its risk catalog and classifier,
+  and ship it. `vaubaan-plugin try <tool> [args]` decides one call without a gateway: the slices
+  the classifier emits, the risks they touch and their gates under a sample mission, and the
+  decision (exit 0 only when allowed).
+
 - **An administrator installs a plugin from Administration › Plugins.** Upload the archive
   `vaubaan-plugin build` writes (`.tgz`, now packed beside its folder): it is checked without
   running any of its code and stays inert. Activating it, by typing the plugin's id after reading
