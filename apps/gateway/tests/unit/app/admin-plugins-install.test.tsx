@@ -134,4 +134,23 @@ describe('Administration › Plugins, installing', () => {
       INSTALL_WORDS.done.uploaded,
     );
   });
+
+  it('lists the trusted signers with what each signed, and offers to trust one more', () => {
+    const html = render({
+      signers: [
+        {
+          keyId: `sha256:${'a'.repeat(64)}`,
+          name: 'Acme release key',
+          addedAt: '2026-11-18T10:00:00.000Z',
+          versions: 2,
+        },
+      ],
+    });
+    const page = text(html);
+    expect(page).toContain('Acme release key');
+    expect(page).toContain(INSTALL_WORDS.signerVersions(2));
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.addSigner}"`);
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.removeSigner}"`);
+    expect(text(render({ signers: [] }))).toContain(INSTALL_WORDS.noSigner);
+  });
 });

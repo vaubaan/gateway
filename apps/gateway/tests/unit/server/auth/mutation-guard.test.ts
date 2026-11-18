@@ -488,6 +488,20 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/plugins/follow-image', headers, { plugin: 'acme' }),
     ),
   ),
+  'pluginInstall.handlers.addSigner': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.addSigner(
+      post('/admin/plugins/signers/add', headers, {
+        name: 'Acme',
+        public_key: 'x',
+        confirm: 'Acme',
+      }),
+    ),
+  ),
+  'pluginInstall.handlers.removeSigner': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.removeSigner(
+      post('/admin/plugins/signers/remove', headers, { key_id: 'sha256:x', confirm: 'Acme' }),
+    ),
+  ),
   'pluginInstall.handlers.restart': form('operator', 303, (rig, headers) =>
     rig.root.pluginInstall.handlers.restart(post('/admin/plugins/restart', headers, {})),
   ),

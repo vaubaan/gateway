@@ -41,6 +41,12 @@ export default async function AdminPluginsPage({ searchParams }: Props) {
     versions,
     activations,
     flash: flashOf(params),
+    signers: (await root.pluginInstall.service.listSigners()).map((signer) => ({
+      keyId: signer.keyId,
+      name: signer.name,
+      addedAt: signer.addedAt,
+      versions: signer.versions,
+    })),
   };
   const { entries } = root.plugins;
   const icons = new Map(serviceCards(root.registry).map((card) => [card.id, card.icon]));

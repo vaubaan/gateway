@@ -84,6 +84,8 @@ import {
   RegistryCatalogIndex,
 } from './registry';
 import { startInstalledPlugins } from './installed-plugins';
+import type { InstalledAdmission } from '../plugins/installed';
+import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
 import {
@@ -282,12 +284,16 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         await store.pluginVersions.keptRiskIds(),
       ),
     );
+    let notifySignerAdded: (name: string) => void = () => undefined;
     const pluginInstall = createPluginInstallService({
       versions: store.pluginVersions,
       dir: installedDir,
       sdkVersion: SDK_VERSION,
       allowUnsigned: new Set(config.plugins.allowUnsigned),
-      reservedIds: () => new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id)),
+      signers: store.pluginSigners,
+      // The notifications module is wired below; a signer is added once the root runs.
+      notifySignerAdded: (name) => notifySignerAdded(name),
+      reservedIds: () => reservedPluginIds(),
       running: (pluginId) => {
         const registered = registry.get(pluginId);
         const entry = inventory.entries.find((e) => e.id === pluginId);
@@ -331,6 +337,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       deps,
       opened,
     );
+    notifySignerAdded = (name) => modules.notifications.events.pluginSignerAdded(name);
     // Nothing about the instance leaves with the request; off unless `updates.check`.
     const updates = createUpdatesModule({
       config: config.updates,
@@ -392,6 +399,31 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
 }
 
 /**
+ * The ids only a Vaubaan signature may carry: the image's plugins. (The catalog's join them
+ * once the instance reads the catalog's index.)
+ */
+function reservedPluginIds(): ReadonlySet<string> {
+  return new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id));
+}
+
+/** The admission rule of this start for installed versions (`trust.ts`), over the trusted signers now. */
+async function installedAdmission(
+  config: InstanceConfig,
+  store: Store,
+): Promise<InstalledAdmission> {
+  const trustedKeys = (await store.pluginSigners.list()).map((signer) => ({
+    name: signer.name,
+    publicKeyPem: signer.publicKeyPem,
+  }));
+  const rules = {
+    reservedIds: reservedPluginIds(),
+    allowUnsigned: new Set(config.plugins.allowUnsigned),
+  };
+  return (pluginId, files) =>
+    admissionProblem(pluginId, trustOf(files, { trustedKeys }), rules)?.message ?? null;
+}
+
+/**
  * Exit code 75 (EX_TEMPFAIL) once the root closed: a supervisor that restarts on failure
  * (`restart: unless-stopped`, Railway's on-failure) starts the instance again, which
  * loads the versions marked for a trial (deploy/README.md).
@@ -422,6 +454,7 @@ async function buildPlugins(
   const installed = await startInstalledPlugins({
     config,
     store,
+    admit: await installedAdmission(config, store),
     audit: store.auditWriter,
     clock: systemClock,
     logger,

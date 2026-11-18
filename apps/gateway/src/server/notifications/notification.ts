@@ -19,6 +19,7 @@ export const NOTIFICATION_KINDS = [
   'mission-revoked',
   'backup-failed',
   'master-key-recovery',
+  'plugin-signer-added',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -40,6 +41,7 @@ export type NotificationBody = { readonly path: string } & (
   | { readonly kind: 'mission-revoked'; readonly mission: string }
   | { readonly kind: 'backup-failed' }
   | { readonly kind: 'master-key-recovery' }
+  | { readonly kind: 'plugin-signer-added'; readonly signer: string }
 );
 
 /**
@@ -94,6 +96,8 @@ function bodyOf(notification: Notification): string {
       return 'The scheduled backup failed: nothing was uploaded.';
     case 'master-key-recovery':
       return 'An administrator was named with the master key. If it was not one of you, rotate it.';
+    case 'plugin-signer-added':
+      return `${line(notification.signer)} was added as a trusted plugin signer. If it was not one of you, remove it.`;
   }
 }
 

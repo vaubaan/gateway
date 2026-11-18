@@ -326,6 +326,10 @@ export type AdminAct =
   | 'plugin-trial-ended'
   /** An administrator restarted the instance from Administration › Plugins. */
   | 'instance-restarted'
+  /** A signer was trusted for private plugins (object: the key id; `after` its name). */
+  | 'plugin-signer-added'
+  /** A trusted signer was removed (object: the key id; `before` its name). */
+  | 'plugin-signer-removed'
   | 'config-changed';
 
 export type AdminObjectType =

@@ -194,15 +194,25 @@ describe('installing a plugin, on trial', () => {
     expect((await root.store.pluginVersions.get(sha256Hex(v100)))?.state).toBe('active');
   });
 
-  it('refuses an unsigned plugin the configuration does not name', async () => {
+  it('refuses an unsigned plugin the configuration does not name, and turns the active one away', async () => {
     const root = await start({ VAUBAAN_PLUGINS_ALLOW_UNSIGNED: '' });
     expect(await root.pluginInstall.service.upload(v110, ADMIN)).toMatchObject({
       ok: false,
       code: 'unsigned-not-allowed',
     });
+    // The same rule at every start: the unsigned version that ran is no longer admitted.
+    expect(root.registry.get('acme')).toBeUndefined();
+    expect(await root.store.pluginVersions.get(sha256Hex(v100))).toMatchObject({
+      state: 'failed',
+      failure: expect.stringMatching(/not signed/) as string,
+    });
   });
 
   it('leaves out a version whose folder was modified on the volume', async () => {
+    const again = await start();
+    expect(await again.pluginInstall.service.activate(sha256Hex(v100), 'acme', ADMIN)).toEqual({
+      ok: true,
+    });
     appendFileSync(join(dir, 'plugins', sha256Hex(v100), 'index.js'), '\n// planted\n');
     const root = await start();
     expect(root.registry.get('acme')).toBeUndefined();

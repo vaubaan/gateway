@@ -23,7 +23,12 @@ export const PLUGIN_ACTIONS = {
   refuse: `${PLUGINS_PAGE}/refuse`,
   followImage: `${PLUGINS_PAGE}/follow-image`,
   restart: `${PLUGINS_PAGE}/restart`,
+  addSigner: `${PLUGINS_PAGE}/signers/add`,
+  removeSigner: `${PLUGINS_PAGE}/signers/remove`,
 } as const;
+export const SIGNER_NAME_FIELD = 'name';
+export const SIGNER_KEY_FIELD = 'public_key';
+export const SIGNER_ID_FIELD = 'key_id';
 export const ARCHIVE_FIELD = 'archive';
 export const DIGEST_FIELD = 'digest';
 export const PLUGIN_FIELD = 'plugin';
@@ -53,6 +58,8 @@ export interface PluginHandlers {
   refuse(request: Request): Promise<Response>;
   followImage(request: Request): Promise<Response>;
   restart(request: Request): Promise<Response>;
+  addSigner(request: Request): Promise<Response>;
+  removeSigner(request: Request): Promise<Response>;
 }
 
 function back(params: Record<string, string>): Response {
@@ -133,6 +140,33 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
         const result = await deps.install.followImage(plugin, actor);
         if (!result.ok) return problem(result.code, result.message);
         return back({ [DONE_PARAM]: 'followed-image' });
+      }),
+
+    addSigner: (request) =>
+      guarded(request, async (form, actor) => {
+        const result = await deps.install.addSigner(
+          {
+            name: field(form, SIGNER_NAME_FIELD) ?? '',
+            publicKeyPem: field(form, SIGNER_KEY_FIELD) ?? '',
+            typedName: field(form, CONFIRM_FIELD) ?? '',
+          },
+          actor,
+        );
+        if (!result.ok) return problem(result.code, result.message);
+        return back({ [DONE_PARAM]: 'signer-added' });
+      }),
+
+    removeSigner: (request) =>
+      guarded(request, async (form, actor) => {
+        const keyId = field(form, SIGNER_ID_FIELD);
+        if (keyId === null) return problem('not-found');
+        const result = await deps.install.removeSigner(
+          keyId,
+          field(form, CONFIRM_FIELD) ?? '',
+          actor,
+        );
+        if (!result.ok) return problem(result.code, result.message);
+        return back({ [DONE_PARAM]: 'signer-removed' });
       }),
 
     restart: (request) =>

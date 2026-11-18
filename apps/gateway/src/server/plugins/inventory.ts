@@ -37,6 +37,11 @@ export interface PluginInventoryEntry {
   readonly enabled: boolean;
   /** The pin's or the installed version's directory; `null` for a bundled plugin. */
   readonly path: string | null;
+  /**
+   * An installed version's trust level. The versions feed speaks of the catalog's plugins:
+   * it is compared only with what Vaubaan signed (ADR plugin-signature-sets-the-trust-level).
+   */
+  readonly trust?: 'vaubaan' | 'signer' | 'unsigned';
 }
 
 /** What the boot registers and what it shows. */
@@ -89,6 +94,7 @@ function pinnedEntry(
       origin,
       replaces: replaced?.version ?? null,
       path: pin.path,
+      ...(pin.trust !== undefined ? { trust: pin.trust } : {}),
     },
   };
 }

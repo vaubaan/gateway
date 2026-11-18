@@ -165,7 +165,7 @@ describe('a backup written before the rename of provider to service', () => {
 
     const store = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
     try {
-      expect(store.schemaVersion).toBe(41);
+      expect(store.schemaVersion).toBe(42);
       // The credential still opens: neither the id nor the associated data moved.
       expect(await store.accounts.getCredential(ACCOUNT_ID)).toBe(CREDENTIAL);
       const account = await store.accounts.getById(ACCOUNT_ID);

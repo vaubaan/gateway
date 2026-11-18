@@ -28,6 +28,7 @@ export const NOTIFICATION_PATHS = {
   account: (id: string) => `/accounts/${encodeURIComponent(id)}`,
   backup: '/admin/encryption',
   administrators: '/admin/users',
+  plugins: '/admin/plugins',
 } as const;
 
 export interface DispatchDeps {
@@ -147,6 +148,12 @@ export function createNotificationDispatch(deps: DispatchDeps): NotificationEven
       send('master-key-recovery', async () => ({
         to: [...(await deps.administrators())],
         draft: { kind: 'master-key-recovery', path: NOTIFICATION_PATHS.administrators },
+      }));
+    },
+    pluginSignerAdded(signer) {
+      send('plugin-signer-added', async () => ({
+        to: [...(await deps.administrators())],
+        draft: { kind: 'plugin-signer-added', signer, path: NOTIFICATION_PATHS.plugins },
       }));
     },
   };

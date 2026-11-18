@@ -40,6 +40,8 @@ export interface NotificationEvents {
   backupFailed(): void;
   /** An administrator was named through the recovery by the master key. */
   masterKeyRecovered(): void;
+  /** A signer was added to the ones the instance trusts for its private plugins. */
+  pluginSignerAdded(signer: string): void;
 }
 
 const ignore = (): void => undefined;
@@ -53,4 +55,5 @@ export const NO_NOTIFICATIONS: NotificationEvents = {
   missionRevoked: ignore,
   backupFailed: ignore,
   masterKeyRecovered: ignore,
+  pluginSignerAdded: ignore,
 };

@@ -22,7 +22,15 @@ import type {
   PluginVersionRecord,
   PluginVersionsRepo,
 } from '../store/repositories/plugin-versions.ts';
+import { keyIdOf, type TrustedKey } from '@vaubaan/plugin-sdk/archive';
+
+import type {
+  PluginSignerRecord,
+  PluginSignersRepo,
+} from '../store/repositories/plugin-signers.ts';
+
 import { InstallRefusal, storeArchive, type InstallRefusalCode } from './installed';
+import { admissionProblem, trustOf, type AdmissionCode } from './trust';
 import { PINNED_CATALOG_FILE } from './loader';
 import { readFile } from 'node:fs/promises';
 
@@ -35,8 +43,7 @@ export interface PluginActor {
   readonly viaMissionId?: string;
 }
 
-export type UploadRefusalCode =
-  InstallRefusalCode | 'no-data-directory' | 'unsigned-not-allowed' | 'reserved-id';
+export type UploadRefusalCode = InstallRefusalCode | 'no-data-directory' | AdmissionCode;
 
 export type PluginActRefusalCode =
   'not-found' | 'wrong-state' | 'confirmation-mismatch' | 'accounts-depend';
@@ -71,6 +78,10 @@ export interface PluginInstallDeps {
   readonly sdkVersion: string;
   /** `plugins.allow_unsigned`. */
   readonly allowUnsigned: ReadonlySet<string>;
+  /** The signers the administrators named as trusted (`plugin_signers`). */
+  readonly signers: PluginSignersRepo;
+  /** Tells every administrator a signer was added. */
+  readonly notifySignerAdded: (name: string) => void;
   /** Ids only a Vaubaan signature may carry: the image's plugins and the catalog's. */
   readonly reservedIds: () => ReadonlySet<string>;
   /** The plugin registered now, by id: its version, origin and risk ids. */
@@ -87,7 +98,26 @@ export interface PluginInstallDeps {
   readonly logger: Logger;
 }
 
+export type SignerRefusalCode =
+  'not-a-key' | 'name-invalid' | 'confirmation-mismatch' | 'already-trusted' | 'not-found';
+
+export type SignerResult =
+  | { readonly ok: true; readonly keyId: string }
+  | { readonly ok: false; readonly code: SignerRefusalCode; readonly message: string };
+
 export interface PluginInstallService {
+  /** The signers trusted for private plugins, with the installed versions each signed. */
+  listSigners(): Promise<readonly (PluginSignerRecord & { readonly versions: number })[]>;
+  /** Trusts a company key, named; `typedName` must be the name. Notifies every administrator. */
+  addSigner(
+    input: { readonly name: string; readonly publicKeyPem: string; readonly typedName: string },
+    actor: PluginActor,
+  ): Promise<SignerResult>;
+  /**
+   * No longer trusts a key; `typedName` must be its name. A version it signed is refused
+   * from the next start, and the plugin falls back to the image's or the pin.
+   */
+  removeSigner(keyId: string, typedName: string, actor: PluginActor): Promise<SignerResult>;
   upload(bytes: Uint8Array, actor: PluginActor): Promise<UploadResult>;
   activationView(digest: string): Promise<ActivationView | null>;
   /** Marks a version for a trial at the next start; `typedId` must be the plugin's id. */
@@ -99,9 +129,19 @@ export interface PluginInstallService {
 }
 
 export function createPluginInstallService(deps: PluginInstallDeps): PluginInstallService {
+  async function trustedKeys(): Promise<TrustedKey[]> {
+    return (await deps.signers.list()).map((s) => ({ name: s.name, publicKeyPem: s.publicKeyPem }));
+  }
+
   async function audit(
     actor: PluginActor,
-    act: 'plugin-uploaded' | 'plugin-activated' | 'plugin-refused' | 'plugin-followed-image',
+    act:
+      | 'plugin-uploaded'
+      | 'plugin-activated'
+      | 'plugin-refused'
+      | 'plugin-followed-image'
+      | 'plugin-signer-added'
+      | 'plugin-signer-removed',
     objectId: string,
     before: unknown,
     after: unknown,
@@ -149,22 +189,14 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
           return { ok: false, code: err.code, message: err.message };
         throw err;
       }
-      // Phase 2: no signature is verified yet, so every archive is unsigned.
-      if (deps.reservedIds().has(stored.pluginId)) {
+      const verdict = trustOf(stored.files, { trustedKeys: await trustedKeys() });
+      const problem = admissionProblem(stored.pluginId, verdict, {
+        reservedIds: deps.reservedIds(),
+        allowUnsigned: deps.allowUnsigned,
+      });
+      if (problem !== null) {
         await rm(stored.path, { recursive: true, force: true }).catch(() => undefined);
-        return {
-          ok: false,
-          code: 'reserved-id',
-          message: `'${stored.pluginId}' is a plugin of the image or the catalog: only a version signed by Vaubaan may replace it`,
-        };
-      }
-      if (!deps.allowUnsigned.has(stored.pluginId)) {
-        await rm(stored.path, { recursive: true, force: true }).catch(() => undefined);
-        return {
-          ok: false,
-          code: 'unsigned-not-allowed',
-          message: `'${stored.pluginId}' is not signed, and plugins.allow_unsigned does not name it`,
-        };
+        return { ok: false, code: problem.code, message: problem.message };
       }
       const version = await deps.versions.addPending({
         digest: stored.digest,
@@ -172,8 +204,8 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
         version: stored.version,
         packageName: stored.packageName,
         sdkRange: stored.sdkRange,
-        trust: 'unsigned',
-        signer: null,
+        trust: verdict.level as 'vaubaan' | 'signer' | 'unsigned',
+        signer: verdict.level === 'signer' ? verdict.signer : null,
         riskIds: stored.riskIds,
         uploadedBy: actor.userId,
         viaMissionId: actor.viaMissionId ?? null,
@@ -286,6 +318,73 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
 
     async list() {
       return deps.versions.list();
+    },
+
+    async listSigners() {
+      const versions = await deps.versions.list();
+      return (await deps.signers.list()).map((signer) => ({
+        ...signer,
+        versions: versions.filter(
+          (v) => v.trust === 'signer' && v.signer === signer.name && v.state !== 'removed',
+        ).length,
+      }));
+    },
+
+    async addSigner(input, actor) {
+      const name = input.name.trim();
+      if (name === '' || name.length > 80) {
+        return { ok: false, code: 'name-invalid', message: 'a name of 1 to 80 characters' };
+      }
+      if (input.typedName.trim() !== name) {
+        return { ok: false, code: 'confirmation-mismatch', message: `type '${name}' to trust it` };
+      }
+      let keyId: string;
+      try {
+        keyId = keyIdOf(input.publicKeyPem);
+      } catch {
+        return {
+          ok: false,
+          code: 'not-a-key',
+          message: 'not an ed25519 public key in PEM (the .pub.pem vaubaan-plugin keygen writes)',
+        };
+      }
+      const added = await deps.signers.add({
+        keyId,
+        name,
+        publicKeyPem: input.publicKeyPem.trim() + '\n',
+        addedBy: actor.userId,
+      });
+      if (!added) {
+        return {
+          ok: false,
+          code: 'already-trusted',
+          message: 'this key or this name is already trusted',
+        };
+      }
+      await audit(actor, 'plugin-signer-added', keyId, null, { name, key_id: keyId });
+      deps.notifySignerAdded(name);
+      return { ok: true, keyId };
+    },
+
+    async removeSigner(keyId, typedName, actor) {
+      const signer = await deps.signers.get(keyId);
+      if (signer === null) return { ok: false, code: 'not-found', message: 'no such signer' };
+      if (typedName.trim() !== signer.name) {
+        return {
+          ok: false,
+          code: 'confirmation-mismatch',
+          message: `type '${signer.name}' to remove it`,
+        };
+      }
+      await deps.signers.remove(keyId);
+      await audit(
+        actor,
+        'plugin-signer-removed',
+        keyId,
+        { name: signer.name, key_id: keyId },
+        null,
+      );
+      return { ok: true, keyId };
     },
   };
 }

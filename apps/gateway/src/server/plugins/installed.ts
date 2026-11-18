@@ -76,6 +76,8 @@ export interface StoredArchive {
   /** The risk ids of its catalog: the store accepts them while the version is kept. */
   readonly riskIds: readonly string[];
   readonly path: string;
+  /** The archive's files, for the trust check of the caller; not kept. */
+  readonly files: ReadonlyMap<string, Uint8Array>;
 }
 
 function text(bytes: Uint8Array | undefined): string | undefined {
@@ -179,6 +181,7 @@ export async function storeArchive(
     sdkRange: read.manifest.sdkRange,
     riskIds,
     path,
+    files,
   };
 }
 
@@ -248,6 +251,8 @@ export interface InstalledVersion {
   readonly pluginId: string;
   readonly version: string;
   readonly state: 'trial' | 'active';
+  /** The trust level recorded at upload; the start verifies it again (`admit`). */
+  readonly trust?: 'vaubaan' | 'signer' | 'unsigned';
 }
 
 /** What the start made of each version it tried. */
@@ -263,14 +268,35 @@ export interface InstalledLoad {
   readonly outcomes: readonly InstalledOutcome[];
 }
 
+/** Whether this start admits a version, given its manifest and signature files (`trust.ts`). */
+export type InstalledAdmission = (
+  pluginId: string,
+  files: ReadonlyMap<string, Uint8Array>,
+) => string | null;
+
+/** The manifest and the signature files of an installed folder, as the trust check reads them. */
+async function signedFilesOf(path: string): Promise<Map<string, Uint8Array>> {
+  const files = new Map<string, Uint8Array>();
+  for (const name of await readdir(path)) {
+    if (name === ARCHIVE_MANIFEST_FILE || outsideManifest(name)) {
+      files.set(name, await readFile(join(/* turbopackIgnore: true */ path, name)));
+    }
+  }
+  return files;
+}
+
 async function tryLoad(
   dir: string,
   row: InstalledVersion,
-  options: PinReadOptions,
+  options: PinReadOptions & { readonly admit?: InstalledAdmission },
 ): Promise<{ ok: true; pin: PinnedPlugin } | { ok: false; failure: string }> {
   const path = join(/* turbopackIgnore: true */ dir, row.digest);
   const problem = await installedFolderProblem(path);
   if (problem !== null) return { ok: false, failure: problem };
+  if (options.admit) {
+    const refused = options.admit(row.pluginId, await signedFilesOf(path));
+    if (refused !== null) return { ok: false, failure: refused };
+  }
   let pin: PinnedPlugin;
   try {
     pin = await readPluginDirectory(path, options);
@@ -291,7 +317,7 @@ async function tryLoad(
   }
   const examples = examplesProblem(pin.plugin);
   if (examples !== null) return { ok: false, failure: examples };
-  return { ok: true, pin };
+  return { ok: true, pin: row.trust === undefined ? pin : { ...pin, trust: row.trust } };
 }
 
 /**
@@ -303,7 +329,7 @@ async function tryLoad(
 export async function loadInstalled(
   dir: string,
   versions: readonly InstalledVersion[],
-  options: PinReadOptions & { readonly logger: Logger },
+  options: PinReadOptions & { readonly logger: Logger; readonly admit?: InstalledAdmission },
 ): Promise<InstalledLoad> {
   const byId = new Map<string, { trial?: InstalledVersion; active?: InstalledVersion }>();
   for (const row of versions) {

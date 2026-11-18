@@ -149,6 +149,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'plugin-followed-image': true,
   'plugin-trial-ended': true,
   'instance-restarted': true,
+  'plugin-signer-added': true,
+  'plugin-signer-removed': true,
   'config-changed': true,
 });
 

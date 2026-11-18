@@ -305,8 +305,14 @@ ones.
 - **Restart now** ends the process with exit code **75** for its supervisor to start it again:
   Compose's `restart: unless-stopped` and Railway's on-failure policy do. Elsewhere, restart the
   instance yourself.
-- Until signatures are verified, only the ids `plugins.allow_unsigned`
-  (`VAUBAAN_PLUGINS_ALLOW_UNSIGNED=crm`) names can be installed, and never an id of the image.
+- **Who signed decides.** An archive of the catalog
+  (`vaubaan/gateway-plugins` on GitHub, its releases) is signed
+  by Vaubaan and verified offline; it may replace a plugin of the image. A private plugin signed
+  with your company key (`vaubaan-plugin keygen`, then `vaubaan-plugin sign`) installs once an
+  administrator added the public key under **Trusted signers** (every administrator is notified).
+  An unsigned archive installs only for an id `plugins.allow_unsigned`
+  (`VAUBAAN_PLUGINS_ALLOW_UNSIGNED=crm`) names, and never for an id of the image. A signer removed
+  turns away, at the next start, every version it signed.
 - **`VAUBAAN_PLUGINS_SAFE_MODE=true`** starts with the image's and pinned versions only, ignoring
   every installed one: the way back when the interface cannot be reached. Remove it once the
   instance answers again.

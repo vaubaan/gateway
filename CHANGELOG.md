@@ -35,7 +35,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `vaubaan-plugin sign <archive> --key <file>` writes `vaubaan-manifest.json.sig.json` (the
   signature of the manifest, named by the key's id) and packs the `.tgz` again, and
   `vaubaan-plugin pack` packs a folder once a signature was added beside its manifest. The format
-  is `@vaubaan/plugin-sdk/archive`'s; the gateway verifies it in a later step.
+  is `@vaubaan/plugin-sdk/archive`'s.
+- **The gateway verifies who signed a plugin.** An archive of the catalog,
+  [vaubaan/gateway-plugins](https://github.com/vaubaan/gateway-plugins), is signed keyless by its
+  release workflow and verified **offline** against the Sigstore trusted root this release embeds:
+  the certificate must name that workflow on main, GitHub's issuer and the catalog repository's
+  id, compared exactly. Such an archive is shown "signed by Vaubaan" and may replace a plugin of
+  the image. A company key's signature counts once an administrator trusts it under
+  Administration › Plugins › Trusted signers (typed name, every administrator notified, audited);
+  a removed signer turns away what it signed at the next start. An unsigned archive installs only
+  for an id `plugins.allow_unsigned` names, never for an id of the image. The versions feed
+  compares only what Vaubaan signed. Migration 0042 (`plugin_signers`).
 
 ## [2.0.0-alpha.25] - 2026-11-17
 

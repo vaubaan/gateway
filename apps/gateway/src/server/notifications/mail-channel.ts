@@ -55,6 +55,7 @@ const SUBJECTS: Readonly<Record<NotificationKind, string>> = {
   'mission-revoked': 'Something stopped without you',
   'backup-failed': 'Something stopped without you',
   'master-key-recovery': 'An administrator was named with the master key',
+  'plugin-signer-added': 'A trusted plugin signer was added',
 };
 
 /** The mail of one notification: built from its payload only. */

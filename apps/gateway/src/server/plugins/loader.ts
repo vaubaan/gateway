@@ -49,6 +49,8 @@ export interface PinnedPlugin {
   /** The SDK range it declares. */
   readonly sdkRange: string;
   readonly plugin: ServicePlugin;
+  /** An installed version's trust level (`trust.ts`); absent for a pin of the operator. */
+  readonly trust?: 'vaubaan' | 'signer' | 'unsigned';
 }
 
 export interface PinReadOptions {

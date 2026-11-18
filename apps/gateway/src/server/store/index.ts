@@ -55,6 +55,7 @@ import {
   createNotificationMailRepo,
   type NotificationMailRepo,
 } from './repositories/notification-mail.ts';
+import { createPluginSignersRepo, type PluginSignersRepo } from './repositories/plugin-signers.ts';
 import {
   createPluginVersionsRepo,
   type PluginVersionsRepo,
@@ -118,6 +119,8 @@ export interface Store {
   readonly sealedBlobs: SealedBlobsRepo;
   /** The versions of installed plugins (migration 0041). */
   readonly pluginVersions: PluginVersionsRepo;
+  /** The signers trusted for private plugins (migration 0042). */
+  readonly pluginSigners: PluginSignersRepo;
   readonly auditWriter: AuditWriter;
   /** Highest migration version applied. */
   readonly schemaVersion: number;
@@ -179,6 +182,7 @@ export function openStore(options: StoreOptions): Store {
     webSessions: createWebSessionsRepo(ctx),
     sealedBlobs: createSealedBlobsRepo(ctx),
     pluginVersions: createPluginVersionsRepo(ctx),
+    pluginSigners: createPluginSignersRepo(ctx),
     auditWriter: new SqliteAuditWriter(audit),
     schemaVersion: currentVersion,
     db,

@@ -865,6 +865,8 @@ export const ACT_WORDS = {
   'plugin-followed-image': 'set a plugin back to the image’s version',
   'plugin-trial-ended': 'ended the trial of a plugin version',
   'instance-restarted': 'restarted the instance',
+  'plugin-signer-added': 'trusted a plugin signer',
+  'plugin-signer-removed': 'removed a trusted plugin signer',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
@@ -1177,6 +1179,9 @@ export const INSTALL_WORDS = {
     refused: 'Refused and deleted.',
     'followed-image': 'The installed version is no longer used from the next start.',
     restarting: 'Restarting: this page answers again once the instance is back.',
+    'signer-added': 'The signer is trusted. Every administrator was told.',
+    'signer-removed':
+      'The signer is no longer trusted: what it signed is refused from the next start.',
   },
   problems: {
     'no-archive': 'Choose an archive to upload.',
@@ -1192,7 +1197,24 @@ export const INSTALL_WORDS = {
     'wrong-state': 'This version cannot change that way now',
     'confirmation-mismatch': 'The id typed does not match',
     'accounts-depend': 'Accounts still use this plugin',
+    'signature-invalid':
+      'The signature does not verify, or names a signer this instance does not trust',
+    'not-a-key': 'This is not an ed25519 public key in PEM',
+    'name-invalid': 'Give the signer a name of 1 to 80 characters',
+    'already-trusted': 'This key or this name is already trusted',
   },
+  signersTitle: 'Trusted signers',
+  signersLede:
+    'A company key that signs your private plugins (vaubaan-plugin keygen writes it). A plugin it signed shows its name, never Vaubaan. The plugins Vaubaan publishes need no signer here.',
+  signerName: 'Name',
+  signerKey: 'Public key (PEM)',
+  signerKeyId: 'key',
+  signerVersions: (n: number) =>
+    `${formatNumber(n)} installed ${n === 1 ? 'version' : 'versions'} signed`,
+  addSigner: 'Trust this signer',
+  removeSigner: 'Remove',
+  noSigner:
+    'No signer is trusted: only plugins signed by Vaubaan, and the unsigned ids the configuration allows, can be installed.',
 } as const;
 
 /**

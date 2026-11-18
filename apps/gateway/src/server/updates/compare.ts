@@ -83,6 +83,9 @@ export function compare(feed: VersionsFeed, input: CompareInput): UpdatesCompari
   const pluginsBehind: PluginBehind[] = [];
   const olderPins: OlderPin[] = [];
   for (const entry of inventory) {
+    // The feed speaks of the catalog's plugins: an installed version Vaubaan did not sign
+    // shares, at most, an id with one of them (a private `crm`, a catalog `crm`).
+    if (entry.origin === 'installed' && entry.trust !== 'vaubaan') continue;
     const released = feed.plugins[entry.id]?.latest;
     if (released !== undefined && isOlder(entry.version, released)) {
       pluginsBehind.push({ id: entry.id, loaded: entry.version, released });
@@ -115,7 +118,9 @@ export function compare(feed: VersionsFeed, input: CompareInput): UpdatesCompari
     }
     const pluginId = subject.slice('plugin:'.length);
     for (const entry of inventory) {
-      if (entry.id === pluginId) hit(entry.version, { plugin: entry.id });
+      if (entry.id !== pluginId) continue;
+      if (entry.origin === 'installed' && entry.trust !== 'vaubaan') continue;
+      hit(entry.version, { plugin: entry.id });
     }
   }
 

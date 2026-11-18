@@ -22,3 +22,6 @@ CLAUDE.md
 .agents/
 .opencode/
 .harness-manifest.json
+
+# Real signatures, kept byte for byte (tests of plugins/trust.ts).
+apps/gateway/tests/fixtures/sigstore/

@@ -10,6 +10,7 @@ import { STARTUP_ACTOR_ID } from '@vaubaan/gateway-core';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import { installedDirFor, loadInstalled, type PinnedPlugin, type PinReadOptions } from '../plugins';
+import type { InstalledAdmission } from '../plugins/installed';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 
@@ -27,6 +28,8 @@ export async function startInstalledPlugins(input: {
   readonly logger: Logger;
   readonly sdkVersion: string;
   readonly importEntry?: PinReadOptions['importEntry'];
+  /** Whether this start admits a version, given who signed it (`trust.ts`). */
+  readonly admit?: InstalledAdmission;
 }): Promise<InstalledPluginsStart> {
   const dir = installedDirFor(input.config.store.path);
   if (dir === null) return { dir, plugins: [] };
@@ -43,8 +46,14 @@ export async function startInstalledPlugins(input: {
       pluginId: v.pluginId,
       version: v.version,
       state: v.state as 'trial' | 'active',
+      trust: v.trust,
     })),
-    { sdkVersion: input.sdkVersion, importEntry: input.importEntry, logger: input.logger },
+    {
+      sdkVersion: input.sdkVersion,
+      importEntry: input.importEntry,
+      logger: input.logger,
+      admit: input.admit,
+    },
   );
   await input.store.pluginVersions.recordStart(loaded.outcomes, STARTUP_ACTOR_ID);
   const trials = new Map(versions.filter((v) => v.state === 'trial').map((v) => [v.digest, v]));

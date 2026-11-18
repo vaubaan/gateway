@@ -108,4 +108,23 @@ describe('compare', () => {
     });
     expect(fixed.advisories).toEqual([]);
   });
+
+  it('compares an installed version only when Vaubaan signed it: a private namesake is not the catalog’s', () => {
+    const installed = (trust: 'vaubaan' | 'signer' | 'unsigned') =>
+      entry('github', '5.0.0', { origin: 'installed', path: '/data/plugins/x', trust });
+    for (const trust of ['signer', 'unsigned'] as const) {
+      const result = compare(FEED, {
+        gatewayVersion: '2.0.0-alpha.17',
+        inventory: [installed(trust)],
+      });
+      expect(result.pluginsBehind, trust).toEqual([]);
+      expect(result.advisories, trust).toEqual([]);
+    }
+    const signed = compare(FEED, {
+      gatewayVersion: '2.0.0-alpha.17',
+      inventory: [installed('vaubaan')],
+    });
+    expect(signed.pluginsBehind).toEqual([{ id: 'github', loaded: '5.0.0', released: '5.1.0' }]);
+    expect(signed.advisories.map((a) => a.id)).toEqual(['VBN-2026-001']);
+  });
 });

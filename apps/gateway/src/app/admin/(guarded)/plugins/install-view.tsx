@@ -21,6 +21,7 @@ import {
   Rows,
   Section,
   Tag,
+  Textarea,
 } from '@/components/ui';
 import { INSTALL_WORDS } from '@/lib/vocabulary';
 import type { Tone } from '@/lib/vocabulary';
@@ -30,6 +31,9 @@ import {
   DIGEST_FIELD,
   PLUGIN_ACTIONS,
   PLUGIN_FIELD,
+  SIGNER_ID_FIELD,
+  SIGNER_KEY_FIELD,
+  SIGNER_NAME_FIELD,
 } from '@/server/plugins/handlers';
 import type { ActivationView } from '@/server/plugins/install-service';
 import type {
@@ -44,6 +48,13 @@ export interface InstallView {
   readonly versions: readonly PluginVersionRecord[];
   /** What activating each pending, kept or failed version would change, by digest. */
   readonly activations: Readonly<Record<string, ActivationView>>;
+  /** The signers the instance trusts, with how many installed versions each signed. */
+  readonly signers?: readonly {
+    readonly keyId: string;
+    readonly name: string;
+    readonly addedAt: string;
+    readonly versions: number;
+  }[];
   /** What the last act said (`?done=` / `?problem=&detail=`). */
   readonly flash:
     | { readonly kind: 'done'; readonly code: keyof typeof INSTALL_WORDS.done }
@@ -200,6 +211,68 @@ function Flash({ flash }: { flash: InstallView['flash'] }) {
   );
 }
 
+function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) {
+  return (
+    <Section title={INSTALL_WORDS.signersTitle} count={signers.length} testId="install-signers">
+      {signers.length > 0 ? (
+        <Rows>
+          {signers.map((signer) => (
+            <Row
+              key={signer.keyId}
+              testId={`signer-${signer.keyId}`}
+              title={signer.name}
+              description={
+                <>
+                  {INSTALL_WORDS.signerKeyId} <Mono>{signer.keyId.slice(0, 19)}…</Mono> ·{' '}
+                  <LocalDate ts={signer.addedAt} /> ·{' '}
+                  {INSTALL_WORDS.signerVersions(signer.versions)}
+                </>
+              }
+              end={
+                <form
+                  method="post"
+                  action={PLUGIN_ACTIONS.removeSigner}
+                  className={styles.lineForm}
+                >
+                  <input type="hidden" name={SIGNER_ID_FIELD} value={signer.keyId} />
+                  <Input
+                    name={CONFIRM_FIELD}
+                    aria-label={INSTALL_WORDS.typeToConfirm(signer.name)}
+                    placeholder={INSTALL_WORDS.typeToConfirm(signer.name)}
+                    autoComplete="off"
+                    required
+                    size="sm"
+                  />
+                  <Button type="submit" size="sm" variant="danger" data-testid="remove-signer">
+                    {INSTALL_WORDS.removeSigner}
+                  </Button>
+                </form>
+              }
+            />
+          ))}
+        </Rows>
+      ) : (
+        <Hint>{INSTALL_WORDS.noSigner}</Hint>
+      )}
+      <form method="post" action={PLUGIN_ACTIONS.addSigner} className={styles.form}>
+        <Field label={INSTALL_WORDS.signerName} htmlFor="signer-name">
+          <Input id="signer-name" name={SIGNER_NAME_FIELD} maxLength={80} required />
+        </Field>
+        <Field label={INSTALL_WORDS.signerKey} htmlFor="signer-key">
+          <Textarea id="signer-key" name={SIGNER_KEY_FIELD} mono rows={4} required />
+        </Field>
+        <Field label={INSTALL_WORDS.typeToConfirm('the name')} htmlFor="signer-confirm">
+          <Input id="signer-confirm" name={CONFIRM_FIELD} autoComplete="off" required />
+        </Field>
+        <Button type="submit" data-testid="add-signer">
+          {INSTALL_WORDS.addSigner}
+        </Button>
+      </form>
+      <Hint>{INSTALL_WORDS.signersLede}</Hint>
+    </Section>
+  );
+}
+
 export function InstallSection({ view }: { view: InstallView }) {
   const trial = view.versions.some((v) => v.state === 'trial');
   const shown = view.versions.filter((v) => v.state !== 'removed' && v.state !== 'refused');
@@ -246,6 +319,7 @@ export function InstallSection({ view }: { view: InstallView }) {
         ) : null}
         <Hint>{view.canInstall ? INSTALL_WORDS.uploadLede : INSTALL_WORDS.noDataDirectory}</Hint>
       </Section>
+      {view.signers && <Signers signers={view.signers} />}
       {shown.length > 0 && (
         <Section title={INSTALL_WORDS.versionsTitle} count={shown.length} testId="install-versions">
           <Rows>
