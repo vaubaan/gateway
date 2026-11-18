@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 /** The tools spec §7.2 names, per service. */
 const LEFT_OUT_BY_THE_RISK_MODEL: Readonly<Record<string, readonly string[]>> = {
@@ -23,13 +23,13 @@ describe('tools left out on purpose', () => {
   it.each(Object.entries(LEFT_OUT_BY_THE_RISK_MODEL))(
     '%s declares the tools spec §7.2 leaves out',
     (id, tools) => {
-      const plugin = SHIPPED_PLUGINS.find((p) => p.id === id);
+      const plugin = REPOSITORY_PLUGINS.find((p) => p.id === id);
       expect(Object.keys(plugin?.excludedTools ?? {})).toEqual(expect.arrayContaining([...tools]));
     },
   );
 
   describe.each(
-    SHIPPED_PLUGINS.filter((plugin) => plugin.excludedTools !== undefined).map(
+    REPOSITORY_PLUGINS.filter((plugin) => plugin.excludedTools !== undefined).map(
       (plugin) => [plugin.id, plugin] as const,
     ),
   )('%s', (_id, plugin) => {

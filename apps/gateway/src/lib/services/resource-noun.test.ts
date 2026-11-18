@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 import { RESOURCE_NOUN_FALLBACK, resourceNounOf } from './resource-noun';
 
 describe('resourceNounOf', () => {
@@ -17,7 +17,7 @@ describe('resourceNounOf', () => {
   });
 
   it('every shipped plugin names its resources', () => {
-    for (const plugin of SHIPPED_PLUGINS) {
+    for (const plugin of REPOSITORY_PLUGINS) {
       expect(plugin.resourceNoun, plugin.id).toBeDefined();
     }
   });

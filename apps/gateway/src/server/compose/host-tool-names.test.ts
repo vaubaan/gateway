@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { permissionRequestTool } from '../execution/permission-request';
 import { checkHostToolNames, HOST_TOOL_NAMES, hostToolNameProblems } from './registry';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 
 describe('host tool names', () => {
   it('the host answers `vaubaan__request_permission`, under the prefix of the `vaubaan` plugin', () => {
@@ -18,7 +19,8 @@ describe('host tool names', () => {
   });
 
   it('no shipped plugin takes a host tool name, the `vaubaan` plugin included', () => {
-    expect(hostToolNameProblems(SHIPPED_PLUGINS)).toEqual([]);
+    expect(hostToolNameProblems(REPOSITORY_PLUGINS)).toEqual([]);
+    // The server compiles the `vaubaan` plugin, whatever the catalog installs beside it.
     expect(SHIPPED_PLUGINS).toContain(vaubaanPlugin);
   });
 

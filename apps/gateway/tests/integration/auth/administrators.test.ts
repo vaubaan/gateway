@@ -18,6 +18,7 @@ import { validEnv } from '../../support/config/testing';
 import { silentLogger } from '../../../src/server/logging';
 import { openMemoryStore, type Store } from '../../../src/server/store';
 import { saveTestOidcSignInProvider } from '../../support/auth/testing';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const IDP = 'https://idp.example.com';
@@ -36,6 +37,7 @@ async function boot(
     loadConfig: () =>
       loadInstanceConfig({ env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, ...env }) }),
     logWrite: () => undefined,
+    bundled: REPOSITORY_PLUGINS,
     openStore: async ({ encryptor, catalog }) => {
       if (!volume.store) {
         const opened = openMemoryStore({ encryptor, catalog });
@@ -167,6 +169,7 @@ describe('administrators live in the instance', () => {
           }),
         }),
       logWrite: (_level, line) => lines.push(line),
+      bundled: REPOSITORY_PLUGINS,
       openStore: async () => ({ ...volume.store!, close: async () => undefined }),
     });
     roots.push(second);

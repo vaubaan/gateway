@@ -48,7 +48,7 @@ export default async function ConnectAccountPage({
       <Section first>
         <ServicePicker
           services={services}
-          available={root.updates.current()?.pluginsAvailable ?? []}
+          available={root.pluginInstall.service.catalogOffer()}
           returnTo={firstParam(params.return_to)}
         />
         <Hint>

@@ -1006,11 +1006,13 @@ Plugins live in this repository and are not published to npm for now
 
 ### How a plugin reaches an instance
 
-Bundled with the gateway image, versioned and released with it; or pinned by the operator, as the
-self-contained bundle `scripts/build-plugin-bundle.mjs` builds and the release publishes as
-`ghcr.io/vaubaan/plugin-<id>:<version>` (a `plugin-<id>-v<version>` tag publishes one plugin alone).
-A dependency that needs a native addon makes a plugin image-only: declare
-`"vaubaan": { "bundleable": false, "reason": "…" }` in its `package.json`. Decision:
+From the catalog (`vaubaan/gateway-plugins`), which rebuilds, signs and publishes each version: an
+instance installs it when a person first connects the service, or an administrator installs a
+version; an operator may also pin the catalog's archive, unpacked, in `plugins.dir`. A plugin
+version is released by a pull request on the catalog, never by a gateway release. Only `vaubaan`
+and `ssh` (a native addon: `"vaubaan": { "bundleable": false, "reason": "…" }`) are compiled into
+the server. Decisions:
+[plugins-installed-when-first-needed](../docs/decisions/plugins-installed-when-first-needed.md),
 [plugins-bundled-or-pinned-by-the-operator](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md);
 for operators: [deploy/README.md "Pin a plugin"](../deploy/README.md#pin-a-plugin); internals:
 [plugin-loading](../docs/handbook/plugin-loading.md).

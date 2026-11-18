@@ -20,6 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const NOTION = readFileSync(new URL('../../fixtures/sigstore/notion-v0.2.0.tgz', import.meta.url));
 const ADMIN = { userId: 'user-ops' };
@@ -96,6 +97,7 @@ describe('installing a catalog version in one click', () => {
           }),
         }),
       logWrite: () => undefined,
+      bundled: REPOSITORY_PLUGINS,
       requestRestart: () => undefined,
       catalogFetch,
       updatesFetch: async () => new Response(JSON.stringify(FEED)),

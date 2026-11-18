@@ -54,8 +54,6 @@ export interface PluginSet {
 
 export interface PluginSetInput {
   readonly bundled: readonly ServicePlugin[];
-  /** The socle's archives that replace a bundled plugin of the same id and version (`socle.ts`). */
-  readonly socle?: readonly PinnedPlugin[];
   readonly pinned: readonly PinnedPlugin[];
   /** The installed versions this start loads, one per id (`loadInstalled`). */
   readonly installed?: readonly PinnedPlugin[];
@@ -68,22 +66,7 @@ interface Known {
   readonly entry: Omit<PluginInventoryEntry, 'enabled'>;
 }
 
-function bundledEntry(plugin: ServicePlugin, socle?: PinnedPlugin): Known {
-  if (socle !== undefined) {
-    // The image's own version, run from the catalog's signed archive.
-    return {
-      plugin: socle.plugin,
-      entry: {
-        id: socle.id,
-        name: socle.plugin.displayName,
-        version: socle.version,
-        origin: 'bundled',
-        replaces: null,
-        path: socle.path,
-        trust: 'vaubaan',
-      },
-    };
-  }
+function bundledEntry(plugin: ServicePlugin): Known {
   return {
     plugin,
     entry: {
@@ -141,11 +124,6 @@ export function composePlugins(input: PluginSetInput): PluginSet {
     if (!pins.has(version.id)) installed.set(version.id, version);
   }
   const bundledIds = new Set(input.bundled.map((plugin) => plugin.id));
-  const socle = new Map(
-    (input.socle ?? [])
-      .filter((pin) => input.bundled.some((p) => p.id === pin.id && p.version === pin.version))
-      .map((pin) => [pin.id, pin]),
-  );
   const added = [
     ...[...pins.values()].map((pin) => ({ pin, origin: 'pinned' as const })),
     ...[...installed.values()].map((pin) => ({ pin, origin: 'installed' as const })),
@@ -155,9 +133,7 @@ export function composePlugins(input: PluginSetInput): PluginSet {
       const pin = pins.get(plugin.id);
       if (pin) return pinnedEntry(pin, plugin);
       const version = installed.get(plugin.id);
-      return version
-        ? pinnedEntry(version, plugin, 'installed')
-        : bundledEntry(plugin, socle.get(plugin.id));
+      return version ? pinnedEntry(version, plugin, 'installed') : bundledEntry(plugin);
     }),
     ...added
       .filter(({ pin }) => !bundledIds.has(pin.id))

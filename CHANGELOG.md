@@ -9,6 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The image ships no service plugin.** Only the management plugin and `ssh` are compiled into
+  the server; every other plugin comes from the catalog: installed when a person first connects
+  its service, by an administrator, or pinned by the operator. A plugin fix is a catalog release,
+  never a gateway release. On upgrade, a plugin the instance's accounts need is installed from the
+  catalog at the first start, at the version this release knows (pinned by its sha256 and checked
+  against the catalog's signature); without the catalog, the start stops naming it — pin the
+  catalog's archive in `plugins.dir`.
+
+### Removed
+
+- The socle of 2.0.0-alpha.26 (catalog archives preinstalled in the image) and the per-plugin
+  images `ghcr.io/vaubaan/plugin-<id>` with their `plugin-<id>-v<version>` tags: a pin is now a
+  catalog archive unpacked (deploy/README.md, "Pin a plugin").
+
 ### Added
 
 - **A plugin installs itself when a person first connects its service.** The connect picker also

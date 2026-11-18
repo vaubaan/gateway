@@ -27,6 +27,7 @@ import { createEncryptor } from '../../../src/server/crypto';
 import { RestoreError, restoreStore } from '../../../src/server/restore/restore';
 import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { backupTo, openDb, openReadonlyDb } from '../../../src/server/store/db';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const KEY = randomBytes(32).toString('base64');
 const OTHER_KEY = randomBytes(32).toString('base64');
@@ -419,6 +420,7 @@ describe('restore of a store copy', () => {
       return buildRoot({
         loadConfig: () => loadInstanceConfig({ env: envFor(target, extra) }),
         logWrite: (_level, line) => lines.push(line),
+        bundled: REPOSITORY_PLUGINS,
         openStore: (ctx) => openEmbeddedStore({ ...ctx, restoreFetch: net }),
       });
     }

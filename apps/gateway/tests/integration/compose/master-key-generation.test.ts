@@ -14,6 +14,7 @@ import { loadBootConfig } from '../../../src/server/compose/boot-config';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { validEnv } from '../../support/config/testing';
 import { MASTER_KEY_GENERATED_KEY } from '../../../src/server/master-key';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 describe('master key generated at the first start', () => {
   const dirs: string[] = [];
@@ -48,6 +49,7 @@ describe('master key generated at the first start', () => {
           scrub: false,
         }),
       logWrite: (_lvl, line) => lines.push(line),
+      bundled: REPOSITORY_PLUGINS,
     };
   }
 

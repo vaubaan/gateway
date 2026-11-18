@@ -132,30 +132,22 @@ owner doing anything:
 - No arm runner nor artifact attestation on this plan: a release ships `linux/amd64` only,
   unattested, and its notes say so.
 
-### Plugin images and plugin releases
+### Plugin releases
 
-- A gateway release also publishes each bundleable plugin as `ghcr.io/vaubaan/plugin-<id>:<version>`
-  (job `plugin-images` of `release.yml`, one install, `scripts/build-plugin-bundle.mjs --all`);
-  a version already published is left as is. Operators pin them (deploy/README.md "Pin a plugin";
-  ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-pinned-by-the-operator.md)).
-- A plugin fix that waits for no gateway release: bump the plugin's version (package.json and
-  `definePlugin`), CHANGELOG, an entry in `apps/website/src/content/advisories.json` when it is a
-  security fix, then `npm run release:prepare -- --plugin <id>` (that plugin's entry of
-  `releases.json` alone). Pull request, merge, then a maintainer pushes `plugin-<id>-v<version>` on
-  the merged commit: job `plugin-release` checks the tag against the plugin's package.json and that
-  the commit is on `main`, and publishes that one image; an existing version is refused. The
-  gateway jobs ignore these tags.
-
-### The socle
-
-- [`deploy/socle.json`](../../deploy/socle.json) lists the catalog versions the image preinstalls,
-  each `{ id, version, sha256 }` of a release `<id>-v<version>` of `vaubaan/gateway-plugins` (the
-  sha256 is the release asset's digest). The project owner chooses it.
-- A plugin's new version, once merged here: its declaration in the catalog takes the new `version`
-  and `commit` (pull request on `vaubaan/gateway-plugins`); once the catalog published it, its entry
-  in `socle.json` takes the version and the asset's sha256. Until then
-  `tests/unit/structural/socle.test.ts` fails on a version the socle does not have: drop the entry
-  meanwhile, and the compiled copy runs.
+- A plugin version is released by the catalog, never by a gateway release (ADR
+  [plugins-installed-when-first-needed](../decisions/plugins-installed-when-first-needed.md)): bump
+  the plugin's version here (package.json and `definePlugin`), CHANGELOG, an entry in
+  `apps/website/src/content/advisories.json` when it fixes a security issue, and
+  `npm run release:prepare -- --plugin <id>` (its entry of `releases.json`, the versions feed);
+  merge, then a pull request on `vaubaan/gateway-plugins` moves its declaration to the new
+  `version` and `commit`. Once merged, the catalog rebuilds, signs and publishes `<id>-v<version>`,
+  and every instance can install it.
+- [`catalog-versions.json`](../../apps/gateway/src/server/plugins/catalog-versions.json) lists the
+  catalog versions a gateway release knows, each `{ version, sha256 }` (the sha256 is the release
+  asset's digest): what an instance installs when the versions feed names none, and at a start for
+  the plugins its accounts need. Once the catalog published a plugin's new version, its entry takes
+  the version and the digest; until then `tests/unit/structural/catalog-versions.test.ts` fails on
+  the repository's newer version. Nothing of it is preinstalled.
 
 ### The plugin kit
 

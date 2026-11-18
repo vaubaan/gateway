@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadInstanceConfig } from '../config';
 import { validEnv } from '../../../tests/support/config/testing';
 import { buildRoot, SEALED_KEY_MISMATCH } from './root';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 
 const KEY_A = randomBytes(32).toString('base64');
 const KEY_B = randomBytes(32).toString('base64');
@@ -27,6 +28,7 @@ describe('boot check of the master keys against the store', () => {
           env: validEnv({ VAUBAAN_STORE_PATH: join(dir, 'gateway.db'), ...env }),
         }),
       logWrite: (_level, line) => lines.push(line),
+      bundled: REPOSITORY_PLUGINS,
     });
     await root.store.config.setSecret('test.secret', 'value');
     await root.close();

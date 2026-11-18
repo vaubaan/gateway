@@ -125,6 +125,8 @@ export interface PluginInstallDeps {
    * feed's), or `null` when the catalog does not offer it or the feed was not read.
    */
   readonly catalogVersionOf: (pluginId: string) => string | null;
+  /** The catalog's plugins this instance does not run, with the version a connection installs. */
+  readonly catalogOffer: () => readonly { id: string; released: string }[];
   /** Why the instance may not run that plugin at all (`plugins.enabled`), or `null`. */
   readonly loadRefusal: (pluginId: string) => string | null;
   /**
@@ -180,6 +182,8 @@ export interface PluginInstallService {
   /** The plugin goes back to the image's (or the operator's) version, or leaves. */
   followImage(pluginId: string, actor: PluginActor): Promise<PluginActResult>;
   list(): Promise<readonly PluginVersionRecord[]>;
+  /** The catalog's plugins this instance does not run yet: the connect picker offers them. */
+  catalogOffer(): readonly { readonly id: string; readonly released: string }[];
 }
 
 export function createPluginInstallService(deps: PluginInstallDeps): PluginInstallService {
@@ -496,6 +500,8 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
       await audit(actor, 'plugin-followed-image', pluginId, null, { plugin: pluginId });
       return { ok: true };
     },
+
+    catalogOffer: () => deps.catalogOffer(),
 
     async list() {
       return deps.versions.list();

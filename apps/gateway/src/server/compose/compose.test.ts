@@ -16,8 +16,8 @@ import {
   RETIRED_MANAGEMENT_KEYS_WARNING,
   type RootDeps,
 } from './root';
-import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 
 const quiet: RootDeps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),
@@ -37,8 +37,8 @@ describe('buildRoot', () => {
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
     expect(root.store.schemaVersion).toBe(42);
-    expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
-    expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
+    expect(root.registry.size).toBe(REPOSITORY_PLUGINS.length);
+    expect(root.registry.ids).toEqual(REPOSITORY_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
     expect((await root.accounts.service.services()).map((p) => p.id)).toEqual(root.registry.ids);
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
@@ -258,7 +258,7 @@ describe('buildRoot and the plugins', () => {
   it('exposes the inventory: every shipped plugin bundled and enabled by default', async () => {
     const root = await buildRoot(quiet);
     expect(root.plugins.dir).toBeNull();
-    expect(root.plugins.entries.map((e) => e.id)).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
+    expect(root.plugins.entries.map((e) => e.id)).toEqual(REPOSITORY_PLUGINS.map((p) => p.id));
     expect(root.plugins.entries.every((e) => e.origin === 'bundled' && e.enabled)).toBe(true);
     await root.close();
   });
@@ -270,7 +270,9 @@ describe('buildRoot and the plugins', () => {
         loadInstanceConfig({ env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github,notion' }) }),
     });
     expect(root.registry.ids).toEqual(['github', 'notion']);
-    expect(root.plugins.entries.filter((e) => !e.enabled).length).toBe(SHIPPED_PLUGINS.length - 2);
+    expect(root.plugins.entries.filter((e) => !e.enabled).length).toBe(
+      REPOSITORY_PLUGINS.length - 2,
+    );
     await root.close();
   });
 

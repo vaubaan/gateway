@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const PLUGINS = join(REPO, 'plugins');
@@ -136,7 +136,7 @@ function identifierTestsOf(plugin: string): string[] {
 describe('every plugin proves that what it executes is what it classified', () => {
   it('finds the plugins, the template among them, and every shipped one', () => {
     expect(pluginDirs).toContain('_template');
-    expect(pluginDirs.length).toBeGreaterThanOrEqual(SHIPPED_PLUGINS.length + 1);
+    expect(pluginDirs.length).toBeGreaterThanOrEqual(REPOSITORY_PLUGINS.length + 1);
     const manifests = new Set(
       pluginDirs.map(
         (dir) =>
@@ -148,7 +148,7 @@ describe('every plugin proves that what it executes is what it classified', () =
       ),
     );
     // Each shipped plugin is one of these directories: none is tested by omission.
-    for (const plugin of SHIPPED_PLUGINS) {
+    for (const plugin of REPOSITORY_PLUGINS) {
       expect(
         manifests.has(`@vaubaan/plugin-${plugin.id}`),
         `no directory under plugins/ is the package of '${plugin.id}'`,

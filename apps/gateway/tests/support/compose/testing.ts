@@ -2,7 +2,8 @@
  * Test helpers for the composition root. Not for production.
  *
  * `memoryStoreDeps` swaps the SQLite file for the store's `:memory:` mode
- * (same schema, same repositories, gone on `close()`); `fakePlugin()` is the
+ * (same schema, same repositories, gone on `close()`) and compiles in the
+ * repository's plugins (`support/plugins/repository.ts`); `fakePlugin()` is the
  * smallest plugin `definePlugin` accepts, so registry-dependent behaviour
  * (service-app check, catalog index) can be exercised without
  * real plugins.
@@ -14,12 +15,17 @@ import type { RiskCatalog } from '@vaubaan/shared';
 
 import { openMemoryStore } from '../../../src/server/store';
 import type { RootDeps } from '../../../src/server/compose/root';
+import { REPOSITORY_PLUGINS } from '../plugins/repository';
 
-/** `RootDeps` slice that opens the store in memory instead of on disk. */
-export const memoryStoreDeps: Pick<RootDeps, 'openStore' | 'requestRestart'> = {
+/**
+ * `RootDeps` slice that opens the store in memory instead of on disk, with every plugin of
+ * this repository compiled in (production compiles only `vaubaan` and `ssh`).
+ */
+export const memoryStoreDeps: Pick<RootDeps, 'openStore' | 'requestRestart' | 'bundled'> = {
   openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog }),
   // "Restart now" never ends the test process.
   requestRestart: () => undefined,
+  bundled: REPOSITORY_PLUGINS,
 };
 
 const FAKE_CATALOG: RiskCatalog = {

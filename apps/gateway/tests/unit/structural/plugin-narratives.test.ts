@@ -11,13 +11,13 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 /** A sentence ends with one of these, then a space or the end of the text. */
 const SENTENCE_END = /[.!?](?=\s|$)/g;
 
 describe('every macro-action of a shipped catalog has a narrative', () => {
-  describe.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  describe.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s',
     (_id, plugin) => {
       const actions = plugin.catalog.macro_actions ?? [];

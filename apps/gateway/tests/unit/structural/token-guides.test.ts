@@ -14,9 +14,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
-const TOKEN_PLUGINS = SHIPPED_PLUGINS.flatMap((plugin) =>
+const TOKEN_PLUGINS = REPOSITORY_PLUGINS.flatMap((plugin) =>
   plugin.credential.kind === 'api-key' ? [[plugin.id, plugin.credential] as const] : [],
 );
 

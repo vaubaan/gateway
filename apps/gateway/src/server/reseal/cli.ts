@@ -21,7 +21,7 @@
 import { existsSync } from 'node:fs';
 
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
-import { RegistryCatalogIndex } from '../compose/registry';
+import { DeferredCatalogIndex, KeptCatalogIndex, RegistryCatalogIndex } from '../compose/registry';
 import { openEmbeddedStore, type StoreContext } from '../compose/store';
 import { ConfigError, loadProcessConfig, secretValues, type LoadedConfig } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
@@ -149,14 +149,19 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
   }).child({ component: 'reseal' });
   // The catalog of the plugins the instance itself registers: the bundled ones, the
   // pins of `plugins.dir`, `plugins.enabled` (the root's `loadPlugins`), so a risk a
-  // pinned plugin declares is known here as at boot.
+  // pinned plugin declares is known here as at boot — and, once the store is open, the
+  // risk ids of every installed version it keeps, as the root accepts them (a catalog
+  // plugin installed at a first connection is compiled nowhere).
   let catalog: CatalogIndex;
+  let registryIndex: RegistryCatalogIndex | null = null;
   try {
-    catalog = deps.catalog
-      ? await deps.catalog()
-      : new RegistryCatalogIndex(
-          (await loadPlugins(config, logger, { bundled: SHIPPED_PLUGINS })).registry,
-        );
+    if (deps.catalog) catalog = await deps.catalog();
+    else {
+      registryIndex = new RegistryCatalogIndex(
+        (await loadPlugins(config, logger, { bundled: SHIPPED_PLUGINS })).registry,
+      );
+      catalog = new DeferredCatalogIndex();
+    }
   } catch (err) {
     if (err instanceof ConfigError) {
       io.stderr(`reseal: the plugins of this instance did not load:\n${redact(err.message)}\n`);
@@ -175,6 +180,9 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
     return EXIT_CONFIG;
   }
 
+  if (registryIndex !== null && catalog instanceof DeferredCatalogIndex) {
+    catalog.fill(new KeptCatalogIndex(registryIndex, await store.pluginVersions.keptRiskIds()));
+  }
   try {
     const report = await store.sealedBlobs.reseal({ apply: parsed.apply });
     const remaining = await store.sealedBlobs.versions();

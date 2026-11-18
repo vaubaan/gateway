@@ -13,10 +13,10 @@
 import { catalogPathIssues } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 describe('shipped catalogs name only paths of their data model', () => {
-  it.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  it.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s: every live pattern walks its data model',
     (_id, plugin) => {
       expect(catalogPathIssues(plugin)).toEqual([]);

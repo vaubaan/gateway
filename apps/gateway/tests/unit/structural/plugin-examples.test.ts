@@ -13,10 +13,10 @@
 import { declaredToolNames } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 describe('every shipped plugin declares examples', () => {
-  describe.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  describe.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s',
     (_id, plugin) => {
       it('has a sample for each of its tools', () => {

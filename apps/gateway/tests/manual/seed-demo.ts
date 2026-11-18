@@ -20,9 +20,11 @@
  */
 import { buildRoot } from '../../src/server/compose/root';
 import { serializeSecret } from '../../src/server/accounts';
+import { REPOSITORY_PLUGINS } from '../support/plugins/repository';
 
 async function main(): Promise<void> {
-  const root = await buildRoot({ logWrite: () => undefined });
+  // The repository's plugins: GitHub included, whatever the image compiles.
+  const root = await buildRoot({ logWrite: () => undefined, bundled: REPOSITORY_PLUGINS });
   try {
     const { store } = root;
     const user = await store.users.upsertFromIdp({

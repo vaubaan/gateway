@@ -12,7 +12,7 @@
  * This file never imports `next`; the root is host-agnostic so a hosted
  * deployment can build the same root from another HTTP host.
  */
-import { MemoryCacheClient } from '@vaubaan/gateway-core';
+import { MemoryCacheClient, STARTUP_ACTOR_ID } from '@vaubaan/gateway-core';
 import {
   createRegistry,
   SDK_VERSION,
@@ -64,6 +64,7 @@ import {
   type PinnedPlugin,
   type PluginInventory,
   type PluginInventoryEntry,
+  type UnservedService,
 } from '../plugins';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
@@ -93,8 +94,7 @@ import type { InstalledAdmission } from '../plugins/installed';
 import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
-import { fetchCatalogArchive } from '../plugins/catalog';
-import { loadSocle, SOCLE_DIR } from '../plugins/socle';
+import { fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -219,8 +219,6 @@ export interface RootDeps {
   readonly updatesFetch?: typeof fetch;
   /** Downloads of the catalog's archives (one-click install); the global `fetch` by default. */
   readonly catalogFetch?: typeof fetch;
-  /** Where the image unpacked the socle (`SOCLE_DIR`); tests point elsewhere. */
-  readonly socleDir?: string;
   /**
    * The plugins compiled into the server (`SHIPPED_PLUGINS` by default). Tests choose theirs:
    * an instance without a plugin, to install it at a first connection.
@@ -291,7 +289,6 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       logger,
       store,
       deps.buildRegistry,
-      deps.socleDir,
       bundled,
     );
     checkSelfResources(config, registry);
@@ -339,21 +336,52 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
       accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
       missionsOf: (pluginId) => activeMissionsOf(pluginId),
+      // The versions feed's latest, else the version this release was tested with.
       catalogVersionOf: (pluginId) =>
-        catalogVersions().find((available) => available.id === pluginId)?.released ?? null,
+        catalogVersions().find((available) => available.id === pluginId)?.released ??
+        KNOWN_CATALOG_VERSIONS.get(pluginId)?.version ??
+        null,
+      catalogOffer: () => {
+        const offered = new Map(catalogVersions().map((p) => [p.id, p.released]));
+        for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
+          if (!offered.has(id)) offered.set(id, known.version);
+        }
+        return [...offered]
+          .filter(([id]) => !registry.has(id))
+          .map(([id, released]) => ({ id, released }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+      },
       loadRefusal: (pluginId) =>
         config.plugins.enabled === null || config.plugins.enabled.includes(pluginId)
           ? null
           : `plugins.enabled does not list ${pluginId}: this instance runs only the plugins it names`,
       loadNow: (pin) => addPluginNow(config, registry, inventory.entries, pin),
-      catalog: (pluginId, version) =>
-        fetchCatalogArchive(pluginId, version, { fetch: deps.catalogFetch ?? fetch }),
+      catalog: (pluginId, version) => {
+        const known = KNOWN_CATALOG_VERSIONS.get(pluginId);
+        return fetchCatalogArchive(pluginId, version, {
+          fetch: deps.catalogFetch ?? fetch,
+          ...(known?.version === version ? { sha256: known.sha256 } : {}),
+        });
+      },
       audit: store.auditWriter,
       clock: systemClock,
       logger,
     });
+    // A plugin the accounts need and no image carries (ADR plugins-installed-when-first-needed):
+    // installed from the catalog before anything reads the accounts — an upgrade from an
+    // image that compiled it, or a store restored elsewhere. What cannot be installed stops
+    // the boot below, naming it.
+    await restoreNeededPlugins(
+      pluginInstall,
+      unservedServices(
+        await store.accounts.countByService(),
+        new Set(registry.ids),
+        inventory.entries,
+      ),
+      logger,
+    );
     // Accounts of a service no registered plugin serves stop the boot (ADR
-    // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or dropped by an image.
+    // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or one not installed.
     checkAccountsServed(
       unservedServices(
         await store.accounts.countByService(),
@@ -486,7 +514,6 @@ async function buildPlugins(
   logger: Logger,
   store: Store,
   buildRegistry: RootDeps['buildRegistry'],
-  socleDir: string = SOCLE_DIR,
   bundled: readonly ServicePlugin[] = SHIPPED_PLUGINS,
 ): Promise<LoadedPlugins & { readonly installedDir: string | null }> {
   if (buildRegistry) {
@@ -506,14 +533,8 @@ async function buildPlugins(
     logger,
     sdkVersion: SDK_VERSION,
   });
-  const socle = await loadSocle(socleDir, {
-    compiled: bundled,
-    sdkVersion: SDK_VERSION,
-    logger,
-  });
   const loaded = await loadPlugins(config, logger, {
     bundled,
-    socle,
     installed: installed.plugins,
   });
   return { ...loaded, installedDir: installed.dir };
@@ -1211,4 +1232,32 @@ function addPluginNow(
     ...(pin.trust !== undefined ? { trust: pin.trust } : {}),
   });
   return null;
+}
+
+/**
+ * Installs, from the catalog, each plugin the store holds accounts for and no registered
+ * plugin serves, at the version the versions feed or this release names; audited as the
+ * start. A plugin the configuration disables is left to `checkAccountsServed`.
+ */
+async function restoreNeededPlugins(
+  install: PluginInstallService,
+  unserved: readonly UnservedService[],
+  logger: Logger,
+): Promise<void> {
+  for (const { service, cause } of unserved) {
+    if (cause !== 'missing') continue;
+    const result = await install.installForConnection(service, { userId: STARTUP_ACTOR_ID });
+    if (result.ok) {
+      logger.info(`plugin ${service} installed from the catalog: accounts of it exist`, {
+        plugin: service,
+        version: result.installed?.version,
+      });
+    } else {
+      logger.error(`plugin ${service} could not be installed from the catalog`, {
+        plugin: service,
+        code: result.code,
+        problem: result.message,
+      });
+    }
+  }
 }

@@ -13,7 +13,7 @@
 import { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const GRID = 24;
 /** Every number of the path data, as written (`1.5`, `-.25`, `1e-3`). */
@@ -21,10 +21,10 @@ const NUMBER = /-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?/gi;
 
 describe('every shipped plugin declares the icon the interface shows it by', () => {
   it('the image ships plugins at all', () => {
-    expect(SHIPPED_PLUGINS.length).toBeGreaterThan(0);
+    expect(REPOSITORY_PLUGINS.length).toBeGreaterThan(0);
   });
 
-  describe.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  describe.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s',
     (_id, plugin) => {
       it('declares an icon: the path data of one SVG path', () => {

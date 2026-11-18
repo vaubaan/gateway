@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { GUIDE_SCREENSHOT_DIR } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import { PLUGIN_FOLDERS, PLUGINS } from './plugin-sources';
 
 const MAX_BYTES = 300 * 1024;
@@ -58,7 +58,7 @@ function imageWidth(bytes: Uint8Array): number | null {
 }
 
 /** Every declared screenshot, as `[plugin id, file name]`. */
-const SCREENSHOTS: readonly (readonly [string, string])[] = SHIPPED_PLUGINS.flatMap((plugin) => {
+const SCREENSHOTS: readonly (readonly [string, string])[] = REPOSITORY_PLUGINS.flatMap((plugin) => {
   const spec = plugin.credential;
   const shots = spec.kind === 'api-key' ? (spec.guide.screenshots ?? {}) : {};
   return Object.keys(shots).map((file) => [plugin.id, file] as const);

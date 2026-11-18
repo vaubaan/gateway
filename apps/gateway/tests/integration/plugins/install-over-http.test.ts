@@ -24,6 +24,7 @@ import {
   PLUGIN_ACTIONS,
 } from '../../../src/server/plugins/handlers';
 import { validEnv } from '../../support/config/testing';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
@@ -72,6 +73,7 @@ describe('Administration › Plugins over HTTP', () => {
           }),
         }),
       logWrite: () => undefined,
+      bundled: REPOSITORY_PLUGINS,
       requestRestart: () => {
         restarts += 1;
       },

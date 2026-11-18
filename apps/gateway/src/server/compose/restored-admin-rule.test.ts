@@ -16,6 +16,7 @@ import { validEnv } from '../../../tests/support/config/testing';
 import { createEncryptor } from '../crypto';
 import { openStore, SetCatalogIndex } from '../store';
 import { buildRoot } from './root';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 
 const KEY = randomBytes(32).toString('base64');
 const CARRIED = JSON.stringify({ group: 'entra:admins', emails: ['boss@acme.example'] });
@@ -50,6 +51,7 @@ describe('the admin rule a restored backup carried', () => {
     const root = await buildRoot({
       loadConfig: load,
       logWrite: (_level, line) => lines.push(line),
+      bundled: REPOSITORY_PLUGINS,
     });
     return { root, lines };
   }

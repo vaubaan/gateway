@@ -13,9 +13,9 @@ import { PROVIDERS } from '@vaubaan/oauth-providers';
 import { isBrokeredSpec, type OAuth2BrokeredSpec } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
-const BROKERED = SHIPPED_PLUGINS.flatMap((plugin): [string, OAuth2BrokeredSpec][] => {
+const BROKERED = REPOSITORY_PLUGINS.flatMap((plugin): [string, OAuth2BrokeredSpec][] => {
   const spec = plugin.credential;
   return spec.kind === 'oauth2' && isBrokeredSpec(spec) ? [[plugin.id, spec]] : [];
 });

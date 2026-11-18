@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
 
@@ -60,7 +60,7 @@ describe('a catalog plugin installed at its first connection', () => {
       logWrite: () => undefined,
       requestRestart: () => undefined,
       // The image without notion: only an installed version can bring it.
-      bundled: SHIPPED_PLUGINS.filter((plugin) => plugin.id !== 'notion'),
+      bundled: REPOSITORY_PLUGINS.filter((plugin) => plugin.id !== 'notion'),
       updatesFetch: async () => new Response(JSON.stringify(FEED)),
       updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
       catalogFetch: async () => new Response(Buffer.from(NOTION)),

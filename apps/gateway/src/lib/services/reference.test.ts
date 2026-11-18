@@ -1,7 +1,7 @@
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 import { enumerateCatalog } from '../missions/catalog-view';
 import { RISK_KINDS } from '../missions/model';
 import {
@@ -20,7 +20,7 @@ import {
   riskExplainer,
 } from './reference';
 
-const registry = createRegistry(SHIPPED_PLUGINS);
+const registry = createRegistry(REPOSITORY_PLUGINS);
 const references = registry.ids.map((id) => {
   const reference = serviceReference(registry, id);
   if (!reference) throw new Error(`no reference for ${id}`);
@@ -278,7 +278,7 @@ describe('riskExplainer', () => {
 
 describe('the rows of the shipped catalogs (decision tree, 2026-11-13)', () => {
   const rowsById = new Map(
-    SHIPPED_PLUGINS.flatMap((plugin) =>
+    REPOSITORY_PLUGINS.flatMap((plugin) =>
       enumerateCatalog(plugin.catalog).map((risk) => [risk.risk_id, risk] as const),
     ),
   );

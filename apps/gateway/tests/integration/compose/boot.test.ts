@@ -14,7 +14,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
 import { healthResponse } from '../../../src/server/http/healthz';
 import { UnknownRiskIdError } from '../../../src/server/store';
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 describe('composition root over the embedded SQLite store', () => {
   const dirs: string[] = [];
@@ -35,6 +35,7 @@ describe('composition root over the embedded SQLite store', () => {
     return {
       loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_STORE_PATH: storePath }) }),
       logWrite: (_lvl, line) => lines.push(line),
+      bundled: REPOSITORY_PLUGINS,
     };
   }
 
@@ -57,7 +58,7 @@ describe('composition root over the embedded SQLite store', () => {
         ?.n,
     ).toBe(42);
     await expect(root.store.ping()).resolves.toBeUndefined();
-    expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
+    expect(root.registry.size).toBe(REPOSITORY_PLUGINS.length);
 
     const res = await healthResponse(root);
     expect(res.status).toBe(200);

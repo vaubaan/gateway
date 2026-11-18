@@ -11,7 +11,26 @@
  * names the id and version asked for.
  */
 
+import { createHash } from 'node:crypto';
+
 import { ARCHIVE_LIMITS } from '@vaubaan/plugin-sdk/archive';
+
+import knownVersions from './catalog-versions.json' with { type: 'json' };
+
+/** A catalog version this release was tested with, pinned by its archive's sha256. */
+export interface KnownCatalogVersion {
+  readonly version: string;
+  readonly sha256: string;
+}
+
+/**
+ * The catalog versions this release knows (`catalog-versions.json`, ADR
+ * plugins-installed-when-first-needed): what an instance installs when the versions feed
+ * names none, and at a start for the plugins its accounts need. Nothing is preinstalled.
+ */
+export const KNOWN_CATALOG_VERSIONS: ReadonlyMap<string, KnownCatalogVersion> = new Map(
+  Object.entries((knownVersions as { plugins: Record<string, KnownCatalogVersion> }).plugins),
+);
 
 /** Where the catalog's release assets are, `<base><tag>/<tag>.tgz`. */
 export const CATALOG_RELEASES_URL = new URL(
@@ -68,7 +87,13 @@ async function readBounded(response: Response, maxBytes: number): Promise<Uint8A
 export async function fetchCatalogArchive(
   pluginId: string,
   version: string,
-  options: { readonly fetch: typeof fetch; readonly base?: URL; readonly timeoutMs?: number },
+  options: {
+    readonly fetch: typeof fetch;
+    readonly base?: URL;
+    readonly timeoutMs?: number;
+    /** The archive's sha256 when the version is pinned (`KNOWN_CATALOG_VERSIONS`). */
+    readonly sha256?: string;
+  },
 ): Promise<CatalogFetch> {
   const url = catalogArchiveUrl(options.base ?? CATALOG_RELEASES_URL, pluginId, version);
   if (url === null) {
@@ -118,6 +143,16 @@ export async function fetchCatalogArchive(
       code: 'catalog-unreachable',
       message: 'the archive is larger than any plugin may be',
     };
+  }
+  if (options.sha256 !== undefined) {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== options.sha256) {
+      return {
+        ok: false,
+        code: 'catalog-unreachable',
+        message: `the catalog served ${pluginId} ${version} with sha256 ${digest}, this release pins ${options.sha256}; nothing was installed`,
+      };
+    }
   }
   return { ok: true, bytes, url: url.href };
 }

@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import {
   ENFORCED_CAP_KEYS,
   ENFORCED_INFRA_LIMIT_KEYS,
@@ -18,7 +18,7 @@ import {
 import { budgetProblem } from '../../../src/lib/missions/preview';
 
 describe('shipped catalogs declare only the limits the door enforces', () => {
-  it.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  it.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s declares no unenforced cap',
     (_id, plugin) => {
       const offenders = plugin.catalog.risks.flatMap((entry) =>

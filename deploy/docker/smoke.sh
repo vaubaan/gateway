@@ -9,8 +9,6 @@
 # 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged,
 #                                 run hardened as deploy/compose.yaml runs it: read-only root,
 #                                 no capability, no new privilege, /tmp a tmpfs, /data a volume
-# 3 bis. socle                 -> every archive of deploy/socle.json runs, its catalog signature
-#                                 verified at start (none refused)
 # 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
 # 5. non-root                  -> the process runs as uid 10001, with no capability, on a
 #                                 root filesystem it cannot write
@@ -151,17 +149,6 @@ fi
 # on a match and turn a leak into a false pass.
 logs="$(docker logs "$NAME" 2>&1)" || fail "cannot read the container logs"
 [ -n "$logs" ] || fail "the container logged nothing"
-# 3 bis. The socle: every archive deploy/socle.json lists runs, its catalog signature
-# verified at start, none refused.
-expected_socle="$(grep -c '"sha256"' deploy/socle.json)"
-socle_loaded="$(grep -c 'from the socle, signed by the catalog' <<<"$logs" || true)"
-if grep -q "the socle's archive is not used" <<<"$logs"; then
-  grep "the socle's archive is not used" <<<"$logs" >&2
-  fail "an archive of the socle was refused at start"
-fi
-[ "$socle_loaded" = "$expected_socle" ] \
-  || fail "${socle_loaded} socle archives ran, deploy/socle.json lists ${expected_socle}"
-pass "the ${expected_socle} archives of the socle run, signed by the catalog"
 if grep -qF -- "$MASTER_KEY" <<<"$logs"; then fail "master key leaked into the logs"; fi
 if grep -qF -- "$BOOTSTRAP" <<<"$logs"; then fail "bootstrap token leaked into the logs"; fi
 pass "no secret in the container logs"

@@ -64,15 +64,6 @@ RUN npm run build --workspace @vaubaan/gateway-app
 # ---------------------------------------------------------------------------
 # runner: the traced standalone output only, non-root, /data volume.
 # ---------------------------------------------------------------------------
-# The socle (deploy/socle.json): the catalog's signed archives of the default plugins,
-# each pinned by its sha256, downloaded and unpacked; the gateway checks the catalog's
-# signature of each at every start and runs it in place of the compiled copy of the same
-# version (apps/gateway/src/server/plugins/socle.ts).
-FROM base AS socle
-COPY deploy/socle.json deploy/socle.json
-COPY scripts/fetch-socle.mjs scripts/fetch-socle.mjs
-RUN node scripts/fetch-socle.mjs /socle
-
 FROM base AS runner
 # VAUBAAN_PLUGINS_DIR: where an operator pins plugins, one directory each, by an image
 # built FROM this one that copies the /plugin directory of ghcr.io/vaubaan/plugin-<id>:<version>
@@ -98,8 +89,6 @@ COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
 # The licence and its notices travel with the image (Apache-2.0 §4).
 COPY --chown=vaubaan:vaubaan LICENSE NOTICE ./
-# Owned by root, read-only to the server: an archive is checked, never rewritten.
-COPY --from=socle --chown=root:root /socle /app/socle
 # Started as root (a platform whose volume is root-owned, e.g. Railway with
 # RAILWAY_RUN_UID=0), it gives /data and /keys to vaubaan and drops to it; otherwise it
 # execs the server as is (deploy/docker/entrypoint.sh).

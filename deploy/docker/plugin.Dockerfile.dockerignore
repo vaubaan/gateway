@@ -1,6 +1,0 @@
-# The context of deploy/docker/plugin.Dockerfile: the plugin bundles, nothing else
-# (BuildKit reads <Dockerfile>.dockerignore before the root .dockerignore, which
-# excludes dist/).
-*
-!dist/plugins
-!dist/plugins/**

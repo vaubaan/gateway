@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 /** Plugin id → the tools whose success creates something its discovery lists. */
 const EXPECTED: Readonly<Record<string, readonly string[]>> = {
@@ -26,7 +26,7 @@ const EXPECTED: Readonly<Record<string, readonly string[]>> = {
 };
 
 describe('resource-creating tools of the shipped plugins', () => {
-  it.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  it.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s declares exactly its creating tools, each one of its MCP tools',
     (id, plugin) => {
       const declared = plugin.resourceCreatingTools ?? [];
@@ -37,7 +37,9 @@ describe('resource-creating tools of the shipped plugins', () => {
   );
 
   it.each(
-    SHIPPED_PLUGINS.filter((plugin) => plugin.resourceCreatingTools).map((p) => [p.id, p] as const),
+    REPOSITORY_PLUGINS.filter((plugin) => plugin.resourceCreatingTools).map(
+      (p) => [p.id, p] as const,
+    ),
   )('%s reads what its creating tools created (createdResources)', (_id, plugin) => {
     // ADR created-resources-join-the-mission: the mission that created it reaches it.
     expect(typeof plugin.createdResources).toBe('function');
@@ -51,7 +53,7 @@ describe('resource-creating tools of the shipped plugins', () => {
   });
 
   it('every plugin named in the table is shipped', () => {
-    const shipped = new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id));
+    const shipped = new Set(REPOSITORY_PLUGINS.map((plugin) => plugin.id));
     for (const id of Object.keys(EXPECTED)) expect(shipped.has(id), id).toBe(true);
   });
 });

@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../../src/server/compose/registry';
-import { buildShippedRegistry } from '../../src/server/compose/shipped-plugins';
+import { buildRepositoryRegistry } from '../support/plugins/repository';
 import { loadInstanceConfig } from '../../src/server/config';
 import { validEnv } from '../support/config/testing';
 import { createEncryptor } from '../../src/server/crypto';
@@ -46,7 +46,7 @@ describe.skipIf(!hasBundle)('the importer runs from the standalone output', () =
     const store = openStore({
       path: config.store.path,
       encryptor: await createEncryptor(config.encryption),
-      catalog: new RegistryCatalogIndex(await buildShippedRegistry()),
+      catalog: new RegistryCatalogIndex(await buildRepositoryRegistry()),
     });
     await store.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'owner', email: OWNER });
     await store.close();

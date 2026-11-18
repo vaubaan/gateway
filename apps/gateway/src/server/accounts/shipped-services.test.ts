@@ -5,24 +5,24 @@
 import { createRegistry, isBrokeredSpec } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 import { toolTitleOf } from '../services/tool-titles';
 import { canWithdraw } from './credentials';
 import { accountsHarness, stateOf } from '../../../tests/support/accounts/testing';
 
 describe('shipped plugins through the generic connect driver', () => {
   it('registers every shipped plugin once', () => {
-    const registry = createRegistry(SHIPPED_PLUGINS);
-    expect(registry.size).toBe(SHIPPED_PLUGINS.length);
+    const registry = createRegistry(REPOSITORY_PLUGINS);
+    expect(registry.size).toBe(REPOSITORY_PLUGINS.length);
     expect(registry.size).toBeGreaterThanOrEqual(10);
   });
 
   it('every tool of a shipped plugin says what it does in a few words, and tools/list does not carry it', () => {
     // The head of an approval request ("Merge a pull request · acme-org/app") is the
     // plugin's title of the tool: a tool without one would be headed by its name.
-    const registry = createRegistry(SHIPPED_PLUGINS);
+    const registry = createRegistry(REPOSITORY_PLUGINS);
     let tools = 0;
-    for (const plugin of SHIPPED_PLUGINS) {
+    for (const plugin of REPOSITORY_PLUGINS) {
       const titles = plugin.toolTitles ?? {};
       for (const tool of plugin.tools) {
         tools += 1;
@@ -46,7 +46,7 @@ describe('shipped plugins through the generic connect driver', () => {
   });
 
   it('every shipped plugin says where a person removes the grant by hand', () => {
-    for (const plugin of SHIPPED_PLUGINS) {
+    for (const plugin of REPOSITORY_PLUGINS) {
       expect(plugin.manualRevocation, plugin.id).toEqual(expect.any(String));
       expect(plugin.manualRevocation!.length, plugin.id).toBeGreaterThan(30);
       // A place in the service's interface, not a promise of the gateway.
@@ -61,7 +61,7 @@ describe('shipped plugins through the generic connect driver', () => {
     // brokered account is withdrawn through its broker (`POST /revoke`, ADR
     // oauth-broker-stateless-in-an-attested-enclave D1).
     const declared = new Map(
-      SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => {
+      REPOSITORY_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => {
         const spec = plugin.credential;
         if (spec.kind !== 'oauth2') return [plugin.id, 'revoke()'];
         return [plugin.id, isBrokeredSpec(spec) ? 'broker' : spec.revocation];
@@ -74,14 +74,14 @@ describe('shipped plugins through the generic connect driver', () => {
       'google-calendar': 'broker',
       outlook: 'broker',
     });
-    for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
+    for (const plugin of REPOSITORY_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
   it('every shipped token way is one of these, each held to a complete guide', () => {
     // The guided token way (ADR one-place-to-authorize-services-token-first, amended
     // 2026-10-31): `definePlugin` refuses an api-key way without its guide and check at
     // paste, and `tests/unit/structural/token-guides.test.ts` holds each of these to it.
-    const tokenWays = SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind === 'api-key');
+    const tokenWays = REPOSITORY_PLUGINS.filter((plugin) => plugin.credential.kind === 'api-key');
     expect(tokenWays.map((plugin) => plugin.id).sort()).toEqual([
       'asana',
       'axonaut',
@@ -103,7 +103,7 @@ describe('shipped plugins through the generic connect driver', () => {
   });
 
   it('ships one way per service: a key at once, OAuth only where no key exists', async () => {
-    const h = accountsHarness({ plugins: SHIPPED_PLUGINS });
+    const h = accountsHarness({ plugins: REPOSITORY_PLUGINS });
     const before = await h.service.services();
     // Nothing needs the operator: a key is pasted, an OAuth client is registered by the gateway.
     for (const p of before) {
@@ -126,7 +126,7 @@ describe('shipped plugins through the generic connect driver', () => {
       'google-calendar',
       'outlook',
     ]);
-    for (const plugin of SHIPPED_PLUGINS) {
+    for (const plugin of REPOSITORY_PLUGINS) {
       const spec = plugin.credential;
       if (spec.kind !== 'oauth2') continue;
       if (isBrokeredSpec(spec)) {
@@ -146,11 +146,11 @@ describe('shipped plugins through the generic connect driver', () => {
   });
 
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {
-    const h = accountsHarness({ plugins: SHIPPED_PLUGINS });
+    const h = accountsHarness({ plugins: REPOSITORY_PLUGINS });
     const alice = await h.actor('alice@example.com');
     // The registration itself is tested in oauth2-clients.test.ts: the client is seeded here.
     // A brokered flow starts at the broker: oauth-broker.test.ts drives it end to end.
-    const redirectFlows = SHIPPED_PLUGINS.filter(
+    const redirectFlows = REPOSITORY_PLUGINS.filter(
       (p) => p.credential.kind === 'oauth2' && !isBrokeredSpec(p.credential),
     );
     expect(redirectFlows.length).toBeGreaterThan(0);

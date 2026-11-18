@@ -187,7 +187,7 @@ export default async function ConnectOneAccountPage({
   if (!service) {
     // No plugin yet: the catalog's, installed when first needed (ADR
     // plugins-installed-when-first-needed).
-    const offered = root.updates.current()?.pluginsAvailable.find((p) => p.id === serviceId);
+    const offered = root.pluginInstall.service.catalogOffer().find((p) => p.id === serviceId);
     if (!offered) notFound();
     return (
       <InstallFirst

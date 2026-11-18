@@ -21,6 +21,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
 import { openMemoryStore } from '../../../src/server/store';
 import { ManualClock } from '../../../src/server/store/clock';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const ADA = 'ada@example.com';
@@ -76,6 +77,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
           }),
         }),
       logWrite: () => undefined,
+      bundled: REPOSITORY_PLUGINS,
       clock,
       openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
     });
@@ -668,6 +670,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
             env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPS }),
           }),
         logWrite: () => undefined,
+        bundled: REPOSITORY_PLUGINS,
         clock,
         openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
         mailer: {
@@ -726,6 +729,7 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
             env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPS }),
           }),
         logWrite: () => undefined,
+        bundled: REPOSITORY_PLUGINS,
         clock,
         openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
         mailer: {

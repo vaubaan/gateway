@@ -10,19 +10,12 @@ name: release
 #   workflow_dispatch      a dry run of the selected ref: same plan, same gates,
 #                          same image build, smoke test and SBOM on each
 #                          architecture. The jobs that hold a write permission
-#                          (push, publish, release, plugin-images) are skipped,
+#                          (push, publish, release) are skipped,
 #                          so nothing is pushed, attested, tagged or released.
-#   push of a tag          one plugin alone, the path of a plugin fix that waits
-#   plugin-<id>-v<x.y.z>   for no gateway release (ADR
-#                          plugins-bundled-or-pinned-by-the-operator): job
-#                          `plugin-release` checks the tag against
-#                          plugins/<id>/package.json, builds that bundle and
-#                          pushes ghcr.io/<owner>/plugin-<id>:<version>. Every
-#                          gateway job is skipped.
 #
-# A gateway release also publishes every bundleable plugin as
-# ghcr.io/<owner>/plugin-<id>:<version> (job `plugin-images`, after the gateway
-# image), skipping the versions already published: a version tag never moves.
+# A plugin is never released here: the catalog (vaubaan/gateway-plugins) rebuilds,
+# signs and publishes each version, and an instance installs it when first needed
+# (ADR plugins-installed-when-first-needed).
 #
 # On a private repository (github.event.repository.private) the plan ships
 # linux/amd64 only and signs no attestation: GitHub gives the ubuntu-24.04-arm
@@ -35,7 +28,7 @@ name: release
 
 on:
   push:
-    tags: ['v2.*.*', 'plugin-*-v*']
+    tags: ['v2.*.*']
   workflow_dispatch:
 
 # A release is never cancelled halfway; a second run of the same ref waits.
@@ -62,9 +55,6 @@ jobs:
   # missing or still titled "Unreleased", or whose commit is not on a release
   # branch.
   plan:
-    # A plugin release tag publishes that plugin alone (`plugin-release`): every
-    # gateway job needs this one, so all of them are skipped.
-    if: ${{ !(github.ref_type == 'tag' && startsWith(github.ref_name, 'plugin-')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -508,92 +498,3 @@ jobs:
             --notes-file release-notes.md \
             "${flags[@]}" \
             vaubaan-gateway-*.spdx.json
-
-  # The pinnable bundle of every bundled plugin, as an image an operator copies
-  # into a gateway image (deploy/README.md "Pin a plugin"), after the gateway
-  # image itself. One Node setup and one install build every bundle
-  # (scripts/build-plugin-bundle.mjs, which imports each under Node); a plugin
-  # declared not bundleable is skipped, said in the log. A version already
-  # published is left as is: a version tag never moves.
-  plugin-images:
-    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v2.')
-    needs: [plan, publish]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '26'
-      - name: Install
-        run: npm ci --no-audit --no-fund
-      - name: Build the plugin bundles
-        run: node scripts/build-plugin-bundle.mjs --all --out dist/plugins
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push the plugin images
-        run: |
-          scripts/publish-plugin-images.sh "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" skip
-
-  # A plugin release tag: that plugin's image alone. The tag must name the
-  # version of plugins/<id>/package.json (scripts/plugin-release-plan.mjs) and its
-  # commit must be on the release branch, which CI gated through its pull
-  # request; a version already published is refused.
-  plugin-release:
-    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'plugin-')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # the release branch, to check the tagged commit is on it
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '26'
-      - name: Plan the plugin release
-        id: plan
-        env:
-          TAG: ${{ github.ref_name }}
-        run: node scripts/plugin-release-plan.mjs --tag "$TAG"
-      - name: Tagged commit is on the release branch
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          if git merge-base --is-ancestor HEAD "refs/remotes/origin/${RELEASE_BRANCH}"; then
-            echo "The commit of ${TAG} is on ${RELEASE_BRANCH}."
-            exit 0
-          fi
-          echo "::error title=Plugin release refused::The commit of ${TAG} is not on ${RELEASE_BRANCH}. Plugin release tags are cut from ${RELEASE_BRANCH}."
-          exit 1
-      - name: Install
-        run: npm ci --no-audit --no-fund
-      - name: Build the plugin bundle
-        env:
-          PLUGIN: ${{ steps.plan.outputs.id }}
-        run: node scripts/build-plugin-bundle.mjs "$PLUGIN" --out dist/plugins
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push the plugin image
-        env:
-          PLUGIN: ${{ steps.plan.outputs.id }}
-        run: |
-          scripts/publish-plugin-images.sh "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" \
-            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" fail "$PLUGIN"

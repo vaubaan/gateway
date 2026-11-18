@@ -562,24 +562,25 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
-    id: 'socle-is-the-compiled-version',
+    id: 'catalog-versions-known-and-pinned',
     statement:
-      'Every archive the image preinstalls (deploy/socle.json) is pinned by its sha256 and is the version the server compiles, never vaubaan nor ssh: the image runs the catalog’s build of the very plugin it would otherwise run.',
-    source: 'ADR plugin-catalog-rebuilt-from-source; handbook plugin-loading, socle',
+      'The catalog versions a release knows (catalog-versions.json) are pinned by their sha256 at the repository’s version of each plugin, never vaubaan nor ssh; an instance installs one at a start for the accounts that need it, refuses an archive whose sha256 differs, and stops naming the plugin when it cannot.',
+    source: 'ADR plugins-installed-when-first-needed; handbook plugin-loading',
     proofs: [
       {
-        file: 'apps/gateway/tests/unit/structural/socle.test.ts',
+        file: 'apps/gateway/tests/unit/structural/catalog-versions.test.ts',
         tests: [
-          'pins each archive by its sha256, each id once',
-          'lists only versions the server compiles, at the version compiled',
-          'never lists the plugins only the server can run',
+          'pins each archive by its sha256',
+          'names each plugin at the version of this repository',
+          'covers every plugin of the repository the catalog declares, never vaubaan nor ssh',
         ],
       },
       {
-        file: 'apps/gateway/tests/integration/plugins/socle.test.ts',
+        file: 'apps/gateway/tests/integration/plugins/restore-at-start.test.ts',
         tests: [
-          'runs the image’s notion from the catalog’s signed archive, the same version',
-          'keeps the compiled copy when the folder is not the catalog’s',
+          'installs it from the catalog before the accounts are read, audited as the start',
+          'stops the start, naming the plugin, when the catalog cannot give it',
+          'refuses an archive whose sha256 is not the one this release pins',
         ],
       },
     ],

@@ -10,9 +10,7 @@ tracks:
   - apps/gateway/migrations/0041_plugin_versions.sql
   - packages/plugin-sdk/src/archive/
   - apps/gateway/src/server/plugins/trust.ts
-  - apps/gateway/src/server/plugins/socle.ts
-  - deploy/socle.json
-  - scripts/fetch-socle.mjs
+  - apps/gateway/src/server/plugins/catalog-versions.json
   - apps/gateway/src/server/plugins/sigstore-trusted-root.json
   - apps/gateway/src/server/store/repositories/plugin-signers.ts
   - apps/gateway/migrations/0042_plugin_signers.sql
@@ -27,10 +25,6 @@ tracks:
   - packages/shared/src/versions-feed.ts
   - scripts/build-plugin-bundle.mjs
   - packages/plugin-cli/
-  - scripts/publish-plugin-images.sh
-  - scripts/plugin-release-plan.mjs
-  - deploy/docker/plugin.Dockerfile
-  - deploy/docker/plugin.Dockerfile.dockerignore
 last_reviewed: 2026-11-17
 ---
 
@@ -57,7 +51,7 @@ compiles its plugins in: preinstalling them from the catalog is a later step).
 - [`store/repositories/plugin-versions.ts`](../../apps/gateway/src/server/store/repositories/plugin-versions.ts) — the states of a version (migration 0041).
 - [`packages/plugin-sdk/src/archive/`](../../packages/plugin-sdk/src/archive/index.ts) — the archive format both sides share: a deterministic ustar subset, gzipped, read only when it is exactly its manifest; `signature.ts`, a company key's ed25519 signature of the manifest.
 - **Installed when a person first connects its service** (ADR plugins-installed-when-first-needed): `installForConnection` in [`plugins/install-service.ts`](../../apps/gateway/src/server/plugins/install-service.ts), route `POST /accounts/new/<service>/install` (any signed-in person), page `install-first.tsx` where `/accounts/new/<service>` would be a 404. The version is the versions feed's (`pluginsAvailable`), downloaded as a one-click install, recorded `active` at once (`recordStart` "activated") and loaded by `addPluginNow` in `compose/root.ts`. **Invariants:** a plugin is only ever _added_ to the running registry (`PluginRegistry.register`), never replaced nor removed — a newer version still goes through the trial at the next start; the boot checks (`checkSelfResources`, `checkBrokeredPlugins`, `checkHostToolNames`) run on the registry it would make before anything is added; the inventory is **one array**, pushed into, that the pages, the versions check and the `vaubaan` plugin read — never copy it; `vaubaanCatalogOf` and the door's git remote read the registry at each call. MCP clients see the new tools at their next `tools/list` (no `listChanged`), and a mission must accept the new service's risks first anyway.
-- [`plugins/socle.ts`](../../apps/gateway/src/server/plugins/socle.ts) — the socle: [`deploy/socle.json`](../../deploy/socle.json) lists the catalog releases the image preinstalls, each pinned by its archive's sha256; `scripts/fetch-socle.mjs` downloads, checks and unpacks them at image build into `/app/socle/<id>/` (root-owned, stage `socle` of the Dockerfile); `loadSocle` checks each folder at every start like an installed version (digests, the catalog's signature only, SDK range, import) and `composePlugins` runs it **in place of the compiled copy, only at the very version compiled**: until the compiled copies leave the server, the image runs the catalog's build of the same plugin and nothing else changes. A folder that fails is logged at `error` ("the socle's archive is not used") and the compiled copy runs: a broken socle never stops a start. The entry stays `origin: 'bundled'`, with `path` (connect guide files) and `trust: 'vaubaan'`. `tests/unit/structural/socle.test.ts` holds every entry to the compiled version; `smoke.sh` checks every archive runs in the image. **Trap:** a plugin's version bump in this repository fails that test until the catalog published the version and `socle.json` names it — or the entry leaves `socle.json` meanwhile.
+- **What a release knows of the catalog**: [`plugins/catalog-versions.json`](../../apps/gateway/src/server/plugins/catalog-versions.json), `KNOWN_CATALOG_VERSIONS` of `catalog.ts` — `{ version, sha256 }` per catalog plugin, the repository's versions (`tests/unit/structural/catalog-versions.test.ts`). The version a person connecting the service installs is the versions feed's when it names one, else this; a download of a pinned version is refused unless its sha256 matches, before its signature is even read. **At a start**, `restoreNeededPlugins` (`compose/root.ts`) installs, before `checkAccountsServed`, each plugin the store holds accounts for that is neither compiled, installed nor pinned — an upgrade from an image that compiled it — audited as `STARTUP_ACTOR_ID`; one it cannot install stops the start, naming it, as before. Only `vaubaan` and `ssh` are compiled (`SHIPPED_PLUGINS`); tests, the demo and the e2e pass the repository's plugins as `bundled` (`tests/support/plugins/repository.ts`). The image still traces every plugin's YAML and connect screenshots (`next.config.ts`): data the e2e reads, no code.
 - [`plugins/catalog.ts`](../../apps/gateway/src/server/plugins/catalog.ts) — the one-click install (`installFromCatalog`, route `install-catalog`): `<CATALOG_RELEASES_URL><id>-v<version>/<id>-v<version>.tgz`, a GET like the feed's (generic user agent, no credentials, 60 s, 16 MB), redirects followed because GitHub serves assets from another host and nothing is trusted from where it came: the archive is kept only if `trustOf` says `vaubaan` **and** it is the id and version asked for, whatever `plugins.allow_unsigned` says. The buttons come from the versions feed (`pluginsBehind`, `pluginsAvailable` of `updates/compare.ts`); a feed version the catalog has not published yet answers `not-in-catalog`. **Invariant:** a refused upload deletes its folder only if it created it and no version records that digest (`StoredArchive.created`): the same bytes always land in the same folder, which a kept version may already use.
 - [`plugins/trust.ts`](../../apps/gateway/src/server/plugins/trust.ts) — `trustOf` (vaubaan, signer, unsigned, invalid) and `admissionProblem`, the one rule at upload and at every start (`installedAdmission` in `compose/root.ts`). **Reserved ids differ on purpose:** at upload, the image's ids and every id the last versions feed named (`catalogIds`, the catalog's); at a start, the image's only, so a private plugin already installed keeps running the day the catalog publishes its id. With `updates.check` off, the catalog's ids are unknown and only the image's are reserved. Trusted signers: `store/repositories/plugin-signers.ts` (migration 0042).
 - [`updates/index.ts`](../../apps/gateway/src/server/updates/index.ts) — the daily read of `versions.json`; `root.updates`.
@@ -107,8 +101,6 @@ compiles its plugins in: preinstalling them from the catalog is a later step).
 - **The e2e instance never reads the feed** (`VAUBAAN_UPDATES_CHECK=false` in `ephemeral-instance.ts`): Administration › Plugins shows no notice there, only "the versions check is off". A notice is tested on the view (`tests/unit/app/admin-plugins.test.tsx`).
 - **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: `buildArchive` copies `src/*.yaml`, and `docs/connect/` (the connect guide's screenshots, which the host serves from `<pin>/docs/connect/`; a pin built before 2026-11-13 has none and its images answer 404). A plugin reading another file needs `buildArchive` taught.
 - **A native addon cannot be bundled** (esbuild has no `.node` loader): the plugin declares `"vaubaan": { "bundleable": false, "reason": … }` (today `ssh`) and stays image-only.
-- **The plugin image's context** is filtered by `plugin.Dockerfile.dockerignore` (BuildKit reads it before the root `.dockerignore`, which excludes `dist/`).
-- **A plugin image version never moves**: a gateway release skips versions already on GHCR; a `plugin-<id>-v<version>` tag on an existing version fails.
 
 ## Debug
 

@@ -17,7 +17,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import { packageJsonOf, PLUGINS } from './plugin-sources';
 
 /**
@@ -29,10 +29,10 @@ const VERSION_SENTENCE =
 
 describe('a plugin states its version in definePlugin and package.json, equal, and nowhere else', () => {
   it('the image ships plugins at all', () => {
-    expect(SHIPPED_PLUGINS.length).toBeGreaterThan(0);
+    expect(REPOSITORY_PLUGINS.length).toBeGreaterThan(0);
   });
 
-  describe.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  describe.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s',
     (id, plugin) => {
       it('has the version of its package.json', () => {

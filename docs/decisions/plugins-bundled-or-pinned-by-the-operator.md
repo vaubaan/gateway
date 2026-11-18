@@ -9,7 +9,10 @@ date: 2026-11-05
 Where plugins come from, and how an instance installs and activates them besides the operator's
 directory, is decided by [plugin-catalog-rebuilt-from-source](./plugin-catalog-rebuilt-from-source.md)
 and [plugins-activated-by-an-administrator-on-trial](./plugins-activated-by-an-administrator-on-trial.md)
-(2026-11-17), which replace this record's bundled tier and its "nothing is fetched" rule.
+(2026-11-17) and [plugins-installed-when-first-needed](./plugins-installed-when-first-needed.md)
+(2026-11-18), which replace this record's bundled tier, its plugin images on GHCR and its "nothing
+is fetched" rule; a pin is now a catalog archive unpacked. The pin, its precedence and the fail
+closed rules below stay.
 
 ## Context
 

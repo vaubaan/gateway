@@ -19,7 +19,7 @@ import { ANYTHING_ELSE_MACRO_ACTION, isFallbackEntry } from '@vaubaan/policy-eng
 import { parseRiskId } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import { EVERYTHING_I_HOLD } from '../../../src/lib/missions/everything-i-hold';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -43,17 +43,17 @@ function catalogSources(): string[] {
 
 describe('every shipped catalog groups its risks in macro-actions, and ships no presets', () => {
   it('the image ships plugins at all', () => {
-    expect(SHIPPED_PLUGINS.length).toBeGreaterThan(0);
+    expect(REPOSITORY_PLUGINS.length).toBeGreaterThan(0);
   });
 
   it('no catalog source declares presets', () => {
     const sources = catalogSources();
-    expect(sources.length).toBeGreaterThanOrEqual(SHIPPED_PLUGINS.length);
+    expect(sources.length).toBeGreaterThanOrEqual(REPOSITORY_PLUGINS.length);
     const withPresets = sources.filter((path) => /^presets\s*:/m.test(readFileSync(path, 'utf8')));
     expect(withPresets).toEqual([]);
   });
 
-  describe.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
+  describe.each(REPOSITORY_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
     '%s',
     (id, plugin) => {
       const actions = plugin.catalog.macro_actions ?? [];

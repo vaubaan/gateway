@@ -35,7 +35,7 @@ import { createRegistry, type ServicePlugin } from '@vaubaan/plugin-sdk';
 import type { CustomFetch } from '../../src/server/auth/relying-party';
 import type { RateLimiter } from '../../src/server/compose/ports';
 import { getRoot, resetRoot, type GatewayRoot } from '../../src/server/compose/root';
-import { SHIPPED_PLUGINS } from '../../src/server/compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../support/plugins/repository';
 import { loadInstanceConfig, type LoadedConfig } from '../../src/server/config';
 import { MASTER_KEY_BYTES } from '../../src/server/config/load';
 import { SlidingWindowRateLimiter } from '../../src/server/rate-limit';
@@ -105,7 +105,7 @@ function listen(server: Server, port: number): Promise<number> {
  * classifier, the check of a pasted token — is the shipped code.
  */
 function demoPlugins(): ServicePlugin[] {
-  return SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind !== 'ssh-key');
+  return REPOSITORY_PLUGINS.filter((plugin) => plugin.credential.kind !== 'ssh-key');
 }
 
 /** The demo configuration, typed by the real loader, then pointed at the local origin. */

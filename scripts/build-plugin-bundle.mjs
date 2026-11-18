@@ -30,8 +30,10 @@
 //   "vaubaan": { "bundleable": false, "reason": "<one line>" }
 // and is skipped, said so on stderr; it stays a bundled plugin of the image.
 // `--all` takes every plugin of plugins/ but _template. Exit 1 when a bundleable plugin
-// fails to build or to import; the release workflow runs this before publishing the
-// images (deploy/docker/plugin.Dockerfile).
+// fails to build or to import. Its output is a directory of pins: an operator's
+// `plugins.dir`, or a developer's to run the repository's plugins in `npm run dev`
+// (`npx tsx scripts/build-plugin-bundle.mjs --all --out <dir>`, then
+// VAUBAAN_PLUGINS_DIR=<dir>; plain Node cannot read the SDK's TypeScript sources).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import type { PluginRegistry, ServicePlugin } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
+import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 import { BUNDLED_PLUGINS_DIR, connectFileUrl, readConnectFile } from './connect-files';
 import { bundledInventory, type PluginInventoryEntry } from './inventory';
 
-const CLOUDFLARE = SHIPPED_PLUGINS.find((p) => p.id === 'cloudflare-dns') as ServicePlugin;
+const CLOUDFLARE = REPOSITORY_PLUGINS.find((p) => p.id === 'cloudflare-dns') as ServicePlugin;
 const FILE = 'create-token.webp';
 
 function registryOf(plugins: readonly ServicePlugin[]): PluginRegistry {

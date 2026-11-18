@@ -29,6 +29,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const ACME = join(REPO, 'packages/plugin-sdk/tests/fixtures/acme');
@@ -113,6 +114,7 @@ describe('signatures decide what an instance installs', () => {
           env: validEnv({ VAUBAAN_STORE_PATH: join(dir, 'gateway.db'), ...env }),
         }),
       logWrite: () => undefined,
+      bundled: REPOSITORY_PLUGINS,
       requestRestart: () => undefined,
     });
     return root;

@@ -245,21 +245,23 @@ plugin contract, catalog ids), and how a release is cut:
 
 ## Pin a plugin
 
-Every plugin ships in the image; an administrator can also install one (next section). To run another version of one — a fix released before the next
-gateway release, or the former version kept while missions are reviewed — pin it: a pinned plugin
-replaces the bundled plugin of the same id, in either direction. The gateway never downloads code;
-the pin is your own artefact ([ADR](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md)).
+The image ships no service plugin but `ssh` and the management plugin: a person connecting a
+service the first time installs the catalog's plugin, signed by Vaubaan, and an administrator
+installs any other (next section) ([ADR](../docs/decisions/plugins-installed-when-first-needed.md)).
+An instance that cannot reach the catalog, or an operator who wants a version fixed by the
+deployment, pins it: a pinned plugin replaces an installed one of the same id, and the gateway
+downloads nothing for it ([ADR](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md)).
 
-Each release publishes every plugin that can be bundled as `ghcr.io/vaubaan/plugin-<id>:<version>`
-(the `ssh` plugin cannot, it needs native addons). Compose an image:
+A pin is a catalog archive unpacked: each release `<id>-v<version>` of `vaubaan/gateway-plugins` on
+GitHub carries the archive `<id>-v<version>.tgz`, one directory per plugin once unpacked:
 
-```dockerfile
-FROM ghcr.io/vaubaan/gateway:<gateway version>
-COPY --from=ghcr.io/vaubaan/plugin-notion:0.3.0 /plugin /plugins/notion
+```sh
+mkdir -p plugins/notion
+tar -xzf notion-v0.2.0.tgz -C plugins/notion
 ```
 
-Or, with Compose, mount the directory read-only (one sub-directory per plugin, the content of the
-plugin image's `/plugin`):
+Then compose an image (`COPY plugins/notion /plugins/notion`) or, with Compose, mount the
+directory read-only (one sub-directory per plugin):
 
 ```yaml
 services:
@@ -276,14 +278,14 @@ out has no picker entry, no tools and no Reference page.
 
 The start stops with exit code 78, like an invalid key, and a message naming the directory, when:
 
-| Message says                                | Meaning and what to do                                                                                  |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `was built for @vaubaan/plugin-sdk <range>` | the pin was built for another gateway: pin the build for this one (the plugin image of a newer version) |
-| `refused:` / `the plugin failed to load`    | the plugin is not one this gateway accepts, or it throws at import: check the image you copied          |
-| `pins plugin '<id>' again`                  | two directories hold the same plugin: keep one                                                          |
-| `no package.json` / `no risk-catalog.yaml`  | the directory is not the content of a plugin image's `/plugin`                                          |
-| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled nor pinned                                                |
-| `the store holds <n> accounts of '<id>'`    | accounts exist for a plugin you disabled or no longer have: enable or pin it, or disconnect them first  |
+| Message says                                | Meaning and what to do                                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `was built for @vaubaan/plugin-sdk <range>` | the pin was built for another gateway: pin the build for this one (a newer catalog version)                                                        |
+| `refused:` / `the plugin failed to load`    | the plugin is not one this gateway accepts, or it throws at import: check the image you copied                                                     |
+| `pins plugin '<id>' again`                  | two directories hold the same plugin: keep one                                                                                                     |
+| `no package.json` / `no risk-catalog.yaml`  | the directory is not an unpacked catalog archive                                                                                                   |
+| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled nor pinned                                                                                           |
+| `the store holds <n> accounts of '<id>'`    | accounts exist for a plugin you disabled, or one the start could not install from the catalog: enable it, give the instance the catalog, or pin it |
 
 Nothing changes for a mission when a plugin version changes: a newer version only narrows what a
 call may do, and a call it now classifies under a permission the mission does not hold is refused
