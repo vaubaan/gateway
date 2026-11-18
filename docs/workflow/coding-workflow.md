@@ -146,6 +146,27 @@ owner doing anything:
   the commit is on `main`, and publishes that one image; an existing version is refused. The
   gateway jobs ignore these tags.
 
+### The plugin kit
+
+- `@vaubaan/plugin-sdk` and `@vaubaan/plugin-cli` are published to npm by
+  [`publish-plugin-kit.yml`](../../.github/workflows/publish-plugin-kit.yml), on a tag
+  `npm-plugin-sdk-v<version>` or `npm-plugin-cli-v<version>` (never `plugin-…-v…`: `release.yml`
+  takes those for a plugin's image). Bump the package's `version`, CHANGELOG, merge, then a
+  maintainer pushes the tag on the merged commit. The SDK goes first when the CLI needs its new
+  version: the job refuses a CLI whose SDK is not on npm.
+- Before publishing, the job runs `scripts/plugin-kit-smoke.sh`: both packages packed, installed
+  in an empty folder, `vaubaan-plugin init`, then the new project's `npm run check`, `try` and
+  `build`. Run it locally after any change to the kit's packaging (about 15 seconds).
+- No token: npm **trusted publishing**. On npmjs.com each package names this repository and
+  `publish-plugin-kit.yml` as its trusted publisher; npm attaches the provenance. npm declares a
+  trusted publisher only for a package that exists, so the **first version of each package is
+  published once by hand** by a maintainer of the `@vaubaan` npm scope:
+  `npm pack --workspace <package>` then `npm publish <tarball> --access public` from their own
+  login, then the trusted publisher declared in the package's settings (repository
+  `vaubaan/gateway`, workflow `publish-plugin-kit.yml`, no environment) and, in the same settings,
+  publishing restricted to trusted publishers (tokens refused). Every later version goes through
+  the tag.
+
 ### The OAuth broker's image
 
 - A release of its own: a maintainer pushes `oauth-broker-v<version>` (the version of

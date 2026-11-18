@@ -1,9 +1,9 @@
 {
   "name": "@vaubaan/plugin-cli",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
-  "description": "The command line of a Vaubaan Gateway plugin author: build the plugin's archive",
+  "description": "The command line of a Vaubaan Gateway plugin author: start a plugin project, try a call, build, sign, deploy and submit",
   "license": "Apache-2.0",
   "bin": {
     "vaubaan-plugin": "./src/cli.ts"
@@ -12,10 +12,24 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "type-check": "tsc -p tsconfig.json --noEmit"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "build": "node scripts/package.ts build",
+    "prepack": "node scripts/package.ts build && node scripts/package.ts apply",
+    "postpack": "node scripts/package.ts restore"
   },
   "dependencies": {
     "@vaubaan/plugin-sdk": "*",
     "esbuild": "0.28.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vaubaan/gateway.git",
+    "directory": "packages/plugin-cli"
+  },
+  "engines": {
+    "node": ">=22.14"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

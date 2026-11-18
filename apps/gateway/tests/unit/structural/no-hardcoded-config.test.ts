@@ -45,6 +45,10 @@ const ALLOWED: Record<string, string> = {
     'the identity that signs "Vaubaan": the catalog release workflow and GitHub\'s OIDC issuer, a fixed root of trust like an attestation issuer (ADR plugin-signature-sets-the-trust-level)',
   'apps/gateway/src/server/plugins/sigstore-trusted-root.json':
     "Sigstore's trusted root: the logs and authorities a signature is checked against, offline, never fetched; refreshed by scripts/fetch-sigstore-root.mjs",
+  'scripts/check-changed.mjs':
+    "the public repository of Semgrep's community rules, cloned at the commit ci.yml pins, as CI does",
+  '.github/workflows/publish-plugin-kit.yml':
+    'the npm registry the plugin kit is published to (setup-node registry-url, trusted publishing)',
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
   'scripts/fetch-tool.sh':

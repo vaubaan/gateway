@@ -111,7 +111,8 @@ not a rename: it is the broker protocol's word.
 
 ## Publication
 
-The package is publishable, not published. `npm pack --workspace @vaubaan/plugin-sdk` runs
+Published to npm with the CLI by `publish-plugin-kit.yml` (procedure: coding-workflow, "The
+plugin kit"). `npm pack --workspace @vaubaan/plugin-sdk` runs
 `prepack`: `scripts/build.ts` builds `dist/`, then `scripts/publish-manifest.ts apply` swaps in the
 published manifest (`publishConfig.exports` → `dist/`); `postpack` restores the repository's —
 npm does not apply `publishConfig.exports` itself. A stray `package.repo.json` means a pack died
@@ -128,9 +129,16 @@ JavaScript only). It fails when an `@vaubaan/*` import is left. `apply` drops bo
 published `dependencies`, leaving `js-yaml`. A new workspace dependency of the SDK must be added to
 `INLINED` and given its `tsconfig.build.<name>.json`, or the build fails.
 
-The proof it installs: `npm pack` it, install the tarball in an empty directory with
-`typescript`, `vitest` and `@types/node`, copy `plugins/_template/src` and `tests` there, and run
-`tsc --noEmit` (`NodeNext`, `skipLibCheck: false`) and `vitest run`.
+The proof it installs: `scripts/plugin-kit-smoke.sh` packs the SDK and the CLI, installs both in
+an empty folder, makes a project with `vaubaan-plugin init` and runs its `check`, `try` and
+`build`.
+
+`@vaubaan/plugin-cli` is packed the same way (`scripts/package.ts`): `build` bundles `src/bin.ts`
+and `src/index.ts` into `dist/` with esbuild (the SDK and esbuild stay dependencies) and copies
+`plugins/_template/src` and `tests` into `template/` (ignored by git); `apply` swaps in a
+manifest whose `bin` and `exports` point at `dist/` and whose SDK range is the SDK's current
+version. **Trap:** the `bin` is `src/bin.ts`, which always runs; `cli.ts` runs itself only when
+it is the program, a check a bundled shared chunk cannot make.
 
 ## Traps
 

@@ -189,3 +189,26 @@ describe('archive helpers', () => {
     expect(() => parseCommand(['build', '--bogus'], '/p')).toThrow(/unknown option/);
   });
 });
+
+describe('the published manifest of the CLI', () => {
+  it('runs dist/, depends on the SDK at its version, and is not private', async () => {
+    const { publishedManifest } = await import('../../scripts/package.ts');
+    const published = publishedManifest(
+      {
+        name: '@vaubaan/plugin-cli',
+        private: false,
+        bin: { 'vaubaan-plugin': './src/cli.ts' },
+        exports: { '.': './src/index.ts' },
+        dependencies: { '@vaubaan/plugin-sdk': '*', esbuild: '0.28.2' },
+      },
+      '0.9.4',
+    );
+    expect(published).toMatchObject({
+      bin: { 'vaubaan-plugin': './dist/cli.js' },
+      exports: { '.': './dist/index.js' },
+      dependencies: { '@vaubaan/plugin-sdk': '^0.9.4', esbuild: '0.28.2' },
+    });
+    expect(published.files).toEqual(expect.arrayContaining(['dist', 'template', 'scaffold']));
+    expect('private' in published).toBe(false);
+  });
+});

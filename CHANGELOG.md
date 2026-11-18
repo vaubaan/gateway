@@ -22,7 +22,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   with "Install plugins" (`VAUBAAN_MISSION_TOKEN`), and prints where to activate it; it never
   activates. `vaubaan-plugin submit` declares the project's pushed commit to the public catalog
   (vaubaan/gateway-plugins) and opens the pull request with `gh`; `--dry-run` only prints the
-  declaration.
+  declaration. `@vaubaan/plugin-cli` and `@vaubaan/plugin-sdk` are ready for npm, published by
+  `publish-plugin-kit.yml` through npm trusted publishing (no token), each version tried first
+  outside the repository the way an author installs it.
 
 - **An administrator installs a plugin from Administration › Plugins.** Upload the archive
   `vaubaan-plugin build` writes (`.tgz`, now packed beside its folder): it is checked without

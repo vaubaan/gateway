@@ -56,3 +56,6 @@ apps/website/content/docs/known-limitations.mdx
 apps/website/content/docs/services/*.mdx
 !apps/website/content/docs/services/index.mdx
 packages/plugin-sdk/package.repo.json
+
+# Built by packages/plugin-cli/scripts/package.ts for npm pack
+packages/plugin-cli/template/

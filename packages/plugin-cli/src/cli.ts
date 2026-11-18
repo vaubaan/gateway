@@ -20,7 +20,7 @@
  * Exit 1 when a step is refused (for `try`: the call is not allowed); 2 on a usage error.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -323,7 +323,18 @@ export async function run(argv: readonly string[], io: CliIo): Promise<number> {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/** Whether this module is the program run: through `node_modules/.bin`, a symlink to it. */
+function isMain(): boolean {
+  const program = process.argv[1];
+  if (!program) return false;
+  try {
+    return realpathSync(program) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   process.exitCode = await run(process.argv.slice(2), {
     cwd: process.cwd(),
     env: process.env,

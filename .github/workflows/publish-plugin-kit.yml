@@ -1,0 +1,93 @@
+name: publish-plugin-kit
+
+# Publishes the plugin author's kit to npm: @vaubaan/plugin-sdk on a tag
+# `npm-plugin-sdk-v<version>`, @vaubaan/plugin-cli on a tag `npm-plugin-cli-v<version>`
+# (docs/workflow/coding-workflow.md, "Release" › "The plugin kit").
+# Not `plugin-…-v…`: release.yml takes those for a plugin's image.
+#
+# No token: npm trusted publishing. This workflow, by its file name, is declared
+# as the trusted publisher of each package on npmjs.com; npm accepts the
+# workflow's OIDC identity and attaches the provenance itself. npm declares a
+# trusted publisher only for a package that exists: each package's first
+# version is published once by hand, by a maintainer of the @vaubaan scope.
+#
+# Before publishing: the tag names the package's version exactly, the kit
+# passes scripts/plugin-kit-smoke.sh (packed, installed outside the repository,
+# a new project's checks green), and the CLI's SDK range is on npm already.
+on:
+  push:
+    tags:
+      - 'npm-plugin-sdk-v*'
+      - 'npm-plugin-cli-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-plugin-kit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC) and provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No dependency cache in the job that publishes (cache poisoning): a
+      # clean `npm ci` of the lockfile.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+      - id: package
+        name: The tag names a package and its version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            npm-plugin-sdk-v*) name=@vaubaan/plugin-sdk; dir=packages/plugin-sdk; version=${TAG#npm-plugin-sdk-v} ;;
+            npm-plugin-cli-v*) name=@vaubaan/plugin-cli; dir=packages/plugin-cli; version=${TAG#npm-plugin-cli-v} ;;
+            *) echo "::error::$TAG names no package of the kit"; exit 1 ;;
+          esac
+          declared=$(node -p "require('./$dir/package.json').version")
+          if [ "$declared" != "$version" ]; then
+            echo "::error::$TAG, but $dir/package.json says $declared"
+            exit 1
+          fi
+          { echo "name=$name"; echo "version=$version"; } >> "$GITHUB_OUTPUT"
+      - name: The CLI's SDK is on npm
+        if: steps.package.outputs.name == '@vaubaan/plugin-cli'
+        run: |
+          sdk=$(node -p "require('./packages/plugin-sdk/package.json').version")
+          npm view "@vaubaan/plugin-sdk@$sdk" version >/dev/null || {
+            echo "::error::@vaubaan/plugin-sdk@$sdk is not on npm: tag npm-plugin-sdk-v$sdk first"
+            exit 1
+          }
+      - run: npx tsc -p packages/plugin-sdk/tsconfig.json --noEmit && npx tsc -p packages/plugin-cli/tsconfig.json --noEmit
+      - run: npx vitest run packages/plugin-sdk packages/plugin-cli
+      - run: scripts/plugin-kit-smoke.sh "${RUNNER_TEMP}/plugin-kit-smoke"
+      - name: Publish
+        env:
+          NAME: ${{ steps.package.outputs.name }}
+        run: npm publish --workspace "$NAME" --access public
+      - name: The version is on npm
+        env:
+          NAME: ${{ steps.package.outputs.name }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          for attempt in $(seq 1 30); do
+            if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$NAME@$VERSION is on npm"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::$NAME@$VERSION is not visible on npm after 10 minutes"
+          exit 1
