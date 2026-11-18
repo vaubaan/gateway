@@ -286,7 +286,8 @@ export type InstalledAdmission = (
 ) => string | null;
 
 /** The manifest and the signature files of an installed folder, as the trust check reads them. */
-async function signedFilesOf(path: string): Promise<Map<string, Uint8Array>> {
+/** The manifest and its signatures, the files a trust check reads. */
+export async function signedFilesOf(path: string): Promise<Map<string, Uint8Array>> {
   const files = new Map<string, Uint8Array>();
   for (const name of await readdir(path)) {
     if (name === ARCHIVE_MANIFEST_FILE || outsideManifest(name)) {

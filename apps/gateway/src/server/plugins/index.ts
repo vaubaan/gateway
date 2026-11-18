@@ -70,6 +70,8 @@ export interface LoadPluginsOptions {
   readonly importEntry?: PinReadOptions['importEntry'];
   /** The installed versions this start loads (`loadInstalled`); none by default. */
   readonly installed?: readonly PinnedPlugin[];
+  /** The socle's archives replacing a bundled plugin of the same version (`loadSocle`). */
+  readonly socle?: readonly PinnedPlugin[];
 }
 
 /**
@@ -92,6 +94,7 @@ export async function loadPlugins(
         });
   const set = composePlugins({
     bundled: options.bundled,
+    socle: options.socle ?? [],
     pinned,
     installed: options.installed ?? [],
     enabled,

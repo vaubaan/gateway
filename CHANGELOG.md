@@ -18,6 +18,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   that plugin at that version, and leaves it pending for an administrator to activate. The
   download is audited with where it came from. An upload of an id the versions feed names (a
   catalog plugin, shipped in the image or not) now needs the catalog's signature too.
+- **The image runs its default plugins from the catalog's signed archives.** The image build
+  downloads the versions `deploy/socle.json` lists (the socle), each pinned by its sha256; at every
+  start the gateway checks each archive's files and the catalog's signature, offline, and runs it in
+  place of the compiled copy of that same version. An archive that does not verify is logged and
+  the compiled copy runs. 18 of the 21 plugins come from the socle (`vaubaan` and `ssh` stay
+  compiled; `github` joins once the catalog publishes 5.3.1).
 
 - **A plugin author starts a project in one command.** `vaubaan-plugin init <dir> --id <id>`
   writes a standalone plugin project, outside the gateway's repository: the template plugin

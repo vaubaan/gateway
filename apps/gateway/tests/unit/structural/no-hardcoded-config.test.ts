@@ -41,6 +41,8 @@ const ALLOWED: Record<string, string> = {
     "Google Cloud Attestation's issuer, the fixed root of trust a broker's Confidential Space attestation is checked against (ADR oauth-broker-stateless-in-an-attested-enclave D4, D7)",
   'apps/gateway/src/server/notifications/messaging/messages.ts':
     'the `$schema` identifier of an Adaptive Card, a name inside the Teams message format, never fetched',
+  'scripts/fetch-socle.mjs':
+    'where the catalog publishes its signed archives, read at image build; each archive pinned by its sha256 in deploy/socle.json',
   'apps/gateway/src/server/plugins/catalog.ts':
     "where the catalog publishes its signed archives, like the versions feed's address: public, read without credentials, and nothing it serves is trusted before its signature verifies",
   'apps/gateway/src/server/plugins/trust.ts':

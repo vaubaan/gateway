@@ -146,6 +146,17 @@ owner doing anything:
   the commit is on `main`, and publishes that one image; an existing version is refused. The
   gateway jobs ignore these tags.
 
+### The socle
+
+- [`deploy/socle.json`](../../deploy/socle.json) lists the catalog versions the image preinstalls,
+  each `{ id, version, sha256 }` of a release `<id>-v<version>` of `vaubaan/gateway-plugins` (the
+  sha256 is the release asset's digest). The project owner chooses it.
+- A plugin's new version, once merged here: its declaration in the catalog takes the new `version`
+  and `commit` (pull request on `vaubaan/gateway-plugins`); once the catalog published it, its entry
+  in `socle.json` takes the version and the asset's sha256. Until then
+  `tests/unit/structural/socle.test.ts` fails on a version the socle does not have: drop the entry
+  meanwhile, and the compiled copy runs.
+
 ### The plugin kit
 
 - `@vaubaan/plugin-sdk` and `@vaubaan/plugin-cli` are published to npm by

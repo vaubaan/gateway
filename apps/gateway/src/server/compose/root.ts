@@ -89,6 +89,7 @@ import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
 import { fetchCatalogArchive } from '../plugins/catalog';
+import { loadSocle, SOCLE_DIR } from '../plugins/socle';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -213,6 +214,8 @@ export interface RootDeps {
   readonly updatesFetch?: typeof fetch;
   /** Downloads of the catalog's archives (one-click install); the global `fetch` by default. */
   readonly catalogFetch?: typeof fetch;
+  /** Where the image unpacked the socle (`SOCLE_DIR`); tests point elsewhere. */
+  readonly socleDir?: string;
   /** The versions check's timers (tests drive them by hand). */
   readonly updatesTimers?: UpdatesTimers;
   /** Ends the process for its supervisor to restart it; default: exit 75 once the root closed. */
@@ -277,6 +280,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       logger,
       store,
       deps.buildRegistry,
+      deps.socleDir,
     );
     checkSelfResources(config, registry);
     checkBrokeredPlugins(registry);
@@ -454,6 +458,7 @@ async function buildPlugins(
   logger: Logger,
   store: Store,
   buildRegistry: RootDeps['buildRegistry'],
+  socleDir: string = SOCLE_DIR,
 ): Promise<LoadedPlugins & { readonly installedDir: string | null }> {
   if (buildRegistry) {
     const registry = await buildRegistry(config, logger);
@@ -472,8 +477,14 @@ async function buildPlugins(
     logger,
     sdkVersion: SDK_VERSION,
   });
+  const socle = await loadSocle(socleDir, {
+    compiled: SHIPPED_PLUGINS,
+    sdkVersion: SDK_VERSION,
+    logger,
+  });
   const loaded = await loadPlugins(config, logger, {
     bundled: SHIPPED_PLUGINS,
+    socle,
     installed: installed.plugins,
   });
   return { ...loaded, installedDir: installed.dir };

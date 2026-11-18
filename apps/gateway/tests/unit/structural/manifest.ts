@@ -562,6 +562,29 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'socle-is-the-compiled-version',
+    statement:
+      'Every archive the image preinstalls (deploy/socle.json) is pinned by its sha256 and is the version the server compiles, never vaubaan nor ssh: the image runs the catalog’s build of the very plugin it would otherwise run.',
+    source: 'ADR plugin-catalog-rebuilt-from-source; handbook plugin-loading, socle',
+    proofs: [
+      {
+        file: 'apps/gateway/tests/unit/structural/socle.test.ts',
+        tests: [
+          'pins each archive by its sha256, each id once',
+          'lists only versions the server compiles, at the version compiled',
+          'never lists the plugins only the server can run',
+        ],
+      },
+      {
+        file: 'apps/gateway/tests/integration/plugins/socle.test.ts',
+        tests: [
+          'runs the image’s notion from the catalog’s signed archive, the same version',
+          'keeps the compiled copy when the folder is not the catalog’s',
+        ],
+      },
+    ],
+  },
+  {
     id: 'deployed-commit-is-known',
     statement:
       'The commit /healthz reports is the one git archive stamped, else the checkout HEAD, else unknown: no build argument or environment variable feeds it.',
