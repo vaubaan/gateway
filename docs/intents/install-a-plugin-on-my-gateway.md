@@ -33,7 +33,7 @@ spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
 
 status: implemented
 requires: plugin
-anchors: apps/gateway/src/app/(app)/accounts/new/[service]/install/route.ts, apps/gateway/src/app/(app)/accounts/new/[service]/install-first.tsx, apps/gateway/tests/integration/plugins/install-at-first-connection.test.ts
+anchors: apps/gateway/src/app/(app)/accounts/new/[service]/install/route.ts, apps/gateway/src/app/(app)/accounts/new/[service]/install-first.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Install a catalog plugin in one click
