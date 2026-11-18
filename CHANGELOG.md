@@ -31,6 +31,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   installed version. Both are refused (`administrator-only`) unless the mission's creator is an
   administrator; no tool activates, rolls back or removes a plugin. A platform mission issued
   before gains them only when its creator edits it.
+- **A plugin is signed with a company key.** `vaubaan-plugin keygen` makes an ed25519 key pair,
+  `vaubaan-plugin sign <archive> --key <file>` writes `vaubaan-manifest.json.sig.json` (the
+  signature of the manifest, named by the key's id) and packs the `.tgz` again, and
+  `vaubaan-plugin pack` packs a folder once a signature was added beside its manifest. The format
+  is `@vaubaan/plugin-sdk/archive`'s; the gateway verifies it in a later step.
 
 ## [2.0.0-alpha.25] - 2026-11-17
 

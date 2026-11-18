@@ -25,7 +25,12 @@ import {
   run,
   type ArchiveManifest,
 } from '../../src/index.ts';
-import { readArchive } from '@vaubaan/plugin-sdk/archive';
+import {
+  parseSignature,
+  readArchive,
+  SIGNATURE_FILE,
+  verifyManifestSignature,
+} from '@vaubaan/plugin-sdk/archive';
 
 const TEMPLATE = fileURLToPath(new URL('../../../../plugins/_template', import.meta.url));
 const SDK_VERSION = (
@@ -88,6 +93,31 @@ describe('buildArchive', () => {
         .digest('hex');
       expect(actual, path).toBe(digest);
     }
+  });
+
+  it('signs the archive with a company key and packs the signature with it', async () => {
+    const lines: string[] = [];
+    const io = { cwd: out, log: (l: string) => lines.push(l), error: (l: string) => lines.push(l) };
+    expect(await run(['keygen', '--out', join(out, 'acme')], io)).toBe(0);
+    expect(await run(['keygen', '--out', join(out, 'acme')], io)).toBe(1);
+    expect(await run(['sign', join(out, 'template'), '--key', join(out, 'acme.key.pem')], io)).toBe(
+      0,
+    );
+    const archive = readArchive(readFileSync(join(out, 'template.tgz')));
+    const signature = parseSignature(
+      JSON.parse(Buffer.from(archive.files.get(SIGNATURE_FILE) as Uint8Array).toString('utf8')),
+    );
+    expect(signature).not.toBeNull();
+    const trusted = [
+      { name: 'Acme', publicKeyPem: readFileSync(join(out, 'acme.pub.pem'), 'utf8') },
+    ];
+    expect(
+      verifyManifestSignature(
+        archive.files.get(ARCHIVE_MANIFEST_FILE) as Uint8Array,
+        signature!,
+        trusted,
+      )?.name,
+    ).toBe('Acme');
   });
 
   it('is what the command line builds and reports', async () => {

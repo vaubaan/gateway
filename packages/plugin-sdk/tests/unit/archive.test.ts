@@ -11,6 +11,10 @@ import {
   ARCHIVE_LIMITS,
   ARCHIVE_MANIFEST_FILE,
   ArchiveFormatError,
+  generateSigningKey,
+  parseSignature,
+  signManifest,
+  verifyManifestSignature,
   manifestOfFiles,
   outsideManifest,
   packArchive,
@@ -134,3 +138,36 @@ function fixChecksum(tar: Buffer, offset: number): void {
   for (const byte of block) sum += byte;
   block.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'utf8');
 }
+
+describe('signature by a company key', () => {
+  const manifest = new TextEncoder().encode('{"format":"vaubaan-plugin-manifest/v1"}');
+
+  it('verifies with the trusted key that signed, and names it', () => {
+    const key = generateSigningKey();
+    const signature = signManifest(manifest, key.privateKeyPem);
+    expect(signature.keyId).toBe(key.keyId);
+    expect(parseSignature(JSON.parse(JSON.stringify(signature)))).toEqual(signature);
+    const trusted = [{ name: 'Acme release key', publicKeyPem: key.publicKeyPem }];
+    expect(verifyManifestSignature(manifest, signature, trusted)?.name).toBe('Acme release key');
+  });
+
+  it('refuses a modified manifest, an untrusted key, and a forged key id', () => {
+    const key = generateSigningKey();
+    const other = generateSigningKey();
+    const signature = signManifest(manifest, key.privateKeyPem);
+    const trusted = [{ name: 'k', publicKeyPem: key.publicKeyPem }];
+    expect(verifyManifestSignature(new TextEncoder().encode('{}'), signature, trusted)).toBeNull();
+    expect(
+      verifyManifestSignature(manifest, signature, [
+        { name: 'o', publicKeyPem: other.publicKeyPem },
+      ]),
+    ).toBeNull();
+    const forged = { ...signManifest(manifest, other.privateKeyPem), keyId: key.keyId };
+    expect(verifyManifestSignature(manifest, forged, trusted)).toBeNull();
+  });
+
+  it('reads only its own format', () => {
+    expect(parseSignature({ format: 'other' })).toBeNull();
+    expect(parseSignature(null)).toBeNull();
+  });
+});

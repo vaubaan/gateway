@@ -275,3 +275,16 @@ export function readArchive(bytes: Uint8Array): ReadArchive {
   }
   return { digest: sha256Hex(bytes), manifest, files };
 }
+
+export {
+  generateSigningKey,
+  keyIdOf,
+  parseSignature,
+  signManifest,
+  SIGNATURE_FILE,
+  SIGNATURE_FORMAT,
+  verifyManifestSignature,
+  type ArchiveSignature,
+  type SigningKeyPair,
+  type TrustedKey,
+} from './signature.ts';
