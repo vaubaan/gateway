@@ -191,14 +191,13 @@ const nextConfig: NextConfig = {
       `../../node_modules/better-sqlite3/prebuilds/${process.platform}*-${process.arch}.node`,
       // The store applies these at boot (apps/gateway/src/server/store/migrate.ts).
       './migrations/*.sql',
-      // Plugins read their risk catalog from disk at import time
-      // (`loadCatalogFile(catalogPathNextTo(import.meta.url))`); nft cannot see a
-      // readFileSync behind a computed path, so every plugin YAML is traced here
-      // (docs/handbook/plugin-sdk.md).
-      '../../plugins/*/src/**/*.yaml',
-      // The screenshots of the connect guides, read by `readConnectFile`
-      // (src/server/plugins/connect-files.ts) behind a computed path, like the catalogs.
-      '../../plugins/*/docs/connect/**',
+      // The plugins compiled into the server read their risk catalog from disk at
+      // import time (`loadCatalogFile(catalogPathNextTo(import.meta.url))`); nft cannot
+      // see a readFileSync behind a computed path, so their YAML is traced here
+      // (docs/handbook/plugin-sdk.md). Only those two: every other plugin is installed
+      // from the catalog with its own files (ADR plugins-installed-when-first-needed).
+      '../../plugins/vaubaan/src/**/*.yaml',
+      '../../plugins/ssh/src/**/*.yaml',
     ],
   },
   // Tests never ship. `catalogPathNextTo` (`packages/plugin-sdk/src/catalog-path.ts`)
