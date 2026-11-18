@@ -155,7 +155,9 @@ describe('a new plugin project', () => {
       { cwd: dir, encoding: 'utf8', env: { ...process.env, CI: '1' } },
     );
     expect(vitest.status, vitest.stdout + vitest.stderr).toBe(0);
-    expect(vitest.stdout).toMatch(/Tests\s+\d+ passed/);
+    // A runner may force colours (FORCE_COLOR on GitHub): read the summary without them.
+    // eslint-disable-next-line no-control-regex
+    expect(vitest.stdout.replace(/\u001b\[[0-9;]*m/g, '')).toMatch(/Tests\s+\d+ passed/);
   }, 120_000);
 
   it('refuses a directory that is not empty', () => {
