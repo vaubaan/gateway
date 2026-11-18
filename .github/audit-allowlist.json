@@ -1,4 +1,12 @@
 {
   "$comment": "Advisories of `npm audit --omit=dev` that were looked at and do not apply to what this repository ships. Read by scripts/audit-gate.mjs (CI job `audit`). Each entry: the GHSA id, the package the advisory is about, why it does not apply here, the day it was reviewed and the day by which it must be looked at again (the gate fails after it). Cadence and procedure: docs/workflow/coding-workflow.md, \"Dependency audit\".",
-  "advisories": []
+  "advisories": [
+    {
+      "id": "GHSA-fc5q-39xc-vjpf",
+      "package": "picomatch",
+      "reason": "No patched release yet (<=4.0.7, first_patched_version null). Reached only through the documentation website's build (fumadocs-mdx, vite, fumadocs-core's remark-mdx-files), on glob patterns written in this repository (apps/website/source.config.ts), never on input from a visitor; not in the gateway nor its image (npm ls picomatch --omit=dev). Upgrade as soon as a fixed version ships.",
+      "reviewed": "2026-11-18",
+      "review_by": "2027-01-18"
+    }
+  ]
 }
