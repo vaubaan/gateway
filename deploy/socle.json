@@ -1,5 +1,5 @@
 {
-  "$comment": "The socle: the catalog's signed archives the image preinstalls (ADR plugin-catalog-rebuilt-from-source). The project owner chooses it. Each entry is a release <id>-v<version> of vaubaan/gateway-plugins, pinned by the sha256 of its archive; scripts/fetch-socle.mjs downloads, checks and unpacks it at image build, and the gateway verifies the catalog's signature at every start. Until the compiled copies leave the server, an entry must be the version compiled (tests/unit/structural/socle.test.ts). github waits for its 5.3.1 release (vaubaan/gateway-plugins#2).",
+  "$comment": "The socle: the catalog's signed archives the image preinstalls (ADR plugin-catalog-rebuilt-from-source). The project owner chooses it. Each entry is a release <id>-v<version> of vaubaan/gateway-plugins, pinned by the sha256 of its archive; scripts/fetch-socle.mjs downloads, checks and unpacks it at image build, and the gateway verifies the catalog's signature at every start. Until the compiled copies leave the server, an entry must be the version compiled (tests/unit/structural/socle.test.ts).",
   "plugins": [
     {
       "id": "asana",
@@ -30,6 +30,11 @@
       "id": "fly",
       "version": "0.4.0",
       "sha256": "38e23928bac93fd4e45995f6bf0e936730b5bdd2c2473d2fc6681363d463a6b7"
+    },
+    {
+      "id": "github",
+      "version": "5.3.1",
+      "sha256": "d6854af559cd3038a58fb0e2c83cd091ed2cb8ccfdd2c70b0cf85154ab8ee213"
     },
     {
       "id": "github-projects",

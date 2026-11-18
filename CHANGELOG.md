@@ -26,8 +26,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   downloads the versions `deploy/socle.json` lists (the socle), each pinned by its sha256; at every
   start the gateway checks each archive's files and the catalog's signature, offline, and runs it in
   place of the compiled copy of that same version. An archive that does not verify is logged and
-  the compiled copy runs. 18 of the 21 plugins come from the socle (`vaubaan` and `ssh` stay
-  compiled; `github` joins once the catalog publishes 5.3.1).
+  the compiled copy runs. 19 of the 21 plugins come from the socle (`vaubaan` and `ssh` stay
+  compiled).
 
 - **A plugin author starts a project in one command.** `vaubaan-plugin init <dir> --id <id>`
   writes a standalone plugin project, outside the gateway's repository: the template plugin
@@ -92,6 +92,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   commit of its history (at most 100 commits and 299 files; beyond, push an earlier commit first).
   A push whose history shares nothing with an existing branch is still refused, and the refusal
   now says what to do: fetch the branch and rebase onto it.
+
+### Changed
+
+- **Base images** `node:26.13.1-bookworm-slim` and `caddy:2.11.9-alpine`, each pinned by its
+  multi-architecture digest.
 
 ## [2.0.0-alpha.25] - 2026-11-17
 

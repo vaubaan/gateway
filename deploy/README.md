@@ -26,7 +26,7 @@ every configuration key: handbook
 
 ```
 deploy/
-  docker/Dockerfile        multi-stage build (node:26.13.0-bookworm-slim pinned by digest, non-root, HEALTHCHECK)
+  docker/Dockerfile        multi-stage build (node:26.13.1-bookworm-slim pinned by digest, non-root, HEALTHCHECK)
   docker/smoke.sh          container smoke test (run by CI and, per architecture, by the release pipeline)
   docker/entrypoint.sh     started as root (a root-owned volume), gives /data to uid 10001 and drops root
   railway.md               deploying on Railway: one service, one volume, GitHub sign-in
@@ -543,8 +543,8 @@ stage of the file, never an image. The structural test
 a frontend line that appears must be pinned by digest like the base images.
 
 Both base images are pinned by full version and by digest, so one commit
-builds one image: `node:26.13.0-bookworm-slim` in the Dockerfile and
-`caddy:2.11.7-alpine` in `compose.yaml`. The digests are those of the
+builds one image: `node:26.13.1-bookworm-slim` in the Dockerfile and
+`caddy:2.11.9-alpine` in `compose.yaml`. The digests are those of the
 multi-architecture index. To bump one, read the new digest from the registry
 and change version and digest together:
 

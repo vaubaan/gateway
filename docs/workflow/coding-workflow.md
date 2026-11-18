@@ -196,7 +196,7 @@ owner doing anything:
 ### Refreshing the base image digests
 
 Monthly (Dependabot), before every release, and on a Node 26 or Debian security release. Today:
-`node:26.13.0-bookworm-slim` and `caddy:2.11.7-alpine`.
+`node:26.13.1-bookworm-slim` and `caddy:2.11.9-alpine`.
 
 1. `docker buildx imagetools inspect node:<version>-bookworm-slim`: the digest of the
    multi-architecture index (amd64 and arm64 listed), never one platform's. Same tag, other digest:
