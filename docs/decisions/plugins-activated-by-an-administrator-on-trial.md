@@ -6,6 +6,10 @@ date: 2026-11-17
 
 # An instance installs its own plugins; an administrator activates each version, which starts on trial
 
+The first installation of a catalog plugin signed by Vaubaan, by any person connecting its service,
+loads at once ([plugins-installed-when-first-needed](./plugins-installed-when-first-needed.md));
+every other version follows this record.
+
 ## Context
 
 With plugins out of the image, an instance must take a new plugin, a newer or an older version
@@ -20,8 +24,7 @@ from a mission whose creator is an administrator) or by a one-click install of a
 it stays inert until an administrator activates it in the browser, shown its signature level and
 catalog diff. Activation takes effect at the next start, on trial: the version becomes active once
 it loaded and classified its own examples, otherwise the previous version is restored and the
-failure shown. The operator's plugins directory stays, and the version preinstalled in the image is
-the floor every plugin can return to.
+failure shown. The operator's plugins directory stays.
 
 ## Consequences
 

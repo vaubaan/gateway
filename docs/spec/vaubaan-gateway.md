@@ -34,9 +34,9 @@ in the interface, the code, the store and the protocol:
 - **service** — the third-party product a plugin connects to (a code host, a mailbox…); a sign-in provider stays
   explicit (IdP).
 - **plugin** — only the code package: installed, pinned, built with the SDK, with its reference
-  page. The **catalog** is the public list every published plugin comes from; the **socle** is the
-  catalog versions an instance has by default; a plugin's **trust level** is what its verified
-  signature says of who built it (§5).
+  page. The **catalog** is the public list every published plugin comes from; an instance has none
+  of them until it installs one; a plugin's **trust level** is what its verified signature says of
+  who built it (§5).
 
 For the other words, tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration
 keys spell the protocol's words, and so does this spec where it states a rule. The interface speaks
@@ -781,14 +781,18 @@ the (i) itself never leaves the page.
   - **plugins**: every plugin the instance knows, with its active version, its **trust level**
     (signed by Vaubaan; signed by a signer this instance trusts, named; unsigned, allowed by the
     configuration — a modified or invalid archive never gets this far), where it comes from
-    (preinstalled in the image, installed here, or pinned by the operator in the plugins
-    directory), whether it follows the image or is held at a version, the versions kept, whether
+    (installed here, compiled into the server for the management plugin and `ssh`, or pinned by
+    the operator in the plugins directory), the versions kept, whether
     the configuration enables it, how many accounts it serves, and its community validation. From
     the published versions feed the page says what is behind, what an advisory names with the
-    version that fixes it, and a pin older than the image's version, and offers to install a
-    catalog version in one click.
-    An administrator **uploads** an archive or **installs** one from the catalog; either stays
-    **pending**, inert, until an administrator **activates** it, shown its trust level and digest,
+    version that fixes it, and offers to install a catalog version in one click.
+    A plugin the instance does not have yet is installed **when a person first connects its
+    service**: the gateway takes the catalog's latest version, keeps it only signed by Vaubaan, and
+    loads it at once; any signed-in person may, and the installation is audited
+    ([ADR](../decisions/plugins-installed-when-first-needed.md)). Every other version — a newer
+    version of a loaded plugin, a private or unsigned one — an administrator **uploads** or
+    **installs** from the catalog; it stays **pending**, inert, until an administrator
+    **activates** it, shown its trust level and digest,
     what it replaces, the permissions it adds or deprecates against the active version, the
     missions using the service and the permissions none of them holds — and for an older version,
     the accounts connected a way it does not offer and the permissions it does not know, which stay
@@ -800,8 +804,8 @@ the (i) itself never leaves the page.
     **automatic security patches** (Vaubaan-signed patch versions that fix an advisory, started on
     trial, every administrator notified), and manages the **trusted signers** (adding one is
     confirmed by typing its name and notifies every administrator). The instance keeps, per plugin,
-    the active version, the two previous ones and the image's. An id the catalog or the socle uses
-    is activated only signed by Vaubaan
+    the active version and the two previous ones. An id the catalog uses is activated only signed
+    by Vaubaan
     ([ADR](../decisions/plugins-activated-by-an-administrator-on-trial.md));
   - teams (local ones); telemetry; the instance's name. Other
     §4.3 keys are shown, not edited; the name and the telemetry opt-in are set here unless the
@@ -881,9 +885,9 @@ committed:
   operator pins plugins, one directory each; **`plugins.enabled`**, the ids the instance
   registers (unset: every plugin it has); **`plugins.allow_unsigned`**, the ids the instance may
   activate without a signature — the only way an unsigned plugin runs, which no interface sets;
-  and **`plugins.safe_mode`**, a start with the image's versions only, ignoring what was installed
-  here, the way back when the interface cannot be reached. A pinned plugin replaces an installed
-  or preinstalled one of the same id. A pinned plugin built for another SDK range, a duplicate, or a service the store holds
+  and **`plugins.safe_mode`**, a start ignoring what was installed here (the management plugin,
+  `ssh` and the operator's pins only), the way back when the interface cannot be reached. A pinned
+  plugin replaces an installed one of the same id. A pinned plugin built for another SDK range, a duplicate, or a service the store holds
   accounts for and no registered plugin serves, stops the start with a message naming it
   ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
 - the **versions check** (`updates.check`, on by default; `updates.feed_url`): at start and daily,
@@ -977,16 +981,17 @@ values.
   **catalog**: a declaration per plugin naming its source and exact revision, added by a reviewed
   change; the catalog rebuilds each declared revision itself and signs the archive, so "signed by
   Vaubaan" means built by the catalog from reviewed source
-  ([ADR](../decisions/plugin-catalog-rebuilt-from-source.md)). The **socle** is a list of catalog
-  versions the project owner chooses, preinstalled in the image; only the management plugin and a
-  plugin that cannot be archived are compiled into the server. A **private** plugin is built
+  ([ADR](../decisions/plugin-catalog-rebuilt-from-source.md)). The image carries no service
+  plugin: only the management plugin and a plugin that cannot be archived (`ssh`) are compiled
+  into the server, and a catalog plugin is installed when a person first connects its service
+  ([ADR](../decisions/plugins-installed-when-first-needed.md)). A **private** plugin is built
   outside the catalog and signed with its author's own key, which an instance trusts by naming it
-  a signer; its existence is published nowhere. A plugin reaches an instance preinstalled,
-  installed by an administrator (uploaded, or from the catalog in one click), or pinned by the
-  operator in the plugins directory, the pin winning over the others of its id
+  a signer; its existence is published nowhere. A plugin reaches an instance installed at a first
+  connection, installed by an administrator (uploaded, or from the catalog in one click), or
+  pinned by the operator in the plugins directory, the pin winning over the others of its id
   ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)). It runs in the process with
-  the credential, so it runs only once an administrator activated it or the operator placed it,
-  and its archive is checked against its signature at every start; a signature says who built the
+  the credential, so it runs only signed by Vaubaan at a first connection, once an administrator
+  activated it, or once the operator placed it, and its archive is checked against its signature at every start; a signature says who built the
   plugin, never that it is harmless
   ([ADR](../decisions/plugins-activated-by-an-administrator-on-trial.md),
   [ADR](../decisions/plugin-signature-sets-the-trust-level.md)).

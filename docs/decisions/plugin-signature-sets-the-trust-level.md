@@ -21,8 +21,7 @@ message-signature bundle); the gateway verifies it offline against a trusted roo
 release, and requires the exact workflow identity, issuer and repository id — never a substring
 or an unanchored pattern. A private archive is signed with a company's ed25519 key, which an
 administrator adds to the instance's trusted signers; an unsigned archive runs only if
-`plugins.allow_unsigned` names its id, and an id of the catalog or the socle needs the Vaubaan
-signature.
+`plugins.allow_unsigned` names its id, and an id of the catalog needs the Vaubaan signature.
 
 ## Consequences
 

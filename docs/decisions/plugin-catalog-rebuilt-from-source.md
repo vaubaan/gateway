@@ -17,15 +17,13 @@ every credential, so what an instance loads must trace back to source someone re
 
 The catalog is one repository, `vaubaan/gateway-plugins`: one declaration per plugin (id, source
 repository and path, version, commit, owners), added or changed by pull request; on merge its
-workflow rebuilds the declared commit, signs the archive and publishes it with `versions.json`. The
-default plugins (the socle) are catalog entries like any other, chosen by the project owner and
-preinstalled in the image from their signed archives; only `vaubaan` (executed by the host) and
-`ssh` (a native addon) stay compiled into the server.
+workflow rebuilds the declared commit, signs the archive and publishes it with `versions.json`. No
+plugin is preinstalled: an instance installs a catalog plugin when it first needs it
+([plugins-installed-when-first-needed](./plugins-installed-when-first-needed.md)).
 
 ## Consequences
 
-- A plugin entering or changing in the catalog changes no instance; only the socle list reaches
-  every image, and it is the owner's to set.
+- A plugin entering or changing in the catalog changes no instance until one installs it.
 - "Signed by Vaubaan" means built by the catalog workflow from a reviewed commit. A pull request's
   build runs without secrets and never signs.
 - A plugin id belongs to the owners its declaration names (`CODEOWNERS`); a new version is a pull
