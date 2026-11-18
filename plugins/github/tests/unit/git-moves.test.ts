@@ -386,7 +386,127 @@ describe('review', () => {
     ]);
     expect(reviewed).toEqual({
       ok: false,
-      reason: 'refs/tags/v2.0.0 cannot be reviewed: it has no history in common with main',
+      reason:
+        'refs/tags/v2.0.0 cannot be reviewed: it has no history in common with main; fetch main and rebase your commits onto it (git fetch origin main && git rebase origin/main), then push again',
+    });
+  });
+
+  test('a branch rewritten onto an unrelated history is refused with what to do', async () => {
+    const fetch = mockFetch([
+      refRoute(OLD),
+      ...noOtherBranch,
+      {
+        method: 'GET',
+        url: new RegExp(`^${API}/compare/`),
+        status: 404,
+        body: { message: 'No common ancestor' },
+      },
+    ]);
+    const reviewed = await review(executeCtx(fetch), 'acme/app', [
+      { ref: 'refs/heads/feature/x', old: OLD, new: NEW },
+    ]);
+    expect(reviewed).toEqual({
+      ok: false,
+      reason: `refs/heads/feature/x cannot be reviewed: it has no history in common with ${OLD.slice(0, 12)}; fetch feature/x and rebase your commits onto it (git fetch origin feature/x && git rebase origin/feature/x), then push again`,
+    });
+  });
+
+  describe('the first branch of an empty repository', () => {
+    const ROOT = '9'.repeat(40);
+    const TREE = '1'.repeat(40);
+    /** No branch at GitHub: only the gateway's temporary ref holding the pack. */
+    const empty = (history: readonly string[], paths: readonly string[]): MockRoute[] => [
+      {
+        method: 'GET',
+        url: `${API}/git/ref/heads/main`,
+        status: 404,
+        body: { message: 'Not Found' },
+      },
+      {
+        method: 'GET',
+        url: 'https://github.com/acme/app.git/info/refs?service=git-upload-pack',
+        respond: () =>
+          Buffer.from(
+            encodeAdvertisement({
+              service: 'git-upload-pack',
+              refs: [{ oid: NEW, name: 'refs/vaubaan/0123456789abcdef' }],
+              capabilities: [],
+            }),
+          ).toString('latin1'),
+      },
+      // GitHub names a default branch even when the repository has none.
+      { method: 'GET', url: API, body: { default_branch: 'main' } },
+      {
+        method: 'GET',
+        url: `${API}/commits?sha=${NEW}&per_page=100&page=1`,
+        body: history.map((sha) => ({ sha })),
+      },
+      {
+        method: 'GET',
+        url: `${API}/git/commits/${NEW}`,
+        body: { sha: NEW, tree: { sha: TREE }, parents: [{ sha: ROOT }] },
+      },
+      {
+        method: 'GET',
+        url: `${API}/git/trees/${TREE}?recursive=1`,
+        body: {
+          sha: TREE,
+          truncated: false,
+          tree: [
+            { path: 'src', type: 'tree', mode: '040000', sha: '2'.repeat(40) },
+            ...paths.map((path) => ({ path, type: 'blob', mode: '100644', sha: '3'.repeat(40) })),
+          ],
+        },
+      },
+    ];
+
+    test('is reviewed as a creation: every commit and every file it brings', async () => {
+      const fetch = mockFetch([
+        ...empty([NEW, ROOT], ['README.md', 'src/a.ts']),
+        {
+          method: 'GET',
+          url: `${API}/commits/${ROOT}`,
+          // Added in the first commit, gone from the tip: still a workflow change.
+          body: { files: [{ filename: 'README.md' }, { filename: '.github/workflows/ci.yml' }] },
+        },
+        {
+          method: 'GET',
+          url: `${API}/commits/${NEW}`,
+          body: { files: [{ filename: 'src/a.ts' }, { filename: '.github/workflows/ci.yml' }] },
+        },
+      ]);
+      const reviewed = await review(executeCtx(fetch), 'acme/app', [
+        { ref: 'refs/heads/main', old: null, new: NEW },
+      ]);
+      expect(reviewed).toEqual({
+        ok: true,
+        updates: [
+          {
+            ref: 'refs/heads/main',
+            old: null,
+            new: NEW,
+            kind: 'create',
+            commits: 2,
+            files: ['README.md', 'src/a.ts'],
+            workflow_files: ['.github/workflows/ci.yml'],
+          },
+        ],
+      });
+      // Nothing to compare with: no comparison asked.
+      expect(fetch.calls.some((c) => c.url.includes('/compare/'))).toBe(false);
+    });
+
+    test('of 300 files or more is refused with what to do', async () => {
+      const many = Array.from({ length: 300 }, (_, i) => `f${i}`);
+      const fetch = mockFetch(empty([NEW], many));
+      const reviewed = await review(executeCtx(fetch), 'acme/app', [
+        { ref: 'refs/heads/main', old: null, new: NEW },
+      ]);
+      expect(reviewed).toEqual({
+        ok: false,
+        reason:
+          'refs/heads/main is too large to review as the first branch of the repository (300 or more files); push an earlier commit first (git push origin <commit>:refs/heads/main), then the rest',
+      });
     });
   });
 

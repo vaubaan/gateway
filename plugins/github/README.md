@@ -147,9 +147,12 @@ password. Two host-built tools are decided and audited like any call:
 - **Review** (`git-review.ts`), reads only: each ref is read at GitHub and a
   differing client `old` is refused as stale; the compare API gives the
   kind, commits, changed files and workflow files; every commit of the range
-  is read for workflow changes (at most 100 per push). Over 300 files or 250
-  commits per comparison, an unrelated history or an empty repository: the
-  push is refused. The review ignores the token's permissions — the
+  is read for workflow changes (at most 100 per push). The first branch of a
+  repository with no branch is reviewed against nothing: every commit of its
+  history and every file of its tip. Over 300 files or 250 commits per
+  comparison, or a history unrelated to the branch it is compared with: the
+  push is refused, with what to do (push an earlier commit first; fetch and
+  rebase). The review ignores the token's permissions — the
   mission's decision comes first.
 - **Moves** (`git-moves.ts`), per ref, reported per ref: create
   `POST git/refs`; fast-forward `PATCH git/refs/<ref>` `force: false`; force

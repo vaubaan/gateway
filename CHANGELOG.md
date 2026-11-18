@@ -47,6 +47,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   for an id `plugins.allow_unsigned` names, never for an id of the image. The versions feed
   compares only what Vaubaan signed. Migration 0042 (`plugin_signers`).
 
+### Fixed
+
+- **GitHub (plugin 5.3.1): the first push to an empty repository goes through.** A repository
+  created without a README has no branch, yet GitHub names a default branch; the review compared
+  the push with that missing branch and refused it ("no history in common with main"). With no
+  branch at GitHub, a new branch is now reviewed as a creation: every file of its tip and every
+  commit of its history (at most 100 commits and 299 files; beyond, push an earlier commit first).
+  A push whose history shares nothing with an existing branch is still refused, and the refusal
+  now says what to do: fetch the branch and rebase onto it.
+
 ## [2.0.0-alpha.25] - 2026-11-17
 
 ### Added

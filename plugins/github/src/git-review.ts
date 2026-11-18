@@ -13,6 +13,8 @@
  *   base         what the push brings is reviewed from the narrowest of: the
  *                nearest existing branches it was built on (`BaseFinder`,
  *                reasoning there), the default branch, and `old` (an update);
+ *                in a repository with no branch at all (a new, empty one),
+ *                a create brings its whole history (`wholeHistory`);
  *   kind         create, fast-forward, force (a non-fast-forward, or any tag
  *                move), delete;
  *   files        the net change of the tip, from GitHub's comparison (both
@@ -31,8 +33,8 @@
  * (`git-moves.ts`) checks it again against the review before any ref moves.
  *
  * Limits fail closed: over 300 files or 250 commits per comparison, over
- * `COMMITS_REVIEWED_MAX` commits per push, an unrelated history, an empty
- * repository — the push is refused.
+ * `COMMITS_REVIEWED_MAX` commits per push, a history unrelated to the
+ * branches GitHub has — the push is refused, with what to do.
  */
 import { type ExecuteContext } from '@vaubaan/plugin-sdk';
 import {
@@ -48,7 +50,7 @@ import { pushedRef, type GitRefKind } from './git-call.ts';
 import { targetOf } from './git-credential.ts';
 import { branchHeads } from './git-heads.ts';
 import { workflowPathsOfCommit } from './git-inspect.ts';
-import { ANCESTORS_PAGE_SIZE, GithubRest, type Comparison } from './git-rest.ts';
+import { ANCESTORS_PAGE_SIZE, COMPARE_MAX_FILES, GithubRest, type Comparison } from './git-rest.ts';
 
 /** Commits of one push read one by one for workflow changes (one request each). */
 export const COMMITS_REVIEWED_MAX = 100;
@@ -185,6 +187,11 @@ class BaseFinder {
     return this.heads;
   }
 
+  /** Whether GitHub lists no branch at all: a new repository, empty or holding only tags. */
+  async noBranch(): Promise<boolean> {
+    return (await this.branchHeads()).size === 0;
+  }
+
   /**
    * The first `BASE_CANDIDATES` branch heads met in `sha`'s history (itself
    * included), `exclude` left out — the nearest first. Several, because
@@ -204,6 +211,45 @@ class BaseFinder {
     }
     return found;
   }
+}
+
+/**
+ * What a create brings to a repository with no branch: nothing is there to
+ * compare it with, so everything is new — every commit of its history and
+ * every path of its tree, as GitHub holds them (the pack is stored there
+ * already). The same limits as a comparison, with what to do instead: push
+ * an earlier, smaller commit first, then the rest compares with it.
+ */
+async function wholeHistory(rest: GithubRest, head: string, label: string): Promise<Comparison> {
+  const smaller = `push an earlier commit first (git push origin <commit>:${label}), then the rest`;
+  const shas: string[] = [];
+  for (let page = 1; shas.length <= COMMITS_REVIEWED_MAX; page += 1) {
+    const ancestors = await rest.ancestors(head, page);
+    shas.push(...ancestors);
+    if (ancestors.length < ANCESTORS_PAGE_SIZE) break;
+  }
+  if (shas.length > COMMITS_REVIEWED_MAX) {
+    return {
+      ok: false,
+      reason: `${label} is too large to review as the first branch of the repository (more than ${COMMITS_REVIEWED_MAX} commits); ${smaller}`,
+    };
+  }
+  const commit = await rest.gitObject(head);
+  const files = commit?.kind === 'commit' ? await rest.treePaths(commit.tree) : null;
+  if (files === null) {
+    return {
+      ok: false,
+      reason: `${label} cannot be reviewed: GitHub did not list the files of ${head.slice(0, 12)}`,
+    };
+  }
+  if (files.length >= COMPARE_MAX_FILES) {
+    return {
+      ok: false,
+      reason: `${label} is too large to review as the first branch of the repository (${COMPARE_MAX_FILES} or more files); ${smaller}`,
+    };
+  }
+  // Oldest first, as the compare API lists them.
+  return { ok: true, status: 'ahead', commits: shas.length, shas: shas.reverse(), files };
 }
 
 /** The reviewable comparison that brings the fewest commits, or the first refusal. */
@@ -247,6 +293,13 @@ async function compareOne(
     const base = await defaultBranch();
     return base === null ? null : rest.compare(base, head, label);
   };
+
+  if (commits.old === null && (await bases.noBranch())) {
+    // The first branch of a new repository: nothing to compare it with.
+    const whole = await wholeHistory(rest, head, label);
+    if (!whole.ok) return { reason: whole.reason };
+    return { update, kind: 'create', compared: [whole] };
+  }
 
   if (commits.old === null) {
     // A create brings what no branch holds: compared with the nearest branches

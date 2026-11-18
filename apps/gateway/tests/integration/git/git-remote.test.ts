@@ -17,6 +17,7 @@ import { line, type IssuedMission } from '../../support/execution/testing';
 import {
   ACCOUNT_TOKEN,
   DEVELOPER_TRUST_LEVELS,
+  EMPTY_REPOSITORY,
   openGitRig,
   OTHER_REPOSITORY,
   REPOSITORY,
@@ -329,7 +330,38 @@ describe('push', () => {
     expect(result.stderr).toContain(
       'refs/tags/v2.0.0 cannot be reviewed: it has no history in common with',
     );
+    expect(result.stderr).toContain('git rebase origin/main');
     expect(await rig.host.refOf(REPOSITORY, 'refs/tags/v2.0.0')).toBeNull();
+  });
+
+  it('pushes the first branch of an empty repository: every file of its history reviewed', async () => {
+    const owner = await rig.mission({
+      repositories: [EMPTY_REPOSITORY],
+      policy: [
+        line('github.read-code'),
+        line('github.git-push'),
+        line('github.merge-protected'),
+        line('github.feature-branch-write'),
+      ],
+    });
+    const repo = join(rig.workdir(), 'fresh');
+    mkdirSync(repo);
+    ok(await rig.git(repo, ['init', '-q', '--initial-branch=main'], null));
+    await commitFile(repo, 'README.md', '# fresh\n', 'first');
+    const head = await commitFile(repo, 'src/index.html', '<p>hi</p>\n', 'second');
+    ok(await rig.git(repo, ['remote', 'add', 'origin', rig.remote(EMPTY_REPOSITORY)], null));
+    const result = await rig.git(repo, ['push', '-u', 'origin', 'main'], owner.token);
+    expect(result.stderr).not.toContain('cannot be reviewed');
+    ok(result);
+    expect(await rig.host.refOf(EMPTY_REPOSITORY, 'refs/heads/main')).toBe(head);
+    const push = (await auditOf(owner)).filter((e) => e.tool === PUSH).at(-1);
+    expect(push).toMatchObject({ decision: 'allowed' });
+    expect([...(push?.risks_touched ?? [])].sort()).toEqual([
+      'github.git-push',
+      'github.merge-protected',
+    ]);
+    // Nothing to compare with: the tip's whole tree was read instead.
+    expect(rig.host.requests.some((r) => r.path.endsWith('?recursive=1'))).toBe(true);
   });
 
   it('refuses a push the compare API cannot review in full (300 files)', async () => {

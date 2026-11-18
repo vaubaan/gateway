@@ -157,6 +157,13 @@ export class FakeGithubHost {
     }
   }
 
+  /** A bare repository with no ref at all, as GitHub creates one without a README. */
+  async createEmptyRepository(repository: string): Promise<void> {
+    await run('git', ['init', '--bare', '--initial-branch=main', this.bare(repository)], {
+      env: isolatedGitEnv(this.home),
+    });
+  }
+
   /** The value of a ref in a bare repository, or `null`. */
   async refOf(repository: string, ref: string): Promise<string | null> {
     try {
@@ -232,6 +239,7 @@ export class FakeGithubHost {
         `${database[1]}/${database[2]}`,
         database[3] as 'commits' | 'trees' | 'tags',
         database[4] ?? '',
+        url.searchParams.get('recursive') === '1',
       );
     }
     const compare = /^\/repos\/([^/]+)\/([^/]+)\/compare\/(.+)$/.exec(url.pathname);
@@ -420,12 +428,13 @@ export class FakeGithubHost {
     repository: string,
     kind: 'commits' | 'trees' | 'tags',
     sha: string,
+    recursive = false,
   ): Promise<Response> {
     const type = await this.git(repository, ['cat-file', '-t', sha]).catch(() => null);
     const expected = { commits: 'commit', trees: 'tree', tags: 'tag' }[kind];
     if (type !== expected) return json({ message: 'Not Found' }, 404);
     if (kind === 'trees') {
-      const out = await this.git(repository, ['ls-tree', sha]);
+      const out = await this.git(repository, ['ls-tree', ...(recursive ? ['-r', '-t'] : []), sha]);
       const tree = out
         .split('\n')
         .filter(Boolean)

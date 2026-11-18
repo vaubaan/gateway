@@ -7,7 +7,7 @@ tracks:
   - packages/plugin-sdk/src/git/
   - plugins/github/src/
   - apps/gateway/src/server/store/repositories/pending-refs.ts
-last_reviewed: 2026-11-15
+last_reviewed: 2026-11-18
 ---
 
 # Git remote — handbook
@@ -69,7 +69,16 @@ plugin: [services/github](services/github.md).
   ref is confirmed gone. On `approval-required` they stay until the request
   expires.
 - The review's base is what no branch already holds, and always the default
-  branch for a create.
+  branch for a create. A repository with no branch at all (created without a
+  README) still names a default branch at GitHub (`main`) that does not exist:
+  comparing with it answers 404, which used to refuse the first push as
+  "no history in common". With no `refs/heads/*` at GitHub, a create is
+  reviewed against nothing — every commit of its history, every path of its
+  tip's tree (`?recursive=1`) — under the same 100-commit / 300-file limits.
+- "No history in common" is a 404 of the compare API: a history that shares
+  no commit with the base. The refusal tells the agent to fetch the branch
+  and rebase onto it; it is never lifted, because no base means no diff to
+  review against an existing branch.
 - Force and delete are one receive-pack command with an empty pack, a
   compare-and-swap under GitHub's ref lock; refs move one by one, reported per
   ref like git without `--atomic`.

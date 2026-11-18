@@ -86,6 +86,22 @@ function shortName(ref: string): string {
   return /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 12) : ref;
 }
 
+/**
+ * What to do about a history unrelated to `base`: the branch to rebase onto is
+ * `base` when it is a branch name (the default branch), the pushed branch
+ * itself when `base` is its old id (a rewrite with no common ancestor).
+ */
+function rebaseHint(base: string, label: string): string {
+  const onto = !/^[0-9a-f]{40}$/.test(base)
+    ? base
+    : label.startsWith('refs/heads/')
+      ? label.slice('refs/heads/'.length)
+      : null;
+  return onto === null
+    ? '; fetch first, rebase your commits onto the branch, then push again'
+    : `; fetch ${onto} and rebase your commits onto it (git fetch origin ${onto} && git rebase origin/${onto}), then push again`;
+}
+
 /** The elements of `value` when it is a list, none otherwise : a list GitHub left out is empty. */
 function listOf(value: unknown): readonly unknown[] {
   return isList(value) ? value : [];
@@ -203,7 +219,7 @@ export class GithubRest {
     if (answer === null) {
       return {
         ok: false,
-        reason: `${label} cannot be reviewed: it has no history in common with ${shortName(base)}`,
+        reason: `${label} cannot be reviewed: it has no history in common with ${shortName(base)}${rebaseHint(base, label)}`,
       };
     }
     const files = listOf(answer.files);
@@ -296,6 +312,28 @@ export class GithubRest {
       entries.push({ name: e.path, mode: normalizeMode(e.mode), oid: e.sha });
     }
     return entries;
+  }
+
+  /**
+   * Every path of a tree and its subtrees (`GET git/trees/{sha}?recursive=1`):
+   * files, symbolic links and submodules, never the directories themselves;
+   * `null` when GitHub holds no such tree or truncated its listing.
+   */
+  async treePaths(sha: string): Promise<readonly string[] | null> {
+    const answer = await this.readUnlessAbsent(
+      `/git/trees/${encodeURIComponent(sha)}?recursive=1`,
+      'github GET git/trees',
+      isRecord,
+      OBJECT_ABSENT,
+    );
+    if (answer === null || answer.sha !== sha || answer.truncated === true) return null;
+    if (!isList(answer.tree)) return null;
+    const paths: string[] = [];
+    for (const e of answer.tree) {
+      if (!isRecord(e) || typeof e.path !== 'string' || typeof e.type !== 'string') return null;
+      if (e.type !== 'tree') paths.push(e.path);
+    }
+    return paths.sort();
   }
 
   /** The paths one commit changes against its first parent; `null` when GitHub truncated the list. */

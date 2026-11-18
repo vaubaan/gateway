@@ -32,6 +32,8 @@ import { FakeGithubHost, isolatedGitEnv } from './fake-github-host';
 export const ACCOUNT_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghijklmnopqrstuv';
 export const REPOSITORY = 'acme/app';
 export const OTHER_REPOSITORY = 'acme/lib';
+/** A repository created on GitHub without a README: no ref at all. */
+export const EMPTY_REPOSITORY = 'acme/fresh';
 /**
  * What the former `developer` preset stood for: read and propose at Trusting
  * (push and pull requests run freely, a force-push or a branch delete asks
@@ -115,6 +117,7 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
   const host = await FakeGithubHost.start();
   await host.createRepository(REPOSITORY);
   await host.createRepository(OTHER_REPOSITORY);
+  await host.createEmptyRepository(EMPTY_REPOSITORY);
   const logs: string[] = [];
   const instance = await executionInstance({
     plugins: [githubPlugin],
@@ -139,6 +142,7 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
   await store.accounts.syncDiscoveredResources(github.id, [
     { ref: REPOSITORY, displayName: REPOSITORY, env: null },
     { ref: OTHER_REPOSITORY, displayName: OTHER_REPOSITORY, env: null },
+    { ref: EMPTY_REPOSITORY, displayName: EMPTY_REPOSITORY, env: null },
   ]);
 
   const server = await serve(instance.root.git.handle);
