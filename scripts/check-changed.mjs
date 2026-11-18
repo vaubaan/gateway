@@ -10,7 +10,8 @@
  *      workspace that depends on them, transitively (scripts/type-check.mjs);
  *   2. ESLint and Prettier on the changed files;
  *   3. the Vitest tests related to the changed files (`vitest --changed`);
- *   4. the harness linters on the docs;
+ *   4. the harness linters on the docs, and the workflows (actionlint with shellcheck,
+ *      the version CI fetches, from its Docker image) when one changed;
  *   5. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
  *      the Semgrep image and the semgrep/semgrep-rules commit ci.yml pins, cloned once
  *      into the ignored .semgrep-rules/), over the whole tree: a rule finds what a
@@ -132,6 +133,12 @@ step('vitest (related to the change)', process.execPath, [
 ]);
 step('harness lint', 'npx', ['vaubaan-harness', 'lint']);
 
+/** The actionlint version CI fetches (scripts/fetch-tool.sh), or null. */
+function actionlintVersion() {
+  const fetchTool = readFileSync(join(ROOT, 'scripts/fetch-tool.sh'), 'utf8');
+  return /actionlint\/x64\)\s*\n\s*version=([\d.]+)/.exec(fetchTool)?.[1] ?? null;
+}
+
 /** The Semgrep image and the rules commit the CI pins (ci.yml), or null when unreadable. */
 function sastPins() {
   const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
@@ -141,6 +148,23 @@ function sastPins() {
 }
 
 const docker = spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0;
+
+// The workflows, as CI's actionlint reads them, with shellcheck on every `run:`: the
+// official image carries shellcheck, which a developer's machine may not.
+const workflowsChanged = changed.some((path) => path.startsWith('.github/'));
+const actionlint = actionlintVersion();
+if (workflowsChanged && docker && actionlint !== null) {
+  step(`actionlint ${actionlint} with shellcheck`, 'docker', [
+    'run',
+    '--rm',
+    '-v',
+    `${ROOT}:/repo`,
+    '-w',
+    '/repo',
+    `rhysd/actionlint:${actionlint}`,
+    '-color',
+  ]);
+}
 const pins = sastPins();
 if (!docker || pins === null) {
   process.stdout.write(

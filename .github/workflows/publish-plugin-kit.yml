@@ -82,7 +82,7 @@ jobs:
           NAME: ${{ steps.package.outputs.name }}
           VERSION: ${{ steps.package.outputs.version }}
         run: |
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
               echo "$NAME@$VERSION is on npm"
               exit 0
