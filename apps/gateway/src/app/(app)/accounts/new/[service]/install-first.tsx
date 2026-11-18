@@ -9,11 +9,14 @@ import { ACCOUNT_PAGES, INSTALL_WORDS, PAGES, ROUTES } from '@/lib/vocabulary';
 
 export function InstallFirst({
   serviceId,
+  name = serviceId,
   version,
   problem,
   detail,
 }: {
   serviceId: string;
+  /** The service's name, when this release knows it. */
+  name?: string;
   version: string;
   problem: string | null;
   detail: string | null;
@@ -26,7 +29,7 @@ export function InstallFirst({
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: ACCOUNT_PAGES.connect.title, href: `${ROUTES.accounts}/new` },
         ]}
-        title={INSTALL_WORDS.firstInstallTitle(serviceId)}
+        title={INSTALL_WORDS.firstInstallTitle(name)}
         lede={INSTALL_WORDS.firstInstallLede}
       />
       {problem !== null && (

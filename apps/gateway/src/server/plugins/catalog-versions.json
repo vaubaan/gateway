@@ -1,79 +1,98 @@
 {
-  "$comment": "The catalog versions this release of the gateway was tested with, each pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed). Nothing here is preinstalled: an instance downloads a version when it needs it \u2014 at a person's first connection of the service when the versions feed names no newer one, and at a start for the plugins its accounts need \u2014 and keeps it only if the sha256 matches and the catalog signed it. tests/unit/structural/catalog-versions.test.ts holds each entry to the repository's version of the plugin.",
+  "$comment": "The catalog versions this release of the gateway was tested with, each with the service's name and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed). Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the versions feed names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it. tests/unit/structural/catalog-versions.test.ts holds each entry to the repository's version of the plugin.",
   "plugins": {
     "asana": {
+      "name": "Asana",
       "version": "0.1.0",
       "sha256": "ebb2aa70cf5abce096a10cea2358ae90593aeef07c13505edf805e6000c8b47a"
     },
     "axonaut": {
+      "name": "Axonaut",
       "version": "0.1.0",
       "sha256": "436e7fbd7970d0eea07026d3722b5782f3bd89995a90c0561820c38f4fea0fd3"
     },
     "caldav": {
+      "name": "CalDAV Calendar",
       "version": "0.2.0",
       "sha256": "da92abbd8e76b5e80b575460225d9d9d8236fd88f481656affe06db9c26083d3"
     },
     "cloudflare-dns": {
+      "name": "Cloudflare DNS",
       "version": "4.0.0",
       "sha256": "e0cc4032bf17cc705a3b3bd5f9d2bc482f9280af4d39da79c797322957395257"
     },
     "context7": {
+      "name": "Context7",
       "version": "0.2.0",
       "sha256": "8c757193c365f48c54faa4d8b9008c38fdd3a601cd77c38e6179778cd1b19ae7"
     },
     "fly": {
+      "name": "Fly.io",
       "version": "0.4.0",
       "sha256": "38e23928bac93fd4e45995f6bf0e936730b5bdd2c2473d2fc6681363d463a6b7"
     },
     "github": {
+      "name": "GitHub",
       "version": "5.3.1",
       "sha256": "d6854af559cd3038a58fb0e2c83cd091ed2cb8ccfdd2c70b0cf85154ab8ee213"
     },
     "github-projects": {
+      "name": "GitHub Projects",
       "version": "0.1.0",
       "sha256": "8d46f30b3da384e8c6f3d5b3bd7e24b197563dec8f826f3e55f4f15b1f2fbd31"
     },
     "gmail": {
+      "name": "Gmail",
       "version": "2.0.0",
       "sha256": "ec0935cbaddf89895d7e7703374b4d378286d742cd2b67df9a256b96507354f5"
     },
     "google-calendar": {
+      "name": "Google Calendar",
       "version": "0.4.0",
       "sha256": "025675d9e43568783d110a7aa9bb603ea645cc7a5c82e3ccf153e3a1b6183481"
     },
     "miro": {
+      "name": "Miro",
       "version": "0.5.0",
       "sha256": "4e6db94890eee9ef3a7b3a0809c07961dac2811476c91bbc93feb2c8f78c29a4"
     },
     "notion": {
+      "name": "Notion",
       "version": "0.2.0",
       "sha256": "e409fc4629fc79d2826ccc886b78671fb24e35868bc9a5692a009562eeb62f64"
     },
     "outlook": {
+      "name": "Outlook",
       "version": "0.1.0",
       "sha256": "6244536d9ca3d44ee08305a6add6de3272e81a48235aa97d05fe031971ed75b7"
     },
     "railway": {
+      "name": "Railway",
       "version": "6.0.0",
       "sha256": "5a120876d905831c655ba6b7a30268d17bd5cf2eebf2644eaefeab5e0a9d7cae"
     },
     "resend": {
+      "name": "Resend",
       "version": "0.6.0",
       "sha256": "18bb029c4d46edcad308fe739c660ce90f0f185d05e9ea4f499b764d64a2be5a"
     },
     "stripe": {
+      "name": "Stripe",
       "version": "0.5.0",
       "sha256": "a78306aeb465092434108d22edc332b98bf82343111f8464361b22dc090ced9e"
     },
     "supabase": {
+      "name": "Supabase",
       "version": "6.0.0",
       "sha256": "f60a08999c2c07aada01ab30b05bc81659522936cea378ecfc0cf0813583f71e"
     },
     "upstash-redis": {
+      "name": "Upstash Redis",
       "version": "4.0.0",
       "sha256": "8ad6bd00a3c9ca883b39ca25c4470454148c5ac0363d0ce0273927e6079710f6"
     },
     "vercel": {
+      "name": "Vercel",
       "version": "4.2.0",
       "sha256": "621df655b1c7c270a8a9bf88a9fffee74b254f51f5df6862a01315ea58264cdf"
     }

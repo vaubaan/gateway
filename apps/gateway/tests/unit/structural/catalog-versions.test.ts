@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { KNOWN_CATALOG_VERSIONS } from '../../../src/server/plugins/catalog';
+import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const PLUGINS = join(import.meta.dirname, '../../../../../plugins');
 const repositoryVersion = (id: string): string | undefined => {
@@ -27,6 +28,12 @@ describe('the catalog versions this release knows', () => {
   it('pins each archive by its sha256', () => {
     for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
       expect(known.sha256, id).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it('gives each service the name its plugin says', () => {
+    for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
+      expect(known.name, id).toBe(REPOSITORY_PLUGINS.find((p) => p.id === id)?.displayName);
     }
   });
 

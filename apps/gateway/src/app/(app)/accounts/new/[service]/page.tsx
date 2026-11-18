@@ -192,6 +192,7 @@ export default async function ConnectOneAccountPage({
     return (
       <InstallFirst
         serviceId={serviceId}
+        name={offered.name ?? serviceId}
         version={offered.released}
         problem={firstParam(query[INSTALL_PROBLEM_PARAM])}
         detail={firstParam(query[DETAIL_PARAM])}

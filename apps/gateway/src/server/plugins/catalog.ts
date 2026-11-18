@@ -19,6 +19,8 @@ import knownVersions from './catalog-versions.json' with { type: 'json' };
 
 /** A catalog version this release was tested with, pinned by its archive's sha256. */
 export interface KnownCatalogVersion {
+  /** The service's name, as its plugin says it: what the connect picker shows before it is installed. */
+  readonly name: string;
   readonly version: string;
   readonly sha256: string;
 }

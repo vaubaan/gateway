@@ -341,15 +341,18 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         catalogVersions().find((available) => available.id === pluginId)?.released ??
         KNOWN_CATALOG_VERSIONS.get(pluginId)?.version ??
         null,
-      catalogOffer: () => {
+      catalogOffer: (): readonly { id: string; released: string; name?: string }[] => {
         const offered = new Map(catalogVersions().map((p) => [p.id, p.released]));
         for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
           if (!offered.has(id)) offered.set(id, known.version);
         }
         return [...offered]
           .filter(([id]) => !registry.has(id))
-          .map(([id, released]) => ({ id, released }))
-          .sort((a, b) => a.id.localeCompare(b.id));
+          .map(([id, released]) => {
+            const name = KNOWN_CATALOG_VERSIONS.get(id)?.name;
+            return name === undefined ? { id, released } : { id, released, name };
+          })
+          .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
       },
       loadRefusal: (pluginId) =>
         config.plugins.enabled === null || config.plugins.enabled.includes(pluginId)
