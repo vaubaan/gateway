@@ -146,9 +146,10 @@ it is the program, a check a bundled shared chunk cannot make.
   asset and `next build` fails. Use `loadCatalogFile(catalogPathNextTo(import.meta.url))`; its
   `join` carries `turbopackIgnore` (without it the whole app, tests included, is traced into
   `.next/standalone`).
-- The YAML reaches `.next/standalone` only through the `plugins/*/src/**/*.yaml` glob of
-  `outputFileTracingIncludes` in `apps/gateway/next.config.ts`: keep it under
-  `plugins/<id>/src/` (`standalone-plugin-catalogs.test.ts` checks after a build).
+- The YAML of a plugin compiled into the server (`vaubaan`, `ssh`) reaches `.next/standalone`
+  only through `outputFileTracingIncludes` in `apps/gateway/next.config.ts`: keep it under
+  `plugins/<id>/src/` (`standalone-plugin-catalogs.test.ts` checks after a build). Every other
+  plugin is an archive carrying its own YAML beside its bundle.
 - `@vaubaan/shared`'s barrel is server-only (`node:crypto`); code the UI bundles takes
   values from `@vaubaan/shared/risk-id`, `/domain`, `/api-key`.
 - A plugin matching a glob from its arguments uses `matchWildcard`, never a `RegExp`.

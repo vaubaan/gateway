@@ -4,11 +4,11 @@
  * A plugin reads `risk-catalog.yaml` from disk at import time through
  * `loadCatalogFile(catalogPathNextTo(import.meta.url))`. Next's file tracing
  * cannot follow a `readFileSync` behind a computed path, so `next.config.ts`
- * lists `plugins/*\/src/**\/*.yaml` in `outputFileTracingIncludes` (see
- * docs/handbook/plugin-sdk.md). This test reads the build
- * output and checks that every catalog of the repository — the template's
- * included — is present under `.next/standalone`, at the path the module
- * computes relative to itself.
+ * lists the YAML of the plugins compiled into the server (`vaubaan`, `ssh`) in
+ * `outputFileTracingIncludes` (see docs/handbook/plugin-sdk.md). This test reads the
+ * build output and checks that those catalogs are under `.next/standalone`, at the path
+ * the module computes relative to itself, and that no other plugin's file is: every
+ * other plugin is installed from the catalog (ADR plugins-installed-when-first-needed).
  *
  * The same output must hold no test file. The plugin loader's computed path
  * (`catalogPathNextTo`) carries a `turbopackIgnore` hint: without it the build
@@ -21,9 +21,6 @@
  * builds before testing, so it runs there; the container smoke test
  * (`deploy/docker/smoke.sh`) boots the image, which fails if a catalog is
  * missing.
- *
- * The screenshots of the connect guides (`plugins/*\/docs/connect/**`) are read the
- * same way, behind a computed path (`readConnectFile`), and traced the same way.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -32,7 +29,6 @@ import { describe, expect, it } from 'vitest';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(appDir, '../..');
-const pluginsDir = join(repoRoot, 'plugins');
 const standaloneDir = join(appDir, '.next/standalone');
 const hasBuild = existsSync(standaloneDir);
 
@@ -65,37 +61,21 @@ function isTestFile(path: string): boolean {
   return /(^|\/)apps\/gateway\/tests\//.test(normalized) || TEST_FILE.test(normalized);
 }
 
-/** Every `plugins/<id>/src/risk-catalog.yaml` of the repository, relative to the root. */
-function catalogsInRepo(): string[] {
-  return readdirSync(pluginsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => join(pluginsDir, entry.name, 'src/risk-catalog.yaml'))
-    .filter((path) => existsSync(path))
-    .map((path) => relative(repoRoot, path));
-}
+/** The plugins compiled into the server (`SHIPPED_PLUGINS`; ADR plugins-installed-when-first-needed). */
+const COMPILED = ['ssh', 'vaubaan'];
 
 describe.skipIf(!hasBuild)('standalone output keeps the plugin risk catalogs (Next build)', () => {
-  it('traces the template catalog next to its module', () => {
-    expect(existsSync(join(standaloneDir, 'plugins/_template/src/risk-catalog.yaml'))).toBe(true);
+  it('traces the catalogs of the plugins compiled into the server, next to their modules', () => {
+    for (const id of COMPILED) {
+      expect(existsSync(join(standaloneDir, `plugins/${id}/src/risk-catalog.yaml`)), id).toBe(true);
+    }
   });
 
-  it('traces every plugin catalog of the repository', () => {
-    const catalogs = catalogsInRepo();
-    expect(catalogs.length).toBeGreaterThan(0);
-    const missing = catalogs.filter((path) => !existsSync(join(standaloneDir, path)));
-    expect(missing).toEqual([]);
-  });
-
-  it('traces the screenshots of the connect guides', () => {
-    const shots = readdirSync(pluginsDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .flatMap((entry) => {
-        const dir = join(pluginsDir, entry.name, 'docs/connect');
-        return existsSync(dir)
-          ? readdirSync(dir).map((file) => relative(repoRoot, join(dir, file)))
-          : [];
-      });
-    expect(shots.filter((path) => !existsSync(join(standaloneDir, path)))).toEqual([]);
+  it('carries no file of any other plugin: they are installed from the catalog', () => {
+    const others = existsSync(join(standaloneDir, 'plugins'))
+      ? readdirSync(join(standaloneDir, 'plugins')).filter((id) => !COMPILED.includes(id))
+      : [];
+    expect(others).toEqual([]);
   });
 
   it('ships no test file: no trace names one and the standalone tree holds none', () => {
