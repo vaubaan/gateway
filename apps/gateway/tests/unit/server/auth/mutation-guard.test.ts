@@ -473,6 +473,13 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   'pluginInstall.handlers.upload': form('operator', 303, (rig, headers) =>
     rig.root.pluginInstall.handlers.upload(post('/admin/plugins/upload', headers, {})),
   ),
+  // Any signed-in person; the instance reads no feed here, so it answers its problem.
+  'pluginInstall.handlers.installForConnection': form('user', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.installForConnection(
+      post('/accounts/new/notion/install', headers, {}),
+      'notion',
+    ),
+  ),
   'pluginInstall.handlers.installCatalog': form('operator', 303, (rig, headers) =>
     rig.root.pluginInstall.handlers.installCatalog(
       post('/admin/plugins/install-catalog', headers, {

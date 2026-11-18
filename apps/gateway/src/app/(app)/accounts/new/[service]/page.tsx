@@ -71,6 +71,8 @@ import {
 import { servicePath } from '@/lib/services/links';
 
 import styles from '../../accounts.module.css';
+import { DETAIL_PARAM, INSTALL_PROBLEM_PARAM } from '@/server/plugins/handlers';
+import { InstallFirst } from './install-first';
 
 export const dynamic = 'force-dynamic';
 
@@ -182,7 +184,20 @@ export default async function ConnectOneAccountPage({
   const query = await searchParams;
   const accounts = root.accounts.service;
   const service = await accounts.service(serviceId);
-  if (!service) notFound();
+  if (!service) {
+    // No plugin yet: the catalog's, installed when first needed (ADR
+    // plugins-installed-when-first-needed).
+    const offered = root.updates.current()?.pluginsAvailable.find((p) => p.id === serviceId);
+    if (!offered) notFound();
+    return (
+      <InstallFirst
+        serviceId={serviceId}
+        version={offered.released}
+        problem={firstParam(query[INSTALL_PROBLEM_PARAM])}
+        detail={firstParam(query[DETAIL_PARAM])}
+      />
+    );
+  }
   const notice = await takeNotice(root, principal.sessionId, query);
   // A refused form comes back as it was typed (never a secret), its field in error marked.
   const typed = notice?.form;

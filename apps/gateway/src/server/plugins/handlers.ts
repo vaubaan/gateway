@@ -9,7 +9,12 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import { ARCHIVE_LIMITS } from '@vaubaan/plugin-sdk/archive';
 
 import { auditActorId, type Authenticator } from '../auth/authenticator';
-import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from '../auth/guard';
+import {
+  guardMutation,
+  OPERATOR_REFUSALS,
+  refusalResponse,
+  type RefusalWording,
+} from '../auth/guard';
 import { notAFormResponse, readForm } from '../http/form';
 import type { Logger } from '../logging';
 import { toIso, type Clock } from '../store/clock';
@@ -56,6 +61,12 @@ export interface PluginHandlerDeps {
 
 export interface PluginHandlers {
   upload(request: Request): Promise<Response>;
+  /**
+   * `POST /accounts/new/<service>/install` — any signed-in person: the first connection of a
+   * service the instance has no plugin for installs the catalog's version and loads it, then
+   * goes on to the connection page (ADR plugins-installed-when-first-needed).
+   */
+  installForConnection(request: Request, serviceId: string): Promise<Response>;
   /** Downloads a catalog version and keeps it pending (form: `plugin`, `plugin_version`). */
   installCatalog(request: Request): Promise<Response>;
   activate(request: Request): Promise<Response>;
@@ -90,6 +101,25 @@ function field(form: FormData, name: string): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
+/** Where a person connects an account of a service. */
+export const CONNECT_PAGE = '/accounts/new';
+export const INSTALL_PROBLEM_PARAM = 'install_problem';
+
+const USER_REFUSALS: RefusalWording = {
+  field: 'reason',
+  noSession: 'no session',
+  forbidden: 'plugins are installed by signed-in people; sign in first',
+};
+
+function toConnect(serviceId: string, params: Record<string, string> = {}): Response {
+  const query = new URLSearchParams(params).toString();
+  const path = `${CONNECT_PAGE}/${encodeURIComponent(serviceId)}`;
+  return new Response(null, {
+    status: SEE_OTHER,
+    headers: { Location: query === '' ? path : `${path}?${query}`, 'Cache-Control': 'no-store' },
+  });
+}
+
 export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
   async function guarded(
     request: Request,
@@ -103,6 +133,28 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
   }
 
   return {
+    async installForConnection(request, serviceId) {
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
+      const result = await deps.install.installForConnection(serviceId, {
+        userId: auditActorId(guard.principal),
+      });
+      if (!result.ok) {
+        return toConnect(serviceId, {
+          [INSTALL_PROBLEM_PARAM]: result.code,
+          [DETAIL_PARAM]: result.message.slice(0, 400),
+        });
+      }
+      if (result.installed !== null) {
+        deps.logger.info('plugin installed at a first connection', {
+          plugin: result.installed.pluginId,
+          version: result.installed.version,
+          digest: result.installed.digest,
+        });
+      }
+      return toConnect(serviceId);
+    },
+
     upload: (request) =>
       guarded(request, async (form, actor) => {
         const file = form.get(ARCHIVE_FIELD);

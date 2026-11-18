@@ -9,6 +9,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **A plugin installs itself when a person first connects its service.** The connect picker also
+  offers the catalog's plugins the instance does not have; choosing one asks to "Install and
+  connect": the gateway downloads the catalog's version, keeps it only signed by Vaubaan, and loads
+  it at once — no restart — for everyone on the instance. Any signed-in person may; the
+  installation is audited. A plugin `plugins.enabled` does not name is refused.
+
 ## [2.0.0-alpha.26] - 2026-11-18
 
 ### Added

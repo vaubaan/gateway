@@ -179,9 +179,10 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     logger,
     build: deps.build,
     clock,
-    ...(deps.registry.gitRemotes().length > 0
-      ? { gitRemote: { publicUrl: deps.config.publicUrl } }
-      : {}),
+    // Always offered: the catalog names a git remote only for an account whose plugin is
+    // one (`registry.gitRemoteOf`), read at each request — a plugin installed at a first
+    // connection included.
+    gitRemote: { publicUrl: deps.config.publicUrl },
   });
 
   return {

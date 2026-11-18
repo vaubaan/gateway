@@ -29,10 +29,15 @@ import type {
   PluginSignersRepo,
 } from '../store/repositories/plugin-signers.ts';
 
-import { InstallRefusal, storeArchive, type InstallRefusalCode } from './installed';
+import {
+  examplesProblem,
+  InstallRefusal,
+  storeArchive,
+  type InstallRefusalCode,
+} from './installed';
 import { admissionProblem, trustOf, type AdmissionCode } from './trust';
 import type { CatalogFetch, CatalogFetchCode } from './catalog';
-import { PINNED_CATALOG_FILE, sdkInRange } from './loader';
+import { PINNED_CATALOG_FILE, readPluginDirectory, sdkInRange, type PinnedPlugin } from './loader';
 import { readFile } from 'node:fs/promises';
 
 /** Previous versions kept per plugin, besides the active one and the image's (D10). */
@@ -57,6 +62,13 @@ export type PluginActRefusalCode =
 export type UploadResult =
   | { readonly ok: true; readonly version: PluginVersionRecord }
   | { readonly ok: false; readonly code: UploadRefusalCode; readonly message: string };
+
+export type ConnectionInstallCode =
+  UploadRefusalCode | 'not-in-catalog' | 'not-enabled' | 'did-not-load';
+
+export type ConnectionInstallResult =
+  | { readonly ok: true; readonly installed: PluginVersionRecord | null }
+  | { readonly ok: false; readonly code: ConnectionInstallCode; readonly message: string };
 
 export type PluginActResult =
   | { readonly ok: true }
@@ -108,6 +120,19 @@ export interface PluginInstallDeps {
   readonly accountsOf: (pluginId: string) => Promise<number>;
   /** The active missions on an account of the service, by name. */
   readonly missionsOf: (pluginId: string) => Promise<readonly { id: string; name: string }[]>;
+  /**
+   * The catalog's latest version of a plugin the instance has no version of (the versions
+   * feed's), or `null` when the catalog does not offer it or the feed was not read.
+   */
+  readonly catalogVersionOf: (pluginId: string) => string | null;
+  /** Why the instance may not run that plugin at all (`plugins.enabled`), or `null`. */
+  readonly loadRefusal: (pluginId: string) => string | null;
+  /**
+   * Adds a loaded plugin to the running instance (ADR plugins-installed-when-first-needed):
+   * the registry, the inventory and every list derived from them. `null` once added, or
+   * why it was not.
+   */
+  readonly loadNow: (pin: PinnedPlugin) => string | null;
   /** Downloads a version's archive from the catalog (`catalog.ts`); `null` when there is none. */
   readonly catalog: ((pluginId: string, version: string) => Promise<CatalogFetch>) | null;
   readonly audit: AuditWriter;
@@ -141,6 +166,13 @@ export interface PluginInstallService {
    * its signature is the catalog's and it is that id at that version; else nothing is kept.
    */
   installFromCatalog(pluginId: string, version: string, actor: PluginActor): Promise<UploadResult>;
+  /**
+   * The first connection of a service the instance has no plugin for (ADR
+   * plugins-installed-when-first-needed): downloads the catalog's latest version, keeps it
+   * only signed by the catalog, records it active and loads it at once. Any signed-in
+   * person may. A plugin already registered answers `ok` at once.
+   */
+  installForConnection(pluginId: string, actor: PluginActor): Promise<ConnectionInstallResult>;
   activationView(digest: string): Promise<ActivationView | null>;
   /** Marks a version for a trial at the next start; `typedId` must be the plugin's id. */
   activate(digest: string, typedId: string, actor: PluginActor): Promise<PluginActResult>;
@@ -282,22 +314,82 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     return { ok: true, version };
   }
 
+  async function fromCatalog(
+    pluginId: string,
+    version: string,
+    actor: PluginActor,
+  ): Promise<UploadResult> {
+    if (deps.dir === null) return noDataDirectory();
+    if (deps.catalog === null) {
+      return {
+        ok: false,
+        code: 'catalog-unreachable',
+        message: 'this instance reads no catalog',
+      };
+    }
+    const fetched = await deps.catalog(pluginId, version);
+    if (!fetched.ok) return fetched;
+    return admit(fetched.bytes, actor, { pluginId, version, source: fetched.url });
+  }
+
   return {
     upload: (bytes, actor) => admit(bytes, actor, null),
 
-    async installFromCatalog(pluginId, version, actor) {
-      if (deps.dir === null) return noDataDirectory();
-      if (deps.catalog === null) {
+    async installForConnection(pluginId, actor) {
+      if (deps.running(pluginId) !== null) return { ok: true, installed: null };
+      const refusal = deps.loadRefusal(pluginId);
+      if (refusal !== null) return { ok: false, code: 'not-enabled', message: refusal };
+      const version = deps.catalogVersionOf(pluginId);
+      if (version === null) {
         return {
           ok: false,
-          code: 'catalog-unreachable',
-          message: 'this instance reads no catalog',
+          code: 'not-in-catalog',
+          message: `${pluginId} is not a plugin of the catalog this instance read`,
         };
       }
-      const fetched = await deps.catalog(pluginId, version);
-      if (!fetched.ok) return fetched;
-      return admit(fetched.bytes, actor, { pluginId, version, source: fetched.url });
+      const installed = await fromCatalog(pluginId, version, actor);
+      if (!installed.ok) return installed;
+      const record = installed.version;
+      const failed = async (failure: string): Promise<ConnectionInstallResult> => {
+        await deps.versions.recordStart(
+          [{ digest: record.digest, outcome: 'failed', failure }],
+          actor.userId,
+        );
+        deps.logger.error('a catalog plugin installed at a first connection did not load', {
+          plugin: pluginId,
+          version,
+          failure,
+        });
+        return { ok: false, code: 'did-not-load', message: failure };
+      };
+      let pin: PinnedPlugin;
+      try {
+        pin = await readPluginDirectory(
+          join(/* turbopackIgnore: true */ deps.dir as string, record.digest),
+          {
+            sdkVersion: deps.sdkVersion,
+          },
+        );
+      } catch (err) {
+        return failed(err instanceof Error ? err.message : String(err));
+      }
+      const examples = examplesProblem(pin.plugin);
+      if (examples !== null) return failed(examples);
+      const notLoaded = deps.loadNow({ ...pin, trust: 'vaubaan' });
+      if (notLoaded !== null) return failed(notLoaded);
+      await deps.versions.recordStart(
+        [{ digest: record.digest, outcome: 'activated', replaced: null }],
+        actor.userId,
+      );
+      await audit(actor, 'plugin-activated', record.digest, summary(record), {
+        ...summary(record),
+        state: 'active',
+        at: 'first connection',
+      });
+      return { ok: true, installed: { ...record, state: 'active' } };
     },
+
+    installFromCatalog: fromCatalog,
 
     async activationView(digest) {
       const version = await deps.versions.get(digest);

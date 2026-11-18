@@ -13,7 +13,12 @@
  * deployment can build the same root from another HTTP host.
  */
 import { MemoryCacheClient } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import {
+  createRegistry,
+  SDK_VERSION,
+  type PluginRegistry,
+  type ServicePlugin,
+} from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createBackupModule, type BackupService, type BackupTimers } from '../backup';
@@ -56,10 +61,10 @@ import {
   loadPlugins,
   unservedServices,
   type LoadedPlugins,
+  type PinnedPlugin,
   type PluginInventory,
   type PluginInventoryEntry,
 } from '../plugins';
-import { SDK_VERSION } from '@vaubaan/plugin-sdk';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
@@ -216,6 +221,11 @@ export interface RootDeps {
   readonly catalogFetch?: typeof fetch;
   /** Where the image unpacked the socle (`SOCLE_DIR`); tests point elsewhere. */
   readonly socleDir?: string;
+  /**
+   * The plugins compiled into the server (`SHIPPED_PLUGINS` by default). Tests choose theirs:
+   * an instance without a plugin, to install it at a first connection.
+   */
+  readonly bundled?: readonly ServicePlugin[];
   /** The versions check's timers (tests drive them by hand). */
   readonly updatesTimers?: UpdatesTimers;
   /** Ends the process for its supervisor to restart it; default: exit 75 once the root closed. */
@@ -274,6 +284,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // handle, then each timer), so a late failure closes it: `getRoot` retries
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
+  const bundled = deps.bundled ?? SHIPPED_PLUGINS;
   try {
     const { registry, inventory, installedDir } = await buildPlugins(
       config,
@@ -281,6 +292,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       store,
       deps.buildRegistry,
       deps.socleDir,
+      bundled,
     );
     checkSelfResources(config, registry);
     checkBrokeredPlugins(registry);
@@ -298,6 +310,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     ) => Promise<readonly { id: string; name: string }[]> = async () => [];
     // The versions check is built below; until its first read, the catalog's ids are unknown.
     let catalogIds: () => readonly string[] = () => [];
+    let catalogVersions: () => readonly { id: string; released: string }[] = () => [];
     const pluginInstall = createPluginInstallService({
       versions: store.pluginVersions,
       dir: installedDir,
@@ -310,7 +323,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       // never takes the id of a catalog plugin, even one this image does not ship. At a
       // start, only the image's (`installedAdmission`): a private plugin already installed
       // does not stop when the catalog later publishes its id.
-      reservedIds: () => new Set([...reservedPluginIds(), ...catalogIds()]),
+      reservedIds: () => new Set([...reservedPluginIds(bundled), ...catalogIds()]),
       running: (pluginId) => {
         const registered = registry.get(pluginId);
         const entry = inventory.entries.find((e) => e.id === pluginId);
@@ -322,10 +335,17 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         };
       },
       providedOtherwise: (pluginId) =>
-        SHIPPED_PLUGINS.some((plugin) => plugin.id === pluginId) ||
+        bundled.some((plugin) => plugin.id === pluginId) ||
         inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
       accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
       missionsOf: (pluginId) => activeMissionsOf(pluginId),
+      catalogVersionOf: (pluginId) =>
+        catalogVersions().find((available) => available.id === pluginId)?.released ?? null,
+      loadRefusal: (pluginId) =>
+        config.plugins.enabled === null || config.plugins.enabled.includes(pluginId)
+          ? null
+          : `plugins.enabled does not list ${pluginId}: this instance runs only the plugins it names`,
+      loadNow: (pin) => addPluginNow(config, registry, inventory.entries, pin),
       catalog: (pluginId, version) =>
         fetchCatalogArchive(pluginId, version, { fetch: deps.catalogFetch ?? fetch }),
       audit: store.auditWriter,
@@ -370,6 +390,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     });
     opened.push(() => updates.stop());
     catalogIds = () => updates.current()?.catalogIds ?? [];
+    catalogVersions = () => updates.current()?.pluginsAvailable ?? [];
     updates.start();
     const closeRoot = () => closeAll(opened);
     const requestRestart = deps.requestRestart ?? defaultRestart;
@@ -424,21 +445,22 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
  * The ids only a Vaubaan signature may carry: the image's plugins. (The catalog's join them
  * once the instance reads the catalog's index.)
  */
-function reservedPluginIds(): ReadonlySet<string> {
-  return new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id));
+function reservedPluginIds(bundled: readonly ServicePlugin[]): ReadonlySet<string> {
+  return new Set(bundled.map((plugin) => plugin.id));
 }
 
 /** The admission rule of this start for installed versions (`trust.ts`), over the trusted signers now. */
 async function installedAdmission(
   config: InstanceConfig,
   store: Store,
+  bundled: readonly ServicePlugin[],
 ): Promise<InstalledAdmission> {
   const trustedKeys = (await store.pluginSigners.list()).map((signer) => ({
     name: signer.name,
     publicKeyPem: signer.publicKeyPem,
   }));
   const rules = {
-    reservedIds: reservedPluginIds(),
+    reservedIds: reservedPluginIds(bundled),
     allowUnsigned: new Set(config.plugins.allowUnsigned),
   };
   return (pluginId, files) =>
@@ -465,6 +487,7 @@ async function buildPlugins(
   store: Store,
   buildRegistry: RootDeps['buildRegistry'],
   socleDir: string = SOCLE_DIR,
+  bundled: readonly ServicePlugin[] = SHIPPED_PLUGINS,
 ): Promise<LoadedPlugins & { readonly installedDir: string | null }> {
   if (buildRegistry) {
     const registry = await buildRegistry(config, logger);
@@ -477,19 +500,19 @@ async function buildPlugins(
   const installed = await startInstalledPlugins({
     config,
     store,
-    admit: await installedAdmission(config, store),
+    admit: await installedAdmission(config, store, bundled),
     audit: store.auditWriter,
     clock: systemClock,
     logger,
     sdkVersion: SDK_VERSION,
   });
   const socle = await loadSocle(socleDir, {
-    compiled: SHIPPED_PLUGINS,
+    compiled: bundled,
     sdkVersion: SDK_VERSION,
     logger,
   });
   const loaded = await loadPlugins(config, logger, {
-    bundled: SHIPPED_PLUGINS,
+    bundled,
     socle,
     installed: installed.plugins,
   });
@@ -1153,4 +1176,39 @@ async function missionsOnService(
     }
   }
   return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Adds a plugin to the running instance (ADR plugins-installed-when-first-needed): the
+ * boot's own checks over the registry it would make, then the registry and the inventory
+ * — one array every page, the versions check and the `vaubaan` plugin read. A plugin is
+ * only ever added: an id the instance has is refused. `null` once added, or why not.
+ */
+function addPluginNow(
+  config: InstanceConfig,
+  registry: PluginRegistry,
+  entries: readonly PluginInventoryEntry[],
+  pin: PinnedPlugin,
+): string | null {
+  if (registry.has(pin.id)) return `${pin.id} is already registered`;
+  try {
+    const candidate = createRegistry([...registry.all().map((r) => r.plugin), pin.plugin]);
+    checkSelfResources(config, candidate);
+    checkBrokeredPlugins(candidate);
+    checkHostToolNames(candidate);
+    registry.register(pin.plugin);
+  } catch (err) {
+    return err instanceof Error ? (err.message.split('\n')[0] ?? err.message) : String(err);
+  }
+  (entries as PluginInventoryEntry[]).push({
+    id: pin.id,
+    name: pin.plugin.displayName,
+    version: pin.version,
+    origin: 'installed',
+    replaces: null,
+    enabled: true,
+    path: pin.path,
+    ...(pin.trust !== undefined ? { trust: pin.trust } : {}),
+  });
+  return null;
 }

@@ -65,45 +65,60 @@ export class PluginRegistryError extends Error {
 }
 
 export class PluginRegistry {
-  private readonly byId: ReadonlyMap<string, RegisteredPlugin>;
-  private readonly byToolName: ReadonlyMap<string, RegisteredPlugin>;
+  private readonly byId = new Map<string, RegisteredPlugin>();
+  private readonly byToolName = new Map<string, RegisteredPlugin>();
 
   /** Build a registry ; throws `PluginRegistryError` on any cross-plugin conflict or ill-formed plugin. */
   constructor(plugins: readonly ServicePlugin[]) {
     const issues: string[] = [];
-    const byId = new Map<string, RegisteredPlugin>();
-    const byToolName = new Map<string, RegisteredPlugin>();
     for (const plugin of plugins) {
-      const own = pluginIssues(plugin);
-      if (own.length > 0) {
-        issues.push(...own.map((m) => `plugin '${String(plugin.id)}': ${m}`));
-        continue;
-      }
-      if (byId.has(plugin.id)) {
-        issues.push(`plugin '${plugin.id}' is registered twice`);
-        continue;
-      }
-      let catalog: IndexedRiskCatalog;
-      try {
-        catalog = prepareCatalog(plugin.catalog, { warn: () => undefined });
-      } catch (e) {
-        issues.push(`plugin '${plugin.id}': ${e instanceof Error ? e.message : String(e)}`);
-        continue;
-      }
-      const registered: RegisteredPlugin = {
+      const prepared = this.prepare(plugin);
+      if ('issues' in prepared) issues.push(...prepared.issues);
+      else this.add(prepared.registered);
+    }
+    if (issues.length > 0) throw new PluginRegistryError(issues);
+  }
+
+  /** A plugin checked against itself and the registry, ready to add; never adds. */
+  private prepare(
+    plugin: ServicePlugin,
+  ): { readonly registered: RegisteredPlugin } | { readonly issues: readonly string[] } {
+    const own = pluginIssues(plugin);
+    if (own.length > 0) return { issues: own.map((m) => `plugin '${String(plugin.id)}': ${m}`) };
+    if (this.byId.has(plugin.id)) return { issues: [`plugin '${plugin.id}' is registered twice`] };
+    let catalog: IndexedRiskCatalog;
+    try {
+      catalog = prepareCatalog(plugin.catalog, { warn: () => undefined });
+    } catch (e) {
+      return { issues: [`plugin '${plugin.id}': ${e instanceof Error ? e.message : String(e)}`] };
+    }
+    return {
+      registered: {
         plugin,
         catalog,
         toolPrefix: toolPrefixFor(plugin.id),
         toolNames: new Set(plugin.tools.map((t) => t.name)),
-      };
-      byId.set(plugin.id, registered);
-      // Tool names cannot collide across plugins : ids are unique and the
-      // prefix rule (checked per plugin) is a bijection on ids.
-      for (const tool of plugin.tools) byToolName.set(tool.name, registered);
-    }
-    if (issues.length > 0) throw new PluginRegistryError(issues);
-    this.byId = byId;
-    this.byToolName = byToolName;
+      },
+    };
+  }
+
+  private add(registered: RegisteredPlugin): void {
+    this.byId.set(registered.plugin.id, registered);
+    // Tool names cannot collide across plugins : ids are unique and the
+    // prefix rule (checked per plugin) is a bijection on ids.
+    for (const tool of registered.plugin.tools) this.byToolName.set(tool.name, registered);
+  }
+
+  /**
+   * Adds a plugin to a running registry (ADR plugins-installed-when-first-needed): the
+   * same checks as the constructor; a plugin is only ever added, never replaced nor
+   * removed. Throws `PluginRegistryError` and leaves the registry as it was.
+   */
+  register(plugin: ServicePlugin): RegisteredPlugin {
+    const prepared = this.prepare(plugin);
+    if ('issues' in prepared) throw new PluginRegistryError(prepared.issues);
+    this.add(prepared.registered);
+    return prepared.registered;
   }
 
   /** Service ids, in registration order. The only service list. */

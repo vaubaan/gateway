@@ -367,7 +367,10 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         note={ACCOUNT_PAGES.connect.lede}
         id={CONNECT_ANCHOR}
       >
-        <ServicePicker services={services} />
+        <ServicePicker
+          services={services}
+          available={root.updates.current()?.pluginsAvailable ?? []}
+        />
         <Hint>
           What an agent can then do on each service, permission by permission, is in the{' '}
           <Link href={SERVICES_PATH}>{PAGES.reference.title}</Link>.

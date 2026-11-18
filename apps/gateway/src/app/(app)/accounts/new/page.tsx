@@ -46,7 +46,11 @@ export default async function ConnectAccountPage({
       />
       <NoticeBanner notice={notice} />
       <Section first>
-        <ServicePicker services={services} returnTo={firstParam(params.return_to)} />
+        <ServicePicker
+          services={services}
+          available={root.updates.current()?.pluginsAvailable ?? []}
+          returnTo={firstParam(params.return_to)}
+        />
         <Hint>
           What an agent can then do on each service, permission by permission, is in the{' '}
           <Link href={SERVICES_PATH}>{PAGES.reference.title}</Link>.

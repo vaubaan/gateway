@@ -63,6 +63,8 @@ const REDIRECTING_PAGES: Readonly<Record<string, string>> = {};
  * through `guardMutation` too. The behaviour is asserted below, route by route.
  */
 const AUTHENTICATING_HANDLERS: readonly string[] = [
+  // `POST /accounts/new/<service>/install`: `guardMutation` with the role `user` first.
+  'pluginInstall.handlers.installForConnection',
   'accounts.handlers.connect',
   'accounts.handlers.callback',
   // `GET /reference/<id>/connect/<file>`: `guardSession` with the role `user` first.

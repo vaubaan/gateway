@@ -80,26 +80,32 @@ export function vaubaanMissionsOf(service: MissionService): VaubaanMissions {
   return Object.freeze(port);
 }
 
-/** The shipped catalogs as plain data: ids, labels, macro-actions. No plugin behaviour is handed over. */
+/**
+ * The registered catalogs as plain data: ids, labels, macro-actions. No plugin behaviour is
+ * handed over. Read from the registry at each call, each catalog derived once: a plugin
+ * installed at a first connection appears (ADR plugins-installed-when-first-needed).
+ */
 export function vaubaanCatalogOf(registry: PluginRegistry): VaubaanCatalog {
   const catalogs = new Map<string, ServiceCatalog>();
-  for (const id of registry.ids) {
-    const { plugin } = registry.require(id);
-    catalogs.set(
-      id,
-      Object.freeze({
-        service: id,
-        service_label: plugin.displayName,
-        derives_env: typeof plugin.envOf === 'function',
-        risks: enumerateCatalog(plugin.catalog),
-        macro_actions: macroActionsOf(plugin.catalog),
-      }),
-    );
-  }
-  const services = Object.freeze([...catalogs.keys()]);
+  const catalogOf = (id: string): ServiceCatalog | null => {
+    const known = catalogs.get(id);
+    if (known) return known;
+    const registered = registry.get(id);
+    if (!registered) return null;
+    const { plugin } = registered;
+    const catalog = Object.freeze({
+      service: id,
+      service_label: plugin.displayName,
+      derives_env: typeof plugin.envOf === 'function',
+      risks: enumerateCatalog(plugin.catalog),
+      macro_actions: macroActionsOf(plugin.catalog),
+    });
+    catalogs.set(id, catalog);
+    return catalog;
+  };
   return Object.freeze({
-    services: () => services,
-    get: (service: string) => catalogs.get(service) ?? null,
+    services: () => Object.freeze([...registry.ids]),
+    get: (service: string) => catalogOf(service),
   });
 }
 

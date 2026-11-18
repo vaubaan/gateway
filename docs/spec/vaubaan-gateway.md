@@ -986,11 +986,11 @@ values.
   into the server, and a catalog plugin is installed when a person first connects its service
   ([ADR](../decisions/plugins-installed-when-first-needed.md)). A **private** plugin is built
   outside the catalog and signed with its author's own key, which an instance trusts by naming it
-  a signer; its existence is published nowhere. A plugin reaches an instance installed at a first
-  connection, installed by an administrator (uploaded, or from the catalog in one click), or
+  a signer; its existence is published nowhere. A plugin reaches an instance installed when a person first
+  connects its service, installed by an administrator (uploaded, or from the catalog in one click), or
   pinned by the operator in the plugins directory, the pin winning over the others of its id
   ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)). It runs in the process with
-  the credential, so it runs only signed by Vaubaan at a first connection, once an administrator
+  the credential, so it runs only signed by Vaubaan when a person first connects its service, once an administrator
   activated it, or once the operator placed it, and its archive is checked against its signature at every start; a signature says who built the
   plugin, never that it is harmless
   ([ADR](../decisions/plugins-activated-by-an-administrator-on-trial.md),

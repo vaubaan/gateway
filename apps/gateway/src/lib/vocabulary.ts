@@ -1215,8 +1215,16 @@ export const INSTALL_WORDS = {
     'not-in-catalog': 'The catalog has not published this version yet',
     'catalog-unreachable': 'The catalog did not answer; nothing was installed',
     'not-the-catalog-version': 'The catalog served another plugin or version; nothing was kept',
+    'not-enabled': 'This instance runs only the plugins its configuration names',
+    'did-not-load': 'The plugin did not load; the instance runs as before',
   },
   installFromCatalog: (version: string) => `Install ${version}`,
+  firstInstallTitle: (service: string) => `Connect ${service}`,
+  firstInstallLede:
+    'This instance has no plugin for this service yet. Installing it adds the plugin the Vaubaan catalog built from reviewed source and signed: its signature is checked before anything runs. It is installed for everyone on this instance, then you connect your account.',
+  firstInstall: 'Install and connect',
+  fromCatalog: 'from the Vaubaan catalog, installed when you connect it',
+  firstInstallFailed: 'The plugin was not installed',
   availableTitle: 'In the catalog, not installed',
   signersTitle: 'Trusted signers',
   signersLede:

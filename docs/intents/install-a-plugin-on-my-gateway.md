@@ -29,6 +29,13 @@ creates: plugin
 anchors: apps/gateway/src/server/vaubaan/plugin-acts.ts, apps/gateway/tests/integration/plugins/deploy-from-cli.test.ts
 spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
 
+### Install a plugin when I first connect its service
+
+status: implemented
+requires: plugin
+anchors: apps/gateway/src/app/(app)/accounts/new/[service]/install/route.ts, apps/gateway/src/app/(app)/accounts/new/[service]/install-first.tsx, apps/gateway/tests/integration/plugins/install-at-first-connection.test.ts
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+
 ### Install a catalog plugin in one click
 
 status: implemented

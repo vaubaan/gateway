@@ -6,7 +6,7 @@
  * through an OAuth broker none is configured for: it says it is not configured.
  */
 import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
-import { ACCOUNT_WORDS } from '@/lib/vocabulary';
+import { ACCOUNT_WORDS, INSTALL_WORDS } from '@/lib/vocabulary';
 import { NEW_ACCOUNT_PATH, type ConnectableService } from '@/server/accounts';
 
 /** "Access token" → "access token"; "API key" stays: an acronym keeps its capitals. */
@@ -30,11 +30,21 @@ export function howToConnect(service: ConnectableService): string {
   }
 }
 
+/** A catalog plugin the instance does not have yet: installed when first connected. */
+export interface CatalogService {
+  readonly id: string;
+  readonly released: string;
+  readonly name?: string;
+}
+
 export function ServicePicker({
   services,
+  available = [],
   returnTo = null,
 }: {
   services: readonly ConnectableService[];
+  /** The catalog's plugins not installed here (ADR plugins-installed-when-first-needed). */
+  available?: readonly CatalogService[];
   /** Where to land after connecting (the mission being written). */
   returnTo?: string | null;
 }) {
@@ -55,6 +65,18 @@ export function ServicePicker({
           testId={`service-${service.id}`}
         />
       ))}
+      {available
+        .filter((plugin) => !services.some((service) => service.id === plugin.id))
+        .map((plugin) => (
+          <PickCard
+            key={plugin.id}
+            href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(plugin.id)}${suffix}`}
+            lead={<ServiceMark name={plugin.name ?? plugin.id} icon={null} />}
+            title={plugin.name ?? plugin.id}
+            description={INSTALL_WORDS.fromCatalog}
+            testId={`catalog-service-${plugin.id}`}
+          />
+        ))}
     </PickGrid>
   );
 }

@@ -27,7 +27,7 @@ Every other version — a newer version of a loaded plugin, a private or unsigne
 
 - The registry and every list derived from it (connect picker, catalog index, tool list) accept a
   plugin added while the instance runs; nothing is ever unloaded or replaced live.
-- A first connection needs the catalog to be reachable; an instance without that network gets its
+- Connecting a service the first time needs the catalog to be reachable; an instance without that network gets its
   plugins from the operator's directory (`plugins.dir`).
 - The installation is audited with who made it, and the plugin stays installed for every person
   of the instance.
@@ -45,5 +45,5 @@ One release train for every plugin: a fix to one waits for a gateway release.
 
 ### Only an administrator installs catalog plugins
 
-Blocks a person's first connection on an administrator for code the catalog already reviewed,
+Blocks a person connecting a service the first time on an administrator for code the catalog already reviewed,
 rebuilt and signed.
