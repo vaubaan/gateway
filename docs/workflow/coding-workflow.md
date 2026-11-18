@@ -23,10 +23,13 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 ## CI pipeline
 
 - The [workflows](../../.github/workflows/) state their triggers and steps in their header comments.
-  Required check: the job `audit`; locally `npm run ci` (lint only through the script: it needs the
-  script's heap).
-- **Billed minutes are the budget**: nothing runs on a draft or a push to `main`; open a pull
-  request when it is ready, push a review round's fixes together.
+  Required check: the job `audit`. Locally, `npm run check:changed` checks only what a change can
+  break (type-check of the touched workspaces and their dependents, ESLint and Prettier on the
+  changed files, the related Vitest tests, the harness linters); `npm run ci` is the full run (lint
+  only through the script: it needs the script's heap), about 30 minutes on a small machine.
+- **A push to `main` runs the full check** (`audit`, then `e2e`): maintainers push their changes
+  to `main` directly, checked locally by `npm run check:changed`, and read the run's verdict after
+  the push. Nothing runs on a draft pull request.
 - **Label `e2e`** a change to pages, components, styles, e2e tests or any plugin (the mission form
   is drawn from catalogs), or run `npm run test:e2e:v5` locally.
 - Service facts in handbooks, catalogs and plugins come from Context7 through the gateway's
@@ -84,8 +87,9 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 
 ## Branch model
 
-- `main` is the trunk, unprotected until publication (free plan, private repository). Work on
-  `feature/*` or `fix/*` from `origin/main`, rebased right before the push. `v5` stays a pre-release
+- `main` is the trunk, unprotected. Maintainers push a squashed, signed-off commit per feature
+  directly to `main`; contributors work on `feature/*` or `fix/*` from `origin/main`, rebased right
+  before the push, and open a pull request. `v5` stays a pre-release
   source until `2.0.0`.
 
 ## Release

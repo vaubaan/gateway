@@ -7,6 +7,10 @@
  * runs as `node <typescript>/bin/tsc …`, without npm (on a two-core runner,
  * starting npm 22 times cost more than the checks). The output of a workspace
  * is printed whole once it ends; the exit code is 1 if any failed.
+ *
+ * `node scripts/type-check.mjs <dir>…` checks only those workspaces
+ * (`npm run check:changed` passes the ones a change touches, and their
+ * dependents).
  */
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -72,7 +76,8 @@ function check({ dir, script }) {
   });
 }
 
-const queue = workspaces();
+const only = process.argv.slice(2).map((dir) => dir.replace(/\/$/, ''));
+const queue = workspaces().filter(({ dir }) => only.length === 0 || only.includes(dir));
 const results = [];
 const lanes = Array.from({ length: Math.min(availableParallelism(), queue.length) }, async () => {
   for (let next = queue.shift(); next !== undefined; next = queue.shift()) {

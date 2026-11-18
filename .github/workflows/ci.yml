@@ -8,12 +8,16 @@ name: ci
 #   pull request (ready)   job `audit`: every gate but the browser
 #   pull request (draft)   nothing: a draft is work in progress
 #   label `e2e` on a PR    job `e2e` too (the browser tests), on demand
-#   push to main / v5      nothing: a squash merge of a pull request that was
-#                          up to date is the tree that pull request checked
+#   push to main           `audit` and `e2e`: changes are pushed to main
+#                          directly, checked locally only by what they touch
+#                          (`npm run check:changed`); this run is the full
+#                          check (the repository is public: minutes are free)
 #   schedule (weekly)      everything: `audit`, `e2e`, `docker` with its scan
 #   release (workflow_call)
 #   manual run             everything
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main, v5]
     types: [opened, synchronize, reopened, ready_for_review, labeled]
@@ -33,7 +37,8 @@ on:
 # group, so it does not cancel the run of the last push.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && 'e2e' || 'gate' }}
-  cancel-in-progress: true
+  # A push to main is never cancelled: each commit gets its verdict.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 # Dependencies are installed with `npm ci`: exactly the lockfile, or a failure.
 #
@@ -75,7 +80,7 @@ jobs:
           persist-credentials: false
       - id: scope
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
         run: scripts/ci-scope.sh "$BASE" HEAD | tee -a "$GITHUB_OUTPUT"
       # A change the browser can show, without the label that runs the browser
       # tests: said on the run, never a failure (the weekly run and the release
@@ -92,12 +97,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
-      # Every commit of a pull request carries a `Signed-off-by:` line, the
-      # Developer Certificate of Origin (CONTRIBUTING.md). Merges are skipped.
+      # Every commit of a pull request, or of a push to main, carries a
+      # `Signed-off-by:` line, the Developer Certificate of Origin
+      # (CONTRIBUTING.md). Merges are skipped.
       - name: Commits are signed off
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/dco-check.mjs "$BASE" HEAD
       - run: node scripts/audit-gate.mjs
       # Every lockfile entry downloads from the npm registry, with a sha512
