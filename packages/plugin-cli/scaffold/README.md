@@ -50,11 +50,16 @@ npx vaubaan-plugin sign dist/plugin --key ~/.vaubaan/<company>-plugins.key.pem
 Then, on your gateway, an administrator:
 
 1. adds the public key (`.pub.pem`) once under Administration › Plugins › Trusted signers;
-2. uploads `dist/plugin.tgz` under Administration › Plugins (or your agent hands it over with the
-   gateway's `vaubaan__upload_plugin` tool);
+2. uploads `dist/plugin.tgz` under Administration › Plugins — or you do, from here, with the token
+   of a mission an administrator issued on the gateway's Vaubaan account with "Install plugins":
+   `VAUBAAN_MISSION_TOKEN=… npx vaubaan-plugin deploy --gateway https://<your gateway>`;
 3. reads the permissions it adds and activates it; it starts on trial at the next start.
 
 Keep the private key (`.key.pem`) out of every repository: `.gitignore` excludes `*.key.pem`.
+
+To publish it in the public catalog instead, signed by Vaubaan and installable by every gateway:
+push the project to a public GitHub repository, then `npx vaubaan-plugin submit --dry-run`, and
+without `--dry-run` to open the pull request (skill `vaubaan-submit`).
 
 ## The plugin
 

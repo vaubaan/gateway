@@ -17,7 +17,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   and skills a coding agent follows to model the service, write its risk catalog and classifier,
   and ship it. `vaubaan-plugin try <tool> [args]` decides one call without a gateway: the slices
   the classifier emits, the risks they touch and their gates under a sample mission, and the
-  decision (exit 0 only when allowed).
+  decision (exit 0 only when allowed). `vaubaan-plugin deploy --gateway <url>` hands the built
+  archive to a gateway through its MCP door, with the token of a mission an administrator issued
+  with "Install plugins" (`VAUBAAN_MISSION_TOKEN`), and prints where to activate it; it never
+  activates. `vaubaan-plugin submit` declares the project's pushed commit to the public catalog
+  (vaubaan/gateway-plugins) and opens the pull request with `gh`; `--dry-run` only prints the
+  declaration.
 
 - **An administrator installs a plugin from Administration › Plugins.** Upload the archive
   `vaubaan-plugin build` writes (`.tgz`, now packed beside its folder): it is checked without

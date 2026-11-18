@@ -88,6 +88,8 @@ npm run build                          # dist/plugin/ and dist/plugin.tgz (unsig
 npx vaubaan-plugin keygen --out <path> # once per company: <path>.key.pem, <path>.pub.pem
 npx vaubaan-plugin sign dist/plugin --key <path>.key.pem   # signs, repacks dist/plugin.tgz
 VAUBAAN_SIGNING_KEY=<path>.key.pem npm run sign            # the same, the path from the environment (CI)
+VAUBAAN_MISSION_TOKEN=… npx vaubaan-plugin deploy --gateway <url>  # uploads dist/plugin.tgz, pending
+npx vaubaan-plugin submit [--owners <user>,<org>/<team>] [--dry-run]   # the catalog's pull request
 ```
 
 Without `--accept`, `npm run try` accepts every macro-action at the trust level (Careful by default),

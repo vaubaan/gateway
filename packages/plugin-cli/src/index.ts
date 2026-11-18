@@ -35,4 +35,15 @@ export {
 export type { InitOptions, InitResult, PluginNames } from './init.ts';
 export { loadProjectPlugin, TRUST_LEVELS, tryCall, tryProjectCall } from './try.ts';
 export type { TryOptions, TryReport, TrustLevel } from './try.ts';
-export type { Command } from './cli.ts';
+export type { CliIo, Command } from './cli.ts';
+export { deployArchive, doorOf, MISSION_TOKEN_ENV, UPLOAD_TOOL } from './deploy.ts';
+export type { DeployOptions, DeployResult } from './deploy.ts';
+export {
+  CATALOG_REPOSITORY,
+  declarationOf,
+  declarationProblems,
+  declarationText,
+  githubRepositoryOf,
+  openSubmission,
+} from './submit.ts';
+export type { Declaration, Runner } from './submit.ts';

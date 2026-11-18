@@ -37,26 +37,20 @@ publishes it as the release `<id>-v<version>`. Your own archive and your company
    - no private key, token or `.env` in the repository or its history.
 3. **Publish the commit**: commit, push to the public repository, optionally tag it `v<version>`.
    Take the full sha: `git rev-parse HEAD` (40 hex characters). It must be reachable on GitHub.
-4. **Write the declaration** in a fork of `vaubaan/gateway-plugins`, on a new branch:
-
-   ```yaml
-   id: <id>
-   repo: https://github.com/<owner>/<repo>
-   path: .                 # the plugin's folder in the repository; omit for the root
-   version: <version>
-   commit: <40-character sha>
-   owners: [<github user>, <org>/<team>]
-   ```
-
-   File `catalog/<id>.yaml`, named after the id; flat YAML, one `key: value` per line; `repo`
-   without `.git`. Then, in the fork: `node scripts/declarations.mjs check` exits 0.
-5. **Optionally rebuild as the catalog will**, in the fork:
+4. **Check the declaration**: `npx vaubaan-plugin submit --dry-run [--owners <user>,<org>/<team>]`
+   prints `catalog/<id>.yaml` for HEAD: id (`SERVICE_ID`), repo (from `origin`), path (the
+   plugin's folder in the repository), version (`package.json`), commit, owners (the repository's
+   owner unless `--owners`). It exits 1, saying why, on uncommitted changes, a commit not pushed,
+   a remote outside GitHub, a missing `package-lock.json`, or a field the catalog would refuse.
+5. **Open the pull request** once the human agrees: `npx vaubaan-plugin submit [--owners …]`. With
+   `gh` logged in as the human, it forks `vaubaan/gateway-plugins`, commits the declaration on the
+   branch `submit/<id>-<version>` and opens the pull request; it prints its URL. Then add to the
+   pull request's description what the reviewer needs: what the service is, the resource, each
+   tool with its slice, each write risk with its vector and why, the documentation the classifier
+   was written from (`gh pr edit <url> --body-file <file>`).
+6. **Optionally rebuild as the catalog will**, in a clone of the catalog:
    `bash scripts/build.sh <id> "$(mktemp -d)"`. It fetches the catalog's toolchain and your commit,
    installs, builds, and fails if the archive's id or version differs from the declaration.
-6. **Open the pull request** once the human agrees: `gh pr create --repo vaubaan/gateway-plugins`
-   from your branch. Title `catalog: add <id> <version>` (or `catalog: <id> <version>` for a new
-   version). Body: what the service is, the resource, each tool with its slice, each write risk with
-   its vector and why, the documentation the classifier was written from.
 7. **Read the check.** The `check` workflow validates every declaration, rebuilds what the pull
    request declares, and writes in its job summary what the reviewer reads: the declaration before
    and after, the permissions (risk ids) of the risk catalog, the files of the archive. A failure

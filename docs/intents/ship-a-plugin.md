@@ -3,7 +3,7 @@ title: Ship a plugin
 status: proposed
 actors: [author, agent]
 spec: ../spec/plugin-authoring.md
-last_reviewed: 2026-11-17
+last_reviewed: 2026-11-18
 ---
 
 # Ship a plugin
@@ -59,13 +59,10 @@ acceptance:
 
 ### Deploy a plugin to a gateway
 
-status: proposed
+status: implemented
 requires: archive
+anchors: packages/plugin-cli/src/deploy.ts, apps/gateway/tests/integration/plugins/deploy-from-cli.test.ts
 spec: ../spec/plugin-authoring.md#1-vision
-acceptance:
-
-- One command uploads the archive to a gateway and prints the activation page's URL
-- It never activates the plugin
 
 ### Rebuild a plugin for a newer gateway
 

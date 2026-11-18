@@ -7,6 +7,10 @@
  *                      [--trust careful|trusting|autonomous]
  *                                                       one call, decided without a gateway (try.ts)
  *   vaubaan-plugin build [<plugin dir>] [--out <dir>]   the archive: <out>/ and <out>.tgz
+ *   vaubaan-plugin submit [--owners a,b] [--dry-run]    the catalog's declaration of HEAD, as a
+ *                                                       pull request on vaubaan/gateway-plugins (submit.ts)
+ *   vaubaan-plugin deploy [<archive>] --gateway <url>    hands the archive to a gateway, pending
+ *                                                       (deploy.ts; token in VAUBAAN_MISSION_TOKEN)
  *   vaubaan-plugin keygen [--out <name>]                 a company key: <name>.key.pem, <name>.pub.pem
  *   vaubaan-plugin sign <archive dir> --key <file>       vaubaan-manifest.json.sig.json, then <dir>.tgz again
  *   vaubaan-plugin pack <archive dir> [--out <file>]     <dir>.tgz from the folder, signatures included
@@ -30,13 +34,23 @@ import {
 } from '@vaubaan/plugin-sdk/archive';
 
 import { ArchiveError, buildArchive, filesOf } from './archive.ts';
+import { deployArchive, MISSION_TOKEN_ENV } from './deploy.ts';
 import { initProject } from './init.ts';
+import {
+  declarationOf,
+  declarationText,
+  openSubmission,
+  runCommand,
+  type Runner,
+} from './submit.ts';
 import { TRUST_LEVELS, tryProjectCall, type TrustLevel } from './try.ts';
 
 export const USAGE = [
   'usage: vaubaan-plugin init <dir> --id <id> [--name <display name>]',
   "       vaubaan-plugin try <tool> ['<json args>'] [--resources ref[:env],…] [--accept <risk id>,…] [--trust careful|trusting|autonomous]",
   '       vaubaan-plugin build [<plugin dir>] [--out <dir>]',
+  '       vaubaan-plugin deploy [<archive .tgz>] --gateway <url>   (token in VAUBAAN_MISSION_TOKEN)',
+  '       vaubaan-plugin submit [--owners <user or org/team>,…] [--dry-run]',
   '       vaubaan-plugin keygen [--out <name>]',
   '       vaubaan-plugin sign <archive dir> --key <private key file>',
   '       vaubaan-plugin pack <archive dir> [--out <file>]',
@@ -59,6 +73,13 @@ export type Command =
       readonly trust: TrustLevel | undefined;
     }
   | { readonly name: 'build'; readonly pluginDir: string; readonly out: string }
+  | { readonly name: 'deploy'; readonly archive: string; readonly gateway: string }
+  | {
+      readonly name: 'submit';
+      readonly pluginDir: string;
+      readonly owners: readonly string[] | undefined;
+      readonly dryRun: boolean;
+    }
   | { readonly name: 'keygen'; readonly out: string }
   | { readonly name: 'sign'; readonly dir: string; readonly key: string }
   | { readonly name: 'pack'; readonly dir: string; readonly out: string };
@@ -126,6 +147,34 @@ export function parseCommand(argv: readonly string[], cwd: string): Command {
       const out = options.get('--out');
       return { name, pluginDir: dir, out: resolve(cwd, out ?? join(dir, 'dist', 'plugin')) };
     }
+    case 'submit': {
+      const dryRun = rest.includes('--dry-run');
+      const { positionals, options } = split(
+        rest.filter((argument) => argument !== '--dry-run'),
+        ['--owners'],
+      );
+      if (positionals.length > 0) throw new UsageError(USAGE);
+      const owners = options.get('--owners');
+      return {
+        name,
+        pluginDir: cwd,
+        owners: owners
+          ?.split(',')
+          .map((owner) => owner.trim())
+          .filter((owner) => owner !== ''),
+        dryRun,
+      };
+    }
+    case 'deploy': {
+      const { positionals, options } = split(rest, ['--gateway']);
+      const gateway = options.get('--gateway');
+      if (positionals.length > 1 || gateway === undefined) throw new UsageError(USAGE);
+      return {
+        name,
+        archive: resolve(cwd, positionals[0] ?? join('dist', 'plugin.tgz')),
+        gateway,
+      };
+    }
     case 'keygen': {
       const { positionals, options } = split(rest, ['--out']);
       if (positionals.length > 0) throw new UsageError(USAGE);
@@ -156,7 +205,18 @@ function pack(dir: string, out: string): string {
   return `${read.manifest.id} ${read.manifest.version} → ${out}`;
 }
 
-async function execute(command: Command, io: { log: (line: string) => void }): Promise<number> {
+/** What a command reads of its surroundings; `env` and `fetch` are the process's unless given. */
+export interface CliIo {
+  readonly cwd: string;
+  readonly log: (line: string) => void;
+  readonly error: (line: string) => void;
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly fetch?: typeof fetch;
+  /** Runs git and gh for `submit`. */
+  readonly run?: Runner;
+}
+
+async function execute(command: Command, io: CliIo): Promise<number> {
   switch (command.name) {
     case 'init': {
       const result = initProject({
@@ -190,6 +250,34 @@ async function execute(command: Command, io: { log: (line: string) => void }): P
       io.log(`built ${result.id} ${result.version} → ${result.archive}`);
       return 0;
     }
+    case 'submit': {
+      const run = io.run ?? runCommand;
+      const declaration = declarationOf(command.pluginDir, {
+        run,
+        ...(command.owners === undefined ? {} : { owners: command.owners }),
+      });
+      io.log(`catalog/${declaration.id}.yaml`);
+      for (const line of declarationText(declaration).trimEnd().split('\n')) io.log(`  ${line}`);
+      if (command.dryRun) {
+        io.log('dry run: nothing was sent');
+        return 0;
+      }
+      io.log(`pull request: ${openSubmission(declaration, run)}`);
+      io.log('the catalog rebuilds this commit without secrets; a maintainer reviews its report');
+      return 0;
+    }
+    case 'deploy': {
+      const result = await deployArchive({
+        archive: command.archive,
+        gateway: command.gateway,
+        token: io.env?.[MISSION_TOKEN_ENV],
+        ...(io.fetch === undefined ? {} : { fetch: io.fetch }),
+      });
+      io.log(`uploaded ${result.plugin} ${result.version} (${result.digest}): pending, not active`);
+      io.log(`activate: ${result.activationUrl}`);
+      if (result.next !== '') io.log(result.next);
+      return 0;
+    }
     case 'keygen': {
       const privatePath = `${command.out}.key.pem`;
       const publicPath = `${command.out}.pub.pem`;
@@ -219,14 +307,7 @@ async function execute(command: Command, io: { log: (line: string) => void }): P
 }
 
 /** Runs a command; returns the exit code. */
-export async function run(
-  argv: readonly string[],
-  io: {
-    readonly cwd: string;
-    readonly log: (line: string) => void;
-    readonly error: (line: string) => void;
-  },
-): Promise<number> {
+export async function run(argv: readonly string[], io: CliIo): Promise<number> {
   let command: Command;
   try {
     command = parseCommand(argv, io.cwd);
@@ -245,6 +326,7 @@ export async function run(
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.exitCode = await run(process.argv.slice(2), {
     cwd: process.cwd(),
+    env: process.env,
     log: (line) => {
       process.stdout.write(`${line}\n`);
     },

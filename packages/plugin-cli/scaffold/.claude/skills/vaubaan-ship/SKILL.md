@@ -47,6 +47,12 @@ do not classify.
    does not trust is refused at upload. An unsigned archive is accepted only if the operator's
    configuration lists its id under `plugins.allow_unsigned`.
 7. **Hand the archive over**, one of:
+   - from the command line: `npx vaubaan-plugin deploy --gateway https://<the gateway>` with
+     `VAUBAAN_MISSION_TOKEN` set in the environment (never on the command line) to the token of a
+     mission on the gateway's Vaubaan account, issued by an administrator with the macro-action
+     "Install plugins" ticked (without it the gateway refuses `risk-not-accepted`). It uploads
+     `dist/plugin.tgz`, prints the `activation_url`, and exits 1 with the gateway's refusal and
+     hint otherwise (same refusals as below);
    - connected to the gateway's `vaubaan` tools: call `vaubaan__upload_plugin` with exactly one
      argument, `archive_base64`, the bytes of `dist/plugin.tgz` in base64 without line breaks
      (`base64 -w0 dist/plugin.tgz` on Linux, `base64 -i dist/plugin.tgz` on macOS), at most 16 MB
