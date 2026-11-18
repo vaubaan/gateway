@@ -10,7 +10,11 @@
  *      workspace that depends on them, transitively (scripts/type-check.mjs);
  *   2. ESLint and Prettier on the changed files;
  *   3. the Vitest tests related to the changed files (`vitest --changed`);
- *   4. the harness linters on the docs.
+ *   4. the harness linters on the docs;
+ *   5. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
+ *      the Semgrep image and the semgrep/semgrep-rules commit ci.yml pins, cloned once
+ *      into the ignored .semgrep-rules/), over the whole tree: a rule finds what a
+ *      changed file breaks elsewhere too.
  *
  * Each step runs even when an earlier one failed; the exit code is 1 if any
  * failed.
@@ -127,6 +131,51 @@ step('vitest (related to the change)', process.execPath, [
   '--passWithNoTests',
 ]);
 step('harness lint', 'npx', ['vaubaan-harness', 'lint']);
+
+/** The Semgrep image and the rules commit the CI pins (ci.yml), or null when unreadable. */
+function sastPins() {
+  const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  const image = /SEMGREP_IMAGE:\s*(\S+)/.exec(workflow)?.[1];
+  const ref = /repository: semgrep\/semgrep-rules\s+ref: ([0-9a-f]{40})/.exec(workflow)?.[1];
+  return image && ref ? { image, ref } : null;
+}
+
+const docker = spawnSync('docker', ['info'], { stdio: 'ignore' }).status === 0;
+const pins = sastPins();
+if (!docker || pins === null) {
+  process.stdout.write(
+    `\n(static analysis skipped: ${docker ? 'pins not found in ci.yml' : 'no Docker'}; CI runs it)\n`,
+  );
+} else {
+  const rules = join(ROOT, '.semgrep-rules');
+  if (!existsSync(rules)) {
+    spawnSync(
+      'git',
+      ['clone', '-q', '--filter=blob:none', 'https://github.com/semgrep/semgrep-rules', rules],
+      { stdio: 'inherit' },
+    );
+  }
+  spawnSync('git', ['-C', rules, 'fetch', '-q', 'origin', pins.ref], { stdio: 'inherit' });
+  spawnSync('git', ['-C', rules, 'checkout', '-q', pins.ref], { stdio: 'inherit' });
+  // A worktree's .git points into the main repository: mount it where it says.
+  const gitDir = git('rev-parse', '--git-common-dir');
+  step('static analysis (scripts/sast.sh)', 'docker', [
+    'run',
+    '--rm',
+    '--network',
+    'none',
+    '-v',
+    `${ROOT}:/src`,
+    '-v',
+    `${resolve(ROOT, gitDir)}:${resolve(ROOT, gitDir)}`,
+    '-w',
+    '/src',
+    pins.image,
+    'sh',
+    '-c',
+    'git config --global --add safe.directory "*" && scripts/sast.sh /src/.semgrep-rules',
+  ]);
+}
 
 process.stdout.write('\n');
 for (const { title, ok } of results) process.stdout.write(`${ok ? 'ok  ' : 'FAIL'} ${title}\n`);

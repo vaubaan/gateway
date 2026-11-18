@@ -25,7 +25,7 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 - The [workflows](../../.github/workflows/) state their triggers and steps in their header comments.
   Required check: the job `audit`. Locally, `npm run check:changed` checks only what a change can
   break (type-check of the touched workspaces and their dependents, ESLint and Prettier on the
-  changed files, the related Vitest tests, the harness linters); `npm run ci` is the full run (lint
+  changed files, the related Vitest tests, the harness linters and, with Docker, Semgrep as CI runs it); `npm run ci` is the full run (lint
   only through the script: it needs the script's heap), about 30 minutes on a small machine.
 - **A push to `main` runs the full check** (`audit`, then `e2e`): maintainers push their changes
   to `main` directly, checked locally by `npm run check:changed`, and read the run's verdict after
