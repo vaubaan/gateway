@@ -15,28 +15,19 @@ that a new service or a fix reaches my instance without a new image and never wi
 
 ### Upload a plugin archive
 
-status: proposed
+status: implemented
 requires: archive
 creates: plugin
+anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/upload/route.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts, apps/gateway/tests/integration/plugins/signatures.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- Administration › Plugins accepts an archive and lists it as pending, inert, with its trust level and digest
-- A modified archive, an unknown signer or an unsigned id absent from `plugins.allow_unsigned` is refused at upload, the reason named
-- An unsigned or privately signed archive using a catalog or socle id is refused at upload
-- The upload is in the audit with the digest, the trust level and who made it
 
 ### Hand over a plugin from an agent
 
-status: proposed
+status: implemented
 requires: mission, archive
 creates: plugin
+anchors: apps/gateway/src/server/vaubaan/plugin-acts.ts, apps/gateway/tests/integration/plugins/deploy-from-cli.test.ts
 spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
-acceptance:
-
-- `vaubaan__upload_plugin` on a mission whose creator is an administrator leaves the version pending and answers the activation page's URL
-- The same call on a mission whose creator is not an administrator is refused
-- No `vaubaan__*` tool activates, rolls back or removes a plugin, or changes the trusted signers
 
 ### Install a catalog plugin in one click
 
@@ -72,13 +63,10 @@ acceptance:
 
 ### Trust a signer
 
-status: proposed
+status: implemented
 requires: signer
+anchors: apps/gateway/src/app/admin/(guarded)/plugins/signers/add/route.ts, apps/gateway/tests/integration/plugins/signatures.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- Adding a signer needs its name typed, notifies every administrator and is in the audit
-- An archive signed by that signer then uploads with the signer's name as its trust level, never "Vaubaan"
 
 ### Start without what was installed here
 
