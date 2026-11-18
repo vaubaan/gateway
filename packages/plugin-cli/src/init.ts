@@ -36,8 +36,14 @@ import { ArchiveError } from './archive.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(HERE, '..');
 
-/** The plugin id grammar: a lowercase slug, as `toolPrefixFor` and the catalog loader expect. */
-export const PLUGIN_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+/**
+ * The plugin id grammar: a lowercase slug, words of letters and digits joined by single
+ * dashes, as `toolPrefixFor` and the catalog loader expect. A flat character class and
+ * two plain checks, no nested quantifier.
+ */
+export function isPluginId(id: string): boolean {
+  return /^[a-z][a-z0-9-]*$/.test(id) && !id.endsWith('-') && !id.includes('--');
+}
 
 /** What a new project's development dependencies are pinned to (the gateway's own pins). */
 export const SCAFFOLD_DEV_DEPENDENCIES = {
@@ -72,7 +78,7 @@ export interface PluginNames {
 }
 
 export function namesOf(id: string, displayName?: string): PluginNames {
-  if (!PLUGIN_ID.test(id)) {
+  if (!isPluginId(id)) {
     throw new ArchiveError(
       `"${id}" is not a plugin id: lowercase letters, digits and dashes (acme-crm)`,
     );

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
 import { ArchiveError } from './archive.ts';
-import { PLUGIN_ID } from './init.ts';
+import { isPluginId } from './init.ts';
 
 export const CATALOG_REPOSITORY = 'vaubaan/gateway-plugins';
 
@@ -53,8 +53,7 @@ const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 /** The problems the catalog's own check would find (vaubaan/gateway-plugins, declarations.mjs). Pure. */
 export function declarationProblems(declaration: Declaration): string[] {
   const problems: string[] = [];
-  if (!PLUGIN_ID.test(declaration.id))
-    problems.push(`id ${declaration.id} is not a lowercase slug`);
+  if (!isPluginId(declaration.id)) problems.push(`id ${declaration.id} is not a lowercase slug`);
   if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(declaration.repo)) {
     problems.push(`repo ${declaration.repo} is not https://github.com/<owner>/<repo>`);
   }

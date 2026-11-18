@@ -27,7 +27,7 @@ export { parseCommand, run, USAGE } from './cli.ts';
 export {
   initProject,
   namesOf,
-  PLUGIN_ID,
+  isPluginId,
   renameTemplate,
   SCAFFOLD_DEV_DEPENDENCIES,
   SCAFFOLD_VERSION,

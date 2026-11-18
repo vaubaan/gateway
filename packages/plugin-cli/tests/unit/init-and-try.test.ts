@@ -45,7 +45,7 @@ describe('the names of a plugin id', () => {
   });
 
   it('refuses what is not a plugin id', () => {
-    for (const id of ['Acme', 'acme_crm', '-acme', 'acme-', '1acme', 'ac me', '']) {
+    for (const id of ['Acme', 'acme_crm', '-acme', 'acme-', 'acme--crm', '1acme', 'ac me', '']) {
       expect(() => namesOf(id), id).toThrow(/not a plugin id/);
     }
   });
