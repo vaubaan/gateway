@@ -72,7 +72,7 @@ import {
   type UpdatesModule,
   type UpdatesTimers,
 } from '../updates';
-import type { Store } from '../store';
+import type { MissionRecord, Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import {
@@ -292,6 +292,10 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       ),
     );
     let notifySignerAdded: (name: string) => void = () => undefined;
+    // The missions are read through the authority module, built with the modules below.
+    let activeMissionsOf: (
+      pluginId: string,
+    ) => Promise<readonly { id: string; name: string }[]> = async () => [];
     // The versions check is built below; until its first read, the catalog's ids are unknown.
     let catalogIds: () => readonly string[] = () => [];
     const pluginInstall = createPluginInstallService({
@@ -321,6 +325,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         SHIPPED_PLUGINS.some((plugin) => plugin.id === pluginId) ||
         inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
       accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
+      missionsOf: (pluginId) => activeMissionsOf(pluginId),
       catalog: (pluginId, version) =>
         fetchCatalogArchive(pluginId, version, { fetch: deps.catalogFetch ?? fetch }),
       audit: store.auditWriter,
@@ -353,6 +358,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       opened,
     );
     notifySignerAdded = (name) => modules.notifications.events.pluginSignerAdded(name);
+    activeMissionsOf = (pluginId) => missionsOnService(store, modules.authority.grounds, pluginId);
     // Nothing about the instance leaves with the request; off unless `updates.check`.
     const updates = createUpdatesModule({
       config: config.updates,
@@ -1128,3 +1134,23 @@ export const DEPRECATED_KEY_WARNING =
 /** Said once at boot when the configuration still sets keys of the retired authorization server. */
 export const RETIRED_MANAGEMENT_KEYS_WARNING =
   'configuration keys no longer read: the gateway runs no OAuth authorization server any more (agents prepare missions through the Vaubaan account and a mission key); remove them';
+
+/**
+ * The active missions on an account of `service`, by name, for the activation page. The
+ * stored status says `active` for an orphaned mission: each record is derived through the
+ * mission grounds first (spec §2.3).
+ */
+async function missionsOnService(
+  store: Store,
+  grounds: { derive(mission: MissionRecord): Promise<MissionRecord> },
+  service: string,
+): Promise<readonly { id: string; name: string }[]> {
+  const byId = new Map<string, string>();
+  for (const account of await store.accounts.list({ service })) {
+    for (const stored of await store.missions.listForAccount(account.id)) {
+      const mission = await grounds.derive(stored);
+      if (mission.status === 'active') byId.set(mission.id, mission.name);
+    }
+  }
+  return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+}

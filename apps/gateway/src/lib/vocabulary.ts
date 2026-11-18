@@ -1164,11 +1164,19 @@ export const INSTALL_WORDS = {
   unknownToIt: 'Permissions this version does not know (kept, inert)',
   none: 'none',
   accounts: (n: number) => `${formatNumber(n)} connected ${n === 1 ? 'account' : 'accounts'}`,
+  missionsUsing: (n: number) =>
+    n === 0
+      ? 'No active mission uses this service'
+      : `${formatNumber(n)} active ${n === 1 ? 'mission uses' : 'missions use'} this service`,
   typeToConfirm: (id: string) => `Type ${id} to confirm`,
   activate: 'Activate at the next start',
   goBack: 'Go back to this version at the next start',
   refuse: 'Refuse',
   followImage: 'Stop using the installed version',
+  cannotRun: 'This gateway cannot run it',
+  safeModeTitle: 'Safe mode: installed plugins are not running',
+  safeModeLede:
+    'plugins.safe_mode is on: this start runs the image’s plugins and the operator’s pins only. Every installed version is kept as it was; turn safe mode off and restart to run them again.',
   restartTitle: 'A restart applies the change',
   restartLede:
     'A version marked for a trial starts at the next start. If it does not load, the previous version stays and this page says why.',

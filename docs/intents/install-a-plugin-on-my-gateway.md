@@ -40,15 +40,10 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Activate a pending plugin version
 
-status: proposed
+status: implemented
 requires: plugin, administrator
+anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-view.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- The activation page lists the permissions added and deprecated against the active version and the missions using the service
-- Activation needs the plugin's id typed, and takes effect at the next start
-- After the restart the version is active and a mission holding its permissions can call its tools
-- A version that fails to load or to classify its own examples is replaced by the previous one; the instance answers and the page shows the failure
 
 ### Roll back a plugin to a kept version
 
@@ -70,9 +65,7 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Start without what was installed here
 
-status: proposed
+status: implemented
 requires: plugin
+anchors: apps/gateway/src/server/compose/installed-plugins.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
 spec: ../spec/vaubaan-gateway.md#43-instance-configuration
-acceptance:
-
-- With `plugins.safe_mode` the instance starts with the image's versions only and says so in its log and in Administration › Plugins

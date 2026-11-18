@@ -18,6 +18,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   that plugin at that version, and leaves it pending for an administrator to activate. The
   download is audited with where it came from. An upload of an id the versions feed names (a
   catalog plugin, shipped in the image or not) now needs the catalog's signature too.
+- **Administration › Plugins says more before an activation.** The activation page names the
+  active missions on the service, each linked; a kept version built for another SDK than this
+  gateway's is shown with the reason and cannot be activated (its trial would fail); with
+  `plugins.safe_mode` on, the page says installed versions are not running.
 - **The image runs its default plugins from the catalog's signed archives.** The image build
   downloads the versions `deploy/socle.json` lists (the socle), each pinned by its sha256; at every
   start the gateway checks each archive's files and the catalog's signature, offline, and runs it in

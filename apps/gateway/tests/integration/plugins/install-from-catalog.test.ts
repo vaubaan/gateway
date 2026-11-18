@@ -164,6 +164,31 @@ describe('installing a catalog version in one click', () => {
     });
   });
 
+  it('keeps a version built for another SDK, and never activates it', async () => {
+    // What a gateway upgrade leaves behind: a kept version the new SDK does not read.
+    const digest = 'f'.repeat(64);
+    await root!.store.pluginVersions.addPending({
+      digest,
+      pluginId: 'notion',
+      version: '0.1.0',
+      packageName: '@vaubaan/plugin-notion',
+      sdkRange: '^0.1.0',
+      trust: 'vaubaan',
+      signer: null,
+      riskIds: [],
+      uploadedBy: ADMIN.userId,
+      viaMissionId: null,
+    });
+    expect((await root!.pluginInstall.service.activationView(digest))?.sdkProblem).toMatch(
+      /built for the SDK \^0\.1\.0; this gateway runs/,
+    );
+    expect(await root!.pluginInstall.service.activate(digest, 'notion', ADMIN)).toMatchObject({
+      ok: false,
+      code: 'sdk-out-of-range',
+    });
+    await root!.pluginInstall.service.refuse(digest, ADMIN);
+  });
+
   it('says a version the catalog has not published', async () => {
     expect(
       await root!.pluginInstall.service.installFromCatalog('notion', '9.9.9', ADMIN),

@@ -32,7 +32,7 @@ import type {
 import { InstallRefusal, storeArchive, type InstallRefusalCode } from './installed';
 import { admissionProblem, trustOf, type AdmissionCode } from './trust';
 import type { CatalogFetch, CatalogFetchCode } from './catalog';
-import { PINNED_CATALOG_FILE } from './loader';
+import { PINNED_CATALOG_FILE, sdkInRange } from './loader';
 import { readFile } from 'node:fs/promises';
 
 /** Previous versions kept per plugin, besides the active one and the image's (D10). */
@@ -52,7 +52,7 @@ export type UploadRefusalCode =
   | 'not-the-catalog-version';
 
 export type PluginActRefusalCode =
-  'not-found' | 'wrong-state' | 'confirmation-mismatch' | 'accounts-depend';
+  'not-found' | 'wrong-state' | 'confirmation-mismatch' | 'accounts-depend' | 'sdk-out-of-range';
 
 export type UploadResult =
   | { readonly ok: true; readonly version: PluginVersionRecord }
@@ -75,6 +75,13 @@ export interface ActivationView {
   readonly unknownToIt: readonly string[];
   /** Accounts connected to the service. */
   readonly accounts: number;
+  /**
+   * Why this gateway cannot run the version — built for another SDK range — or `null`.
+   * Such a version is kept, shown, and never activated: its trial would fail.
+   */
+  readonly sdkProblem: string | null;
+  /** The active missions on those accounts: what the version's permissions apply to. */
+  readonly missions: readonly { readonly id: string; readonly name: string }[];
 }
 
 export interface PluginInstallDeps {
@@ -99,6 +106,8 @@ export interface PluginInstallDeps {
   /** Whether the image or the operator's directory provides a version of the plugin. */
   readonly providedOtherwise: (pluginId: string) => boolean;
   readonly accountsOf: (pluginId: string) => Promise<number>;
+  /** The active missions on an account of the service, by name. */
+  readonly missionsOf: (pluginId: string) => Promise<readonly { id: string; name: string }[]>;
   /** Downloads a version's archive from the catalog (`catalog.ts`); `null` when there is none. */
   readonly catalog: ((pluginId: string, version: string) => Promise<CatalogFetch>) | null;
   readonly audit: AuditWriter;
@@ -183,6 +192,12 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
       state: v.state,
       trust: v.trust,
     };
+  }
+
+  function sdkProblemOf(version: PluginVersionRecord): string | null {
+    return sdkInRange(deps.sdkVersion, version.sdkRange)
+      ? null
+      : `built for the SDK ${version.sdkRange}; this gateway runs ${deps.sdkVersion}: rebuild the plugin for this gateway`;
   }
 
   function noDataDirectory(): UploadResult {
@@ -311,6 +326,8 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
         deprecated,
         unknownToIt: [...runningIds].filter((id) => !ids.has(id)),
         accounts: await deps.accountsOf(version.pluginId),
+        missions: await deps.missionsOf(version.pluginId),
+        sdkProblem: sdkProblemOf(version),
       };
     },
 
@@ -324,6 +341,8 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
           message: `type '${version.pluginId}' to activate it`,
         };
       }
+      const sdkProblem = sdkProblemOf(version);
+      if (sdkProblem !== null) return { ok: false, code: 'sdk-out-of-range', message: sdkProblem };
       const marked = await deps.versions.markTrial(digest, actor.userId);
       if (!marked.ok) {
         return {

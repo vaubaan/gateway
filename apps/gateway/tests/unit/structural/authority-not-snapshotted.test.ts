@@ -259,6 +259,8 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads a token row by prefix only to know whether a drawn prefix is free; the mission that comes with it is never looked at',
       'requests/request-service.ts':
         'derives: `own` goes through `grounds.derive`; the inbox reads the name only',
+      'compose/root.ts':
+        'derives: `missionsOnService` (the activation page’s missions of a service) goes through `grounds.derive` before reading the status',
       'execution/admission.ts':
         'derives: `grounds.inspect` on every request of both doors (MCP and the remote), before the pipeline',
       'audit/query-service.ts': 'reads names and creators only, never the status',

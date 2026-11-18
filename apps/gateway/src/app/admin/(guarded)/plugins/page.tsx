@@ -38,6 +38,7 @@ export default async function AdminPluginsPage({ searchParams }: Props) {
   }
   const install: InstallView = {
     canInstall: root.pluginInstall.dir !== null,
+    safeMode: root.config.plugins.safeMode,
     versions,
     activations,
     flash: flashOf(params),

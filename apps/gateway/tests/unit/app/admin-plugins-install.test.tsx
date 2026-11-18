@@ -79,6 +79,8 @@ describe('Administration › Plugins, installing', () => {
           deprecated: [],
           unknownToIt: [],
           accounts: 0,
+          missions: [],
+          sdkProblem: null,
         },
       },
     });
@@ -105,13 +107,47 @@ describe('Administration › Plugins, installing', () => {
             deprecated: [],
             unknownToIt: ['crm.contact-merge'],
             accounts: 2,
+            missions: [{ id: 'm-1', name: 'Release bot' }],
+            sdkProblem: null,
           },
         },
       }),
     );
     expect(page).toContain(INSTALL_WORDS.goBack);
     expect(page).toContain('crm.contact-merge');
+    // The missions its permissions apply to, each a link to its page.
+    expect(page).toContain('1 active mission uses this service: Release bot.');
     expect(page).toContain(INSTALL_WORDS.followImage);
+  });
+
+  it('greys a kept version this gateway cannot run, with the reason', () => {
+    const kept = version('d', 'previous', { sdkRange: '^0.1.0' });
+    const html = render({
+      versions: [kept],
+      activations: {
+        [kept.digest]: {
+          version: kept,
+          running: null,
+          added: [],
+          deprecated: [],
+          unknownToIt: [],
+          accounts: 0,
+          missions: [],
+          sdkProblem: 'built for the SDK ^0.1.0; this gateway runs 0.9.4',
+        },
+      },
+    });
+    expect(html).toContain('data-testid="activation-sdk"');
+    expect(html).toMatch(
+      /<button[^>]*disabled=""[^>]*data-testid="activate"|<button[^>]*data-testid="activate"[^>]*disabled=""/,
+    );
+  });
+
+  it('says when safe mode keeps every installed version from running', () => {
+    expect(render({ versions: [], activations: {}, safeMode: true })).toContain(
+      'data-testid="safe-mode"',
+    );
+    expect(render({ versions: [], activations: {} })).not.toContain('data-testid="safe-mode"');
   });
 
   it('asks for a restart once a trial is marked, and says why a version did not load', () => {

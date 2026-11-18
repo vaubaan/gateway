@@ -23,7 +23,7 @@ import {
   Tag,
   Textarea,
 } from '@/components/ui';
-import { INSTALL_WORDS } from '@/lib/vocabulary';
+import { INSTALL_WORDS, ROUTES } from '@/lib/vocabulary';
 import type { Tone } from '@/lib/vocabulary';
 import {
   ARCHIVE_FIELD,
@@ -44,6 +44,8 @@ import type {
 export interface InstallView {
   /** `false` for a store in memory: nothing can be installed. */
   readonly canInstall: boolean;
+  /** `plugins.safe_mode`: this start loaded no installed version. */
+  readonly safeMode?: boolean;
   /** Every version but the removed ones, newest change first. */
   readonly versions: readonly PluginVersionRecord[];
   /** What activating each pending, kept or failed version would change, by digest. */
@@ -111,6 +113,17 @@ function Activation({ version, view }: { version: PluginVersionRecord; view: Act
         )}{' '}
         {INSTALL_WORDS.accounts(view.accounts)}.
       </p>
+      <p data-testid="activation-missions">
+        {INSTALL_WORDS.missionsUsing(view.missions.length)}
+        {view.missions.length > 0 && ': '}
+        {view.missions.map((mission, index) => (
+          <span key={mission.id}>
+            {index > 0 && ', '}
+            <a href={`${ROUTES.missions}/${encodeURIComponent(mission.id)}`}>{mission.name}</a>
+          </span>
+        ))}
+        .
+      </p>
       <p data-testid="activation-added">
         {INSTALL_WORDS.added}: <Ids ids={view.added} />
       </p>
@@ -122,6 +135,11 @@ function Activation({ version, view }: { version: PluginVersionRecord; view: Act
           {INSTALL_WORDS.unknownToIt}: <Ids ids={view.unknownToIt} />
         </p>
       )}
+      {view.sdkProblem !== null && (
+        <p data-testid="activation-sdk">
+          {INSTALL_WORDS.cannotRun}: {view.sdkProblem}.
+        </p>
+      )}
       <form method="post" action={PLUGIN_ACTIONS.activate} className={styles.lineForm}>
         <input type="hidden" name={DIGEST_FIELD} value={version.digest} />
         <Field label={INSTALL_WORDS.typeToConfirm(version.pluginId)} htmlFor={fieldId}>
@@ -131,10 +149,16 @@ function Activation({ version, view }: { version: PluginVersionRecord; view: Act
             mono
             autoComplete="off"
             required
+            disabled={view.sdkProblem !== null}
             pattern={version.pluginId.replace(/[-]/g, '\\-')}
           />
         </Field>
-        <Button type="submit" variant="primary" data-testid="activate">
+        <Button
+          type="submit"
+          variant="primary"
+          data-testid="activate"
+          disabled={view.sdkProblem !== null}
+        >
           {version.state === 'pending' ? INSTALL_WORDS.activate : INSTALL_WORDS.goBack}
         </Button>
       </form>
@@ -279,6 +303,11 @@ export function InstallSection({ view }: { view: InstallView }) {
   return (
     <>
       <Flash flash={view.flash} />
+      {view.safeMode === true && (
+        <Callout tone="warn" title={INSTALL_WORDS.safeModeTitle} testId="safe-mode">
+          {INSTALL_WORDS.safeModeLede}
+        </Callout>
+      )}
       {trial && (
         <Callout
           tone="info"
