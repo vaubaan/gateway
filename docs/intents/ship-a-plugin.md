@@ -15,14 +15,11 @@ run it on my gateway or publish it to the catalog, without learning the gateway'
 
 ### Start a plugin project
 
-status: proposed
+status: implemented
 requires: kit
 creates: scaffold
+anchors: packages/plugin-cli/src/init.ts, packages/plugin-cli/scaffold/, packages/plugin-cli/tests/unit/init-and-try.test.ts, scripts/plugin-kit-smoke.sh
 spec: ../spec/plugin-authoring.md#1-vision
-acceptance:
-
-- One command in an empty directory makes a project whose checks pass before any change
-- The project holds the skills for the supported coding agents and a build that signs
 
 ### Try a call without a gateway
 
