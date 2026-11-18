@@ -70,6 +70,7 @@ const QUIET: UpdatesReport = {
   feedGeneratedAt: '2026-11-04T00:00:00.000Z',
   gateway: { current: '2.0.0', latest: '2.0.0', latestIsPrerelease: false, behind: false },
   pluginsBehind: [],
+  pluginsAvailable: [],
   advisories: [],
   olderPins: [],
 };
@@ -155,6 +156,24 @@ describe('Administration › Plugins', () => {
     expect(page).toContain('fixed in 5.0.1');
     expect(html.match(/role="note"/g)).toHaveLength(1);
     expect(html).toContain('data-tone="bad"');
+  });
+
+  it('offers a catalog version in one click where the instance can install, never otherwise', () => {
+    const report: UpdatesReport = {
+      ...QUIET,
+      pluginsBehind: [{ id: 'github', loaded: '5.0.0', released: '5.1.0' }],
+      pluginsAvailable: [{ id: 'linear', released: '1.2.0' }],
+    };
+    const install = { canInstall: true, versions: [], activations: {}, flash: null };
+    const html = render(view({ report, install }));
+    expect(html).toContain('data-testid="install-catalog-github"');
+    expect(html).toContain('data-testid="available-plugin-linear"');
+    expect(html).toContain('data-testid="install-catalog-linear"');
+    expect(html).toContain('action="/admin/plugins/install-catalog"');
+    expect(html).toContain('value="5.1.0"');
+    const inMemory = render(view({ report, install: { ...install, canInstall: false } }));
+    expect(inMemory).toContain('data-testid="available-plugin-linear"');
+    expect(inMemory).not.toContain('install-catalog-');
   });
 
   it('names the last failed read, and keeps the report it had', () => {

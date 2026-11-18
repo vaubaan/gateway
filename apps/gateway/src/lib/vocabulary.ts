@@ -1175,6 +1175,8 @@ export const INSTALL_WORDS = {
   restart: 'Restart now',
   done: {
     uploaded: 'Uploaded. It runs nothing until it is activated.',
+    'catalog-installed':
+      'Downloaded from the catalog, signature verified. It runs nothing until it is activated.',
     activated: 'Marked to start on trial at the next start.',
     refused: 'Refused and deleted.',
     'followed-image': 'The installed version is no longer used from the next start.',
@@ -1202,7 +1204,12 @@ export const INSTALL_WORDS = {
     'not-a-key': 'This is not an ed25519 public key in PEM',
     'name-invalid': 'Give the signer a name of 1 to 80 characters',
     'already-trusted': 'This key or this name is already trusted',
+    'not-in-catalog': 'The catalog has not published this version yet',
+    'catalog-unreachable': 'The catalog did not answer; nothing was installed',
+    'not-the-catalog-version': 'The catalog served another plugin or version; nothing was kept',
   },
+  installFromCatalog: (version: string) => `Install ${version}`,
+  availableTitle: 'In the catalog, not installed',
   signersTitle: 'Trusted signers',
   signersLede:
     'A company key that signs your private plugins (vaubaan-plugin keygen writes it). A plugin it signed shows its name, never Vaubaan. The plugins Vaubaan publishes need no signer here.',

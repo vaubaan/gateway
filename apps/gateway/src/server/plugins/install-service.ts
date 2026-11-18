@@ -31,6 +31,7 @@ import type {
 
 import { InstallRefusal, storeArchive, type InstallRefusalCode } from './installed';
 import { admissionProblem, trustOf, type AdmissionCode } from './trust';
+import type { CatalogFetch, CatalogFetchCode } from './catalog';
 import { PINNED_CATALOG_FILE } from './loader';
 import { readFile } from 'node:fs/promises';
 
@@ -43,7 +44,12 @@ export interface PluginActor {
   readonly viaMissionId?: string;
 }
 
-export type UploadRefusalCode = InstallRefusalCode | 'no-data-directory' | AdmissionCode;
+export type UploadRefusalCode =
+  | InstallRefusalCode
+  | 'no-data-directory'
+  | AdmissionCode
+  | CatalogFetchCode
+  | 'not-the-catalog-version';
 
 export type PluginActRefusalCode =
   'not-found' | 'wrong-state' | 'confirmation-mismatch' | 'accounts-depend';
@@ -93,6 +99,8 @@ export interface PluginInstallDeps {
   /** Whether the image or the operator's directory provides a version of the plugin. */
   readonly providedOtherwise: (pluginId: string) => boolean;
   readonly accountsOf: (pluginId: string) => Promise<number>;
+  /** Downloads a version's archive from the catalog (`catalog.ts`); `null` when there is none. */
+  readonly catalog: ((pluginId: string, version: string) => Promise<CatalogFetch>) | null;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -119,6 +127,11 @@ export interface PluginInstallService {
    */
   removeSigner(keyId: string, typedName: string, actor: PluginActor): Promise<SignerResult>;
   upload(bytes: Uint8Array, actor: PluginActor): Promise<UploadResult>;
+  /**
+   * Downloads a version from the catalog and keeps it pending, as an upload would — only if
+   * its signature is the catalog's and it is that id at that version; else nothing is kept.
+   */
+  installFromCatalog(pluginId: string, version: string, actor: PluginActor): Promise<UploadResult>;
   activationView(digest: string): Promise<ActivationView | null>;
   /** Marks a version for a trial at the next start; `typedId` must be the plugin's id. */
   activate(digest: string, typedId: string, actor: PluginActor): Promise<PluginActResult>;
@@ -172,46 +185,103 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     };
   }
 
-  return {
-    async upload(bytes, actor) {
-      if (deps.dir === null) {
+  function noDataDirectory(): UploadResult {
+    return {
+      ok: false,
+      code: 'no-data-directory',
+      message: 'this instance keeps its store in memory: nothing can be installed',
+    };
+  }
+
+  /**
+   * Stores an archive, checks it, and keeps it pending. `expected`, for a catalog download:
+   * the archive must carry the catalog's signature and be that id at that version, or it
+   * is deleted and nothing is recorded.
+   */
+  async function admit(
+    bytes: Uint8Array,
+    actor: PluginActor,
+    expected: {
+      readonly pluginId: string;
+      readonly version: string;
+      readonly source: string;
+    } | null,
+  ): Promise<UploadResult> {
+    if (deps.dir === null) return noDataDirectory();
+    let stored;
+    try {
+      stored = await storeArchive(deps.dir, bytes, { sdkVersion: deps.sdkVersion });
+    } catch (err) {
+      if (err instanceof InstallRefusal) return { ok: false, code: err.code, message: err.message };
+      throw err;
+    }
+    // Only a folder this upload wrote, and no recorded version uses: the same digest may be
+    // a version already kept, whose folder a refusal of these bytes must never delete.
+    const discard = async (): Promise<void> => {
+      if (!stored.created || (await deps.versions.get(stored.digest)) !== null) return;
+      await rm(stored.path, { recursive: true, force: true }).catch(() => undefined);
+    };
+    const verdict = trustOf(stored.files, { trustedKeys: await trustedKeys() });
+    if (expected !== null) {
+      if (verdict.level !== 'vaubaan') {
+        await discard();
         return {
           ok: false,
-          code: 'no-data-directory',
-          message: 'this instance keeps its store in memory: nothing can be installed',
+          code: 'signature-invalid',
+          message: `the archive downloaded from the catalog is not signed by the catalog (${verdict.level}); nothing was kept`,
         };
       }
-      let stored;
-      try {
-        stored = await storeArchive(deps.dir, bytes, { sdkVersion: deps.sdkVersion });
-      } catch (err) {
-        if (err instanceof InstallRefusal)
-          return { ok: false, code: err.code, message: err.message };
-        throw err;
+      if (stored.pluginId !== expected.pluginId || stored.version !== expected.version) {
+        await discard();
+        return {
+          ok: false,
+          code: 'not-the-catalog-version',
+          message: `the catalog served ${stored.pluginId} ${stored.version}, not ${expected.pluginId} ${expected.version}; nothing was kept`,
+        };
       }
-      const verdict = trustOf(stored.files, { trustedKeys: await trustedKeys() });
-      const problem = admissionProblem(stored.pluginId, verdict, {
-        reservedIds: deps.reservedIds(),
-        allowUnsigned: deps.allowUnsigned,
-      });
-      if (problem !== null) {
-        await rm(stored.path, { recursive: true, force: true }).catch(() => undefined);
-        return { ok: false, code: problem.code, message: problem.message };
+    }
+    const problem = admissionProblem(stored.pluginId, verdict, {
+      reservedIds: deps.reservedIds(),
+      allowUnsigned: deps.allowUnsigned,
+    });
+    if (problem !== null) {
+      await discard();
+      return { ok: false, code: problem.code, message: problem.message };
+    }
+    const version = await deps.versions.addPending({
+      digest: stored.digest,
+      pluginId: stored.pluginId,
+      version: stored.version,
+      packageName: stored.packageName,
+      sdkRange: stored.sdkRange,
+      trust: verdict.level as 'vaubaan' | 'signer' | 'unsigned',
+      signer: verdict.level === 'signer' ? verdict.signer : null,
+      riskIds: stored.riskIds,
+      uploadedBy: actor.userId,
+      viaMissionId: actor.viaMissionId ?? null,
+    });
+    await audit(actor, 'plugin-uploaded', version.digest, null, {
+      ...summary(version),
+      ...(expected !== null ? { from: 'catalog', source: expected.source } : {}),
+    });
+    return { ok: true, version };
+  }
+
+  return {
+    upload: (bytes, actor) => admit(bytes, actor, null),
+
+    async installFromCatalog(pluginId, version, actor) {
+      if (deps.dir === null) return noDataDirectory();
+      if (deps.catalog === null) {
+        return {
+          ok: false,
+          code: 'catalog-unreachable',
+          message: 'this instance reads no catalog',
+        };
       }
-      const version = await deps.versions.addPending({
-        digest: stored.digest,
-        pluginId: stored.pluginId,
-        version: stored.version,
-        packageName: stored.packageName,
-        sdkRange: stored.sdkRange,
-        trust: verdict.level as 'vaubaan' | 'signer' | 'unsigned',
-        signer: verdict.level === 'signer' ? verdict.signer : null,
-        riskIds: stored.riskIds,
-        uploadedBy: actor.userId,
-        viaMissionId: actor.viaMissionId ?? null,
-      });
-      await audit(actor, 'plugin-uploaded', version.digest, null, summary(version));
-      return { ok: true, version };
+      const fetched = await deps.catalog(pluginId, version);
+      if (!fetched.ok) return fetched;
+      return admit(fetched.bytes, actor, { pluginId, version, source: fetched.url });
     },
 
     async activationView(digest) {

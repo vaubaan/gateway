@@ -89,6 +89,28 @@ describe('compare', () => {
     ]);
   });
 
+  it('offers the feed’s plugins this instance has no version of, by id', () => {
+    const result = compare(
+      {
+        ...FEED,
+        plugins: { ...FEED.plugins, zeta: { latest: '1.0.0' }, alpha: { latest: '0.1.0' } },
+      },
+      { gatewayVersion: '2.0.0-alpha.17', inventory },
+    );
+    expect(result.pluginsAvailable).toEqual(
+      expect.arrayContaining([
+        { id: 'alpha', released: '0.1.0' },
+        { id: 'zeta', released: '1.0.0' },
+      ]),
+    );
+    expect(result.pluginsAvailable.map((p) => p.id)).toEqual(
+      [...result.pluginsAvailable.map((p) => p.id)].sort(),
+    );
+    for (const entry of inventory) {
+      expect(result.pluginsAvailable.map((p) => p.id)).not.toContain(entry.id);
+    }
+  });
+
   it('lists the pins older than the bundled version they replace', () => {
     const result = compare(FEED, { gatewayVersion: '2.0.0-alpha.17', inventory });
     expect(result.olderPins).toEqual([

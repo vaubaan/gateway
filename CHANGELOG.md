@@ -11,6 +11,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Install a plugin from the catalog in one click.** Administration › Plugins offers each plugin
+  the versions feed says is behind, and each catalog plugin the instance does not have, with an
+  "Install" button: the gateway downloads the version's archive from the catalog
+  (`vaubaan/gateway-plugins` releases), keeps it only if it carries the catalog's signature and is
+  that plugin at that version, and leaves it pending for an administrator to activate. The
+  download is audited with where it came from.
+
 - **A plugin author starts a project in one command.** `vaubaan-plugin init <dir> --id <id>`
   writes a standalone plugin project, outside the gateway's repository: the template plugin
   renamed to the id, its tests passing before any change (`npm run check`), and the instructions
@@ -63,6 +70,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   compares only what Vaubaan signed. Migration 0042 (`plugin_signers`).
 
 ### Fixed
+
+- An uploaded archive refused at upload no longer deletes the folder of an installed version
+  with the same bytes.
 
 - **GitHub (plugin 5.3.1): the first push to an empty repository goes through.** A repository
   created without a README has no branch, yet GitHub names a default branch; the review compared

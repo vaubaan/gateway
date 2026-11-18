@@ -25,6 +25,12 @@ export interface PluginBehind {
   readonly released: string;
 }
 
+/** A catalog plugin this instance has no version of: offered for a one-click install. */
+export interface PluginAvailable {
+  readonly id: string;
+  readonly released: string;
+}
+
 /** An advisory whose affected range holds the version this instance runs. */
 export interface AdvisoryHit {
   readonly id: string;
@@ -52,6 +58,8 @@ export interface UpdatesComparison {
   readonly feedGeneratedAt: string;
   readonly gateway: GatewayVersionCheck;
   readonly pluginsBehind: readonly PluginBehind[];
+  /** The feed's plugins the instance knows of no version, sorted by id. */
+  readonly pluginsAvailable: readonly PluginAvailable[];
   readonly advisories: readonly AdvisoryHit[];
   readonly olderPins: readonly OlderPin[];
 }
@@ -133,6 +141,10 @@ export function compare(feed: VersionsFeed, input: CompareInput): UpdatesCompari
       behind: isOlder(gatewayVersion, feed.gateway.latest),
     },
     pluginsBehind,
+    pluginsAvailable: Object.entries(feed.plugins)
+      .filter(([id]) => !inventory.some((entry) => entry.id === id))
+      .map(([id, { latest }]) => ({ id, released: latest }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
     advisories,
     olderPins,
   };

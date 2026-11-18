@@ -76,6 +76,12 @@ export interface StoredArchive {
   /** The risk ids of its catalog: the store accepts them while the version is kept. */
   readonly riskIds: readonly string[];
   readonly path: string;
+  /**
+   * Whether this call wrote the folder. The same bytes land in the same folder: a caller
+   * refusing an archive deletes the folder only if it created it, never one a kept
+   * version of the same digest uses.
+   */
+  readonly created: boolean;
   /** The archive's files, for the trust check of the caller; not kept. */
   readonly files: ReadonlyMap<string, Uint8Array>;
 }
@@ -152,6 +158,7 @@ export async function storeArchive(
   }
 
   const path = join(/* turbopackIgnore: true */ dir, digest);
+  let created = false;
   if (!(await stat(path).catch(() => null))?.isDirectory()) {
     await mkdir(dir, { recursive: true });
     const partial = join(
@@ -164,11 +171,14 @@ export async function storeArchive(
         await mkdir(dirname(target), { recursive: true });
         await writeFile(target, content, { mode: 0o644 });
       }
-      await rename(partial, path).catch(async (err: unknown) => {
-        // Another upload of the same bytes won the race: its folder is the same.
-        if ((await stat(path).catch(() => null))?.isDirectory()) return;
-        throw err;
-      });
+      created = await rename(partial, path).then(
+        () => true,
+        async (err: unknown) => {
+          // Another upload of the same bytes won the race: its folder is the same.
+          if ((await stat(path).catch(() => null))?.isDirectory()) return false;
+          throw err;
+        },
+      );
     } finally {
       await rm(partial, { recursive: true, force: true });
     }
@@ -181,6 +191,7 @@ export async function storeArchive(
     sdkRange: read.manifest.sdkRange,
     riskIds,
     path,
+    created,
     files,
   };
 }

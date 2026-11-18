@@ -3,7 +3,7 @@ title: Install a plugin on my gateway
 status: proposed
 actors: [administrator, agent]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-17
+last_reviewed: 2026-11-18
 ---
 
 # Install a plugin on my gateway
@@ -40,13 +40,10 @@ acceptance:
 
 ### Install a catalog plugin in one click
 
-status: proposed
+status: implemented
 requires: plugin
+anchors: apps/gateway/src/server/plugins/catalog.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-catalog/route.ts, apps/gateway/tests/integration/plugins/install-from-catalog.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- A plugin behind its catalog version shows an install button; using it downloads the archive and leaves it pending
-- An archive whose Vaubaan signature does not verify is refused and nothing is kept
 
 ## Run a version I chose
 

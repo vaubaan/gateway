@@ -19,6 +19,7 @@ export const PLUGINS_PAGE = '/admin/plugins';
 /** The forms of the page, one route each (`app/admin/(guarded)/plugins/<act>/route.ts`). */
 export const PLUGIN_ACTIONS = {
   upload: `${PLUGINS_PAGE}/upload`,
+  installCatalog: `${PLUGINS_PAGE}/install-catalog`,
   activate: `${PLUGINS_PAGE}/activate`,
   refuse: `${PLUGINS_PAGE}/refuse`,
   followImage: `${PLUGINS_PAGE}/follow-image`,
@@ -32,6 +33,7 @@ export const SIGNER_ID_FIELD = 'key_id';
 export const ARCHIVE_FIELD = 'archive';
 export const DIGEST_FIELD = 'digest';
 export const PLUGIN_FIELD = 'plugin';
+export const PLUGIN_VERSION_FIELD = 'plugin_version';
 export const CONFIRM_FIELD = 'confirm';
 /** Query parameters the page reads back. */
 export const DONE_PARAM = 'done';
@@ -54,6 +56,8 @@ export interface PluginHandlerDeps {
 
 export interface PluginHandlers {
   upload(request: Request): Promise<Response>;
+  /** Downloads a catalog version and keeps it pending (form: `plugin`, `plugin_version`). */
+  installCatalog(request: Request): Promise<Response>;
   activate(request: Request): Promise<Response>;
   refuse(request: Request): Promise<Response>;
   followImage(request: Request): Promise<Response>;
@@ -113,6 +117,21 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
           digest: result.version.digest,
         });
         return back({ [DONE_PARAM]: 'uploaded', [VERSION_PARAM]: result.version.digest });
+      }),
+
+    installCatalog: (request) =>
+      guarded(request, async (form, actor) => {
+        const pluginId = field(form, PLUGIN_FIELD);
+        const version = field(form, PLUGIN_VERSION_FIELD);
+        if (pluginId === null || version === null) return problem('not-in-catalog');
+        const result = await deps.install.installFromCatalog(pluginId, version, actor);
+        if (!result.ok) return problem(result.code, result.message);
+        deps.logger.info('plugin installed from the catalog', {
+          plugin: result.version.pluginId,
+          version: result.version.version,
+          digest: result.version.digest,
+        });
+        return back({ [DONE_PARAM]: 'catalog-installed', [VERSION_PARAM]: result.version.digest });
       }),
 
     activate: (request) =>

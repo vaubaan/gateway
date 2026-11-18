@@ -9,7 +9,8 @@
  *   1. type-check of the workspaces a changed file belongs to, and of every
  *      workspace that depends on them, transitively (scripts/type-check.mjs);
  *   2. ESLint and Prettier on the changed files;
- *   3. the Vitest tests related to the changed files (`vitest --changed`);
+ *   3. the Vitest tests related to the changed files (`vitest --changed`), and the
+ *      structural tests, which read the whole tree and no import ties to a change;
  *   4. the harness linters on the docs, and the workflows (actionlint with shellcheck,
  *      the version CI fetches, from its Docker image) when one changed;
  *   5. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
@@ -130,6 +131,13 @@ step('vitest (related to the change)', process.execPath, [
   '--changed',
   base,
   '--passWithNoTests',
+]);
+// The structural tests read the whole tree without importing it (no hard-coded
+// configuration, no forbidden import…): `--changed` never selects them. Seconds.
+step('vitest (structural rules over the tree)', process.execPath, [
+  'node_modules/vitest/vitest.mjs',
+  'run',
+  'apps/gateway/tests/unit/structural',
 ]);
 step('harness lint', 'npx', ['vaubaan-harness', 'lint']);
 

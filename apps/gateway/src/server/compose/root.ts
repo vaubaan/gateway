@@ -88,6 +88,7 @@ import type { InstalledAdmission } from '../plugins/installed';
 import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
+import { fetchCatalogArchive } from '../plugins/catalog';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -210,6 +211,8 @@ export interface RootDeps {
   readonly backupTimers?: BackupTimers;
   /** Outbound HTTP of the versions check (tests inject a fake; default: the global `fetch`). */
   readonly updatesFetch?: typeof fetch;
+  /** Downloads of the catalog's archives (one-click install); the global `fetch` by default. */
+  readonly catalogFetch?: typeof fetch;
   /** The versions check's timers (tests drive them by hand). */
   readonly updatesTimers?: UpdatesTimers;
   /** Ends the process for its supervisor to restart it; default: exit 75 once the root closed. */
@@ -308,6 +311,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         SHIPPED_PLUGINS.some((plugin) => plugin.id === pluginId) ||
         inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
       accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
+      catalog: (pluginId, version) =>
+        fetchCatalogArchive(pluginId, version, { fetch: deps.catalogFetch ?? fetch }),
       audit: store.auditWriter,
       clock: systemClock,
       logger,

@@ -1,0 +1,127 @@
+/**
+ * One click installs a catalog version (intent "Install a catalog plugin in one click"),
+ * end to end on a store file, the catalog faked by a `fetch` serving real archives:
+ *
+ *   - the archive the catalog published for notion 0.2.0 (signed by its release workflow)
+ *     is kept pending, trust "Vaubaan", the download audited with where it came from;
+ *   - an archive without the catalog's signature, or of another version than asked, is
+ *     refused and nothing is kept, even for an id the configuration allows unsigned;
+ *   - a version the catalog has not published is said so.
+ */
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { manifestOfFiles, packArchive, readArchive } from '@vaubaan/plugin-sdk/archive';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
+import { loadInstanceConfig } from '../../../src/server/config';
+import { validEnv } from '../../support/config/testing';
+
+const NOTION = readFileSync(new URL('../../fixtures/sigstore/notion-v0.2.0.tgz', import.meta.url));
+const ADMIN = { userId: 'user-ops' };
+const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+/** notion 0.2.0's files, its signatures removed: an unsigned archive of the same plugin. */
+function unsignedNotion(version = '0.2.0'): Uint8Array {
+  const files = new Map(
+    [...readArchive(NOTION).files].filter(([path]) => !path.startsWith('vaubaan-manifest')),
+  );
+  if (version !== '0.2.0') {
+    const pkg = JSON.parse(new TextDecoder().decode(files.get('package.json'))) as Record<
+      string,
+      unknown
+    >;
+    files.set('package.json', encode(JSON.stringify({ ...pkg, version })));
+  }
+  files.set(
+    'vaubaan-manifest.json',
+    encode(JSON.stringify(manifestOfFiles(files, 'notion', version))),
+  );
+  return packArchive(files);
+}
+
+describe('installing a catalog version in one click', () => {
+  let dir: string;
+  let root: GatewayRoot | null = null;
+  /** What the fake catalog serves, by `<tag>/<tag>.tgz`; absent → 404. */
+  const served = new Map<string, Uint8Array>();
+  const requested: string[] = [];
+  const catalogFetch = (async (url: URL | string) => {
+    const path = new URL(String(url)).pathname.split('/').slice(-2).join('/');
+    requested.push(String(url));
+    const bytes = served.get(path);
+    return bytes === undefined
+      ? new Response('Not Found', { status: 404 })
+      : new Response(Buffer.from(bytes));
+  }) as typeof fetch;
+
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'vbn-catalog-install-'));
+    root = await buildRoot({
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({
+            VAUBAAN_STORE_PATH: join(dir, 'gateway.db'),
+            // Even an id allowed unsigned takes nothing unsigned from the catalog.
+            VAUBAAN_PLUGINS_ALLOW_UNSIGNED: 'notion',
+          }),
+        }),
+      logWrite: () => undefined,
+      requestRestart: () => undefined,
+      catalogFetch,
+    });
+  }, 60_000);
+
+  afterAll(async () => {
+    await root?.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const kept = (): string[] => readdirSync(join(dir, 'plugins')).filter((n) => !n.startsWith('.'));
+
+  it('keeps the catalog’s archive pending, signed by Vaubaan, and audits where it came from', async () => {
+    served.set('notion-v0.2.0/notion-v0.2.0.tgz', NOTION);
+    const result = await root!.pluginInstall.service.installFromCatalog('notion', '0.2.0', ADMIN);
+    expect(result).toMatchObject({
+      ok: true,
+      version: { pluginId: 'notion', version: '0.2.0', state: 'pending', trust: 'vaubaan' },
+    });
+    expect(requested.at(-1)).toBe(
+      'https://github.com/vaubaan/gateway-plugins/releases/download/notion-v0.2.0/notion-v0.2.0.tgz',
+    );
+    const entries = await root!.store.audit.list({ kind: 'admin' });
+    const entry = entries.find((e) => e.kind === 'admin' && e.act === 'plugin-uploaded');
+    expect(entry).toMatchObject({
+      act: 'plugin-uploaded',
+      after: { from: 'catalog', trust: 'vaubaan', source: requested.at(-1) },
+    });
+  });
+
+  it('refuses an archive the catalog did not sign, and keeps nothing', async () => {
+    const before = kept();
+    served.set('notion-v0.2.1/notion-v0.2.1.tgz', unsignedNotion('0.2.1'));
+    expect(
+      await root!.pluginInstall.service.installFromCatalog('notion', '0.2.1', ADMIN),
+    ).toMatchObject({ ok: false, code: 'signature-invalid' });
+    expect(kept()).toEqual(before);
+  });
+
+  it('refuses another version than the one asked for, and keeps nothing', async () => {
+    const before = kept();
+    // The catalog's real 0.2.0 archive, served where 0.3.0 was expected.
+    served.set('notion-v0.3.0/notion-v0.3.0.tgz', NOTION);
+    expect(
+      await root!.pluginInstall.service.installFromCatalog('notion', '0.3.0', ADMIN),
+    ).toMatchObject({ ok: false, code: 'not-the-catalog-version' });
+    expect(kept()).toEqual(before);
+    expect(await root!.pluginInstall.service.list()).toHaveLength(1);
+  });
+
+  it('says a version the catalog has not published', async () => {
+    expect(
+      await root!.pluginInstall.service.installFromCatalog('notion', '9.9.9', ADMIN),
+    ).toMatchObject({ ok: false, code: 'not-in-catalog' });
+  });
+});

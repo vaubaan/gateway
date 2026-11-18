@@ -26,8 +26,9 @@ import {
 } from '@/components/ui';
 import { servicePath } from '@/lib/services/links';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
-import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, INSTALL_WORDS, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
+import { PLUGIN_ACTIONS, PLUGIN_FIELD, PLUGIN_VERSION_FIELD } from '@/server/plugins/handlers';
 
 import { InstallSection, type InstallView } from './install-view';
 import type { ValidationStatus } from '@/server/telemetry';
@@ -100,12 +101,39 @@ function subjectOf(advisory: AdvisoryHit, lines: readonly PluginLine[]): string 
 export function reportsSomething(report: UpdatesReport | null): report is UpdatesReport {
   if (!report) return false;
   const { gateway, pluginsBehind, advisories, olderPins } = report;
-  return gateway.behind || pluginsBehind.length + advisories.length + olderPins.length > 0;
+  const available = report.pluginsAvailable;
+  return (
+    gateway.behind ||
+    pluginsBehind.length + available.length + advisories.length + olderPins.length > 0
+  );
+}
+
+/** The one-click install of a catalog version: downloaded, verified, left pending. */
+function InstallFromCatalog({ id, version }: { id: string; version: string }) {
+  return (
+    <form method="post" action={PLUGIN_ACTIONS.installCatalog} className={styles.inlineForm}>
+      <input type="hidden" name={PLUGIN_FIELD} value={id} />
+      <input type="hidden" name={PLUGIN_VERSION_FIELD} value={version} />
+      <Button type="submit" size="sm" data-testid={`install-catalog-${id}`}>
+        {INSTALL_WORDS.installFromCatalog(version)}
+      </Button>
+    </form>
+  );
 }
 
 /** What the feed reports, each kind only when present. */
-function FeedNotices({ report, lines }: { report: UpdatesReport; lines: readonly PluginLine[] }) {
+function FeedNotices({
+  report,
+  lines,
+  canInstall,
+}: {
+  report: UpdatesReport;
+  lines: readonly PluginLine[];
+  /** Whether the instance can install (a store on disk): the catalog's buttons show. */
+  canInstall: boolean;
+}) {
   const { gateway, pluginsBehind, advisories, olderPins } = report;
+  const available = report.pluginsAvailable;
   const markOf = (id: string) => {
     const line = lines.find((l) => l.entry.id === id);
     return <ServiceMark name={line?.entry.name ?? id} icon={line?.icon ?? null} />;
@@ -155,6 +183,21 @@ function FeedNotices({ report, lines }: { report: UpdatesReport; lines: readonly
                 <Mono>{behind.loaded}</Mono> → <Mono>{behind.released}</Mono>
               </span>
             }
+            {...(canInstall
+              ? { end: <InstallFromCatalog id={behind.id} version={behind.released} /> }
+              : {})}
+          />
+        ))}
+        {available.map((plugin) => (
+          <Row
+            key={`available-${plugin.id}`}
+            testId={`available-plugin-${plugin.id}`}
+            lead={markOf(plugin.id)}
+            title={`${plugin.id}: ${INSTALL_WORDS.availableTitle.toLowerCase()}`}
+            description={<Mono>{plugin.released}</Mono>}
+            {...(canInstall
+              ? { end: <InstallFromCatalog id={plugin.id} version={plugin.released} /> }
+              : {})}
           />
         ))}
         {olderPins.map((pin) => (
@@ -268,7 +311,13 @@ export function PluginsPage({ view }: { view: PluginsView }) {
         lede={SETTINGS_PAGES.plugins.lede}
       />
       {view.install && <InstallSection view={view.install} />}
-      {reportsSomething(view.report) && <FeedNotices report={view.report} lines={view.lines} />}
+      {reportsSomething(view.report) && (
+        <FeedNotices
+          report={view.report}
+          lines={view.lines}
+          canInstall={view.install?.canInstall ?? false}
+        />
+      )}
       <Section
         title={PLUGIN_WORDS.listTitle}
         count={view.lines.length}
