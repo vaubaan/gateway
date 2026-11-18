@@ -157,15 +157,19 @@ owner doing anything:
 - Before publishing, the job runs `scripts/plugin-kit-smoke.sh`: both packages packed, installed
   in an empty folder, `vaubaan-plugin init`, then the new project's `npm run check`, `try` and
   `build`. Run it locally after any change to the kit's packaging (about 15 seconds).
-- No token: npm **trusted publishing**. On npmjs.com each package names this repository and
-  `publish-plugin-kit.yml` as its trusted publisher; npm attaches the provenance. npm declares a
-  trusted publisher only for a package that exists, so the **first version of each package is
-  published once by hand** by a maintainer of the `@vaubaan` npm scope:
-  `npm pack --workspace <package>` then `npm publish <tarball> --access public` from their own
-  login, then the trusted publisher declared in the package's settings (repository
-  `vaubaan/gateway`, workflow `publish-plugin-kit.yml`, no environment) and, in the same settings,
-  publishing restricted to trusted publishers (tokens refused). Every later version goes through
-  the tag.
+- No token: npm **trusted publishing**, **staged**. On npmjs.com each package names this
+  repository and `publish-plugin-kit.yml` as its trusted publisher with **no allowed action
+  checked** ("Allow npm publish" and "Allow npm dist-tag" left off): the workflow may only
+  `npm stage publish`. A staged version stays hidden until a maintainer approves it with their
+  second factor, on npmjs.com (the package's staged versions) or with `npm stage list <package>`
+  then `npm stage approve <id>` (npm 11.15 or later); the job's summary says what to approve.
+  "Publishing access" requires two-factor authentication and disallows tokens.
+- npm declares a trusted publisher only for a package that exists: the first version of each
+  package was published by hand on 2026-11-18 (`@vaubaan/plugin-sdk` 0.9.4,
+  `@vaubaan/plugin-cli` 0.1.0, by `dev-vaubaan`). A new package of the kit starts the same way:
+  `npm pack --workspace <package>`, `npm publish <tarball> --access public` from a maintainer's
+  login, in a real terminal (the browser's second-factor prompt needs one), then the trusted
+  publisher declared as above.
 
 ### The OAuth broker's image
 

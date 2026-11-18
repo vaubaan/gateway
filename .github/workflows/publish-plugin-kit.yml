@@ -7,7 +7,9 @@ name: publish-plugin-kit
 #
 # No token: npm trusted publishing. This workflow, by its file name, is declared
 # as the trusted publisher of each package on npmjs.com; npm accepts the
-# workflow's OIDC identity and attaches the provenance itself. npm declares a
+# workflow's OIDC identity and attaches the provenance itself. It may only
+# stage: a staged version stays hidden until a maintainer approves it with
+# their second factor (npmjs.com, or `npm stage approve <id>`). npm declares a
 # trusted publisher only for a package that exists: each package's first
 # version is published once by hand, by a maintainer of the @vaubaan scope.
 #
@@ -73,21 +75,28 @@ jobs:
       - run: npx tsc -p packages/plugin-sdk/tsconfig.json --noEmit && npx tsc -p packages/plugin-cli/tsconfig.json --noEmit
       - run: npx vitest run packages/plugin-sdk packages/plugin-cli
       - run: scripts/plugin-kit-smoke.sh "${RUNNER_TEMP}/plugin-kit-smoke"
-      - name: Publish
+      # Staged, never live: the trusted publisher may only `npm stage publish`
+      # ("Allow npm publish" left unchecked on npmjs.com). The version waits,
+      # hidden, until a maintainer approves it with their second factor, on
+      # npmjs.com or with `npm stage approve <id>` (npm 11.15 or later).
+      - name: Stage
+        # `shell: bash` runs with pipefail: a failed stage is not hidden by `tee`.
+        shell: bash
         env:
           NAME: ${{ steps.package.outputs.name }}
-        run: npm publish --workspace "$NAME" --access public
-      - name: The version is on npm
+        run: npm stage publish --workspace "$NAME" --access public | tee "${RUNNER_TEMP}/stage.txt"
+      - name: What a maintainer approves
         env:
           NAME: ${{ steps.package.outputs.name }}
           VERSION: ${{ steps.package.outputs.version }}
         run: |
-          for _ in $(seq 1 30); do
-            if [ "$(npm view "$NAME@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
-              echo "$NAME@$VERSION is on npm"
-              exit 0
-            fi
-            sleep 20
-          done
-          echo "::error::$NAME@$VERSION is not visible on npm after 10 minutes"
-          exit 1
+          {
+            echo "## $NAME@$VERSION is staged, not published"
+            echo
+            echo "A maintainer approves it with their second factor: on npmjs.com (the package's"
+            echo "staged versions), or \`npm stage list $NAME\` then \`npm stage approve <id>\`."
+            echo
+            echo '```'
+            cat "${RUNNER_TEMP}/stage.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
