@@ -58,6 +58,8 @@ export interface UpdatesComparison {
   readonly feedGeneratedAt: string;
   readonly gateway: GatewayVersionCheck;
   readonly pluginsBehind: readonly PluginBehind[];
+  /** Every plugin id the feed names: the catalog's, reserved to its signature at upload. */
+  readonly catalogIds: readonly string[];
   /** The feed's plugins the instance knows of no version, sorted by id. */
   readonly pluginsAvailable: readonly PluginAvailable[];
   readonly advisories: readonly AdvisoryHit[];
@@ -141,6 +143,7 @@ export function compare(feed: VersionsFeed, input: CompareInput): UpdatesCompari
       behind: isOlder(gatewayVersion, feed.gateway.latest),
     },
     pluginsBehind,
+    catalogIds: Object.keys(feed.plugins).sort(),
     pluginsAvailable: Object.entries(feed.plugins)
       .filter(([id]) => !inventory.some((entry) => entry.id === id))
       .map(([id, { latest }]) => ({ id, released: latest }))

@@ -6,7 +6,9 @@
  *     is kept pending, trust "Vaubaan", the download audited with where it came from;
  *   - an archive without the catalog's signature, or of another version than asked, is
  *     refused and nothing is kept, even for an id the configuration allows unsigned;
- *   - a version the catalog has not published is said so.
+ *   - a version the catalog has not published is said so;
+ *   - once the versions feed names a catalog id, an archive of that id the catalog did not
+ *     sign is refused at upload, even one the configuration allows unsigned.
  */
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,6 +44,29 @@ function unsignedNotion(version = '0.2.0'): Uint8Array {
   return packArchive(files);
 }
 
+/** An unsigned archive of id `id`, made of notion's files renamed: never run, only stored. */
+function unsignedOf(id: string): Uint8Array {
+  const files = new Map(
+    [...readArchive(NOTION).files].filter(([path]) => !path.startsWith('vaubaan-manifest')),
+  );
+  const rename = (path: string): void => {
+    const text = new TextDecoder().decode(files.get(path));
+    files.set(path, encode(text.replace(/\bnotion\b/g, id)));
+  };
+  rename('risk-catalog.yaml');
+  rename('package.json');
+  files.set('vaubaan-manifest.json', encode(JSON.stringify(manifestOfFiles(files, id, '0.2.0'))));
+  return packArchive(files);
+}
+
+const FEED = {
+  schema: 1,
+  generated_at: '2026-11-18T10:00:00Z',
+  gateway: { latest: '2.0.0', prerelease: false },
+  plugins: { notion: { latest: '0.2.0' }, linear: { latest: '1.0.0' } },
+  advisories: [],
+};
+
 describe('installing a catalog version in one click', () => {
   let dir: string;
   let root: GatewayRoot | null = null;
@@ -65,12 +90,16 @@ describe('installing a catalog version in one click', () => {
           env: validEnv({
             VAUBAAN_STORE_PATH: join(dir, 'gateway.db'),
             // Even an id allowed unsigned takes nothing unsigned from the catalog.
-            VAUBAAN_PLUGINS_ALLOW_UNSIGNED: 'notion',
+            VAUBAAN_PLUGINS_ALLOW_UNSIGNED: 'notion,linear',
+            VAUBAAN_UPDATES_CHECK: 'true',
+            VAUBAAN_UPDATES_FEED_URL: 'https://feed.example.com/versions.json',
           }),
         }),
       logWrite: () => undefined,
       requestRestart: () => undefined,
       catalogFetch,
+      updatesFetch: async () => new Response(JSON.stringify(FEED)),
+      updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
     });
   }, 60_000);
 
@@ -117,6 +146,22 @@ describe('installing a catalog version in one click', () => {
     ).toMatchObject({ ok: false, code: 'not-the-catalog-version' });
     expect(kept()).toEqual(before);
     expect(await root!.pluginInstall.service.list()).toHaveLength(1);
+  });
+
+  it('reserves the ids the versions feed names to the catalog’s signature, at upload', async () => {
+    // Before the feed is read, `linear` is no id this instance knows: allowed unsigned.
+    const first = await root!.pluginInstall.service.upload(unsignedOf('linear'), ADMIN);
+    expect(first).toMatchObject({ ok: true, version: { pluginId: 'linear', trust: 'unsigned' } });
+    await root!.pluginInstall.service.refuse(
+      (first as { version: { digest: string } }).version.digest,
+      ADMIN,
+    );
+
+    expect((await root!.updates.refresh())?.catalogIds).toEqual(['linear', 'notion']);
+    expect(await root!.pluginInstall.service.upload(unsignedOf('linear'), ADMIN)).toMatchObject({
+      ok: false,
+      code: 'reserved-id',
+    });
   });
 
   it('says a version the catalog has not published', async () => {

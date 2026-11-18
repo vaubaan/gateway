@@ -71,6 +71,7 @@ const QUIET: UpdatesReport = {
   gateway: { current: '2.0.0', latest: '2.0.0', latestIsPrerelease: false, behind: false },
   pluginsBehind: [],
   pluginsAvailable: [],
+  catalogIds: [],
   advisories: [],
   olderPins: [],
 };

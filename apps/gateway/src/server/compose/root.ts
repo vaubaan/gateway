@@ -288,6 +288,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       ),
     );
     let notifySignerAdded: (name: string) => void = () => undefined;
+    // The versions check is built below; until its first read, the catalog's ids are unknown.
+    let catalogIds: () => readonly string[] = () => [];
     const pluginInstall = createPluginInstallService({
       versions: store.pluginVersions,
       dir: installedDir,
@@ -296,7 +298,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       signers: store.pluginSigners,
       // The notifications module is wired below; a signer is added once the root runs.
       notifySignerAdded: (name) => notifySignerAdded(name),
-      reservedIds: () => reservedPluginIds(),
+      // At upload, the catalog's ids too (the last versions feed read): a private archive
+      // never takes the id of a catalog plugin, even one this image does not ship. At a
+      // start, only the image's (`installedAdmission`): a private plugin already installed
+      // does not stop when the catalog later publishes its id.
+      reservedIds: () => new Set([...reservedPluginIds(), ...catalogIds()]),
       running: (pluginId) => {
         const registered = registry.get(pluginId);
         const entry = inventory.entries.find((e) => e.id === pluginId);
@@ -353,6 +359,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       timers: deps.updatesTimers,
     });
     opened.push(() => updates.stop());
+    catalogIds = () => updates.current()?.catalogIds ?? [];
     updates.start();
     const closeRoot = () => closeAll(opened);
     const requestRestart = deps.requestRestart ?? defaultRestart;

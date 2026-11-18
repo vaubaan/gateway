@@ -16,7 +16,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   "Install" button: the gateway downloads the version's archive from the catalog
   (`vaubaan/gateway-plugins` releases), keeps it only if it carries the catalog's signature and is
   that plugin at that version, and leaves it pending for an administrator to activate. The
-  download is audited with where it came from.
+  download is audited with where it came from. An upload of an id the versions feed names (a
+  catalog plugin, shipped in the image or not) now needs the catalog's signature too.
 
 - **A plugin author starts a project in one command.** `vaubaan-plugin init <dir> --id <id>`
   writes a standalone plugin project, outside the gateway's repository: the template plugin
