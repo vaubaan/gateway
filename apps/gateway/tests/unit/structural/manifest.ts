@@ -565,7 +565,8 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'catalog-versions-known-and-pinned',
     statement:
       'The catalog versions a release knows (catalog-versions.json) are pinned by their sha256, written from the catalog index at a gateway release and never newer than the repository’s version of an official plugin, never vaubaan nor ssh; an instance installs one at a start for the accounts that need it, refuses an archive whose sha256 differs, and stops naming the plugin when it cannot.',
-    source: 'ADR plugins-installed-when-first-needed; ADR plugin-catalog-rebuilt-from-source (amendment 2026-11-19); handbook plugin-loading',
+    source:
+      'ADR plugins-installed-when-first-needed; ADR plugin-catalog-rebuilt-from-source (amendment 2026-11-19); handbook plugin-loading',
     proofs: [
       {
         file: 'apps/gateway/tests/unit/structural/catalog-versions.test.ts',
