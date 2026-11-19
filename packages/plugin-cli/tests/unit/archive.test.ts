@@ -156,6 +156,11 @@ describe('archive helpers', () => {
     expect(outsideManifest(ARCHIVE_MANIFEST_FILE)).toBe(true);
     expect(outsideManifest('vaubaan-manifest.json.sig.json')).toBe(true);
     expect(outsideManifest('docs/connect/token.png')).toBe(false);
+    // Only the root's own signatures, by their exact names: a lookalike is listed and hashed.
+    expect(outsideManifest('vaubaan-manifest.json.sigstore.json')).toBe(true);
+    expect(outsideManifest('dist/payload.sig')).toBe(false);
+    expect(outsideManifest('dist/vaubaan-manifest.json.sig.json')).toBe(false);
+    expect(outsideManifest('extra.sigstore.json')).toBe(false);
   });
 
   it('hashes nested files with forward slashes, sorted', () => {

@@ -17,6 +17,7 @@
  * string as an unanchored pattern, which would accept a look-alike workflow.
  */
 import { bundleFromJSON } from '@sigstore/bundle';
+import { ASN1Obj, X509Certificate } from '@sigstore/core';
 import { TrustedRoot } from '@sigstore/protobuf-specs';
 import { toSignedEntity, toTrustMaterial, Verifier } from '@sigstore/verify';
 import {
@@ -83,57 +84,26 @@ function verifierFor(root: unknown): Verifier {
   return verifier;
 }
 
-/** The DER of an OID, its content bytes only. */
-function oidBytes(oid: string): Buffer {
-  const parts = oid.split('.').map(Number);
-  const out: number[] = [40 * (parts[0] as number) + (parts[1] as number)];
-  for (const part of parts.slice(2)) {
-    const groups: number[] = [];
-    let value = part;
-    do {
-      groups.unshift(value & 0x7f);
-      value >>>= 7;
-    } while (value > 0);
-    for (let index = 0; index < groups.length - 1; index += 1)
-      groups[index] = (groups[index] as number) | 0x80;
-    out.push(...groups);
-  }
-  return Buffer.from(out);
-}
-
-function lengthAt(der: Buffer, offset: number): { length: number; next: number } | null {
-  const first = der[offset];
-  if (first === undefined) return null;
-  if (first < 0x80) return { length: first, next: offset + 1 };
-  const count = first & 0x7f;
-  if (count < 1 || count > 3) return null;
-  let length = 0;
-  for (let index = 1; index <= count; index += 1)
-    length = length * 256 + (der[offset + index] ?? 0);
-  return { length, next: offset + 1 + count };
-}
-
 /**
- * The text of a Fulcio certificate extension: the OID, then an OCTET STRING holding a
- * UTF8String (the newer extensions), or the raw string (the older ones). `null` when absent.
+ * The text of a Fulcio certificate extension, read from the parsed certificate: a
+ * UTF8String inside the extension's value (the newer extensions), or the raw string (the
+ * older ones). `null` when absent, or when the bytes are not a certificate. Parsed, never
+ * searched for: bytes elsewhere in the certificate (a public key) cannot pose as one.
  */
 export function certificateExtension(der: Buffer, oid: string): string | null {
-  const encoded = Buffer.concat([Buffer.from([0x06, oidBytes(oid).length]), oidBytes(oid)]);
-  const at = der.indexOf(encoded);
-  if (at < 0) return null;
-  let offset = at + encoded.length;
-  if (der[offset] === 0x01) offset += 3; // a `critical` BOOLEAN
-  if (der[offset] !== 0x04) return null;
-  const octet = lengthAt(der, offset + 1);
-  if (octet === null) return null;
-  const inner = der.subarray(octet.next, octet.next + octet.length);
-  if (inner[0] === 0x0c) {
-    const utf8 = lengthAt(inner, 1);
-    return utf8 === null
-      ? null
-      : inner.subarray(utf8.next, utf8.next + utf8.length).toString('utf8');
+  let value: Buffer | undefined;
+  try {
+    value = X509Certificate.parse(Buffer.from(der)).extension(oid)?.value;
+  } catch {
+    return null;
   }
-  return inner.toString('utf8');
+  if (value === undefined) return null;
+  if (value[0] !== 0x0c) return value.toString('utf8');
+  try {
+    return ASN1Obj.parseBuffer(Buffer.from(value)).value.toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 const OID_ISSUER_V2 = '1.3.6.1.4.1.57264.1.8';
@@ -150,6 +120,12 @@ function sigstoreVerdict(
     parsed = bundleFromJSON(JSON.parse(Buffer.from(bundleBytes).toString('utf8')));
   } catch {
     return { level: 'invalid', reason: 'the Sigstore bundle is not one this gateway reads' };
+  }
+  // The catalog signs the manifest itself (`cosign sign-blob`). A DSSE envelope carries its
+  // own payload, which the verifier checks instead of the manifest: any envelope the
+  // catalog's identity ever signed would then pass beside any manifest.
+  if (parsed.content.$case !== 'messageSignature') {
+    return { level: 'invalid', reason: 'the Sigstore bundle does not sign the manifest itself' };
   }
   let signer;
   try {

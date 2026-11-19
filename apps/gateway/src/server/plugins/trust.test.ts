@@ -103,6 +103,40 @@ describe('the trust level of an archive', () => {
     }
   });
 
+  it('refuses a DSSE envelope: only a signature of the manifest itself counts', () => {
+    const json = JSON.parse(BUNDLE.toString('utf8')) as Record<string, unknown>;
+    delete json.messageSignature;
+    json.dsseEnvelope = {
+      payload: Buffer.from('{}').toString('base64'),
+      payloadType: 'application/vnd.in-toto+json',
+      signatures: [{ sig: Buffer.from('sig').toString('base64'), keyid: '' }],
+    };
+    const verdict = trustOf(cosignSigned(Buffer.from(JSON.stringify(json))), {
+      trustedKeys: [],
+    });
+    expect(verdict).toEqual({
+      level: 'invalid',
+      reason: 'the Sigstore bundle does not sign the manifest itself',
+    });
+  });
+
+  it('reads an extension from the parsed certificate, never from bytes that only look like one', () => {
+    // The issuer extension's encoding, followed by a string, outside any certificate.
+    const oid = Buffer.from([
+      0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xbf, 0x30, 0x01, 0x08,
+    ]);
+    const lookalike = Buffer.concat([
+      oid,
+      Buffer.from([0x04, 0x06, 0x0c, 0x04]),
+      Buffer.from('evil'),
+    ]);
+    expect(certificateExtension(lookalike, '1.3.6.1.4.1.57264.1.8')).toBeNull();
+    expect(
+      certificateExtension(Buffer.concat([lookalike, CERT]), '1.3.6.1.4.1.57264.1.8'),
+    ).toBeNull();
+    expect(certificateExtension(CERT, '1.3.6.1.4.1.57264.1.8')).toBe('https://accounts.google.com');
+  });
+
   it('refuses a manifest changed after it was signed', () => {
     const files = cosignSigned();
     files.set(ARCHIVE_MANIFEST_FILE, Buffer.concat([SIGNED, Buffer.from('\n')]));

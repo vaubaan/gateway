@@ -100,6 +100,7 @@ import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
 import { CATALOG_INDEX_URL, fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
+import { catalogVersionFloor } from '../plugins/catalog-floor';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -353,13 +354,19 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         inventory.entries.some((e) => e.id === pluginId && e.origin === 'pinned'),
       accountsOf: async (pluginId) => (await store.accounts.countByService())[pluginId] ?? 0,
       missionsOf: (pluginId) => activeMissionsOf(pluginId),
-      // The versions feed's latest, else the version this release was tested with.
+      // The versions feed's latest, else the version this release was tested with; and
+      // never below the version this release knows (an unsigned feed must not roll back).
       catalogVersionOf: (pluginId) =>
-        catalogVersions().find((available) => available.id === pluginId)?.released ??
-        KNOWN_CATALOG_VERSIONS.get(pluginId)?.version ??
-        null,
+        catalogVersionFloor(
+          catalogVersions().find((available) => available.id === pluginId)?.released,
+          KNOWN_CATALOG_VERSIONS.get(pluginId),
+        ),
       catalogOffer: (): readonly { id: string; released: string; name?: string }[] => {
-        const offered = new Map(catalogVersions().map((p) => [p.id, p.released]));
+        const offered = new Map<string, string>();
+        for (const p of catalogVersions()) {
+          const version = catalogVersionFloor(p.released, KNOWN_CATALOG_VERSIONS.get(p.id));
+          if (version !== null) offered.set(p.id, version);
+        }
         for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
           if (!offered.has(id)) offered.set(id, known.version);
         }

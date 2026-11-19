@@ -58,13 +58,16 @@ export class ArchiveFormatError extends Error {
   override readonly name = 'ArchiveFormatError';
 }
 
-/** Whether a file of the archive is left out of its manifest (itself, a signature). */
+/**
+ * Whether a file of the archive is left out of its manifest: the manifest itself and its two
+ * signatures, at the root, by their exact names. Any other file, wherever it sits and
+ * whatever it is called, is listed and hashed: nothing rides along unsigned.
+ */
 export function outsideManifest(path: string): boolean {
   return (
     path === ARCHIVE_MANIFEST_FILE ||
-    path.endsWith('.sig') ||
-    path.endsWith('.sig.json') ||
-    path.endsWith('.sigstore.json')
+    path === `${ARCHIVE_MANIFEST_FILE}.sig.json` ||
+    path === `${ARCHIVE_MANIFEST_FILE}.sigstore.json`
   );
 }
 
