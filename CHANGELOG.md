@@ -9,6 +9,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Vercel: a token scoped to one project connects again** (plugin 4.2.1). Vercel answers
+  `404 Token not found.` when a project token asks for its own description
+  (`GET /v5/user/tokens/current`), and the check read it first: every "One project" account
+  failed at paste with a bare 404. The check now reads the project first, then the expiry, unknown
+  for such a token.
+
 ## [2.0.0-alpha.28] - 2026-11-19
 
 ### Fixed

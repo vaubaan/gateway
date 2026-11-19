@@ -23,6 +23,6 @@
     "supabase": "6.0.0",
     "upstash-redis": "4.0.0",
     "vaubaan": "0.5.0",
-    "vercel": "4.2.0"
+    "vercel": "4.2.1"
   }
 }
