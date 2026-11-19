@@ -36,6 +36,16 @@ requires: plugin
 anchors: apps/gateway/src/app/(app)/accounts/new/[service]/install/route.ts, apps/gateway/src/app/(app)/accounts/new/[service]/install-first.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 
+### See every catalog service in the connect picker
+
+status: proposed
+requires: plugin
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- A plugin the catalog published after this release is offered by its service's name, never its id
+- The versions feed names each catalog plugin with its service's name, and an older gateway still reads the feed
+
 ### Install a catalog plugin in one click
 
 status: implemented
@@ -62,6 +72,17 @@ acceptance:
 - The page lists the kept versions; one built for another SDK range is greyed with the reason
 - Before confirming, the page names the permissions the older version does not know and the accounts it cannot run
 - After the rollback a mission holding a permission unknown to the active version can still be edited and saved
+
+### Receive security patches automatically
+
+status: proposed
+requires: plugin, administrator
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- An administrator opts a plugin into automatic security patches; nothing updates by itself otherwise
+- A Vaubaan-signed patch version that fixes an advisory of the active version is installed and started on trial without anyone acting
+- Every administrator is notified of the patch applied, or of the trial that failed and the version kept
 
 ### Trust a signer
 

@@ -31,6 +31,17 @@ acceptance:
 - Given a tool and its arguments, the command line prints the slices, the permissions touched and the decision against a sample mission
 - The kit's checks exit non-zero, naming the tool, when a write is classified as a read
 
+### Run my plugin on a local gateway
+
+status: proposed
+requires: scaffold
+spec: ../spec/plugin-authoring.md#1-vision
+acceptance:
+
+- One command in the project starts a gateway on the author's machine with the plugin loaded and a simulated service, nothing sent to a real one
+- The author's coding agent connects to it with a mission and calls the plugin's tools through it
+- A change to the plugin's code is picked up without reinstalling the kit
+
 ### Let my agent build the plugin
 
 status: proposed
