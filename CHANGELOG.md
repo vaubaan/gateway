@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.27] - 2026-11-19
+
 ### Changed
 
 - **The image ships no service plugin.** Only the management plugin and `ssh` are compiled into
@@ -3075,7 +3077,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.26...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.27...HEAD
+[2.0.0-alpha.27]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.26...v2.0.0-alpha.27
 [2.0.0-alpha.26]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.25...v2.0.0-alpha.26
 [2.0.0-alpha.25]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.24...v2.0.0-alpha.25
 [2.0.0-alpha.24]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.23...v2.0.0-alpha.24
