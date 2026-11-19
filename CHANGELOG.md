@@ -11,6 +11,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **An instance on Fly or Railway starts again.** Since 2.0.0-alpha.27 the image compiles no
+  service plugin, yet the start refused a self resource of a plugin not installed yet: every
+  instance on Fly (`fly:$FLY_APP_NAME`, always added) or Railway (`railway:$RAILWAY_PROJECT_ID`)
+  stopped with `'fly' is not a registered plugin id`, and so did installing any plugin at run time
+  on an instance whose `self_resources` named one not installed. A self resource of a plugin the
+  catalog offers is now accepted; it protects the resource from the moment the plugin is
+  installed. An entry of a service the catalog does not offer still stops the start.
 - **`plugins.enabled` naming a catalog plugin no longer stops the start.** Since 2.0.0-alpha.27
   the image compiles no service plugin, yet the start refused an id of `plugins.enabled` that was
   not installed yet (`'<id>' is not a plugin of this instance`): an instance upgraded with

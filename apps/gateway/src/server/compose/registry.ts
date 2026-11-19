@@ -29,6 +29,7 @@ import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
 
 import { ConfigError, type InstanceConfig } from '../config';
 import { permissionRequestTool } from '../execution/permission-request';
+import { KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
 import type { CatalogIndex } from '../store';
 
 /** A registry with no plugin — tests of the root that need no service. */
@@ -60,15 +61,24 @@ export class RegistryCatalogIndex implements CatalogIndex {
 }
 
 /**
- * Every configured self resource (`self_resources`) names a registered plugin: an entry
- * of an unknown service (a typo, `Railway` for `railway`) would match nothing and
- * protect nothing, silently (SEC 2026-10-15 re-check L-1). Exit 78 like any invalid key.
+ * Every configured self resource (`self_resources`) names a registered plugin or one the
+ * catalog offers: an entry of an unknown service (a typo, `Railway` for `railway`) would
+ * match nothing and protect nothing, silently (SEC 2026-10-15 re-check L-1). Exit 78 like
+ * any invalid key. A catalog plugin is installed when first needed (ADR
+ * plugins-installed-when-first-needed), after this check: the entry protects it from then
+ * on, since a self resource is matched by service id at every call.
  */
-export function checkSelfResources(config: InstanceConfig, registry: PluginRegistry): void {
+export function checkSelfResources(
+  config: InstanceConfig,
+  registry: Pick<PluginRegistry, 'size' | 'has' | 'ids'>,
+  installable: ReadonlySet<string> = new Set(KNOWN_CATALOG_VERSIONS.keys()),
+): void {
   if (registry.size === 0) return;
-  const unknown = config.selfResources.filter((self) => !registry.has(self.service));
+  const unknown = config.selfResources.filter(
+    (self) => !registry.has(self.service) && !installable.has(self.service),
+  );
   if (unknown.length === 0) return;
-  const known = registry.ids.join(', ');
+  const known = [...registry.ids].join(', ');
   throw new ConfigError(
     unknown.map((self) => ({
       path: 'self_resources',
