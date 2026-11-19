@@ -105,6 +105,12 @@ amendments 2026-11-11 and 2026-11-14).
 `vercelAuth` reads the mode from the field there, so an account made with
 `team_id` before the alternatives keeps working.
 
+Vercel's MCP server rejects a token scoped to one project (401
+`invalid_token`). A "One project" account therefore runs `get_project`,
+`list_deployments`, `get_deployment` and `get_deployment_build_logs` through the
+REST API (`src/project-mode.ts`), plus every custom tool; the other rewrapped
+tools are refused before any request and need a team account.
+
 The check at paste (`verifyVercelToken`) reads `GET /v5/user/tokens/current`
 for the expiry, then `GET /v2/teams/{id}` for the team's name (403: the token
 does not cover the whole team, choose One project; 404: no such team) or

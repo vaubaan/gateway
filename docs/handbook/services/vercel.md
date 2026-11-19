@@ -18,8 +18,9 @@ Resource: the project; the environment is a slice segment, not a resource label.
   `readDeploymentTargets`, `vercelEnvOf`, `UNBOUND_TOOLS`.
 - [`src/credential.ts`](../../../plugins/vercel/src/credential.ts) — `vercelAuth` (the mode from
   the field there), `verifyVercelToken`, the two alternatives.
-- [`src/execute.ts`](../../../plugins/vercel/src/execute.ts) — `pinArgs`, `projectTeam`,
-  `bindDeployments`, `discoverOneProject`.
+- [`src/execute.ts`](../../../plugins/vercel/src/execute.ts) — `pinArgs`, `bindDeployments`,
+  `executeProjectRest`, `discoverOneProject`; [`src/project-mode.ts`](../../../plugins/vercel/src/project-mode.ts)
+  — what a project-mode account runs instead of the MCP server.
 - [`src/redact.ts`](../../../plugins/vercel/src/redact.ts) and
   [`src/project-redact.ts`](../../../plugins/vercel/src/project-redact.ts) — redaction of metadata
   reads.
@@ -46,12 +47,19 @@ Resource: the project; the environment is a slice segment, not a resource label.
   every `teamId` argument is refused, the right one included; REST requests carry no `teamId`
   (Vercel infers team and project from the token); a resolved project other than `project_id` is
   refused, so a mission holding two projects cannot reach the second through this account.
-  The rewrapped tools' frozen schemas require `teamId`, so they get the project's team as discovery
-  read it (`accountId` → the resource's `team_id`); without it they are refused ("refresh the
-  resources"), REST tools still run. A deployment lookup skips the `ownerId` check (no team to
-  compare) and keeps the `projectId` one. Rewrapped tools that
-  cannot carry it (`TEAMLESS_UPSTREAM_TOOLS`) are forwarded only when they read no team data or
-  after their deployment is resolved under the pinned team; any other teamless tool is refused
+  Nothing of this account reaches Vercel's MCP server (see Traps): `get_project`
+  (`GET /v9/projects/{id}`), `list_deployments` (`GET /v6/deployments?projectId=…`, 20 per page,
+  `pagination.next` as the next `until`), `get_deployment` (the binding lookup's own answer) and
+  `get_deployment_build_logs` (`GET /v3/deployments/{id}/events?follow=0&direction=backward`, at
+  most 1 000 lines, reduced to `created`/`type`/`text`, oldest first) go to the REST API
+  (`PROJECT_REST_TOOLS`, [`src/project-mode.ts`](../../../plugins/vercel/src/project-mode.ts)),
+  same names, schemas, classification and redaction; every other rewrapped tool is refused before
+  any request, naming the team account as the way. A deployment lookup skips the `ownerId` check
+  (no team to compare) and keeps the `projectId` one. Discovery still keeps the project's
+  `accountId` as `team_id`, for display only.
+- **Teamless rewrapped tools** (team mode): those that cannot carry `teamId`
+  (`TEAMLESS_UPSTREAM_TOOLS`) are forwarded only when they read no team data or after their
+  deployment is resolved under the pinned team; any other teamless tool is refused
   (`tests/unit/team-pin.test.ts` checks the list against the schemas).
 - **Deployment binding**: a rewrapped tool declaring `idOrUrl`, `deploymentId` or `url` is forwarded
   only after `GET /v13/deployments/{…}?teamId=<pinned>` returns the resolved project. A 404, 403, an
@@ -76,6 +84,14 @@ Resource: the project; the environment is a slice segment, not a resource label.
 
 ## Traps
 
+- Vercel's MCP server rejects a token scoped to one project: every `tools/call` answers
+  `401 {"error":"invalid_token"}` (plain curl reproduces it; a team-scoped token works), while the
+  REST API accepts the same token. Before 4.2.2 every rewrapped tool of a "One project" account
+  failed with that 401, and the host marked the account `expired`. A rewrapped tool added to
+  project mode needs a REST equivalent in `project-mode.ts`, never a forward.
+- `GET /v1/security/firewall/config/active` answers `404 {"error":{"code":"not_found","message":
+"Config not found"}}` for a project whose firewall was never configured: `get_firewall_config`
+  answers `active: null` (both modes); any other 404 is still an upstream failure.
 - `deploy_to_vercel` is always classified `prod`: upstream declares no `target`, and deploys "the
   current project" from CLI context; whether it honours the pinned team and project is not verified.
 - `get_access_to_vercel_url` mints a bypass token: a credential write, not a read.
@@ -113,7 +129,9 @@ Resource: the project; the environment is a slice segment, not a resource label.
   `teamId`.
 - `not the project this account is scoped to` → a project-mode account reaches its one project;
   use a team account for the other.
-- `the team of vercel project … is not known` → a project-mode resource discovered without
-  `accountId`: refresh the account's resources.
+- `Vercel's MCP server does not accept a token scoped to one project` → by design in project mode:
+  that tool needs a team account (Scope = the team, All Projects).
+- A rewrapped tool failing with `401 invalid_token` on a project account → plugin older than
+  4.2.2: update it.
 - `get_firewall_config` or `deploy_to_vercel` refused on a mission without `watch`, or without
   `vercel[prod].deploy` → by design: the mission holds no such line.

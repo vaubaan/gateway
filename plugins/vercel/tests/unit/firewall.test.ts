@@ -182,3 +182,59 @@ describe('executeVercel — request shapes of the firewall tools', () => {
     expect(fetch.calls).toHaveLength(2);
   });
 });
+
+describe('executeVercel — get_firewall_config on a project without a firewall configuration', () => {
+  const notFound = { error: { code: 'not_found', message: 'Config not found' } };
+
+  test('404 "Config not found" answers an absent configuration, not an error (team mode)', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: ACTIVE_URL, status: 404, body: notFound }]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__get_firewall_config', {});
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(text(result))).toMatchObject({ projectId: 'prj_abc', active: null });
+  });
+
+  test('the same in project mode (no teamId)', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v1/security/firewall/config/active?projectId=prj_abc`,
+        status: 404,
+        body: notFound,
+      },
+    ]);
+    const result = await vercelPlugin.execute(
+      {
+        credential: {
+          kind: 'api-key',
+          fields: { token: 'vcp_secret', project_id: 'prj_abc' },
+          metadata: {},
+        },
+        fetch,
+        resources: [app],
+      },
+      'vercel__get_firewall_config',
+      {},
+    );
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(text(result))).toMatchObject({ projectId: 'prj_abc', active: null });
+  });
+
+  test('any other 404, or another failure, is still thrown', async () => {
+    const other = mockFetch([
+      {
+        method: 'GET',
+        url: ACTIVE_URL,
+        status: 404,
+        body: { error: { code: 'not_found', message: 'Project not found' } },
+      },
+    ]);
+    await expect(
+      vercelPlugin.execute(ctx(other), 'vercel__get_firewall_config', {}),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 404 });
+
+    const broken = mockFetch([{ method: 'GET', url: ACTIVE_URL, status: 500, body: notFound }]);
+    await expect(
+      vercelPlugin.execute(ctx(broken), 'vercel__get_firewall_config', {}),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 500 });
+  });
+});

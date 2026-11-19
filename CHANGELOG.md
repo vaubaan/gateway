@@ -11,6 +11,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **Vercel: an account scoped to one project reads its project and deployments** (plugin 4.2.2).
+  Vercel's MCP server rejects a project-scoped token (`401 invalid_token`), so every rewrapped tool
+  of a "One project" account failed. `get_project`, `list_deployments`, `get_deployment` and
+  `get_deployment_build_logs` now go through the REST API for such an account, with the same
+  names, schemas, classification and redaction; the other rewrapped tools are refused before any
+  request, saying a team account runs them. `get_firewall_config` on a project without a firewall
+  configuration (`404 Config not found`) answers an absent configuration instead of an error.
 - **Vercel: a token scoped to one project connects again** (plugin 4.2.1). Vercel answers
   `404 Token not found.` when a project token asks for its own description
   (`GET /v5/user/tokens/current`), and the check read it first: every "One project" account

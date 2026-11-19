@@ -30,10 +30,12 @@
  *   - an account scoped to one project (`project_id`, ADR
  *     one-place-to-authorize-services-token-first, amendment 2026-11-11)
  *     refuses every `teamId` argument and names no team to the REST API
- *     (Vercel infers it from the token) ; the rewrapped tools, whose upstream
- *     schema requires a `teamId`, get the project's own team as discovery
- *     read it (`accountId`, the resource's `team_id`) ; a call naming another
- *     project is refused, and discovery returns that project alone ;
+ *     (Vercel infers it from the token) ; Vercel's MCP server rejects such a
+ *     token (401 `invalid_token`), so the essential reads of the rewrapped
+ *     tools go to the REST API (`PROJECT_REST_TOOLS`, `project-mode.ts`) and
+ *     every other rewrapped tool is refused before any request ; a call
+ *     naming another project is refused, and discovery returns that project
+ *     alone ;
  *   - the project is the one the classifier resolved (`resolveProject`, the
  *     same function) : the argument is overwritten with it, never forwarded
  *     as received ;
@@ -81,6 +83,13 @@ import {
 } from './classify.ts';
 import { vercelAuth, type VercelAuth } from './credential.ts';
 import { SERVICE_ID, TOOL, VERCEL_API_BASE, VERCEL_MCP_SERVER } from './identity.ts';
+import {
+  buildLogsQuery,
+  listDeploymentsQuery,
+  projectModeRefusal,
+  PROJECT_REST_TOOLS,
+  shapeBuildLogs,
+} from './project-mode.ts';
 import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
 import { isCustomTool, toUpstreamName, toolAcceptsArgument, vercelToolByName } from './tools.ts';
@@ -109,6 +118,9 @@ export const TEAMLESS_UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
 /** Lookup answers that mean "this team cannot see that deployment". */
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+
+/** Vercel's message on a project without any firewall configuration. */
+const FIREWALL_CONFIG_NOT_FOUND = 'Config not found';
 
 /** What one upstream call needs : the context's `fetch` and signal, and the credential. */
 interface VercelCall {
@@ -141,10 +153,12 @@ export async function executeVercel(
   const { token } = auth;
   return declining(async () => {
     const pinned = pinArgs(tool, args, auth, ctx.resources);
-    const finalArgs = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
+    const bound = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
     const result = isCustomTool(tool)
-      ? jsonResult(await executeCustom(call, tool, finalArgs))
-      : await callUpstreamTool(ctx, VERCEL_MCP_SERVER, token, toUpstreamName(tool), finalArgs);
+      ? jsonResult(await executeCustom(call, tool, bound.args))
+      : auth.mode === 'project'
+        ? jsonResult(await executeProjectRest(call, tool, bound))
+        : await callUpstreamTool(ctx, VERCEL_MCP_SERVER, token, toUpstreamName(tool), bound.args);
     // A project object carries env values and deploy-hook URLs (`project-redact.ts`).
     return PROJECT_TOOLS.has(tool) ? redactProjectResult(result) : result;
   });
@@ -209,8 +223,8 @@ export async function discoverVercelResources(ctx: AccountContext): Promise<read
 
 /**
  * The one project a project-scoped token opens, read without `teamId` (Vercel
- * infers the team from the token). Its `accountId` is the team the rewrapped
- * tools are sent (`pinArgs`).
+ * infers the team from the token). Its `accountId` is kept as the resource's
+ * `team_id`, for display : no request of this account names a team.
  */
 async function discoverOneProject(call: VercelCall, projectId: string): Promise<Resource> {
   const answer = await rest(call, 'GET', `/v9/projects/${projectId}`, {}, isRecord);
@@ -314,6 +328,11 @@ function pinArgs(
   if (!isClassifiedTool(tool) || vercelToolByName(tool) === undefined) {
     throw new ExecutorRefusal(`unknown vercel tool '${tool}'.`);
   }
+  // Vercel's MCP server answers 401 to a project token : only the reads the
+  // REST API serves run (`project-mode.ts`).
+  if (auth.mode === 'project' && !isCustomTool(tool) && !PROJECT_REST_TOOLS.has(tool)) {
+    throw new ExecutorRefusal(projectModeRefusal(tool, auth.projectId));
+  }
   if (auth.mode === 'project' && args.teamId !== undefined) {
     throw new ExecutorRefusal(
       `teamId : this account is scoped to the vercel project '${auth.projectId}' and Vercel infers its team — omit the argument.`,
@@ -340,11 +359,8 @@ function pinArgs(
     if (key !== 'teamId' && key !== 'projectId') out[key] = value;
   }
   if (toolAcceptsArgument(tool, 'teamId')) {
-    // A project token names no team to the REST API ; a rewrapped tool's
-    // upstream schema requires one : the project's own.
-    const team =
-      auth.mode === 'team' ? auth.teamId : isCustomTool(tool) ? null : projectTeam(auth, resources);
-    if (team !== null) out.teamId = team;
+    // A project token names no team : every request of that account is REST.
+    if (auth.mode === 'team') out.teamId = auth.teamId;
   } else if (!Object.hasOwn(TEAMLESS_UPSTREAM_TOOLS, tool)) {
     throw new ExecutorRefusal(
       `${tool}: the upstream tool cannot carry the team of this account and has not been reviewed — refused.`,
@@ -356,31 +372,13 @@ function pinArgs(
   return { args: out, projectRef: project.ref };
 }
 
-/**
- * The team of the project a project-scoped token opens, as discovery read it
- * (`accountId`, kept as the resource's `team_id`) ; never from the arguments.
- */
-function projectTeam(
-  auth: Extract<VercelAuth, { mode: 'project' }>,
-  resources: readonly Resource[],
-): string {
-  const own = resources.find((r) => r.service === SERVICE_ID && r.ref === auth.projectId);
-  const team = pathIdent(own?.metadata?.team_id);
-  if (team === null) {
-    throw new ExecutorRefusal(
-      `the team of vercel project '${auth.projectId}' is not known : refresh the resources of this account, then retry.`,
-    );
-  }
-  return team;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Deployment binding : the deployment a call names belongs to the mission project
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Resolve a deployment through the REST API **under the pinned team** and
- * return its id, after checking it belongs to `projectRef`. Throws an
+ * return the lookup's answer, after checking it belongs to `projectRef`. Throws an
  * `ExecutorRefusal` (a refusal the agent reads) when the team cannot see it
  * (403 or 404 on the lookup), when the answer does not name its project, or
  * when the project is another one.
@@ -389,11 +387,11 @@ function projectTeam(
  * it is a refusal, not an upstream failure. A 401, a 5xx or a network failure
  * of the lookup is the service's and is thrown unchanged.
  */
-async function verifiedDeploymentId(
+async function verifiedDeployment(
   call: VercelCall,
   key: string,
   projectRef: string,
-): Promise<string> {
+): Promise<VerifiedDeployment> {
   const unverified = `deployment '${key}' could not be verified as a deployment of vercel project '${projectRef}' in the team of this account`;
   let body: unknown;
   try {
@@ -426,7 +424,16 @@ async function verifiedDeploymentId(
       `deployment '${key}' does not belong to vercel project '${projectRef}' of this mission.`,
     );
   }
-  return body.id;
+  return { ...body, id: body.id };
+}
+
+/** A deployment lookup's answer, its `id` read as a string. */
+type VerifiedDeployment = Readonly<Record<string, unknown>> & { readonly id: string };
+
+/** The arguments to send, and the deployments verified on the way. */
+interface BoundArgs {
+  readonly args: Record<string, unknown>;
+  readonly deployments: readonly VerifiedDeployment[];
 }
 
 /**
@@ -442,22 +449,66 @@ async function bindDeployments(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   projectRef: string | null,
-): Promise<Record<string, unknown>> {
+): Promise<BoundArgs> {
   const out: Record<string, unknown> = { ...args };
   const read = readDeploymentTargets(tool, args);
   if ('denied' in read) throw new ExecutorRefusal(read.denied);
   const { targets } = read;
-  if (targets.length === 0) return out;
+  if (targets.length === 0) return { args: out, deployments: [] };
   if (projectRef === null) {
     throw new ExecutorRefusal(
       `${tool}: a deployment cannot be verified without a project of this mission.`,
     );
   }
+  const deployments: VerifiedDeployment[] = [];
   for (const target of targets) {
-    const id = await verifiedDeploymentId(call, target.key, projectRef);
-    out[target.arg] = target.href ?? id;
+    const deployment = await verifiedDeployment(call, target.key, projectRef);
+    deployments.push(deployment);
+    out[target.arg] = target.href ?? deployment.id;
   }
-  return out;
+  return { args: out, deployments };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Project mode : the rewrapped reads served by the REST API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A rewrapped read of a project-mode account, through the REST API without
+ * `teamId` (`project-mode.ts`). `pinArgs` refused every other rewrapped tool
+ * and wrote the project ; `bindDeployments` verified the deployment, whose
+ * lookup is `get_deployment`'s answer.
+ */
+async function executeProjectRest(
+  call: VercelCall,
+  tool: string,
+  bound: BoundArgs,
+): Promise<unknown> {
+  const { args, deployments } = bound;
+  if (tool === TOOL.getDeployment || tool === TOOL.getDeploymentBuildLogs) {
+    const deployment = deployments[0];
+    if (deployment === undefined) throw new ExecutorRefusal(`${tool}: idOrUrl is required.`);
+    if (tool === TOOL.getDeployment) return deployment;
+    const id = pathIdent(deployment.id);
+    if (id === null) throw new ExecutorRefusal(`${tool}: the deployment id is not readable.`);
+    const events = await rest(
+      call,
+      'GET',
+      `/v3/deployments/${id}/events`,
+      buildLogsQuery(args),
+      anyJson,
+    );
+    return shapeBuildLogs(id, events);
+  }
+  const project = pathIdent(args.projectId);
+  if (project === null) throw new ExecutorRefusal(`${tool}: projectId is required.`);
+  if (tool === TOOL.getProject) {
+    return rest(call, 'GET', `/v9/projects/${project}`, {}, anyJson);
+  }
+  if (tool === TOOL.listDeployments) {
+    return rest(call, 'GET', '/v6/deployments', listDeploymentsQuery(project, args), anyJson);
+  }
+  throw new ExecutorRefusal(`${tool}: not served for an account scoped to one project.`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -611,7 +662,22 @@ async function executeCustom(
 
   if (tool === TOOL.getFirewallConfig) {
     query.projectId = project;
-    return customRest(call, 'GET', '/v1/security/firewall/config/active', query);
+    try {
+      return await customRest(call, 'GET', '/v1/security/firewall/config/active', query);
+    } catch (e) {
+      // A project whose firewall was never configured has no active config :
+      // Vercel answers 404 "Config not found", which is an answer, not a failure.
+      const absent =
+        e instanceof UpstreamHttpError &&
+        e.status === HTTP_NOT_FOUND &&
+        e.message.includes(FIREWALL_CONFIG_NOT_FOUND);
+      if (!absent) throw e;
+      return {
+        projectId: project,
+        active: null,
+        note: 'No firewall configuration exists for this project (Vercel: "Config not found"): no custom rule, IP block or managed ruleset is set.',
+      };
+    }
   }
   if (tool === TOOL.toggleFirewall) {
     if (typeof args.enabled !== 'boolean') {
