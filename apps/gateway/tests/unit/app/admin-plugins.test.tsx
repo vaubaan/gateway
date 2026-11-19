@@ -72,6 +72,9 @@ const QUIET: UpdatesReport = {
   pluginsBehind: [],
   pluginsAvailable: [],
   catalogIds: [],
+  catalog: {},
+  catalogSource: 'feed',
+  indexFailure: null,
   advisories: [],
   olderPins: [],
 };

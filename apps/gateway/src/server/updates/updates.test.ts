@@ -118,3 +118,57 @@ describe('the versions check', () => {
     expect(calls()).toBe(1);
   });
 });
+
+describe('the catalog index, read beside the feed', () => {
+  const indexUrl = new URL('https://catalog.example.com/index.json');
+  const SHA = 'a03544c0fdf5b307329c687a397176fde9ccf437c68b1cfad8b1ac7087a90bed';
+  const INDEX = {
+    schema: 1,
+    generated_at: '2026-11-19T17:00:00Z',
+    plugins: {
+      github: { name: 'GitHub', version: '5.3.1', sha256: SHA },
+      vercel: { name: 'Vercel', version: '4.2.2', sha256: SHA },
+    },
+  };
+
+  function withIndex(index: () => Response) {
+    const fake = (async (input: string | URL | Request) =>
+      String(input) === indexUrl.href ? index() : ok()) as typeof fetch;
+    return createUpdatesModule({
+      config: { check: true, feedUrl },
+      gatewayVersion: '2.0.0-alpha.16',
+      inventory: [
+        {
+          id: 'github',
+          name: 'GitHub',
+          version: '5.0.0',
+          origin: 'installed',
+          trust: 'vaubaan',
+          replaces: null,
+          enabled: true,
+          path: null,
+        },
+      ],
+      logger,
+      indexUrl,
+      fetch: fake,
+      now: () => new Date('2026-11-05T12:00:00Z'),
+    });
+  }
+
+  it("offers the catalog's version, its service's name and digest from the index, whatever the feed names", async () => {
+    const report = await withIndex(() => new Response(JSON.stringify(INDEX))).refresh();
+    expect(report?.catalogSource).toBe('index');
+    expect(report?.pluginsBehind).toEqual([{ id: 'github', loaded: '5.0.0', released: '5.3.1' }]);
+    expect(report?.pluginsAvailable).toEqual([{ id: 'vercel', released: '4.2.2', name: 'Vercel' }]);
+    expect(report?.catalog['vercel']).toEqual({ version: '4.2.2', name: 'Vercel', sha256: SHA });
+    expect(report?.indexFailure).toBeNull();
+  });
+
+  it('falls back on the feed when the index cannot be read', async () => {
+    const report = await withIndex(() => new Response('gone', { status: 404 })).refresh();
+    expect(report?.catalogSource).toBe('feed');
+    expect(report?.indexFailure).toBe('http-status');
+    expect(report?.pluginsBehind).toEqual([{ id: 'github', loaded: '5.0.0', released: '5.1.0' }]);
+  });
+});

@@ -329,7 +329,10 @@ describe('buildRoot and the versions check', () => {
     });
     expect(root.updates.current()).toBeNull();
     const report = await root.updates.refresh();
-    expect(seen).toEqual(['https://feed.example.com/versions.json']);
+    expect(seen).toEqual([
+      'https://feed.example.com/versions.json',
+      'https://vaubaan.github.io/gateway-plugins/index.json',
+    ]);
     expect(report?.gateway.behind).toBe(true);
     expect(report?.pluginsBehind.map((p) => p.id)).toEqual(['github']);
     await root.close();

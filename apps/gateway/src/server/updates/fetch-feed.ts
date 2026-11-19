@@ -4,7 +4,12 @@
  * no cookie, no query added, no body — bounded in time and size, its answer checked by
  * `isVersionsFeed` before anything reads it. Never throws: a failure is a result.
  */
-import { isVersionsFeed, type VersionsFeed } from '@vaubaan/shared';
+import {
+  isCatalogIndex,
+  isVersionsFeed,
+  type CatalogIndex,
+  type VersionsFeed,
+} from '@vaubaan/shared';
 
 /** The `User-Agent` of the request: the product, never its version or the instance. */
 export const FEED_USER_AGENT = 'vaubaan-gateway';
@@ -18,6 +23,14 @@ export type FeedReadFailure =
 
 export type FeedRead =
   | { readonly ok: true; readonly feed: VersionsFeed }
+  | { readonly ok: false; readonly failure: FeedReadFailure; readonly status?: number };
+
+export type CatalogIndexRead =
+  | { readonly ok: true; readonly index: CatalogIndex }
+  | { readonly ok: false; readonly failure: FeedReadFailure; readonly status?: number };
+
+type DocumentRead<T> =
+  | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly failure: FeedReadFailure; readonly status?: number };
 
 export interface FeedReadOptions {
@@ -56,6 +69,28 @@ function isTimeout(err: unknown): boolean {
 
 /** Reads the feed at `url`. */
 export async function readVersionsFeed(url: URL, options: FeedReadOptions): Promise<FeedRead> {
+  const read = await readDocument(url, isVersionsFeed, options);
+  return read.ok ? { ok: true, feed: read.value } : read;
+}
+
+/**
+ * Reads the catalog's index at `url` (ADR plugin-catalog-rebuilt-from-source, amendment
+ * 2026-11-19), with the same request as the feed: nothing about the instance leaves.
+ */
+export async function readCatalogIndex(
+  url: URL,
+  options: FeedReadOptions,
+): Promise<CatalogIndexRead> {
+  const read = await readDocument(url, isCatalogIndex, options);
+  return read.ok ? { ok: true, index: read.value } : read;
+}
+
+/** One bounded GET of a JSON document, checked by `guard` before anything reads it. */
+async function readDocument<T>(
+  url: URL,
+  guard: (x: unknown) => x is T,
+  options: FeedReadOptions,
+): Promise<DocumentRead<T>> {
   const maxBytes = options.maxBytes ?? FEED_MAX_BYTES;
   const signal = AbortSignal.timeout(options.timeoutMs ?? FEED_TIMEOUT_MS);
   let text: string | null;
@@ -82,5 +117,5 @@ export async function readVersionsFeed(url: URL, options: FeedReadOptions): Prom
   } catch {
     return { ok: false, failure: 'not-json' };
   }
-  return isVersionsFeed(parsed) ? { ok: true, feed: parsed } : { ok: false, failure: 'not-a-feed' };
+  return guard(parsed) ? { ok: true, value: parsed } : { ok: false, failure: 'not-a-feed' };
 }

@@ -11,16 +11,16 @@
 //   apps/website/src/content/releases.json
 //                       the released versions the site serves in versions.json:
 //                       { gateway, prerelease, date, plugins: { <id>: <version> } },
-//                       every plugins/*/package.json but _template
+//                       the catalog index's versions, and plugins/*/package.json for
+//                       the plugins the catalog does not publish (vaubaan, ssh)
+//   apps/gateway/src/server/plugins/catalog-versions.json
+//                       the catalog versions this release knows, read from the
+//                       catalog's index (--catalog-index <file or https URL>, by
+//                       default the published one)
 //
-// A plugin hotfix, released alone by a tag plugin-<id>-v<version> (ADR
-// plugins-bundled-or-pinned-by-the-operator):
-//
-//   npm run release:prepare -- --plugin <id>
-//
-//   apps/website/src/content/releases.json
-//                       that plugin's entry alone, to the version of
-//                       plugins/<id>/package.json (bumped by hand beforehand)
+// A plugin version is released by the catalog alone, never here (ADR
+// plugin-catalog-rebuilt-from-source, amendment 2026-11-19): a pull request on
+// vaubaan/gateway-plugins.
 //
 // Policy: docs/workflow/coding-workflow.md ("Release").
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,46 +32,80 @@ import {
   assertMovesForward,
   bumpLockfile,
   bumpManifest,
-  parseReleasesData,
+  catalogVersionsFrom,
   parseVersion,
   PLUGIN_TEMPLATE,
   prepareChangelog,
   releasesData,
   serializeReleasesData,
-  withPluginRelease,
 } from './release-lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const USAGE =
-  'usage: npm run release:prepare -- <version> [--date YYYY-MM-DD]\n' +
-  '       npm run release:prepare -- --plugin <id>';
+  'usage: npm run release:prepare -- <version> [--date YYYY-MM-DD] [--catalog-index <file or https URL>]';
 const RELEASES = 'apps/website/src/content/releases.json';
+const CATALOG_VERSIONS = 'apps/gateway/src/server/plugins/catalog-versions.json';
+const CATALOG_INDEX_URL = 'https://vaubaan.github.io/gateway-plugins/index.json';
+/** The plugins compiled into the server: never in the catalog. */
+const COMPILED = ['vaubaan', 'ssh'];
+const CATALOG_VERSIONS_COMMENT =
+  "The catalog versions this release of the gateway was tested with, each with the service's name and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed), written by npm run release:prepare from the catalog's index. Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the catalog index names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it.";
 
 function parseArguments(argv) {
   const positional = [];
   let date = new Date().toISOString().slice(0, 10);
-  let plugin = null;
+  let catalogIndex = CATALOG_INDEX_URL;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--date') {
       date = argv[index + 1] ?? '';
       index += 1;
-    } else if (argument === '--plugin') {
-      plugin = argv[index + 1] ?? '';
+    } else if (argument === '--catalog-index') {
+      catalogIndex = argv[index + 1] ?? '';
       index += 1;
-      if (plugin === '') throw new ReleaseError(USAGE);
+      if (catalogIndex === '') throw new ReleaseError(USAGE);
+    } else if (argument === '--plugin') {
+      throw new ReleaseError(
+        'a plugin version is released by the catalog alone: open a pull request on vaubaan/gateway-plugins that moves its declaration (docs/workflow/coding-workflow.md, "Plugin releases")',
+      );
     } else if (argument.startsWith('--')) {
       throw new ReleaseError(`unknown option ${argument}\n${USAGE}`);
     } else {
       positional.push(argument);
     }
   }
-  if (plugin !== null) {
-    if (positional.length !== 0) throw new ReleaseError(USAGE);
-    return { plugin, version: null, date };
-  }
   if (positional.length !== 1) throw new ReleaseError(USAGE);
-  return { plugin: null, version: positional[0], date };
+  return { version: positional[0], date, catalogIndex };
+}
+
+/** The catalog's index, from a file or an https URL. */
+async function readCatalogIndex(where) {
+  let text;
+  if (where.startsWith('https://')) {
+    let response;
+    try {
+      response = await fetch(where, { headers: { accept: 'application/json' } });
+    } catch (error) {
+      throw new ReleaseError(`the catalog index ${where} could not be read: ${error.message}`);
+    }
+    if (!response.ok) {
+      throw new ReleaseError(`the catalog index ${where} answered HTTP ${response.status}`);
+    }
+    text = await response.text();
+  } else {
+    if (!existsSync(resolve(ROOT, where))) {
+      throw new ReleaseError(`no catalog index at ${where}`);
+    }
+    text = readFileSync(resolve(ROOT, where), 'utf8');
+  }
+  /** @type {unknown} */
+  let index;
+  try {
+    index = JSON.parse(String(text));
+  } catch {
+    throw new ReleaseError(`the catalog index ${where} is not JSON`);
+  }
+  return index;
 }
 
 /** The version of every plugin of plugins/ but the template, by id. */
@@ -93,45 +127,8 @@ function writeReleases(data) {
   writeFileSync(path, serializeReleasesData(data));
 }
 
-/** `--plugin <id>`: the hotfix of one plugin, released by its own tag. */
-function preparePlugin(id) {
-  const manifest = resolve(ROOT, 'plugins', id, 'package.json');
-  if (id === PLUGIN_TEMPLATE || !existsSync(manifest)) {
-    throw new ReleaseError(`no plugin '${id}' in plugins/`);
-  }
-  const path = resolve(ROOT, RELEASES);
-  if (!existsSync(path)) {
-    throw new ReleaseError(`${RELEASES} does not exist: a gateway release writes it first`);
-  }
-  const version = JSON.parse(readFileSync(manifest, 'utf8')).version;
-  const before = parseReleasesData(readFileSync(path, 'utf8'));
-  const previous = before.plugins[id] ?? 'none';
-  writeReleases(withPluginRelease(before, id, version));
-  const tag = `plugin-${id}-v${version}`;
-  console.log(
-    [
-      `Prepared plugin ${id} ${version}.`,
-      `  ${RELEASES}   ${id}: ${previous} -> ${version}`,
-      '',
-      'Next, by hand:',
-      `  1. Commit it with the plugin's change (plugins/${id}/package.json, its definePlugin`,
-      '     version, CHANGELOG.md, and advisories.json when the fix is a security one).',
-      '  2. Bring that commit to main through a pull request and wait for CI.',
-      '  3. Tag the merged commit and push the tag; it publishes this plugin alone:',
-      `       git tag -a ${tag} -m "Vaubaan plugin ${id} ${version}" <commit>`,
-      `       git push origin ${tag}`,
-      '',
-      'No commit and no tag were created.',
-    ].join('\n'),
-  );
-}
-
-function main() {
-  const { plugin, version, date } = parseArguments(process.argv.slice(2));
-  if (plugin !== null) {
-    preparePlugin(plugin);
-    return;
-  }
+async function main() {
+  const { version, date, catalogIndex } = parseArguments(process.argv.slice(2));
   const paths = {
     changelog: resolve(ROOT, 'CHANGELOG.md'),
     manifest: resolve(ROOT, 'package.json'),
@@ -146,11 +143,26 @@ function main() {
   const changelog = prepareChangelog(readFileSync(paths.changelog, 'utf8'), next.raw, date);
   const bumpedManifest = bumpManifest(manifest, next.raw);
   const bumpedLockfile = bumpLockfile(readFileSync(paths.lockfile, 'utf8'), next.raw);
-  const releases = releasesData({ gatewayVersion: next.raw, date, plugins: pluginVersions() });
+  const known = catalogVersionsFrom(
+    await readCatalogIndex(catalogIndex),
+    CATALOG_VERSIONS_COMMENT,
+    COMPILED,
+  );
+  const releases = releasesData({
+    gatewayVersion: next.raw,
+    date,
+    plugins: {
+      ...pluginVersions(),
+      ...Object.fromEntries(Object.entries(known.plugins).map(([id, p]) => [id, p.version])),
+    },
+  });
   writeFileSync(paths.changelog, changelog);
   writeFileSync(paths.manifest, bumpedManifest);
   writeFileSync(paths.lockfile, bumpedLockfile);
   writeReleases(releases);
+  const catalogVersionsPath = resolve(ROOT, CATALOG_VERSIONS);
+  mkdirSync(dirname(catalogVersionsPath), { recursive: true });
+  writeFileSync(catalogVersionsPath, `${JSON.stringify(known, null, 2)}\n`);
 
   const tag = `v${next.raw}`;
   const branch =
@@ -162,10 +174,11 @@ function main() {
       `  package.json        ${current} -> ${next.raw}`,
       `  package-lock.json   ${current} -> ${next.raw}`,
       `  ${RELEASES}   gateway ${next.raw}, ${Object.keys(releases.plugins).length} plugins`,
+      `  ${CATALOG_VERSIONS}   ${Object.keys(known.plugins).length} catalog plugins, from ${catalogIndex}`,
       '',
       'Next, by hand:',
       '  1. Review the diff, then commit:',
-      `       git add CHANGELOG.md package.json package-lock.json ${RELEASES}`,
+      `       git add CHANGELOG.md package.json package-lock.json ${RELEASES} ${CATALOG_VERSIONS}`,
       `       git commit -m "chore(release): ${next.raw}"`,
       `  2. Bring that commit to ${branch} through a pull request and wait for CI.`,
       '  3. Rehearse (optional): run the "release" workflow by hand on that branch.',
@@ -179,10 +192,8 @@ function main() {
   );
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   if (!(error instanceof ReleaseError)) throw error;
   console.error(`release:prepare: ${error.message}`);
   process.exit(1);
-}
+});

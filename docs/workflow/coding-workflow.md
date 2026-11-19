@@ -134,20 +134,21 @@ owner doing anything:
 
 ### Plugin releases
 
-- A plugin version is released by the catalog, never by a gateway release (ADR
-  [plugins-installed-when-first-needed](../decisions/plugins-installed-when-first-needed.md)): bump
-  the plugin's version here (package.json and `definePlugin`), CHANGELOG, an entry in
-  `apps/website/src/content/advisories.json` when it fixes a security issue, and
-  `npm run release:prepare -- --plugin <id>` (its entry of `releases.json`, the versions feed);
-  merge, then a pull request on `vaubaan/gateway-plugins` moves its declaration to the new
-  `version` and `commit`. Once merged, the catalog rebuilds, signs and publishes `<id>-v<version>`,
-  and every instance can install it.
-- [`catalog-versions.json`](../../apps/gateway/src/server/plugins/catalog-versions.json) lists the
-  catalog versions a gateway release knows, each `{ version, sha256 }` (the sha256 is the release
-  asset's digest): what an instance installs when the versions feed names none, and at a start for
-  the plugins its accounts need. Once the catalog published a plugin's new version, its entry takes
-  the version and the digest; until then `tests/unit/structural/catalog-versions.test.ts` fails on
-  the repository's newer version. Nothing of it is preinstalled.
+- A plugin version is released by the catalog alone, never by the gateway's repository (ADRs
+  [plugins-installed-when-first-needed](../decisions/plugins-installed-when-first-needed.md),
+  [plugin-catalog-rebuilt-from-source](../decisions/plugin-catalog-rebuilt-from-source.md),
+  amendment 2026-11-19): bump the plugin's version here (package.json, `definePlugin`, the
+  lockfile entry), CHANGELOG, an entry in `apps/website/src/content/advisories.json` when it fixes
+  a security issue; push to main; then a pull request on `vaubaan/gateway-plugins` moves its
+  declaration to the new `version` and `commit`. Once merged, the catalog rebuilds, signs and
+  publishes `<id>-v<version>` and its `index.json` (GitHub Pages), which every instance reads at
+  its next versions check. Nothing else in this repository moves.
+- [`catalog-versions.json`](../../apps/gateway/src/server/plugins/catalog-versions.json) — the
+  catalog versions a gateway release knows, `{ name, version, sha256 }` — is written by
+  `npm run release:prepare` from the catalog's index of that day (`--catalog-index <file or URL>`
+  to read another): the fallback when an instance cannot read the index, and what a start
+  installs for the plugins its accounts need. `releases.json` takes the index's versions too, for
+  gateways released before the index. Nothing of it is preinstalled.
 
 ### The plugin kit
 

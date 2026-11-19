@@ -39,6 +39,12 @@ export const CATALOG_RELEASES_URL = new URL(
   'https://github.com/vaubaan/gateway-plugins/releases/download/',
 );
 
+/**
+ * The catalog's index (ADR plugin-catalog-rebuilt-from-source, amendment 2026-11-19): its
+ * plugins' names, latest versions and archive digests, published by its release workflow.
+ */
+export const CATALOG_INDEX_URL = new URL('https://vaubaan.github.io/gateway-plugins/index.json');
+
 /** The `User-Agent` of the request: the product, never its version or the instance. */
 export const CATALOG_USER_AGENT = 'vaubaan-gateway';
 

@@ -31,6 +31,7 @@ import {
   unreleasedNotes,
   versionOfTag,
   withPluginRelease,
+  catalogVersionsFrom,
 } from './release-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -400,6 +401,14 @@ describe('the command-line scripts', () => {
       `${JSON.stringify({ ...manifest, packages: { '': manifest } }, null, 2)}\n`,
     );
     writeFileSync(join(sandbox, 'CHANGELOG.md'), FIXTURE);
+    writeFileSync(
+      join(sandbox, 'catalog-index.json'),
+      JSON.stringify({
+        schema: 1,
+        generated_at: '2026-12-01T08:00:00Z',
+        plugins: { vercel: { name: 'Vercel', version: '4.2.2', sha256: 'b'.repeat(64) } },
+      }),
+    );
     for (const [id, version] of [
       ['notion', '0.2.0'],
       ['_template', '0.2.0'],
@@ -430,9 +439,10 @@ describe('the command-line scripts', () => {
   }
 
   const read = (name) => readFileSync(join(sandbox, name), 'utf8');
+  const INDEX = ['--catalog-index', 'catalog-index.json'];
 
   it('release:prepare edits the three files and prints the tag command without running it', () => {
-    const result = run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01']);
+    const result = run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01', ...INDEX]);
     expect(result.code).toBe(0);
     expect(read('CHANGELOG.md')).toContain('## [Unreleased]\n\n## [2.2.0] - 2026-12-01\n');
     expect(JSON.parse(read('package.json')).version).toBe('2.2.0');
@@ -443,29 +453,25 @@ describe('the command-line scripts', () => {
       gateway: '2.2.0',
       prerelease: false,
       date: '2026-12-01',
-      plugins: { notion: '0.2.0' },
+      plugins: { notion: '0.2.0', vercel: '4.2.2' },
     });
+    expect(
+      JSON.parse(read('apps/gateway/src/server/plugins/catalog-versions.json')).plugins,
+    ).toEqual({ vercel: { name: 'Vercel', version: '4.2.2', sha256: 'b'.repeat(64) } });
   });
 
-  it('release:prepare --plugin moves that plugin alone and prints its tag', () => {
-    run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01']);
-    writeFileSync(
-      join(sandbox, 'plugins', 'notion', 'package.json'),
-      JSON.stringify({ version: '0.2.1' }),
-    );
+  it("release:prepare refuses --plugin: a plugin version is the catalog's pull request alone", () => {
     const result = run('release-prepare.mjs', ['--plugin', 'notion']);
-    expect(result.code).toBe(0);
-    expect(JSON.parse(read('apps/website/src/content/releases.json'))).toEqual({
-      gateway: '2.2.0',
-      prerelease: false,
-      date: '2026-12-01',
-      plugins: { notion: '0.2.1' },
-    });
-    expect(result.stdout).toContain('git tag -a plugin-notion-v0.2.1');
-    expect(run('release-prepare.mjs', ['--plugin', 'notion']).stderr).toContain(
-      'does not come after',
-    );
-    expect(run('release-prepare.mjs', ['--plugin', 'jira']).stderr).toContain("no plugin 'jira'");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('released by the catalog alone');
+  });
+
+  it('release:prepare refuses a missing catalog index and writes nothing', () => {
+    const before = read('package.json');
+    const result = run('release-prepare.mjs', ['2.2.0', '--catalog-index', 'nowhere.json']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('no catalog index at nowhere.json');
+    expect(read('package.json')).toBe(before);
   });
 
   it('release:prepare refuses a version that does not move forward and writes nothing', () => {
@@ -550,7 +556,7 @@ describe('the command-line scripts', () => {
   });
 
   it('the plan of a tag fails while the changes are still titled Unreleased', () => {
-    run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01']);
+    run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01', ...INDEX]);
     writeFileSync(join(sandbox, 'CHANGELOG.md'), FIXTURE); // the changelog edit was not committed
     const result = run('release-plan.mjs', ['--tag', 'v2.2.0', '--notes-out', 'notes.md']);
     expect(result.code).toBe(1);
@@ -590,5 +596,39 @@ describe('the repository', () => {
     expect(changelog).toMatch(/^## \[Unreleased\]$/m);
     const version = JSON.parse(readFileSync(resolve(HERE, '../package.json'), 'utf8')).version;
     expect(() => parseVersion(version)).not.toThrow();
+  });
+});
+
+describe('the catalog versions a gateway release knows, from the catalog index', () => {
+  const SHA = 'a'.repeat(64);
+  const index = {
+    schema: 1,
+    generated_at: '2026-11-19T17:00:00Z',
+    plugins: {
+      vercel: { name: 'Vercel', version: '4.2.2', sha256: SHA },
+      asana: { name: 'Asana', version: '0.1.0', sha256: SHA },
+      ssh: { name: 'SSH', version: '2.0.5', sha256: SHA },
+    },
+  };
+
+  it('lists every catalog plugin with its name, version and digest, sorted, never a compiled one', () => {
+    expect(catalogVersionsFrom(index, 'why', ['vaubaan', 'ssh'])).toEqual({
+      $comment: 'why',
+      plugins: {
+        asana: { name: 'Asana', version: '0.1.0', sha256: SHA },
+        vercel: { name: 'Vercel', version: '4.2.2', sha256: SHA },
+      },
+    });
+  });
+
+  it('refuses an index that is not one', () => {
+    expect(() => catalogVersionsFrom({ schema: 2, plugins: {} }, '', [])).toThrow(ReleaseError);
+    expect(() =>
+      catalogVersionsFrom(
+        { schema: 1, plugins: { vercel: { name: 'Vercel', version: '4.2.2', sha256: 'x' } } },
+        '',
+        [],
+      ),
+    ).toThrow(/vercel/);
   });
 });

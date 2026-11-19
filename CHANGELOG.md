@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **A plugin version is activated without a restart.** Activating a newer (or a kept) version of
+  an installed plugin runs its trial at once in the running instance: the next call of that service
+  runs the new version, the sessions of every other service go on, and a call already running
+  finishes on the version it started with. A version that fails its trial is never served: the
+  previous one keeps serving and Administration › Plugins shows why. Plugins the image or the
+  operator's plugins directory provide, and `plugins.safe_mode`, keep the trial at the next start.
+- **Plugin versions are read from the catalog's index.** The versions check reads the catalog's
+  `index.json` beside the versions feed: a plugin version the catalog published is offered at the
+  next check, with its service's name, without a gateway release nor a site deployment. When the
+  index cannot be read, the feed names the plugins as before.
+
 ### Changed
 
 - **Miro (plugin 0.5.1): the tool list captured again.** Miro's descriptions of five tools are

@@ -43,6 +43,8 @@ const ALLOWED: Record<string, string> = {
     'the `$schema` identifier of an Adaptive Card, a name inside the Teams message format, never fetched',
   'scripts/fetch-socle.mjs':
     'where the catalog publishes its signed archives, read at image build; each archive pinned by its sha256 in deploy/socle.json',
+  'scripts/release-prepare.mjs':
+    "the catalog index's published address, read at a gateway release to write catalog-versions.json; --catalog-index reads another",
   'apps/gateway/src/server/plugins/catalog.ts':
     "where the catalog publishes its signed archives, like the versions feed's address: public, read without credentials, and nothing it serves is trusted before its signature verifies",
   'apps/gateway/src/server/plugins/trust.ts':

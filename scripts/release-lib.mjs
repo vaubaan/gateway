@@ -514,6 +514,43 @@ export function releasesData({ gatewayVersion, date, plugins }) {
 }
 
 /**
+ * `catalog-versions.json` of a gateway release, from the catalog's index of that day (ADR
+ * plugin-catalog-rebuilt-from-source, amendment 2026-11-19): every plugin the catalog
+ * published, its name, version and archive sha256, sorted by id. The compiled plugins
+ * (`compiled`) are never listed. Throws on an index that is not one.
+ * @param {unknown} index
+ * @param {string} comment
+ * @param {readonly string[]} compiled
+ */
+export function catalogVersionsFrom(index, comment, compiled) {
+  const isRecord = (x) => typeof x === 'object' && x !== null && !Array.isArray(x);
+  if (!isRecord(index) || index.schema !== 1 || !isRecord(index.plugins)) {
+    throw new ReleaseError('the catalog index is not { schema: 1, plugins }');
+  }
+  /** @type {Record<string, { name: string, version: string, sha256: string }>} */
+  const plugins = {};
+  for (const id of Object.keys(index.plugins).sort()) {
+    if (compiled.includes(id)) continue;
+    const entry = index.plugins[id];
+    if (
+      !/^[a-z][a-z0-9-]*$/.test(id) ||
+      !isRecord(entry) ||
+      typeof entry.name !== 'string' ||
+      entry.name.trim() === '' ||
+      !/^[0-9a-f]{64}$/.test(String(entry.sha256))
+    ) {
+      throw new ReleaseError(`the catalog index entry '${id}' is not { name, version, sha256 }`);
+    }
+    plugins[id] = {
+      name: entry.name,
+      version: parseVersion(String(entry.version)).raw,
+      sha256: entry.sha256,
+    };
+  }
+  return { $comment: comment, plugins };
+}
+
+/**
  * The released versions after a plugin hotfix: that plugin's entry alone moves, and
  * only forward.
  * @param {ReleasesData} data

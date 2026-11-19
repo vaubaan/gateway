@@ -12,7 +12,7 @@ import type { UpdatesConfig } from '../config';
 import type { Logger } from '../logging';
 import type { PluginInventoryEntry } from '../plugins';
 import { compare, type UpdatesComparison } from './compare';
-import { readVersionsFeed, type FeedReadFailure } from './fetch-feed';
+import { readCatalogIndex, readVersionsFeed, type FeedReadFailure } from './fetch-feed';
 export {
   createUpdatesHandlers,
   PLUGINS_PAGE,
@@ -24,6 +24,7 @@ export {
 export {
   compare,
   type AdvisoryHit,
+  type CatalogPlugin,
   type CompareInput,
   type GatewayVersionCheck,
   type OlderPin,
@@ -34,7 +35,9 @@ export {
   FEED_MAX_BYTES,
   FEED_TIMEOUT_MS,
   FEED_USER_AGENT,
+  readCatalogIndex,
   readVersionsFeed,
+  type CatalogIndexRead,
   type FeedRead,
   type FeedReadFailure,
 } from './fetch-feed';
@@ -48,6 +51,8 @@ export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export interface UpdatesReport extends UpdatesComparison {
   /** ISO 8601: when this instance read the feed. */
   readonly checkedAt: string;
+  /** Why the catalog's index was not read, when it was asked for and failed; the feed's plugins stand in. */
+  readonly indexFailure: FeedReadFailure | null;
 }
 
 /** The last read that failed, while no later one succeeded. */
@@ -79,6 +84,11 @@ export interface UpdatesModuleDeps {
   readonly gatewayVersion: string;
   readonly inventory: readonly PluginInventoryEntry[];
   readonly logger: Logger;
+  /**
+   * The catalog's index (`CATALOG_INDEX_URL`), read beside the feed for the plugins' versions
+   * (ADR plugin-catalog-rebuilt-from-source, amendment 2026-11-19); absent: the feed's alone.
+   */
+  readonly indexUrl?: URL;
   readonly fetch?: typeof fetch;
   readonly timers?: UpdatesTimers;
   readonly now?: () => Date;
@@ -109,7 +119,10 @@ export function createUpdatesModule(deps: UpdatesModuleDeps): UpdatesModule {
   let stopped = false;
 
   async function read(): Promise<UpdatesReport | null> {
-    const result = await readVersionsFeed(deps.config.feedUrl, { fetch: fetchFn });
+    const [result, indexRead] = await Promise.all([
+      readVersionsFeed(deps.config.feedUrl, { fetch: fetchFn }),
+      deps.indexUrl ? readCatalogIndex(deps.indexUrl, { fetch: fetchFn }) : null,
+    ]);
     const at = now().toISOString();
     if (!result.ok) {
       failure = { at, failure: result.failure, status: result.status };
@@ -121,9 +134,21 @@ export function createUpdatesModule(deps: UpdatesModuleDeps): UpdatesModule {
       return null;
     }
     failure = null;
+    if (indexRead !== null && !indexRead.ok) {
+      logger.info('catalog index not read; the versions feed names the plugins', {
+        index: deps.indexUrl?.origin,
+        failure: indexRead.failure,
+        status: indexRead.status,
+      });
+    }
     report = {
       checkedAt: at,
-      ...compare(result.feed, { gatewayVersion: deps.gatewayVersion, inventory: deps.inventory }),
+      indexFailure: indexRead !== null && !indexRead.ok ? indexRead.failure : null,
+      ...compare(
+        result.feed,
+        { gatewayVersion: deps.gatewayVersion, inventory: deps.inventory },
+        indexRead?.ok ? indexRead.index : null,
+      ),
     };
     logger.info('versions feed read', {
       gateway_behind: report.gateway.behind,

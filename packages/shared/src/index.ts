@@ -35,6 +35,13 @@ export {
   VERSIONS_FEED_SCHEMA,
 } from './versions-feed.ts';
 export type { AdvisorySubject, VersionsFeed, VersionsFeedAdvisory } from './versions-feed.ts';
+export {
+  CATALOG_INDEX_LIMITS,
+  CATALOG_INDEX_SCHEMA,
+  isCatalogIndex,
+  isCatalogIndexEntry,
+} from './catalog-index.ts';
+export type { CatalogIndex, CatalogIndexEntry } from './catalog-index.ts';
 export type {
   JsonRpcError,
   JsonRpcSuccess,

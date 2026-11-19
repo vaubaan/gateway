@@ -8,6 +8,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { gt } from 'semver';
 import { describe, expect, it } from 'vitest';
 
 import { KNOWN_CATALOG_VERSIONS } from '../../../src/server/plugins/catalog';
@@ -33,15 +34,20 @@ describe('the catalog versions this release knows', () => {
 
   it('gives each service the name its plugin says', () => {
     for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
-      expect(known.name, id).toBe(REPOSITORY_PLUGINS.find((p) => p.id === id)?.displayName);
+      const repository = REPOSITORY_PLUGINS.find((p) => p.id === id);
+      if (repository !== undefined) expect(known.name, id).toBe(repository.displayName);
+      else expect(known.name.trim(), id).not.toBe('');
     }
   });
 
-  it('names each plugin at the version of this repository', () => {
+  it('never names a version newer than the repository holds for an official plugin', () => {
     for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
-      expect(known.version, `${id}: plugins/${id} is ${repositoryVersion(id)}`).toBe(
-        repositoryVersion(id),
-      );
+      const repository = repositoryVersion(id);
+      if (repository === undefined) continue;
+      expect(
+        gt(known.version, repository),
+        `${id}: the catalog's ${known.version} is newer than plugins/${id} (${repository})`,
+      ).toBe(false);
     }
   });
 
@@ -53,6 +59,6 @@ describe('the catalog versions this release knows', () => {
       .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
       .map((d) => d.name)
       .filter((id) => id !== 'vaubaan' && id !== 'ssh');
-    expect(ids.sort()).toEqual(repository.sort());
+    for (const id of repository) expect(ids, `plugins/${id}`).toContain(id);
   });
 });

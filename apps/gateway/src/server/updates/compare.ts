@@ -3,7 +3,7 @@
  * plugins-bundled-or-pinned-by-the-operator): nothing about the instance left it, so
  * everything Administration › Plugins shows is computed here. Pure.
  */
-import type { VersionsFeed } from '@vaubaan/shared';
+import type { CatalogIndex, VersionsFeed } from '@vaubaan/shared';
 import { lt, satisfies, valid, validRange } from 'semver';
 
 import type { PluginInventoryEntry } from '../plugins';
@@ -29,6 +29,16 @@ export interface PluginBehind {
 export interface PluginAvailable {
   readonly id: string;
   readonly released: string;
+  /** The service's name, when the catalog's index gives it. */
+  readonly name?: string;
+}
+
+/** What the catalog says of one plugin: its latest version, and from the index its name and digest. */
+export interface CatalogPlugin {
+  readonly version: string;
+  readonly name?: string;
+  /** The sha256 of that version's archive (the index's). */
+  readonly sha256?: string;
 }
 
 /** An advisory whose affected range holds the version this instance runs. */
@@ -58,8 +68,15 @@ export interface UpdatesComparison {
   readonly feedGeneratedAt: string;
   readonly gateway: GatewayVersionCheck;
   readonly pluginsBehind: readonly PluginBehind[];
-  /** Every plugin id the feed names: the catalog's, reserved to its signature at upload. */
+  /** Every plugin id the catalog names: reserved to its signature at upload. */
   readonly catalogIds: readonly string[];
+  /**
+   * The catalog's plugins, by id: from its index when it was read (ADR
+   * plugin-catalog-rebuilt-from-source, amendment 2026-11-19), else from the feed.
+   */
+  readonly catalog: Readonly<Record<string, CatalogPlugin>>;
+  /** Where `catalog` was read. */
+  readonly catalogSource: 'index' | 'feed';
   /** The feed's plugins the instance knows of no version, sorted by id. */
   readonly pluginsAvailable: readonly PluginAvailable[];
   readonly advisories: readonly AdvisoryHit[];
@@ -88,15 +105,29 @@ function affects(range: string, version: string): boolean {
  * registered or not (a disabled plugin is still in the image). An advisory with a range
  * semver cannot read is ignored, never a hit.
  */
-export function compare(feed: VersionsFeed, input: CompareInput): UpdatesComparison {
+export function compare(
+  feed: VersionsFeed,
+  input: CompareInput,
+  index: CatalogIndex | null = null,
+): UpdatesComparison {
   const { gatewayVersion, inventory } = input;
+  const catalog: Record<string, CatalogPlugin> = index
+    ? Object.fromEntries(
+        Object.entries(index.plugins).map(([id, { name, version, sha256 }]) => [
+          id,
+          { version, name, sha256 },
+        ]),
+      )
+    : Object.fromEntries(
+        Object.entries(feed.plugins).map(([id, { latest }]) => [id, { version: latest }]),
+      );
   const pluginsBehind: PluginBehind[] = [];
   const olderPins: OlderPin[] = [];
   for (const entry of inventory) {
     // The feed speaks of the catalog's plugins: an installed version Vaubaan did not sign
     // shares, at most, an id with one of them (a private `crm`, a catalog `crm`).
     if (entry.origin === 'installed' && entry.trust !== 'vaubaan') continue;
-    const released = feed.plugins[entry.id]?.latest;
+    const released = catalog[entry.id]?.version;
     if (released !== undefined && isOlder(entry.version, released)) {
       pluginsBehind.push({ id: entry.id, loaded: entry.version, released });
     }
@@ -143,10 +174,14 @@ export function compare(feed: VersionsFeed, input: CompareInput): UpdatesCompari
       behind: isOlder(gatewayVersion, feed.gateway.latest),
     },
     pluginsBehind,
-    catalogIds: Object.keys(feed.plugins).sort(),
-    pluginsAvailable: Object.entries(feed.plugins)
+    catalogIds: Object.keys(catalog).sort(),
+    catalog,
+    catalogSource: index ? 'index' : 'feed',
+    pluginsAvailable: Object.entries(catalog)
       .filter(([id]) => !inventory.some((entry) => entry.id === id))
-      .map(([id, { latest }]) => ({ id, released: latest }))
+      .map(([id, { version, name }]) =>
+        name === undefined ? { id, released: version } : { id, released: version, name },
+      )
       .sort((a, b) => a.id.localeCompare(b.id)),
     advisories,
     olderPins,

@@ -76,6 +76,7 @@ import {
   createUpdatesHandlers,
   createUpdatesModule,
   type UpdatesHandlers,
+  type UpdatesComparison,
   type UpdatesModule,
   type UpdatesTimers,
 } from '../updates';
@@ -98,7 +99,7 @@ import type { InstalledAdmission } from '../plugins/installed';
 import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
 import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
-import { fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
+import { CATALOG_INDEX_URL, fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -226,6 +227,11 @@ export interface RootDeps {
   /** Downloads of the catalog's archives (one-click install); the global `fetch` by default. */
   readonly catalogFetch?: typeof fetch;
   /**
+   * Where the versions check reads the catalog's index (`CATALOG_INDEX_URL` by default);
+   * `null` reads none, the versions feed then names the plugins (tests).
+   */
+  readonly catalogIndexUrl?: URL | null;
+  /**
    * The plugins compiled into the server (`SHIPPED_PLUGINS` by default). Tests choose theirs:
    * an instance without a plugin, to install it at a first connection.
    */
@@ -312,7 +318,13 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     ) => Promise<readonly { id: string; name: string }[]> = async () => [];
     // The versions check is built below; until its first read, the catalog's ids are unknown.
     let catalogIds: () => readonly string[] = () => [];
-    let catalogVersions: () => readonly { id: string; released: string }[] = () => [];
+    let catalogVersions: () => readonly {
+      id: string;
+      released: string;
+      name?: string;
+    }[] = () => [];
+    // The catalog's index of the last read (names, versions, digests); `{}` before it.
+    let catalogPlugins: () => UpdatesComparison['catalog'] = () => ({});
     const pluginInstall = createPluginInstallService({
       versions: store.pluginVersions,
       dir: installedDir,
@@ -354,7 +366,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         return [...offered]
           .filter(([id]) => !registry.has(id))
           .map(([id, released]) => {
-            const name = KNOWN_CATALOG_VERSIONS.get(id)?.name;
+            const name = catalogPlugins()[id]?.name ?? KNOWN_CATALOG_VERSIONS.get(id)?.name;
             return name === undefined ? { id, released } : { id, released, name };
           })
           .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
@@ -377,10 +389,18 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
           logger,
         }),
       catalog: (pluginId, version) => {
+        // The digest the index or this release gives for that very version, if any.
+        const indexed = catalogPlugins()[pluginId];
         const known = KNOWN_CATALOG_VERSIONS.get(pluginId);
+        const sha256 =
+          indexed?.version === version && indexed.sha256 !== undefined
+            ? indexed.sha256
+            : known?.version === version
+              ? known.sha256
+              : undefined;
         return fetchCatalogArchive(pluginId, version, {
           fetch: deps.catalogFetch ?? fetch,
-          ...(known?.version === version ? { sha256: known.sha256 } : {}),
+          ...(sha256 !== undefined ? { sha256 } : {}),
         });
       },
       audit: store.auditWriter,
@@ -434,12 +454,16 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       gatewayVersion: build.version,
       inventory: inventory.entries,
       logger,
+      ...(deps.catalogIndexUrl === null
+        ? {}
+        : { indexUrl: deps.catalogIndexUrl ?? CATALOG_INDEX_URL }),
       fetch: deps.updatesFetch,
       timers: deps.updatesTimers,
     });
     opened.push(() => updates.stop());
     catalogIds = () => updates.current()?.catalogIds ?? [];
     catalogVersions = () => updates.current()?.pluginsAvailable ?? [];
+    catalogPlugins = () => updates.current()?.catalog ?? {};
     updates.start();
     const closeRoot = () => closeAll(opened);
     const requestRestart = deps.requestRestart ?? defaultRestart;
