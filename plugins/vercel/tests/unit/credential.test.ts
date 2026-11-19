@@ -115,22 +115,41 @@ describe('vercel token — verify at paste', () => {
     await expect(check).rejects.toThrow(/no team with the ID team_abc/);
   });
 
-  test('a project token: names the project, read without teamId, and reads the expiry', async () => {
-    const fetch = mockFetch([
-      current({ expiresAt: Date.UTC(2027, 0, 31) }),
-      { method: 'GET', url: PROJECT, body: { id: 'prj_app', name: 'site', accountId: 'team_abc' } },
-    ]);
+  const projectRoute: MockRoute = {
+    method: 'GET',
+    url: PROJECT,
+    body: { id: 'prj_app', name: 'site', accountId: 'team_abc' },
+  };
+
+  test('a project token: names the project, read without teamId, then reads the expiry', async () => {
+    const fetch = mockFetch([projectRoute, current({ expiresAt: Date.UTC(2027, 0, 31) })]);
     expect(await verifyVercelToken(projectCtx(fetch))).toEqual({
       account: 'the site project',
       expiresAt: '2027-01-31T00:00:00.000Z',
     });
-    expect(fetch.calls.map((c) => c.url)).toEqual([CURRENT, PROJECT]);
+    expect(fetch.calls.map((c) => c.url)).toEqual([PROJECT, CURRENT]);
+  });
+
+  test('a project token Vercel denies its own description (404 Token not found): accepted, expiry unknown', async () => {
+    const fetch = mockFetch([
+      projectRoute,
+      {
+        method: 'GET',
+        url: CURRENT,
+        status: 404,
+        body: { error: { code: 'not_found', message: 'Token not found.' } },
+      },
+    ]);
+    expect(await verifyVercelToken(projectCtx(fetch))).toEqual({
+      account: 'the site project',
+      expiresAt: null,
+    });
   });
 
   test.each([403, 404])(
     'a project the token does not open (HTTP %i) is refused with the scope to choose',
     async (status) => {
-      const fetch = mockFetch([current({}), { method: 'GET', url: PROJECT, status, body: {} }]);
+      const fetch = mockFetch([{ method: 'GET', url: PROJECT, status, body: {} }]);
       const check = verifyVercelToken(projectCtx(fetch));
       await expect(check).rejects.toBeInstanceOf(CredentialRefusal);
       await expect(check).rejects.toThrow(

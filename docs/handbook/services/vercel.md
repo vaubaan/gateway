@@ -3,7 +3,7 @@ title: Vercel plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
-last_reviewed: 2026-11-11
+last_reviewed: 2026-11-19
 ---
 
 # Vercel plugin — handbook
@@ -95,8 +95,11 @@ Resource: the project; the environment is a slice segment, not a resource label.
   one-place-to-authorize-services-token-first, amendment 2026-11-14: a key per project keeps a
   leak or a mistake inside that project). **One project**: Scope = the team, then the project, plus
   its `project_id` (`prj_…`, Project Settings → General); checked by `GET /v9/projects/{id}` without
-  `teamId`, account = the project name; 403/404 → "does not open the project". Discovery then
-  returns that project alone. **Team**: Scope = the team, All Projects, plus its `team_id`
+  `teamId`, account = the project name; 403/404 → "does not open the project". Then
+  `GET /v5/user/tokens/current` for the expiry: Vercel denies it to a project token with
+  **404 "Token not found."** (not 403), so a 404 there means expiry unknown, never a refusal; read
+  it before the project and every project token fails at paste. Discovery then returns that
+  project alone. **Team**: Scope = the team, All Projects, plus its `team_id`
   (`team_…`); checked by `GET /v5/user/tokens/current` (expiry) and `GET /v2/teams/{id}` (name):
   403 → "does not cover the whole team (it may be scoped to one project)", 404 → "no team with the
   ID".

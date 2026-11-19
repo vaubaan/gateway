@@ -177,21 +177,34 @@ export function vercelAuth(secret: CredentialSecret): VercelAuth {
 }
 
 /**
- * The token's expiry (`GET /v5/user/tokens/current`), then what the form
- * names, which the token must open : the team (`GET /v2/teams/{teamId}`) or
- * the project (`GET /v9/projects/{projectId}`, without `teamId` : Vercel
- * infers it from the token). A refusal says what to change.
+ * What the form names, which the token must open, and the token's expiry
+ * (`GET /v5/user/tokens/current`). Team mode : the expiry, then the team
+ * (`GET /v2/teams/{teamId}`). Project mode : the project first
+ * (`GET /v9/projects/{projectId}`, without `teamId` : Vercel infers it from
+ * the token), then the expiry, unknown when Vercel answers 404 : a token
+ * scoped to one project is denied user-level resources, and Vercel says so
+ * with `404 Token not found` (seen 2026-11-19), not a 403. A refusal says
+ * what to change.
  */
 export async function verifyVercelToken(ctx: AccountContext): Promise<CredentialCheck> {
   const auth = vercelAuth(ctx.credential);
-  const current = await vercelGet(ctx, auth.token, '/v5/user/tokens/current');
-  const account =
-    auth.mode === 'team' ? await teamAccount(ctx, auth) : await projectAccount(ctx, auth);
+  if (auth.mode === 'team') {
+    const current = await vercelGet(ctx, auth.token, '/v5/user/tokens/current');
+    return { account: await teamAccount(ctx, auth), expiresAt: expiryOf(current) };
+  }
+  const account = await projectAccount(ctx, auth);
+  let current: Readonly<Record<string, unknown>> | undefined;
+  try {
+    current = await vercelGet(ctx, auth.token, '/v5/user/tokens/current');
+  } catch (err) {
+    if (!isNotFound(err)) throw err;
+  }
+  return { account, expiresAt: current ? expiryOf(current) : null };
+}
+
+function expiryOf(current: Readonly<Record<string, unknown>>): string | null {
   const expiresAt = isRecord(current.token) ? current.token.expiresAt : undefined;
-  return {
-    account,
-    expiresAt: typeof expiresAt === 'number' ? new Date(expiresAt).toISOString() : null,
-  };
+  return typeof expiresAt === 'number' ? new Date(expiresAt).toISOString() : null;
 }
 
 async function teamAccount(
