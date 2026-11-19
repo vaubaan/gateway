@@ -165,6 +165,33 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
     expect(issue?.args[2]).toEqual({ issuedBy: { missionId: ACTOR.missionId } });
   });
 
+  it('a mission issued through a mission never outlives it', async () => {
+    const end = '2026-12-01T00:00:00.000Z';
+    const { tools, calls } = rig({
+      missions: {
+        get: (_user, id) =>
+          Promise.resolve(
+            id === ACTOR.missionId
+              ? ({ role: 'creator', mission: { id, expiresAt: end } } as never)
+              : null,
+          ),
+      },
+    });
+    for (const expires_at of [null, '2026-12-01T00:00:01.000Z']) {
+      expect(
+        await tools.issueMission(ACTOR, { ...DRAFT, expires_at }),
+        String(expires_at),
+      ).toMatchObject({
+        ok: false,
+        refusal: { code: 'outlives-calling-mission', mission_id: ACTOR.missionId, expires_at: end },
+      });
+    }
+    expect(calls.some((call) => call.method === 'issue' || call.method === 'preview')).toBe(false);
+    // Ending with it or before goes on to the authority check.
+    await tools.issueMission(ACTOR, { ...DRAFT, expires_at: end });
+    expect(calls.some((call) => call.method === 'preview')).toBe(true);
+  });
+
   it('a draft beyond the authority is refused before anything is issued, with the uncovered list', async () => {
     const { tools, calls } = rig({ shared: true });
     const outcome = await tools.issueMission(ACTOR, DRAFT);
@@ -730,7 +757,13 @@ describe('VaubaanActs — every act is the calling mission’s creator’s', () 
       // The recorded `issue` answers `refused`, although `preview` said the draft passes.
       const { tools, calls } = rig();
       const outcome = await tools.issueMission(ACTOR, within);
-      expect(calls.map((call) => call.method)).toEqual(['issuanceContext', 'preview', 'issue']);
+      // `get`: the calling mission's end, which a mission issued here never outlives.
+      expect(calls.map((call) => call.method)).toEqual([
+        'issuanceContext',
+        'get',
+        'preview',
+        'issue',
+      ]);
       expect(outcome).toMatchObject({
         ok: false,
         refusal: { code: 'draft-refused', uncovered: [], preview: { name: within.name } },

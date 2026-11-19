@@ -63,7 +63,8 @@ or removes a plugin), and live in `server/vaubaan/plugin-acts.ts`.
   `tests/integration/vaubaan/hard-deny.test.ts` (object graph of the real root) hold it.
 - **The self rule, at every call, whatever the stored selection says** (like `isSelfResource`):
   a draft naming a Vaubaan account, by id or by service, is refused before any preview
-  (`vaubaan-account-not-allowed`), at issuance and at an edit; the calling mission is never renamed,
+  (`vaubaan-account-not-allowed`), at issuance and at an edit; a mission it issues ends when the
+  calling mission ends at the latest (`outlives-calling-mission`); the calling mission is never renamed,
   edited, rotated nor revoked through its own key (`self-not-allowed`), nor is its edit previewed; a teammate's key is refused before the arguments are read
   (`teammate-key-not-allowed`) — the acts reach the creator's whole authority, wider than the
   mission a teammate was added to. A machine key (made by the creator) passes.
@@ -135,6 +136,7 @@ refusal, as for any service. `acts.test.ts` holds this table to `VAUBAAN_REFUSAL
 | `invalid-arguments`           | the arguments do not match the tool's input schema                                                                                    | `issues`                                                     |
 | `draft-refused`               | `issue_mission` or `edit_mission` on a draft the preview does not accept                                                              | `uncovered`, `issues`, `preview` (issue) or `changes` (edit) |
 | `vaubaan-account-not-allowed` | `issue_mission` or `edit_mission` on a draft that names a Vaubaan account                                                             | `account_ids`                                                |
+| `outlives-calling-mission`    | `issue_mission` on a draft ending after the calling mission, or never, when the calling mission has an end                            | `mission_id`, `expires_at` (the calling mission's end)       |
 | `self-not-allowed`            | any tool naming the calling mission but `list_my_missions`                                                                            | `mission_id`                                                 |
 | `teammate-key-not-allowed`    | any tool, called with a teammate's key rather than the creator's or a machine key                                                     |                                                              |
 | `mission-not-found`           | no such mission of this user (another user's, or one they are only a member of for a change)                                          | `mission_id`                                                 |

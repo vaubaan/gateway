@@ -22,7 +22,7 @@
     "stripe": "0.5.0",
     "supabase": "6.1.0",
     "upstash-redis": "4.0.0",
-    "vaubaan": "0.5.0",
+    "vaubaan": "0.5.1",
     "vercel": "4.2.2"
   }
 }

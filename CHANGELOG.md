@@ -55,6 +55,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   repository are read from the parsed certificate, never searched for in its bytes; an archive
   file named like a signature is hashed in the manifest unless it is the root's own signature; and
   the versions feed can no longer offer a plugin version below the one this release knows.
+- **A mission an agent issues never outlives the mission that issued it.** `vaubaan__issue_mission`
+  refuses an end later than the calling mission's, or none when it has one
+  (`outlives-calling-mission`; plugin vaubaan 0.5.1): a stolen key can no longer mint missions that outlast it.
+- **A password reset ends every open session**, and a recovery code is spent once even when
+  posted twice at the same instant. The codes of the second factor have their own rate windows:
+  anonymous password posts filling theirs no longer stop a person typing their code.
 - **An enrolment begun in Settings no longer opens a session.** A session cookie could be turned
   into a fresh session through the sign-in route of the second factor, passing the "recent
   sign-in" check of the master-key download. Replacing a second factor now also needs a session

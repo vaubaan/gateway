@@ -78,6 +78,7 @@ export const VAUBAAN_REFUSAL_CODES = [
   'invalid-arguments',
   'draft-refused',
   'vaubaan-account-not-allowed',
+  'outlives-calling-mission',
   'self-not-allowed',
   'teammate-key-not-allowed',
   'mission-not-found',
@@ -272,6 +273,25 @@ function vaubaanAccountRefusal(
     hint: 'Remove the Vaubaan account from the draft: the mission you prepare works on the services, not on missions. Only the user gives a mission a Vaubaan account, in the web interface.',
     account_ids: accountIds,
   };
+}
+
+/**
+ * A mission issued through a mission never outlives it: a stolen key cannot mint missions
+ * that keep working once its own end is reached.
+ */
+function outlivesCallerRefusal(callerId: string, callerEnd: string): ActRefusal {
+  return {
+    code: 'outlives-calling-mission',
+    message: `A mission issued by mission "${callerId}" ends at ${callerEnd} at the latest, when it does. Nothing was issued.`,
+    hint: `Set \`expires_at\` to ${callerEnd} or earlier. A mission that must last longer is issued by the user, in the web interface.`,
+    mission_id: callerId,
+    expires_at: callerEnd,
+  };
+}
+
+/** Whether `end` (`null`: never) is after `limit`. */
+function endsAfter(end: string | null, limit: string): boolean {
+  return end === null || Date.parse(end) > Date.parse(limit);
 }
 
 /** What an act does to a mission, as its refusals word it. */
@@ -528,6 +548,11 @@ export class VaubaanActs {
     if (vaubaan.length > 0) {
       this.log('issue_mission', caller, 'vaubaan-account-not-allowed');
       return refused(vaubaanAccountRefusal(vaubaan));
+    }
+    const callerEnd = (await this.deps.missions.get(user, caller.missionId))?.mission.expiresAt;
+    if (callerEnd && endsAfter(draft.expires_at, callerEnd)) {
+      this.log('issue_mission', caller, 'outlives-calling-mission');
+      return refused(outlivesCallerRefusal(caller.missionId, callerEnd));
     }
     const checked = await this.deps.missions.preview(user, draft);
     if (!checked.ok) {
