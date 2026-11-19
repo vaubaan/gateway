@@ -60,6 +60,14 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   store's expiry. Wrong codes count per person in `user_second_factors`
   (`SECOND_FACTOR_LOCKOUT`, 10 in 15 min, as `LOCAL_LOCKOUT` for passwords);
   while locked, no code is checked.
+- Two kinds of enrolment step, never interchangeable. `enrol` is a sign-in's: the
+  sign-in route that takes it (`enrolAtSignIn`) opens a session. `settings-enrol`
+  is a signed-in person replacing their factor from Settings: only
+  `confirmSecondFactor` takes it, and it keeps the session the person has. A
+  shared step would let a stolen session open a fresh one, which the master-key
+  download and the factor's removal accept as a recent sign-in. Replacing an
+  existing factor, like removing it, needs a session opened in the last ten
+  minutes (`FRESH_SIGN_IN_FOR_FACTOR_MS`).
 
 ## Traps
 

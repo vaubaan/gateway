@@ -51,7 +51,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pag
   const enrolling = params[ENROL_PARAM] !== undefined;
   const step = enrolling ? await root.auth.sessions.peekLocalStep(await headers()) : null;
   const enrolment =
-    step?.step === 'enrol' && step.userId === principal.user.id && step.totpSecret
+    step?.step === 'settings-enrol' && step.userId === principal.user.id && step.totpSecret
       ? {
           secret: step.totpSecret,
           otpauth: otpauthUrl({

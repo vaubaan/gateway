@@ -317,6 +317,16 @@ export function createLocalAuthHandlers(
   }
 
   /** The step of the request when it is the expected one for this sign-in provider; else `null`. */
+  /** Whether the session behind the request was opened in the last ten minutes. */
+  async function openedFreshly(request: Request): Promise<boolean> {
+    const session = await deps.sessions.read(request.headers);
+    const createdAt = session ? Date.parse(session.record.createdAt) : NaN;
+    return (
+      Number.isFinite(createdAt) &&
+      deps.clock.now().getTime() - createdAt < FRESH_SIGN_IN_FOR_FACTOR_MS
+    );
+  }
+
   async function takeStep(
     request: Request,
     signInProviderId: string | undefined,
@@ -601,9 +611,20 @@ export function createLocalAuthHandlers(
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
       const who = guard.principal;
+      // Replacing a factor the person has needs a fresh sign-in, as removing it does: a
+      // session someone else holds must not swap the person's authenticator for theirs.
+      if ((await deps.secondFactors.has(who.user.id)) && !(await openedFreshly(request))) {
+        return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
+          tone: 'danger',
+          title: 'Sign in again first',
+          lines: [
+            'Replacing the second factor needs a session opened in the last ten minutes. Sign out, sign in again, then replace it.',
+          ],
+        });
+      }
       const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, who.user.email);
       const step = await deps.sessions.createLocalStep({
-        step: 'enrol',
+        step: 'settings-enrol',
         signInProviderId: who.signInProviderId ?? '',
         userId: who.user.id,
         login: { email: who.user.email, groups: [] },
@@ -619,7 +640,7 @@ export function createLocalAuthHandlers(
       const who = guard.principal;
       const step = await deps.sessions.takeLocalStep(request.headers);
       const clear = deps.sessions.clearPendingCookie();
-      if (step?.step !== 'enrol' || step.userId !== who.user.id || !step.totpSecret) {
+      if (step?.step !== 'settings-enrol' || step.userId !== who.user.id || !step.totpSecret) {
         return redirectWithNotice(who.sessionId, SECURITY_PAGE, ENROLMENT_EXPIRED);
       }
       const form = await readForm(request);
@@ -655,12 +676,7 @@ export function createLocalAuthHandlers(
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
       const who = guard.principal;
-      const session = await deps.sessions.read(request.headers);
-      const createdAt = session ? Date.parse(session.record.createdAt) : NaN;
-      const fresh =
-        Number.isFinite(createdAt) &&
-        deps.clock.now().getTime() - createdAt < FRESH_SIGN_IN_FOR_FACTOR_MS;
-      if (!fresh) {
+      if (!(await openedFreshly(request))) {
         return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Sign in again first',

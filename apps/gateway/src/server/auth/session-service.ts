@@ -93,7 +93,13 @@ export interface PendingLogin {
  */
 export interface PendingLocalStep {
   readonly kind: 'local-step';
-  readonly step: 'second-factor' | 'enrol';
+  /**
+   * `second-factor` and `enrol` are steps of a sign-in, taken by the sign-in routes, which open
+   * a session. `settings-enrol` is a signed-in person replacing their factor from Settings:
+   * only Settings takes it, and it never opens a session (a stolen session must not turn
+   * itself into a fresh one).
+   */
+  readonly step: 'second-factor' | 'enrol' | 'settings-enrol';
   readonly signInProviderId: string;
   /** The person signing in (their `users` row exists: the sign-in was admitted). */
   readonly userId: string;
@@ -147,7 +153,7 @@ export function isPendingLocalStep(value: unknown): value is PendingLocalStep {
   const v = value as Record<string, unknown>;
   return (
     v.kind === 'local-step' &&
-    (v.step === 'second-factor' || v.step === 'enrol') &&
+    (v.step === 'second-factor' || v.step === 'enrol' || v.step === 'settings-enrol') &&
     typeof v.signInProviderId === 'string' &&
     typeof v.userId === 'string' &&
     typeof v.login === 'object' &&

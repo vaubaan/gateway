@@ -579,6 +579,40 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe('/login/second-factor');
     });
 
+    it('a session cannot turn an enrolment from Settings into a fresh session', async () => {
+      await invitedAccount();
+      const session = sessionCookieOf(await through(await signIn(ADA, PASSWORD)));
+      const [ada] = await root.store.users.list();
+      // A session someone else holds, past its first ten minutes, cannot replace the factor.
+      clock.advance(11 * 60_000);
+      const late = await root.auth.handlers.beginSecondFactor(formWith(session, {}));
+      expect(late.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect(cookieOf(late, LOGIN_COOKIE)).toBeNull();
+      // A fresh one may, but the step it gets belongs to Settings: the sign-in route that
+      // opens a session refuses it, whatever the code.
+      const fresh = sessionCookieOf(await through(await signIn(ADA, PASSWORD)));
+      const begin = await root.auth.handlers.beginSecondFactor(formWith(fresh, {}));
+      const { cookie, step } = await stepOf(begin);
+      expect(step.step).toBe('settings-enrol');
+      const smuggled = await root.auth.handlers.enrolAtSignIn(
+        formWith(`${fresh}; ${cookie}`, { code: codeNow(step.totpSecret ?? '') }),
+        step.signInProviderId,
+      );
+      expect(smuggled.headers.get('location') ?? '').toMatch(/^\/login\?error=login-expired/);
+      expect(sessionCookieOf(smuggled)).toBeNull();
+      // Settings itself confirms it and keeps the session it has.
+      const again = await root.auth.handlers.beginSecondFactor(formWith(fresh, {}));
+      const replaced = await stepOf(again);
+      const confirmed = await root.auth.handlers.confirmSecondFactor(
+        formWith(`${fresh}; ${replaced.cookie}`, {
+          code: codeNow(replaced.step.totpSecret ?? ''),
+        }),
+      );
+      expect(confirmed.headers.get('location') ?? '').toMatch(/^\/settings\/security\?notice=/);
+      expect(sessionCookieOf(confirmed)).toBeNull();
+      expect(await root.auth.secondFactors.has(ada?.id ?? '')).toBe(true);
+    });
+
     it('a person changes their password with the current one', async () => {
       await invitedAccount();
       const session = sessionCookieOf(await through(await signIn(ADA, PASSWORD)));
