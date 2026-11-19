@@ -64,7 +64,9 @@ env-scoped. Rules common to every plugin: [services README](README.md).
   `delete_file` would send `DELETE /repos/{owner}/{repo}/`. Hence grammars, never escapes.
 - The merge-base check is a read then the merge, not atomic: a PR retargeted in between merges into
   its new base (GitHub has no "expected base").
-- `search_*` is not forced to `repo:<resource>`; `search-global` (blast `account`) is the guard.
+- `search_*` is not forced to `repo:<resource>`; `search-global` (blast `account`) is the guard,
+  in a macro-action of its own (`search`): ticking Read never lets a mission search beyond its
+  repositories.
 - A merge into an unprotected non-working branch (`develop`) lands on the fallback: open catalog
   question.
 - `add_labels` with `labels: []` would remove every label at GitHub: the grammar asks 1 to 20 names.

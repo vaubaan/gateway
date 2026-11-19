@@ -69,7 +69,12 @@ export const supabaseExamples: ToolSamples = samplesOn([EXAMPLE_STAGING_PROJECT]
     { args: { ...p, bucket: 'b1', content_base64: 'AA' }, expectDenied: true },
   ],
   [TOOL.deleteObject]: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
-  [TOOL.createSignedUrl]: [{ args: { ...p, bucket: 'b1', path: 'p.txt' } }],
+  [TOOL.createSignedUrl]: [
+    { args: { ...p, bucket: 'b1', path: 'p.txt' } },
+    { args: { ...p, bucket: 'b1', path: 'p.txt', expires_in: 86_400 } },
+    { args: { ...p, bucket: 'b1', path: 'p.txt', expires_in: 86_401 }, expectDenied: true },
+    { args: { ...p, bucket: 'b1', path: 'p.txt', expires_in: '3600' }, expectDenied: true },
+  ],
   [TOOL.getAuthConfig]: [{ args: p }],
   [TOOL.updateAuthConfig]: [{ args: { ...p, config: {} } }],
   [TOOL.listSsoProviders]: [{ args: p }],
@@ -88,7 +93,11 @@ export const supabaseExamples: ToolSamples = samplesOn([EXAMPLE_STAGING_PROJECT]
     { args: { ...p, phone: '+33612345678' } },
     { args: p },
   ],
-  [TOOL.updateUser]: [{ args: { ...p, user_id: 'u1' } }, { args: { ...p, user_id: 'bulk' } }],
+  [TOOL.updateUser]: [
+    { args: { ...p, user_id: 'u1' } },
+    { args: { ...p, user_id: 'bulk' } },
+    { args: { ...p, user_id: 'u1', password: 'a new password' } },
+  ],
   [TOOL.deleteUser]: [
     { args: { ...p, user_id: 'u1' } },
     { args: { ...p, user_id: ['u1'] }, expectDenied: true },

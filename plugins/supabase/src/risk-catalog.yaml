@@ -53,9 +53,13 @@
 # no risk, pattern or macro-action changed.
 # catalog_version 9 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 10 (2026-11-19) : `supabase.auth.user-credential-write`, the
+# password, email, phone or app_metadata of a user set by `create_user` /
+# `update_user` (whoever sets them signs in as that user, or changes what the
+# policies grant), in `change-data`.
 service: supabase
-catalog_version: 9
-catalog_date: 2026-11-13
+catalog_version: 10
+catalog_date: 2026-11-19
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -328,6 +332,21 @@ risks:
       visibility: internal
     acceptable_in_envs: [preview, staging]
 
+  - id: supabase.auth.user-credential-write
+    label: Set a user's password, email, phone or app metadata
+    reason: >-
+      Whoever sets a user's password, or an email or phone they then confirm, signs in as that
+      user: an account takeover, as a sign-in link is. app_metadata is what row-level security
+      policies and custom claims usually read to grant roles.
+    matches: supabase.project[**].user[one].credential.W
+    vector:
+      reversibility: costly
+      blast: single
+      data: secret
+      cost: free
+      visibility: internal
+    acceptable_in_envs: [preview, staging, prod]
+
   - id: supabase.auth.generate-link
     label: Generate a magic link, recovery or invite
     reason: >-
@@ -502,7 +521,8 @@ macro_actions:
       Changing what the applications hold: rows written by migrations, files in buckets, users
       and their sign-in links. One file or one user can be put back; a mass row write or a
       prefix-wide delete cannot, so those are separate permissions and are never accepted on
-      prod. A sign-in link is a permission of its own because whoever holds it is that user.
+      prod. A sign-in link, and setting a user's password, email, phone or app metadata, are
+      permissions of their own because whoever does it is that user, or grants them a role.
     entries:
       - risk_id: supabase.bulk-row-write
         quota: 50
@@ -518,6 +538,9 @@ macro_actions:
         rate_limit: { max: 30, window_seconds: 60 }
       - risk_id: supabase.auth.bulk-user-write
         quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.auth.user-credential-write
+        quota: 100
         rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: supabase.auth.generate-link
         quota: 100

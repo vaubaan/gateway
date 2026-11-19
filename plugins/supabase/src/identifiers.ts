@@ -132,6 +132,23 @@ export function pageNumber(value: unknown, fallback: number): string | null {
     : null;
 }
 
+/** The longest a signed URL lives: a day. A link outliving the mission is a share. */
+export const SIGNED_URL_TTL_MAX = 86_400;
+
+/**
+ * A signed URL's lifetime in seconds, as sent: 3600 when absent, else an integer from 1 to
+ * {@link SIGNED_URL_TTL_MAX}; `null` (the call is denied) otherwise.
+ */
+export function signedUrlTtl(value: unknown): string | null {
+  if (value === undefined) return '3600';
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= SIGNED_URL_TTL_MAX
+    ? String(value)
+    : null;
+}
+
 const BASE64_TEXT = /^[A-Za-z0-9+/]*={0,2}$/;
 
 /**

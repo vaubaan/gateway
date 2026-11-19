@@ -140,7 +140,7 @@ describe('the page, in eight sections', () => {
     expect(hero).toContain('class="pp-svc"');
     expect(words(hero)).toContain(`GitHub ${github.version}`);
     expect(words(hero)).toContain(github.description);
-    expect(words(hero)).toMatch(/18 permissions · 4 macro-actions · \d+ tools and the git remote/);
+    expect(words(hero)).toMatch(/18 permissions · 5 macro-actions · \d+ tools and the git remote/);
   });
 
   it('never says "tier" nor "severity", for any plugin', () => {

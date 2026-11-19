@@ -163,22 +163,23 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, propose, ship, administer ; catalog version 15', () => {
+  test('read, search, propose, ship, administer ; catalog version 16', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
+      'search',
       'propose',
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(15);
+    expect(githubCatalog.catalog.catalog_version).toBe(16);
   });
 
-  test('read at Careful : code and metadata run freely, the global search asks first', () => {
+  test('read at Careful reads the mission repositories only ; the global search is a macro-action of its own', () => {
     expect(gates({ read: 'careful' })).toEqual({
       'github.read-code': 'auto',
       'github.read-meta': 'auto',
-      'github.search-global': 'approval',
     });
+    expect(gates({ search: 'careful' })).toEqual({ 'github.search-global': 'approval' });
   });
 
   test('propose at Careful writes on feature branches and PRs, never on protected branches or admin surfaces', () => {

@@ -35,9 +35,12 @@
 # catalog_version 15 (2026-11-17) : `github.issue-write` (tool `update_issue`, slice
 # `issue[N].edit.W`), in
 # the macro-action `propose`.
+# catalog_version 16 (2026-11-19) : `github.search-global` leaves `read` for a
+# macro-action of its own, `search` : a mission on one repository that ticks Read
+# reads that repository only.
 service: github
-catalog_version: 15
-catalog_date: 2026-11-17
+catalog_version: 16
+catalog_date: 2026-11-19
 
 risks:
   # ---------------------------------------------------------------
@@ -436,13 +439,11 @@ risks:
 macro_actions:
   - id: read
     label: 'Read'
-    description: 'Code, metadata and global search.'
+    description: "Code and metadata of the mission's repositories."
     narrative: >-
       Reading the code, issues, pull requests, releases, workflow runs and job logs of the
       mission's repositories. Nothing here changes a repository, but what is read lands in the
       agent's context: a README or an issue body can carry instructions someone else wrote.
-      Global search is a permission of its own because it reaches beyond the mission's
-      repositories.
     entries:
       - risk_id: github.read-code
         quota: 5000
@@ -450,6 +451,15 @@ macro_actions:
       - risk_id: github.read-meta
         quota: 5000
         rate_limit: { max: 120, window_seconds: 60 }
+  - id: search
+    label: 'Search everywhere'
+    description: "GitHub's code and issue search, beyond the mission's repositories."
+    narrative: >-
+      GitHub's search reaches every repository the account can see, not only the mission's:
+      a query names any repository of the organisation, and the code it returns lands in the
+      agent's context. Kept apart from Read so that a mission on one repository reads that
+      repository only.
+    entries:
       - risk_id: github.search-global
         quota: 500
         rate_limit: { max: 30, window_seconds: 60 }

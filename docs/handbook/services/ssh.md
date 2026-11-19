@@ -57,6 +57,11 @@ the resource and its owner label (`dev | staging | prod`) its environment.
 - `./deploy.sh`, `make`, `git pull` are plain `W`: markers price what is written on the line. The
   opaque list is a deny-list of launchers and cannot be complete (`sed`'s `e`, a database client's
   shell escape, a `git` alias).
+- **`exec-write` holds every class in practice.** A mission that may write can write a script and
+  run it (`echo 'sudo rm -rf /srv' > /tmp/x; sh /tmp/x`), or copy `rm` under another name: the
+  `sudo` and destructive markers see neither. They price what the line shows, they do not contain
+  a writer. What contains it is the host account (no `sudo`, no write outside its directories)
+  and the gate: on a host that matters, writes ask first. Accepted risk A47.
 - Startup files and `PATH` are host-side: a function `ls` planted by an earlier write runs when a
   later mission calls `ls`.
 - A non-zero exit is not `isError`. An unlabelled host (or a label outside the triad) never

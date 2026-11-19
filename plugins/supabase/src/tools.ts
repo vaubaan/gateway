@@ -651,7 +651,10 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
         ...projectArg,
         bucket: { type: 'string' },
         path: { type: 'string' },
-        expires_in: { type: 'number', description: 'TTL in seconds (default 3600).' },
+        expires_in: {
+          type: 'number',
+          description: 'TTL in seconds, 1 to 86400 (a day); default 3600.',
+        },
       },
       required: ['project_ref', 'bucket', 'path'],
     },

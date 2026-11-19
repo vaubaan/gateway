@@ -219,6 +219,14 @@ export const supabaseDataModel: DataModel = {
             'but whoever holds the URL enters the user account.',
         },
         {
+          name: 'credential',
+          parent: 'user',
+          cardinalities: ['one'],
+          description:
+            'What signs in as a user or grants them roles: password, email, phone, app_metadata. ' +
+            'Written by create_user / update_user beside the user itself.',
+        },
+        {
           name: 'mfa-factor',
           parent: 'user',
           cardinalities: ['bounded'],

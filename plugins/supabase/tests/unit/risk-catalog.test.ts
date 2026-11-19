@@ -52,12 +52,12 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares service `supabase`, a version and a date', () => {
     expect(CATALOG.service).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(9);
-    expect(CATALOG.catalog_date).toBe('2026-11-13');
+    expect(CATALOG.catalog_version).toBe(10);
+    expect(CATALOG.catalog_date).toBe('2026-11-19');
   });
 
-  test('exposes 25 named risks plus the fallback', () => {
-    expect(CATALOG.risks.length).toBe(26);
+  test('exposes 26 named risks plus the fallback', () => {
+    expect(CATALOG.risks.length).toBe(27);
   });
 
   test('every entry has the required fields and a five-axis vector', () => {
@@ -223,6 +223,32 @@ describe('risk-catalog.yaml — coverage lint', () => {
     ['supabase__create_user', { email: 'a@b.c' }, ['supabase.auth.user-write-one']],
     ['supabase__update_user', { user_id: 'u1' }, ['supabase.auth.user-write-one']],
     ['supabase__update_user', { user_id: 'bulk' }, ['supabase.auth.user-write-one']],
+    // Whoever sets these signs in as the user, or grants them roles: a permission of its own.
+    ...(
+      ['password', 'email', 'email_confirm', 'phone', 'phone_confirm', 'app_metadata'] as const
+    ).map((field): [string, Record<string, unknown>, string[]] => [
+      'supabase__update_user',
+      {
+        user_id: 'u1',
+        [field]: field.endsWith('_confirm')
+          ? true
+          : field === 'app_metadata'
+            ? { role: 'admin' }
+            : 'x',
+      },
+      ['supabase.auth.user-write-one', 'supabase.auth.user-credential-write'],
+    ]),
+    [
+      'supabase__update_user',
+      { user_id: 'u1', user_metadata: { theme: 'dark' } },
+      ['supabase.auth.user-write-one'],
+    ],
+    [
+      'supabase__create_user',
+      { email: 'a@b.c', password: 'x', app_metadata: { role: 'admin' } },
+      ['supabase.auth.user-write-one', 'supabase.auth.user-credential-write'],
+    ],
+    ['supabase__create_user', { email: 'a@b.c', password: 'x' }, ['supabase.auth.user-write-one']],
     ['supabase__delete_user', { user_id: 'u1' }, ['supabase.auth.user-write-one']],
     [
       'supabase__upload_object',

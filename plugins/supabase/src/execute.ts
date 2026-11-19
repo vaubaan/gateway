@@ -494,7 +494,8 @@ async function callDataPlane(
     case TOOL.deleteObject:
       return data(objectPathOf(id), 'DELETE');
     case TOOL.createSignedUrl: {
-      const expiresIn = typeof args.expires_in === 'number' ? args.expires_in : 3600;
+      // Bounded by the classifier (`signedUrlTtl`): 1 s to a day, 3600 by default.
+      const expiresIn = Number(id('expires_in'));
       return data(
         `/storage/v1/object/sign/${enc(id('bucket'))}/${encodePath(id('path'))}`,
         'POST',

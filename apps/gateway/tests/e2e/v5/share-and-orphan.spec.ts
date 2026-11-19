@@ -146,7 +146,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // A macro-action is a toggle over its own explicit list; "Select all" holds Read whole.
   const readAction = dialog.getByRole('button', { name: 'Read', exact: true });
   await expect(readAction).toHaveAttribute('aria-pressed', 'true');
-  // "Clear", then Read alone: its three reads, nothing else.
+  // "Clear", then Read alone: its two reads, nothing else (the global search is a
+  // macro-action of its own).
   await dialog.getByRole('button', { name: 'Clear' }).click();
   await expect(submit).toBeDisabled();
   await expect(readAction).toHaveAttribute('aria-pressed', 'false');
@@ -154,11 +155,13 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(readAction).toHaveAttribute('aria-pressed', 'true');
   await expect(dialog.getByLabel(`Give ${READ_CODE}`)).toBeChecked();
   await expect(dialog.getByLabel(`Give ${READ_META}`)).toBeChecked();
-  await expect(dialog.getByLabel('Give github.search-global')).toBeChecked();
+  await expect(dialog.getByLabel('Give github.search-global')).not.toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).not.toBeChecked();
-  await expect(summary).toContainText(`3 of ${GITHUB_PERMISSIONS} permissions`);
-  // One box unticked by hand: Read is no longer whole, and the list posted is the one ticked.
-  await dialog.getByLabel('Give github.search-global').uncheck();
+  await expect(summary).toContainText(`2 of ${GITHUB_PERMISSIONS} permissions`);
+  // One box ticked and one unticked by hand: Read is no longer whole, and the list posted is
+  // the one ticked.
+  await dialog.getByLabel('Give github.search-global').check();
+  await dialog.getByLabel(`Give ${READ_META}`).uncheck();
   await expect(readAction).toHaveAttribute('aria-pressed', 'false');
   await expect(summary).toContainText(`2 of ${GITHUB_PERMISSIONS} permissions`);
   await expect(submit).toHaveText('Give access · 2 permissions');
@@ -176,7 +179,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await shareRow.getByRole('link', { name: `2 of ${GITHUB_PERMISSIONS}` }).click();
   const held = ines.getByTestId('access-permissions');
   await expect(held).toContainText(READ_CODE);
-  await expect(held).toContainText(READ_META);
+  await expect(held).toContainText('github.search-global');
+  await expect(held).not.toContainText(READ_META);
   await expect(held).not.toContainText('github.merge-protected');
   await snap(ines, 'account-shares');
 

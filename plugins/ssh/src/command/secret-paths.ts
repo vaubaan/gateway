@@ -32,7 +32,11 @@ import { hasBrace, lexCommandLine, type SimpleCommand, type Word } from '../shel
  */
 const SECRET_SEGMENT = new RegExp(
   `^(?:${[
-    String.raw`\.(?:ssh|aws|gnupg|kube|docker)`,
+    String.raw`\.(?:ssh|aws|gnupg|kube|docker|azure|vault-token)`,
+    // Shell histories hold the secrets typed on a command line; Terraform states hold the
+    // values of every resource they created.
+    String.raw`\.\w*_?history`,
+    String.raw`.+\.tfstate(?:\.backup)?`,
     String.raw`\.env.*`,
     String.raw`\.(?:netrc|pgpass|npmrc|pypirc|git-credentials|htpasswd|my\.cnf)`,
     String.raw`id_(?:rsa|dsa|ecdsa|ed25519)[\w.-]*`,
@@ -52,6 +56,12 @@ const SECRET_NAME_SAMPLES: readonly string[] = [
   '.gnupg',
   '.kube',
   '.docker',
+  '.azure',
+  '.vault-token',
+  '.bash_history',
+  '.zsh_history',
+  '.python_history',
+  'terraform.tfstate',
   '.env',
   '.env.local',
   '.netrc',
@@ -150,7 +160,11 @@ function segmentIsSecret(segment: Segment): boolean {
   );
 }
 
-/** Rules that need the path from the root : `/root`, `/dev/<disk>`, `/proc/…/mem`, `/etc/ssl/private`. */
+/**
+ * Rules that need the path from the root : `/root`, `/dev/<disk>`, `/proc/…/mem`,
+ * `/etc/ssl/private`, `/run/secrets` and `/var/run/secrets` (Docker and Kubernetes mount
+ * their secrets there).
+ */
 function rootedPathIsSecret(segments: readonly Segment[]): boolean {
   const [first, second, third] = segments;
   if (first === undefined) return false;
@@ -167,6 +181,8 @@ function rootedPathIsSecret(segments: readonly Segment[]): boolean {
       (s) => s.glob || s.text === 'mem' || s.text === 'kcore' || s.text === 'kmem',
     );
   }
+  if (first.text === 'run' && second?.text === 'secrets') return true;
+  if (first.text === 'var' && second?.text === 'run' && third?.text === 'secrets') return true;
   return first.text === 'etc' && second?.text === 'ssl' && third?.text === 'private';
 }
 

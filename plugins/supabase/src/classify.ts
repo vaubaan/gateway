@@ -92,6 +92,7 @@ import {
   mediaType,
   objectPath,
   pageNumber,
+  signedUrlTtl,
   pathIdent,
   projectRefIdent,
   sliceName,
@@ -211,6 +212,28 @@ const settingsRead = (_id: ToolIdentifiers, ref: string): Slice[] => [
 /** Single-user write : the `user[one]` cardinality marker, the slice the catalog matches. */
 function userWrite(ref: string): Slice[] {
   return [slice([...project(ref), n('user'), i('one')], 'W')];
+}
+
+/**
+ * The fields of a user that sign in as them, or grant them roles: setting one is the
+ * `credential` slice beside the user write. At creation the identity is new, so only
+ * `app_metadata` (roles, claims) counts; an update takes over an existing user.
+ */
+const CREDENTIAL_FIELDS_AT_UPDATE = [
+  'password',
+  'email',
+  'email_confirm',
+  'phone',
+  'phone_confirm',
+  'app_metadata',
+] as const;
+const CREDENTIAL_FIELDS_AT_CREATE = ['app_metadata'] as const;
+
+function userWriteWithCredential(ref: string, args: Args, fields: readonly string[]): Slice[] {
+  const touches = fields.some((field) => args[field] !== undefined && args[field] !== null);
+  return touches
+    ? [...userWrite(ref), slice([...project(ref), n('user'), i('one'), n('credential')], 'W')]
+    : userWrite(ref);
 }
 
 /** Single-object write : the `object[one]` cardinality marker under its bucket. */
@@ -334,7 +357,11 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
   },
   [TOOL.createSignedUrl]: {
     plane: 'storage',
-    ids: { ...arg('bucket', bucketId), ...arg('path', objectPath) },
+    ids: {
+      ...arg('bucket', bucketId),
+      ...arg('path', objectPath),
+      expires_in: (args) => signedUrlTtl(args.expires_in),
+    },
     produce: (id, ref) => [
       slice(
         [
@@ -420,12 +447,12 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
   [TOOL.createUser]: {
     plane: 'auth',
     // The identity does not exist yet : one user is created, whatever names it.
-    produce: (_id, ref) => userWrite(ref),
+    produce: (_id, ref, args) => userWriteWithCredential(ref, args, CREDENTIAL_FIELDS_AT_CREATE),
   },
   [TOOL.updateUser]: {
     plane: 'auth',
     ids: arg('user_id', pathIdent),
-    produce: (_id, ref) => userWrite(ref),
+    produce: (_id, ref, args) => userWriteWithCredential(ref, args, CREDENTIAL_FIELDS_AT_UPDATE),
   },
   [TOOL.deleteUser]: {
     plane: 'auth',

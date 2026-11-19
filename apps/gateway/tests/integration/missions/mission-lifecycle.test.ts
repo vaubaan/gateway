@@ -574,11 +574,10 @@ describe('missions: issue, rotate, revoke', () => {
         service,
       ).toBe(true);
     }
-    // Careful on Read: the global search, in row 2, asks first.
+    // Careful on Read: the mission's repositories only; the global search is not in it.
     expect(result.preview.accounts[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.read-meta', 'auto'],
-      ['github.search-global', 'approval'],
     ]);
     // Vercel resources carry no label: the plugin derives the env from the call.
     expect(result.mission.policy.some((e) => e.riskId === 'vercel[preview].deploy')).toBe(true);
