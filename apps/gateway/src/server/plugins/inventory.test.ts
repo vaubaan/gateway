@@ -117,6 +117,29 @@ describe('composePlugins', () => {
     expect(message).toContain('known: github, notion, miro');
   });
 
+  it('accepts an enabled id the catalog offers, not yet installed, and registers nothing for it', () => {
+    const set = composePlugins({
+      bundled: [plugin('ssh', '2.0.5')],
+      pinned: [],
+      enabled: ['notion'],
+      installable: new Set(['notion', 'github']),
+    });
+    expect(set.plugins).toEqual([]);
+    expect(set.inventory.map((e) => [e.id, e.enabled])).toEqual([['ssh', false]]);
+  });
+
+  it('still refuses an enabled id neither known nor in the catalog', () => {
+    const message = messageOf(() =>
+      composePlugins({
+        bundled: BUNDLED,
+        pinned: [],
+        enabled: ['jira'],
+        installable: new Set(['asana']),
+      }),
+    );
+    expect(message).toContain(`'jira' is not a plugin of this instance`);
+  });
+
   it('refuses two pins of one id', () => {
     const message = messageOf(() =>
       composePlugins({

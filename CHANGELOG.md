@@ -9,6 +9,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`plugins.enabled` naming a catalog plugin no longer stops the start.** Since 2.0.0-alpha.27
+  the image compiles no service plugin, yet the start refused an id of `plugins.enabled` that was
+  not installed yet (`'<id>' is not a plugin of this instance`): an instance upgraded with
+  `VAUBAAN_PLUGINS_ENABLED=github` did not start, before the plugin its accounts need could be
+  installed from the catalog. An id the catalog offers is now accepted and installed when first
+  needed; an id the catalog does not offer still stops the start.
+
 ## [2.0.0-alpha.27] - 2026-11-19
 
 ### Changed

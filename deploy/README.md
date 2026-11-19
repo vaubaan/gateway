@@ -284,7 +284,7 @@ The start stops with exit code 78, like an invalid key, and a message naming the
 | `refused:` / `the plugin failed to load`    | the plugin is not one this gateway accepts, or it throws at import: check the image you copied                                                     |
 | `pins plugin '<id>' again`                  | two directories hold the same plugin: keep one                                                                                                     |
 | `no package.json` / `no risk-catalog.yaml`  | the directory is not an unpacked catalog archive                                                                                                   |
-| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled nor pinned                                                                                           |
+| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled, pinned, installed nor in the catalog                                                                |
 | `the store holds <n> accounts of '<id>'`    | accounts exist for a plugin you disabled, or one the start could not install from the catalog: enable it, give the instance the catalog, or pin it |
 
 Nothing changes for a mission when a plugin version changes: a newer version only narrows what a

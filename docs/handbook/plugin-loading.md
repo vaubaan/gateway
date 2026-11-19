@@ -105,5 +105,6 @@ compiles its plugins in: preinstalling them from the catalog is a later step).
 ## Debug
 
 - **Exit 78 naming `plugins.dir`** → a pin directory: the message says which check (range, manifest, catalog, import, `definePlugin`, duplicate id).
+- **`plugins.enabled` names catalog ids before they are installed.** The boot checks its ids against the compiled, pinned and installed plugins _and_ `catalog-versions.json`; without the catalog ids, an instance upgraded to an image that no longer compiles a plugin stopped on `'<id>' is not a plugin of this instance` before `restoreNeededPlugins` could install it (fixed after 2.0.0-alpha.27). The catalog ids are those this release knows, not the versions feed's (read after the boot).
 - **Exit 78 "the store holds N accounts of '<id>'"** → `plugins.enabled` leaves it out, or the image no longer bundles it: enable or pin it; disconnect those accounts on an instance that still serves them.
 - **`versions feed not read`** in the log → `failure` says why (`unreachable`, `timeout`, `http-status`, `too-large`, `not-json`, `not-a-feed`); the last good report stays.

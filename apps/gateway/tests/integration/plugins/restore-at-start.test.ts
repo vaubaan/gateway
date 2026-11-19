@@ -38,12 +38,15 @@ describe('a plugin the accounts need, restored at a start', () => {
   async function start(
     bundled: typeof REPOSITORY_PLUGINS,
     catalogFetch: typeof fetch = async () => new Response('Not Found', { status: 404 }),
+    env: Record<string, string> = {},
   ): Promise<GatewayRoot> {
     await root?.close();
     root = null;
     root = await buildRoot({
       loadConfig: () =>
-        loadInstanceConfig({ env: validEnv({ VAUBAAN_STORE_PATH: join(dir, 'gateway.db') }) }),
+        loadInstanceConfig({
+          env: validEnv({ VAUBAAN_STORE_PATH: join(dir, 'gateway.db'), ...env }),
+        }),
       logWrite: () => undefined,
       requestRestart: () => undefined,
       bundled,
@@ -91,6 +94,15 @@ describe('a plugin the accounts need, restored at a start', () => {
     expect(acts).toEqual(
       expect.arrayContaining([{ act: 'plugin-activated', user: STARTUP_ACTOR_ID }]),
     );
+  });
+
+  it('installs it when plugins.enabled names it, though no image carries it yet', async () => {
+    await withNotionAccount();
+    const r = await start(WITHOUT_NOTION, async () => new Response(Buffer.from(NOTION)), {
+      VAUBAAN_PLUGINS_ENABLED: 'notion',
+    });
+    expect(r.registry.get('notion')?.plugin.version).toBe('0.2.0');
+    expect(r.registry.has('github')).toBe(false);
   });
 
   it('stops the start, naming the plugin, when the catalog cannot give it', async () => {

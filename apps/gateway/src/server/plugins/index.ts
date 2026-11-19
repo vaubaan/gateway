@@ -15,6 +15,7 @@ import {
 
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
+import { KNOWN_CATALOG_VERSIONS } from './catalog';
 import { composePlugins, type PluginInventoryEntry } from './inventory';
 import { readPinnedPlugins, type PinnedPlugin, type PinReadOptions } from './loader';
 
@@ -70,6 +71,8 @@ export interface LoadPluginsOptions {
   readonly importEntry?: PinReadOptions['importEntry'];
   /** The installed versions this start loads (`loadInstalled`); none by default. */
   readonly installed?: readonly PinnedPlugin[];
+  /** The catalog ids `plugins.enabled` may name before they are installed; default: those this release knows. */
+  readonly installable?: ReadonlySet<string>;
 }
 
 /**
@@ -95,6 +98,7 @@ export async function loadPlugins(
     pinned,
     installed: options.installed ?? [],
     enabled,
+    installable: options.installable ?? new Set(KNOWN_CATALOG_VERSIONS.keys()),
   });
   const registry = createRegistry(set.plugins);
   logInventory(logger, set.inventory);

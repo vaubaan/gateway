@@ -292,9 +292,10 @@
 # Plugins (ADR plugins-bundled-or-pinned-by-the-operator). `dir` is where you pin
 # plugins, one directory each (the image sets /plugins); a pinned plugin replaces
 # the bundled one of the same id, logged at start. `enabled` lists the plugins the
-# instance registers; absent, every bundled and pinned plugin. A pin built for
-# another SDK range, two pins of one id, an unknown id here, or accounts of a
-# plugin no longer registered stop the start (deploy/README.md "Pin a plugin").
+# instance registers; absent, every plugin. A catalog id may be named before it is
+# installed. A pin built for another SDK range, two pins of one id, an id here the
+# catalog does not offer, or accounts of a plugin no longer registered stop the start
+# (deploy/README.md "Pin a plugin").
 # `allow_unsigned` lists the plugins an administrator may install without a signature
 # (none by default; no interface sets it). `safe_mode: true` starts with the image's and
 # the pinned versions only, ignoring what was installed in Administration › Plugins: the

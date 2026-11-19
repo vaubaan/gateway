@@ -6,7 +6,9 @@
  *
  * - **The pin wins**: a pinned plugin with the id of a bundled one takes its place in
  *   the registration order, and the inventory keeps the bundled version it replaces.
- * - **`plugins.enabled`** filters what is registered; an id no plugin has stops the boot.
+ * - **`plugins.enabled`** filters what is registered; an id no plugin has and the catalog
+ *   does not offer stops the boot. A catalog id is installed when first needed (ADR
+ *   plugins-installed-when-first-needed), so naming it before it is installed is valid.
  * - **Accounts are served**: a service the store holds accounts for and no registered
  *   plugin serves stops the boot, naming the service and the count.
  */
@@ -59,6 +61,11 @@ export interface PluginSetInput {
   readonly installed?: readonly PinnedPlugin[];
   /** `plugins.enabled`; `null`: every plugin. */
   readonly enabled: readonly string[] | null;
+  /**
+   * The catalog's plugin ids this release can install (`catalog-versions.json`): an id of
+   * `plugins.enabled` among them is valid before it is installed.
+   */
+  readonly installable?: ReadonlySet<string>;
 }
 
 interface Known {
@@ -102,7 +109,8 @@ function pinnedEntry(
 /**
  * Composes the bundled plugins, the pins and `plugins.enabled`. Throws a `ConfigError`
  * on two pins of one id (the loader refuses it first; checked again here since the
- * input may come from elsewhere) or an enabled id no plugin has.
+ * input may come from elsewhere) or an enabled id no plugin has and the catalog does not
+ * offer.
  */
 export function composePlugins(input: PluginSetInput): PluginSet {
   const pins = new Map<string, PinnedPlugin>();
@@ -144,7 +152,8 @@ export function composePlugins(input: PluginSetInput): PluginSet {
   const enabled = input.enabled === null ? null : new Set(input.enabled);
   if (enabled !== null) {
     const ids = new Set(known.map((k) => k.entry.id));
-    const unknown = [...enabled].filter((id) => !ids.has(id));
+    const installable = input.installable ?? new Set<string>();
+    const unknown = [...enabled].filter((id) => !ids.has(id) && !installable.has(id));
     if (unknown.length > 0) {
       throw new ConfigError([
         {
