@@ -93,8 +93,8 @@
     },
     "vercel": {
       "name": "Vercel",
-      "version": "4.2.0",
-      "sha256": "621df655b1c7c270a8a9bf88a9fffee74b254f51f5df6862a01315ea58264cdf"
+      "version": "4.2.1",
+      "sha256": "a03544c0fdf5b307329c687a397176fde9ccf437c68b1cfad8b1ac7087a90bed"
     }
   }
 }
