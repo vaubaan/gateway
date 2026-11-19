@@ -84,11 +84,14 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
  && chown vaubaan:vaubaan /data /keys \
  && chmod 0700 /keys \
  && chmod 0755 /plugins
-COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/standalone ./
-COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/gateway/.next/static
-COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
+# The application belongs to root: the process that runs it (vaubaan) reads it and cannot
+# rewrite it, even where the platform gives no read-only root filesystem (plain `docker
+# run`, Railway). It writes /data and /keys only (and /tmp).
+COPY --from=build /app/apps/gateway/.next/standalone ./
+COPY --from=build /app/apps/gateway/.next/static ./apps/gateway/.next/static
+COPY --from=build /app/apps/gateway/public ./apps/gateway/public
 # The licence and its notices travel with the image (Apache-2.0 §4).
-COPY --chown=vaubaan:vaubaan LICENSE NOTICE ./
+COPY LICENSE NOTICE ./
 # Started as root (a platform whose volume is root-owned, e.g. Railway with
 # RAILWAY_RUN_UID=0), it gives /data and /keys to vaubaan and drops to it; otherwise it
 # execs the server as is (deploy/docker/entrypoint.sh).

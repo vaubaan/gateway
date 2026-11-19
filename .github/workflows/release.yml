@@ -43,9 +43,8 @@ env:
   # The only event that publishes. Jobs repeat the expression in `if:` because
   # `env` is not available there.
   PUBLISH: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-  # Pre-releases may be cut from the integration branch until the cutover.
+  # Every release, pre-releases included, is cut from main.
   RELEASE_BRANCH: main
-  PRERELEASE_BRANCH: v5
 
 jobs:
   # What is about to ship, decided once: version, pre-release or not, image
@@ -98,16 +97,12 @@ jobs:
           PRERELEASE: ${{ steps.plan.outputs.prerelease }}
           TAG: ${{ github.ref_name }}
         run: |
-          branches=("$RELEASE_BRANCH")
-          if [ "$PRERELEASE" = "true" ]; then branches+=("$PRERELEASE_BRANCH"); fi
-          for branch in "${branches[@]}"; do
-            if git rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null \
-              && git merge-base --is-ancestor HEAD "refs/remotes/origin/${branch}"; then
-              echo "The commit of ${TAG} is on ${branch}."
-              exit 0
-            fi
-          done
-          echo "::error title=Release refused::The commit of ${TAG} is on none of: ${branches[*]}. Release tags are cut from ${RELEASE_BRANCH} (pre-releases: also ${PRERELEASE_BRANCH})."
+          if git rev-parse --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}" >/dev/null \
+            && git merge-base --is-ancestor HEAD "refs/remotes/origin/${RELEASE_BRANCH}"; then
+            echo "The commit of ${TAG} is on ${RELEASE_BRANCH}."
+            exit 0
+          fi
+          echo "::error title=Release refused::The commit of ${TAG} is not on ${RELEASE_BRANCH}. Release tags are cut from ${RELEASE_BRANCH}."
           exit 1
       - name: Image name and commit stamp
         id: names

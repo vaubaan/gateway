@@ -19,7 +19,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main, v5]
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, labeled]
   workflow_dispatch:
   # Weekly, the whole file on the default branch: the browser tests, the image
@@ -51,7 +51,7 @@ jobs:
   # Every gate of a pull request, in one job (one billed rounding, not ten).
   # Cheapest and most decisive first, so a failing run stops early:
   #
-  #   scope        scripts/ci-scope.sh: `code=false` when only docs/** or *.md
+  #   scope        scripts/ci-scope.sh: `code=false` when only docs/** or root *.md
   #                changed; a schedule, a manual run or a release checks all
   #   sign-off     scripts/dco-check.mjs: every commit of a pull request signed off
   #   supply chain audit-gate (npm audit --omit=dev against the reviewed

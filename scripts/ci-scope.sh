@@ -6,7 +6,7 @@
 # Prints two lines, `code=<bool>` and `surface=<bool>`.
 #
 # `code=false` when every file changed between the two commits is
-# documentation (under docs/, or a Markdown file anywhere): the run then checks
+# documentation (under docs/, or a Markdown file at the root): the run then checks
 # the format of those files and the tests that read documentation, nothing
 # else. `code=true` otherwise, and when there is no base to compare with (a new
 # branch, a tag, a schedule, a manual run): the whole CI runs.
@@ -40,7 +40,10 @@ fi
 code=false
 surface=false
 while IFS= read -r path; do
-  if [[ "$path" != docs/* && "$path" != *.md ]]; then
+  # A Markdown file elsewhere may ship: a plugin's README is in its archive, the plugin
+  # kit's scaffold (AGENTS.md, SKILL.md) is published on npm. Only docs/ and the root's
+  # own pages are documentation alone.
+  if [[ "$path" != docs/* && ! ("$path" == *.md && "$path" != */*) ]]; then
     code=true
   fi
   case "$path" in
