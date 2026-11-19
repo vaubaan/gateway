@@ -221,13 +221,17 @@ export function createLocalAuthHandlers(
     return effective?.signInProvider.kind === 'local' ? effective.signInProvider : null;
   }
 
-  async function throttled(request: Request, scope: 'password' | 'forgot'): Promise<boolean> {
-    return !(await admitted(
-      request,
-      scope,
-      scope === 'forgot' ? AUTH_LIMITS.forgotPerAddress : AUTH_LIMITS.passwordPerAddress,
-      scope === 'forgot' ? AUTH_LIMITS.forgotPerInstance : AUTH_LIMITS.passwordPerInstance,
-    ));
+  async function throttled(
+    request: Request,
+    scope: 'password' | 'forgot' | 'code',
+  ): Promise<boolean> {
+    const [perAddress, perInstance] =
+      scope === 'forgot'
+        ? [AUTH_LIMITS.forgotPerAddress, AUTH_LIMITS.forgotPerInstance]
+        : scope === 'code'
+          ? [AUTH_LIMITS.codePerAddress, AUTH_LIMITS.codePerInstance]
+          : [AUTH_LIMITS.passwordPerAddress, AUTH_LIMITS.passwordPerInstance];
+    return !(await admitted(request, scope, perAddress, perInstance));
   }
 
   /** A session for the person, replacing the one the browser had; the pending cookie cleared. */
@@ -455,7 +459,7 @@ export function createLocalAuthHandlers(
 
     async secondFactorLogin(request, signInProviderId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (await throttled(request, 'password')) return loginError('too-many-attempts');
+      if (await throttled(request, 'code')) return loginError('too-many-attempts');
       const step = await takeStep(request, signInProviderId, 'second-factor');
       if (!step) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
@@ -489,7 +493,7 @@ export function createLocalAuthHandlers(
 
     async enrolAtSignIn(request, signInProviderId) {
       if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      if (await throttled(request, 'password')) return loginError('too-many-attempts');
+      if (await throttled(request, 'code')) return loginError('too-many-attempts');
       const step = await takeStep(request, signInProviderId, 'enrol');
       if (!step?.totpSecret) {
         return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
@@ -574,15 +578,23 @@ export function createLocalAuthHandlers(
       if (password !== rawField(form, 'password_again')) {
         return refused(RESET_PASSWORD_PAGE, token, 'password-mismatch');
       }
+      let signInAccount: SignInAccountRecord;
       try {
-        await deps.signInAccounts.resetPasswordFromLink(token, password);
+        signInAccount = await deps.signInAccounts.resetPasswordFromLink(token, password);
       } catch (err) {
         if (err instanceof SignInAccountError) {
           return refused(RESET_PASSWORD_PAGE, err.code === 'link-invalid' ? null : token, err.code);
         }
         throw err;
       }
-      // Every open session of that person stays: a reset is not a sign-out (deactivation is).
+      // A reset is what a person does who lost control of their password: every session
+      // open with the old one ends, wherever it is.
+      const signInProvider = await localSignInProvider(signInAccount.signInProvider);
+      if (signInProvider) {
+        const identity = localIdentity(signInProvider, signInAccount);
+        const user = await deps.store.users.getByIdentity(identity.issuer, identity.subject);
+        if (user) await deps.store.users.endSessions(user.id);
+      }
       return redirect(`${LOGIN_PAGE}?${RESET_DONE_PARAM}=done`);
     },
 

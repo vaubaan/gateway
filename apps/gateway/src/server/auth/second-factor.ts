@@ -141,14 +141,37 @@ export class SecondFactorService {
       if (step === null || !(await factors.advanceStep(userId, step))) return null;
       return { ok: true, by: 'totp', recoveryCodesLeft: await this.recoveryCodesLeft(userId) };
     }
-    const raw = await factors.readSecret(userId, 'recovery');
-    const digests = raw ? (JSON.parse(raw) as string[]) : [];
-    const digest = recoveryCodeDigest(typed);
-    if (!digests.includes(digest)) return null;
-    const left = digests.filter((d) => d !== digest);
-    await factors.writeSecret(userId, 'recovery', JSON.stringify(left));
-    this.deps.logger.info('recovery code used', { left: left.length });
-    return { ok: true, by: 'recovery-code', recoveryCodesLeft: left.length };
+    // Read, check and write one person's codes at a time: two posts of the same code at the
+    // same instant would otherwise both read it unused (one process, ADR
+    // embedded-store-sqlite-and-migrations).
+    return this.#oneAtATime(userId, async () => {
+      const raw = await factors.readSecret(userId, 'recovery');
+      const digests = raw ? (JSON.parse(raw) as string[]) : [];
+      const digest = recoveryCodeDigest(typed);
+      if (!digests.includes(digest)) return null;
+      const left = digests.filter((d) => d !== digest);
+      await factors.writeSecret(userId, 'recovery', JSON.stringify(left));
+      this.deps.logger.info('recovery code used', { left: left.length });
+      return { ok: true, by: 'recovery-code', recoveryCodesLeft: left.length } as const;
+    });
+  }
+
+  readonly #queues = new Map<string, Promise<unknown>>();
+
+  /** Runs `work` after every earlier one of the same person has settled. */
+  async #oneAtATime<T>(userId: string, work: () => Promise<T>): Promise<T> {
+    const before = this.#queues.get(userId) ?? Promise.resolve();
+    const run = before.then(work, work);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#queues.set(userId, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.#queues.get(userId) === settled) this.#queues.delete(userId);
+    }
   }
 
   /** One more wrong code; `locked` when it was the one too many. */

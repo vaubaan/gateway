@@ -109,6 +109,14 @@ export const AUTH_LIMITS = {
    */
   passwordPerAddress: { limit: 10, windowMs: MINUTE_MS },
   passwordPerInstance: { limit: 60, windowMs: MINUTE_MS },
+  /**
+   * The codes of the second factor, after a password or a sign-in provider vouched: no
+   * hash, and the person's own lockout bounds the guesses (10 in 15 min). A window of
+   * their own, so that anonymous password posts filling theirs never stop a person who
+   * already gave their password from typing the code.
+   */
+  codePerAddress: { limit: 10, windowMs: MINUTE_MS },
+  codePerInstance: { limit: 600, windowMs: MINUTE_MS },
   /** "Forgot your password": each answer may send a mail. */
   forgotPerAddress: { limit: 3, windowMs: 10 * MINUTE_MS },
   forgotPerInstance: { limit: 30, windowMs: 10 * MINUTE_MS },

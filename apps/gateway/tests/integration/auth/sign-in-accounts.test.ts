@@ -264,8 +264,12 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
     expect(refused.headers.get('location')).toBe('/login?error=account-deactivated');
   });
 
-  it('a reset link sets a new password once; the old one stops working', async () => {
+  it('a reset link sets a new password once; the old one stops working, and so does every open session', async () => {
     await invitedAccount();
+    const before = sessionCookieOf(await through(await signIn(ADA, PASSWORD)));
+    expect(
+      await root.auth.authenticator.authenticate(new Headers({ cookie: before ?? '' })),
+    ).not.toBeNull();
     const issued = await root.auth.signInAccounts.createLink({
       kind: 'reset',
       signInProviderId: 'local',
@@ -280,6 +284,11 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       }),
     );
     expect(reset.headers.get('location')).toBe('/login?reset=done');
+    // Whoever held the old password, and a session opened with it, is out.
+    expect(
+      await root.auth.authenticator.authenticate(new Headers({ cookie: before ?? '' })),
+    ).toBeNull();
+    clock.advance(1_000);
     expect((await signIn(ADA, PASSWORD)).headers.get('location')).toBe(
       '/login?error=password-refused',
     );
@@ -487,6 +496,39 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       );
     }
 
+    it('anonymous password posts filling the instance window never stop a person typing their code', async () => {
+      const { secret } = await enrolledAdministrator();
+      const asked = await signIn(OPS, OPS_PASSWORD);
+      const flood = (address: string): Request =>
+        new Request(`${PUBLIC_URL}/form`, {
+          method: 'POST',
+          headers: {
+            // Not a form: the window's slot is taken before the body is read, and no
+            // password is hashed.
+            'content-type': 'text/plain',
+            origin: PUBLIC_URL,
+            'x-real-ip': address,
+          },
+          body: 'x',
+        });
+      const perAddress = AUTH_LIMITS.passwordPerAddress.limit;
+      const addresses = Math.ceil(AUTH_LIMITS.passwordPerInstance.limit / perAddress) + 1;
+      for (let a = 0; a < addresses; a += 1) {
+        for (let i = 0; i < perAddress; i += 1) {
+          await root.auth.handlers.passwordLogin(flood(`198.51.100.${a + 1}`), 'local');
+        }
+      }
+      // The password window is full for everybody…
+      expect(
+        (await root.auth.handlers.passwordLogin(flood('198.51.100.200'), 'local')).headers.get(
+          'location',
+        ),
+      ).toBe('/login?error=too-many-attempts');
+      // …and the code of a sign-in already past its password still goes through.
+      clock.advance(30_000); // the enrolment used the current step's code
+      expect((await answerCode(asked, codeNow(secret))).headers.get('location')).toBe('/');
+    });
+
     it('a wrong code keeps the step’s ten minutes: retrying never extends them', async () => {
       const { secret } = await enrolledAdministrator();
       const asked = await signIn(OPS, OPS_PASSWORD);
@@ -530,6 +572,17 @@ describe('sign-in accounts: invitation link, password sign-in, lockout, reset', 
       expect((await answerCode(res, codeNow(secret))).headers.get('location')).toBe('/');
       const again = await answerCode(await signIn(OPS, OPS_PASSWORD), '123456');
       expect(again.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+    });
+
+    it('a recovery code is spent once, even by two posts at the same instant', async () => {
+      const { recoveryCodes } = await enrolledAdministrator();
+      const [user] = await root.store.users.list();
+      const code = recoveryCodes[0] ?? '';
+      const [a, b] = await Promise.all([
+        root.auth.secondFactors.check(user?.id ?? '', code),
+        root.auth.secondFactors.check(user?.id ?? '', code),
+      ]);
+      expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
     });
 
     it('an administrator resets a person’s second factor: their next sign-in enrols again', async () => {

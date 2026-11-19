@@ -68,6 +68,13 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   download and the factor's removal accept as a recent sign-in. Replacing an
   existing factor, like removing it, needs a session opened in the last ten
   minutes (`FRESH_SIGN_IN_FOR_FACTOR_MS`).
+- The codes of the second factor have windows of their own (`AUTH_LIMITS.code*`): a person
+  past their password, or their sign-in provider, types the code even while anonymous
+  password posts fill the password window. A recovery code is read, checked and spent one
+  post at a time per person (`SecondFactors`), so two posts of one code never both pass.
+- A password reset by link ends every open session of the person (`users.endSessions`): it
+  is what someone does who lost control of the password. A change from Settings, made with
+  the current password, keeps them; "Sign out everywhere" is beside it.
 
 ## Traps
 
@@ -120,7 +127,8 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 ## Debug
 
 - **`too-many-attempts` for everyone** → no client address known, the
-  instance window is full: it slides in ten minutes, or restart (in-memory).
+  instance window is full: it slides in ten minutes, or restart (in-memory). The code of the
+  second factor has its own window: a person already past the password is not stopped.
 - **Boot exit 78 on `bootstrap_token`** → no administrator, no token, no admin
   rule: no way in.
 - **`second-factor-locked`** → ten wrong codes in fifteen minutes: wait
