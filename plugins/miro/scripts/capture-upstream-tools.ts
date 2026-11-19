@@ -11,6 +11,12 @@
  * writes the file, and prints how the new list differs from the model. The
  * token stays in this process's memory and is never printed or written.
  *
+ * Miro's list depends on the team chosen (its features: tables, prototypes,
+ * blog posts…), so a tool of the model the list does not show is KEPT, with
+ * its previous declaration: a capture never takes a tool away from the teams
+ * that have it. `--drop-gone` writes the live list alone, once Miro is known
+ * to have retired a tool.
+ *
  * Then: run the plugin's tests (`tools.ts` refuses a list with a tool or a
  * locating argument it does not model), adapt the model where it differs,
  * bump the plugin version.
@@ -23,6 +29,7 @@ import type { AddressInfo } from 'node:net';
 import { mcpRequest } from '@vaubaan/plugin-sdk';
 
 import { toolDrift } from '../src/execute.ts';
+import { UPSTREAM_TOOL_LIST } from '../src/tools.ts';
 import { MIRO_MCP_SERVER, MIRO_MCP_URL, MIRO_OAUTH } from '../src/identity.ts';
 import { REQUIRED_SCOPES } from '../src/credential.ts';
 
@@ -137,19 +144,28 @@ async function main(): Promise<void> {
     const tools = (listed as { tools?: unknown } | null)?.tools;
     if (!Array.isArray(tools)) throw new Error(`${MIRO_MCP_URL} answered no tool list`);
     const drift = toolDrift(listed);
+    const dropGone = process.argv.includes('--drop-gone');
+    const kept = dropGone
+      ? []
+      : UPSTREAM_TOOL_LIST.tools.filter((tool) => drift.gone.includes(tool.name));
     writeFileSync(
       OUTPUT,
       `${JSON.stringify(
         {
           source: `tools/list of ${MIRO_MCP_URL}`,
           captured_at: new Date().toISOString().slice(0, 10),
-          tools,
+          tools: [...(tools as unknown[]), ...kept],
         },
         null,
         2,
       )}\n`,
     );
-    say(`Wrote ${tools.length} tools to src/upstream-tools.json.`);
+    say(`Wrote ${tools.length + kept.length} tools to src/upstream-tools.json.`);
+    if (kept.length > 0) {
+      say(
+        `Kept from the previous model, absent from this team's list: ${kept.map((t) => t.name).join(', ')} (--drop-gone to remove them).`,
+      );
+    }
     say(`Differences with the previous model: ${JSON.stringify(drift, null, 2)}`);
     say(
       'In Miro, remove the app "Vaubaan Gateway (tool list capture)" from your profile settings.',

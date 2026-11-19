@@ -21,7 +21,7 @@ the decision in the ADR
 | ----------------------------------- | ------------------------------------------------------------------------------------------ |
 | `src/identity.ts`                   | `SERVICE_ID`, Miro's URLs, `MIRO_MCP_SERVER`, OAuth endpoints, upstream names, `TOOL`      |
 | `src/identifiers.ts`                | The grammars: board ref, board URL, item id, comment id; `boardUrlOf`                      |
-| `src/upstream-tools.json`           | Miro's `tools/list`, captured verbatim on 2026-10-23 (51 tools)                            |
+| `src/upstream-tools.json`           | Miro's `tools/list` of 2026-11-19 (42 tools) and 10 a team's features may hide (52)        |
 | `src/tools.ts`                      | The 28 tools: Miro's, with `board` / `item_id` for `miro_url`, plus `list_boards`          |
 | `src/call.ts`                       | `readMiroCall`: the one reader of a call, for `classify` and `execute`                     |
 | `src/classify.ts`                   | The slices of a call                                                                       |
@@ -61,7 +61,7 @@ run nothing after the upgrade: reconnect them from Accounts.
 ## Tools
 
 `miro__list_boards` (answered by the gateway from the mission's boards) and
-27 of Miro's 51 tools, renamed `miro__<name>`: `board_create`,
+27 of Miro's 52 known tools, renamed `miro__<name>`: `board_create`,
 `canvas_search`, `canvas_read_as_svg`, `canvas_create_from_svg`,
 `canvas_update_from_svg`, `canvas_get_canvas_composer_skill`,
 `canvas_load_format_skill`, `comment_list_comments`, `comment_create`,
@@ -119,7 +119,10 @@ npm run capture-upstream-tools --workspace @vaubaan/plugin-miro
 ```
 
 Open the printed address, sign in, choose a team, allow. The script writes
-`src/upstream-tools.json` verbatim and prints the differences with the
-previous model; then run the plugin's tests, align the model, bump the
-version. Remove the throw-away app "Vaubaan Gateway (tool list capture)"
+`src/upstream-tools.json` and prints the differences with the previous
+model; then run the plugin's tests, align the model, bump the version.
+Miro's list depends on the team's features (tables, prototypes, blog
+posts…): a tool of the model the team does not list is kept, so a capture
+never takes a tool away from the teams that have it. `--drop-gone` drops
+them, once Miro is known to have retired a tool. Remove the throw-away app "Vaubaan Gateway (tool list capture)"
 from your Miro profile afterwards.

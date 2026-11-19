@@ -126,10 +126,11 @@ describe('miro credential — OAuth with a client the gateway registers itself',
 });
 
 describe('miro tools — built from the upstream list', () => {
-  test("the list is Miro's tools/list, captured on 2026-10-23 : no drift against itself", () => {
-    expect(UPSTREAM_TOOL_LIST.capturedAt).toBe('2026-10-23');
+  test("the list is Miro's tools/list, captured on 2026-11-19 : no drift against itself", () => {
+    expect(UPSTREAM_TOOL_LIST.capturedAt).toBe('2026-11-19');
     expect(UPSTREAM_TOOL_LIST.source).toBe('tools/list of https://mcp.miro.com/');
-    expect(UPSTREAM_TOOL_LIST.tools).toHaveLength(51);
+    // 42 listed for the capturing team, and 10 of the previous capture its features hide.
+    expect(UPSTREAM_TOOL_LIST.tools).toHaveLength(52);
     expect(toolDrift({ tools: UPSTREAM_TOOL_LIST.tools })).toEqual({
       gone: [],
       unmodelled: [],
@@ -144,7 +145,7 @@ describe('miro tools — built from the upstream list', () => {
       expect(offered !== leftOut, tool.name).toBe(true);
     }
     expect(Object.keys(LOCATOR)).toHaveLength(27);
-    expect(Object.keys(LEFT_OUT_UPSTREAM_TOOLS)).toHaveLength(24);
+    expect(Object.keys(LEFT_OUT_UPSTREAM_TOOLS)).toHaveLength(25);
     // Every upload URL stays out : a presigned URL is a credential of its own.
     for (const name of [
       UPSTREAM_TOOL.imageGetUploadUrl,

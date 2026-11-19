@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-miro",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Miro boards, through Miro's official MCP server",

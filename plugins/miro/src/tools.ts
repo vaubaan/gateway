@@ -7,8 +7,10 @@
  * ADR      : docs/decisions/rewrap-official-mcps.md.
  *
  * `upstream-tools.json` is Miro's `tools/list`, captured verbatim on
- * 2026-10-23 by `npm run capture-upstream-tools --workspace
- * @vaubaan/plugin-miro` (51 tools).
+ * 2026-11-19 by `npm run capture-upstream-tools --workspace
+ * @vaubaan/plugin-miro` (42 tools), plus the 10 tools of the 2026-10-23
+ * capture that team's features did not show (tables, prototypes, blog posts):
+ * Miro's list depends on the team, and the capture keeps what it hides.
  *
  * The gateway's declaration of a tool is Miro's, with these changes :
  *   - the locator. Miro's tools take the board as a URL (`miro_url`, or

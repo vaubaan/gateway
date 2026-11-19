@@ -9,6 +9,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Miro (plugin 0.5.1): the tool list captured again.** Miro's descriptions of five tools are
+  today's. Its new `content_search` is left out: it searches every board, space and call recording
+  the person can open, beyond the mission's boards (agents keep `list_boards`). Tables, prototypes
+  and blog posts stay modelled: Miro lists them only for a team that has those features, and the
+  capture script now keeps a tool a team does not list (`--drop-gone` to remove one).
+
 ### Fixed
 
 - **Vercel: an account scoped to one project reads its project and deployments** (plugin 4.2.2).

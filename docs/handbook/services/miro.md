@@ -72,7 +72,10 @@ One resource per board; no environment. Rules common to every plugin:
 - **The tool list captured**: recapture with a Miro account,
   `npm run capture-upstream-tools --workspace @vaubaan/plugin-miro` (throw-away client, loopback
   redirect, PKCE; the token never leaves the process; prints the differences). Then run the tests,
-  align `LOCATOR`, `call.ts`, `classify.ts`, bump the version. Every discovery compares the live
+  align `LOCATOR`, `call.ts`, `classify.ts`, bump the version. **Trap:** Miro's `tools/list`
+  depends on the team chosen at consent (tables, prototypes and blog posts are missing for a team
+  without those features), so a `gone` tool is usually not retired: the script keeps it (2026-11-19:
+  10 tools kept); `--drop-gone` only once Miro announced the removal. Every discovery compares the live
   list and logs `Miro's MCP tools differ from the plugin's model; capture them again`.
 
 ## Debug

@@ -207,6 +207,8 @@ export const LEFT_OUT_UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
   canvas_get_html_upload_url: UPLOAD_URL,
   prototype_get_upload_url: UPLOAD_URL,
   [UPSTREAM_TOOL.userWhoAmI]: "reads the connecting person's own profile ; no task needs it",
+  content_search:
+    "searches every board, space and call recording the person can open, beyond the mission's ; agents get list_boards",
   user_search_organization_users:
     'searches the people of the whole organisation (names, emails) : no resource of the mission bounds it',
   get_brand_context:
