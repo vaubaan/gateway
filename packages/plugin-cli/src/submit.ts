@@ -31,6 +31,8 @@ export const runCommand: Runner = (command, args, cwd) =>
 
 export interface Declaration {
   readonly id: string;
+  /** The service's name (`displayName`), shown before the plugin is installed. */
+  readonly name: string;
   readonly repo: string;
   readonly path: string;
   readonly version: string;
@@ -54,6 +56,13 @@ const SEMVER = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 export function declarationProblems(declaration: Declaration): string[] {
   const problems: string[] = [];
   if (!isPluginId(declaration.id)) problems.push(`id ${declaration.id} is not a lowercase slug`);
+  if (
+    declaration.name.trim() === '' ||
+    declaration.name.length > 80 ||
+    declaration.name.includes('#')
+  ) {
+    problems.push(`name ${declaration.name} must be 1 to 80 characters, without #`);
+  }
   if (!/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(declaration.repo)) {
     problems.push(`repo ${declaration.repo} is not https://github.com/<owner>/<repo>`);
   }
@@ -75,6 +84,7 @@ export function declarationProblems(declaration: Declaration): string[] {
 export function declarationText(declaration: Declaration): string {
   return [
     `id: ${declaration.id}`,
+    `name: ${declaration.name}`,
     `repo: ${declaration.repo}`,
     ...(declaration.path === '.' ? [] : [`path: ${declaration.path}`]),
     `version: ${declaration.version}`,
@@ -90,6 +100,14 @@ function pluginIdOf(pluginDir: string): string {
   const match = /export const SERVICE_ID = '([^']+)'/.exec(identity);
   if (!match?.[1]) throw new ArchiveError('src/identity.ts declares no SERVICE_ID');
   return match[1];
+}
+
+/** The service's name, from the `displayName` of `src/index.ts` (where `init` writes it). */
+function serviceNameOf(pluginDir: string): string {
+  const entry = readFileSync(join(pluginDir, 'src', 'index.ts'), 'utf8');
+  const match = /displayName:\s*(['"])(.+?)\1/.exec(entry);
+  if (!match?.[2]) throw new ArchiveError("src/index.ts declares no displayName: '…'");
+  return match[2].replace(/\\(['"])/g, '$1');
 }
 
 /** The declaration of the project's HEAD, after checking it is a commit the catalog can build. */
@@ -124,6 +142,7 @@ export function declarationOf(
   }
   const declaration: Declaration = {
     id: pluginIdOf(pluginDir),
+    name: serviceNameOf(pluginDir),
     repo,
     path: relative(top, pluginDir) || '.',
     version: manifest.version,

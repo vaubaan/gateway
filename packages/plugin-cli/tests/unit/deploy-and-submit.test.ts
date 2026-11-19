@@ -175,6 +175,7 @@ describe('deploy', () => {
 
 const DECLARATION: Declaration = {
   id: 'acme-crm',
+  name: 'Acme CRM',
   repo: 'https://github.com/acme/vaubaan-plugin-crm',
   path: '.',
   version: '0.1.0',
@@ -199,6 +200,7 @@ describe('the catalog declaration', () => {
     expect(declarationText(DECLARATION)).toBe(
       [
         'id: acme-crm',
+        'name: Acme CRM',
         'repo: https://github.com/acme/vaubaan-plugin-crm',
         'version: 0.1.0',
         `commit: ${'a'.repeat(40)}`,
@@ -220,8 +222,9 @@ describe('the catalog declaration', () => {
         commit: 'abc',
         version: 'one',
         owners: ['not an owner'],
+        name: '',
       }),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
   });
 });
 
@@ -266,6 +269,7 @@ describe('submit', () => {
     const { run } = runner();
     expect(declarationOf(dir, { run })).toEqual({
       id: 'acme-crm',
+      name: 'Acme Crm',
       repo: 'https://github.com/acme/vaubaan-plugin-crm',
       path: '.',
       version: '0.1.0',
