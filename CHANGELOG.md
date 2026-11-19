@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.28] - 2026-11-19
+
 ### Fixed
 
 - **An instance on Fly or Railway starts again.** Since 2.0.0-alpha.27 the image compiles no
@@ -3093,7 +3095,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.27...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.28...HEAD
+[2.0.0-alpha.28]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.27...v2.0.0-alpha.28
 [2.0.0-alpha.27]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.26...v2.0.0-alpha.27
 [2.0.0-alpha.26]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.25...v2.0.0-alpha.26
 [2.0.0-alpha.25]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.24...v2.0.0-alpha.25
