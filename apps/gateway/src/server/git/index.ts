@@ -12,6 +12,7 @@ import type { InstanceConfig } from '../config';
 import type { AccountsModule } from '../accounts';
 import type { ExecutionModule } from '../execution';
 import type { Logger } from '../logging';
+import type { PluginCallGate } from '../plugins/call-gate';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { GitDoor } from './door';
@@ -27,6 +28,8 @@ export interface GitModuleDeps {
   readonly accounts: Pick<AccountsModule, 'credentials'>;
   readonly logger: Logger;
   readonly clock?: Clock;
+  /** Holds a service against a swap of its plugin's version; absent: nothing held. */
+  readonly callGate?: PluginCallGate;
   /** Interval of the temporary-ref sweeper (tests). */
   readonly sweepIntervalMs?: number;
 }
@@ -68,6 +71,7 @@ export function createGitModule(deps: GitModuleDeps): GitModule {
     credentials,
     credentialCache,
     logger,
+    ...(deps.callGate ? { callGate: deps.callGate } : {}),
   });
   const sweeper = startPendingRefSweeper({
     pendingRefs: deps.store.pendingRefs,

@@ -104,7 +104,7 @@ describe('Administration › Plugins', () => {
     expect(html).not.toContain('href="/reference/stripe"');
     // Nothing on the page installs anything; it says how a plugin changes, and links the guide.
     expect(html).toContain(PIN_A_PLUGIN_DOC);
-    expect(page).toContain('A plugin installed here runs from the next start, on trial.');
+    expect(page).toContain('A plugin installed here runs as soon as it is activated, on trial');
   });
 
   it('shows no notice when the feed reports nothing, and says when and where it was read', () => {

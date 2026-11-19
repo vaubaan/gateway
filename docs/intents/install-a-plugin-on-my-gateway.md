@@ -3,7 +3,7 @@ title: Install a plugin on my gateway
 status: proposed
 actors: [administrator, agent]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-19
 ---
 
 # Install a plugin on my gateway
@@ -60,6 +60,13 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 status: implemented
 requires: plugin, administrator
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-view.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+
+### Update a plugin without restarting the gateway
+
+status: implemented
+requires: plugin, administrator
+anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/plugins/call-gate.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/integration/plugins/swap-during-call.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Roll back a plugin to a kept version

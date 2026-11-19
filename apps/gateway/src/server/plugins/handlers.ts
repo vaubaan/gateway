@@ -192,7 +192,10 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
         if (digest === null) return problem('not-found');
         const result = await deps.install.activate(digest, field(form, CONFIRM_FIELD) ?? '', actor);
         if (!result.ok) return problem(result.code, result.message);
-        return back({ [DONE_PARAM]: 'activated', [VERSION_PARAM]: digest });
+        return back({
+          [DONE_PARAM]: result.live === true ? 'activated-live' : 'activated',
+          [VERSION_PARAM]: digest,
+        });
       }),
 
     refuse: (request) =>

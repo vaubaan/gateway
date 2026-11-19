@@ -58,6 +58,7 @@ import {
   bundledInventory,
   checkAccountsServed,
   installedDirFor,
+  loadInstalled,
   loadPlugins,
   unservedServices,
   type LoadedPlugins,
@@ -90,6 +91,9 @@ import {
   RegistryCatalogIndex,
 } from './registry';
 import { startInstalledPlugins } from './installed-plugins';
+import { createPluginCallGate, type PluginCallGate } from '../plugins/call-gate';
+import type { LiveActivation } from '../plugins/install-service';
+import type { PluginVersionRecord } from '../store/repositories/plugin-versions';
 import type { InstalledAdmission } from '../plugins/installed';
 import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
@@ -133,6 +137,8 @@ export interface GatewayRoot {
     readonly handlers: PluginHandlers;
     /** `<data dir>/plugins`; `null` for a store in memory. */
     readonly dir: string | null;
+    /** Holds each call's service against a swap of its plugin's version (`plugins/call-gate.ts`). */
+    readonly calls: PluginCallGate;
   };
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
@@ -294,12 +300,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     checkSelfResources(config, registry);
     checkBrokeredPlugins(registry);
     checkHostToolNames(registry);
-    catalog.fill(
-      new KeptCatalogIndex(
-        new RegistryCatalogIndex(registry),
-        await store.pluginVersions.keptRiskIds(),
-      ),
-    );
+    // Grows when a version is swapped in while the instance runs: the replaced version's
+    // permissions stay known, as a start would read them from the kept versions.
+    const keptRiskIds = new Set(await store.pluginVersions.keptRiskIds());
+    catalog.fill(new KeptCatalogIndex(new RegistryCatalogIndex(registry), keptRiskIds));
+    const callGate = createPluginCallGate();
     let notifySignerAdded: (name: string) => void = () => undefined;
     // The missions are read through the authority module, built with the modules below.
     let activeMissionsOf: (
@@ -359,6 +364,18 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
           ? null
           : `plugins.enabled does not list ${pluginId}: this instance runs only the plugins it names`,
       loadNow: (pin) => addPluginNow(config, registry, inventory.entries, pin),
+      activateNow: async (version) =>
+        activatePluginNow(version, {
+          config,
+          registry,
+          entries: inventory.entries,
+          dir: installedDir,
+          gate: callGate,
+          keptRiskIds,
+          versions: store.pluginVersions,
+          admit: await installedAdmission(config, store, bundled),
+          logger,
+        }),
       catalog: (pluginId, version) => {
         const known = KNOWN_CATALOG_VERSIONS.get(pluginId);
         return fetchCatalogArchive(pluginId, version, {
@@ -404,6 +421,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         encryptor,
         pluginEntries: inventory.entries,
         pluginInstall,
+        callGate,
       },
       deps,
       opened,
@@ -444,6 +462,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       pluginInstall: {
         service: pluginInstall,
         dir: installedDir,
+        calls: callGate,
         handlers: createPluginHandlers({
           publicUrl: config.publicUrl,
           authenticator: modules.auth.authenticator,
@@ -692,6 +711,8 @@ interface RootBase {
   readonly pluginEntries: readonly PluginInventoryEntry[];
   /** Installing plugins: the `vaubaan` plugin acts reach it through a narrow port. */
   readonly pluginInstall: PluginInstallService;
+  /** Holds each call's service against a swap of its plugin's version. */
+  readonly callGate: PluginCallGate;
 }
 
 type RootModules = Pick<
@@ -993,6 +1014,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     telemetry: telemetry.sink,
     hostExecutes: vaubaan.hostExecutes,
     notifications: notifications.events,
+    callGate: base.callGate,
   });
   // A discovery the door scheduled after a creating call finishes before the store closes.
   opened.push(() => accounts.discoveryAfterCall.stop());
@@ -1004,6 +1026,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     execution,
     accounts,
     logger,
+    callGate: base.callGate,
   });
   opened.push(() => git.sweeper.stop());
   return {
@@ -1235,6 +1258,106 @@ function addPluginNow(
     ...(pin.trust !== undefined ? { trust: pin.trust } : {}),
   });
   return null;
+}
+
+/**
+ * Activates an installed version in the running instance (ADR
+ * plugins-activated-by-an-administrator-on-trial, amendment 2026-11-19): its trial as a start
+ * runs it (the folder against its manifest, its signature against today's signers, its own
+ * examples), then the boot's checks over the registry it would make, then the swap, once no
+ * call of the service runs (`PluginCallGate`). A plugin the image or a pin serves, safe mode
+ * and an instance without a data directory keep the trial for the next start.
+ */
+async function activatePluginNow(
+  version: PluginVersionRecord,
+  input: {
+    readonly config: InstanceConfig;
+    readonly registry: PluginRegistry;
+    readonly entries: readonly PluginInventoryEntry[];
+    readonly dir: string | null;
+    readonly gate: PluginCallGate;
+    readonly keptRiskIds: Set<string>;
+    readonly versions: Store['pluginVersions'];
+    readonly admit: InstalledAdmission;
+    readonly logger: Logger;
+  },
+): Promise<LiveActivation> {
+  const { config, registry, dir } = input;
+  const id = version.pluginId;
+  if (dir === null || config.plugins.safeMode) return { kind: 'next-start' };
+  if (config.plugins.enabled !== null && !config.plugins.enabled.includes(id)) {
+    return { kind: 'next-start' };
+  }
+  const entry = input.entries.find((e) => e.id === id);
+  if (entry !== undefined && entry.origin !== 'installed') return { kind: 'next-start' };
+  const loaded = await loadInstalled(
+    dir,
+    [
+      {
+        digest: version.digest,
+        pluginId: id,
+        version: version.version,
+        state: 'trial',
+        trust: version.trust,
+      },
+    ],
+    { sdkVersion: SDK_VERSION, logger: input.logger, admit: input.admit },
+  );
+  const outcome = loaded.outcomes[0];
+  const pin = loaded.plugins[0];
+  if (outcome?.outcome === 'failed') return { kind: 'failed', failure: outcome.failure };
+  if (pin === undefined) return { kind: 'failed', failure: 'the version did not load' };
+  const replaced =
+    (await input.versions.list()).find((v) => v.pluginId === id && v.state === 'active')?.digest ??
+    null;
+  const previous = registry.get(id);
+  if (previous === undefined) {
+    const refused = addPluginNow(config, registry, input.entries, pin);
+    return refused === null
+      ? { kind: 'activated', replaced }
+      : { kind: 'failed', failure: refused };
+  }
+  try {
+    const candidate = createRegistry(
+      registry.all().map((r) => (r.plugin.id === id ? pin.plugin : r.plugin)),
+    );
+    checkSelfResources(config, candidate);
+    checkBrokeredPlugins(candidate);
+    checkHostToolNames(candidate);
+  } catch (err) {
+    return {
+      kind: 'failed',
+      failure: err instanceof Error ? (err.message.split('\n')[0] ?? err.message) : String(err),
+    };
+  }
+  try {
+    await input.gate.swap(id, () => {
+      registry.replace(pin.plugin);
+      for (const { entry: risk } of previous.catalog.entries) input.keptRiskIds.add(risk.id);
+      const entries = input.entries as PluginInventoryEntry[];
+      const at = entries.findIndex((e) => e.id === id);
+      const next: PluginInventoryEntry = {
+        id,
+        name: pin.plugin.displayName,
+        version: pin.version,
+        origin: 'installed',
+        replaces: entries[at]?.replaces ?? null,
+        enabled: true,
+        path: pin.path,
+        ...(pin.trust !== undefined ? { trust: pin.trust } : {}),
+      };
+      if (at === -1) entries.push(next);
+      else entries[at] = next;
+    });
+  } catch (err) {
+    return { kind: 'failed', failure: err instanceof Error ? err.message : String(err) };
+  }
+  input.logger.info(`plugin ${id} ${version.version} activated without a restart`, {
+    plugin: id,
+    version: version.version,
+    replaced,
+  });
+  return { kind: 'activated', replaced };
 }
 
 /**

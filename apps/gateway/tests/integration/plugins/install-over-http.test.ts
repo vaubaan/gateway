@@ -141,7 +141,7 @@ describe('Administration › Plugins over HTTP', () => {
     return new URL(response.headers.get('location') ?? '', PUBLIC_URL);
   }
 
-  it('uploads, refuses a wrong confirmation, activates, and restarts, each audited', async () => {
+  it('uploads, refuses a wrong confirmation, runs the trial at activation and shows its failure, then restarts, each audited', async () => {
     const uploaded = await post(PLUGIN_ACTIONS.upload, uploadForm(archive('1.0.0')));
     expect(uploaded.status).toBe(303);
     const back = location(uploaded);
@@ -161,10 +161,11 @@ describe('Administration › Plugins over HTTP', () => {
     const right = new FormData();
     right.set(DIGEST_FIELD, digest);
     right.set(CONFIRM_FIELD, 'acme');
-    expect(location(await post(PLUGIN_ACTIONS.activate, right)).searchParams.get('done')).toBe(
-      'activated',
-    );
-    expect((await root.store.pluginVersions.get(digest))?.state).toBe('trial');
+    // The archive's code is no plugin: its trial runs at once and fails, shown on the page.
+    const activated = location(await post(PLUGIN_ACTIONS.activate, right));
+    expect(activated.searchParams.get('problem')).toBe('did-not-load');
+    expect(activated.searchParams.get('detail')).toBeTruthy();
+    expect((await root.store.pluginVersions.get(digest))?.state).toBe('failed');
 
     const restarted = await post(PLUGIN_ACTIONS.restart, new FormData());
     expect(location(restarted).searchParams.get('done')).toBe('restarting');
@@ -175,7 +176,7 @@ describe('Administration › Plugins over HTTP', () => {
       e.kind === 'admin' ? [e.act] : [],
     );
     expect(acts).toEqual(
-      expect.arrayContaining(['plugin-uploaded', 'plugin-activated', 'instance-restarted']),
+      expect.arrayContaining(['plugin-uploaded', 'plugin-trial-ended', 'instance-restarted']),
     );
   });
 

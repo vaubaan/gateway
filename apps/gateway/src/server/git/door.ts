@@ -50,6 +50,7 @@ import type { InFlightPushes } from './in-flight';
 import { GIT_DOOR_SEGMENT, parseGitPath, type GitPath } from './paths';
 import { PushSide } from './push-side';
 import type { Scope } from './scope';
+import type { PluginCallGate } from '../plugins/call-gate';
 import type { RelayJobs, UpstreamDeps } from './upstream';
 import { gitText, lfsUnsupported, unauthorized } from './wire';
 import { oneLine, refusalLine } from './words';
@@ -59,6 +60,8 @@ export interface GitDoorDeps extends UpstreamDeps {
   readonly registry: PluginRegistry;
   /** The MCP door's admission: the same instance (`ExecutionDoor.admission`). */
   readonly admission: MissionAdmission;
+  /** Holds the service against a swap of its plugin's version; absent: nothing held. */
+  readonly callGate?: PluginCallGate;
   /** The git pipeline: the execution door's stages, the relay as upstream stage. */
   readonly pipeline: CallPipeline;
   readonly jobs: RelayJobs;
@@ -103,6 +106,18 @@ export class GitDoor {
   }
 
   async handle(request: Request): Promise<Response> {
+    const path = parseGitPath(new URL(request.url));
+    if (!path || path.service === '' || !this.deps.callGate) return this.serve(request);
+    // One version of the plugin for the whole exchange (`plugins/call-gate.ts`).
+    const release = await this.deps.callGate.enter(path.service);
+    try {
+      return await this.serve(request);
+    } finally {
+      release();
+    }
+  }
+
+  private async serve(request: Request): Promise<Response> {
     const path = parseGitPath(new URL(request.url));
     if (!path) return gitText(HTTP_NOT_FOUND, 'Not a git path.');
     if (path.endpoint.kind === 'lfs') return lfsUnsupported();

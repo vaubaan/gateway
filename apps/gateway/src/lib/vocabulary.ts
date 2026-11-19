@@ -1119,7 +1119,7 @@ export const PLUGIN_WORDS = {
     'not-a-feed': 'the answer was not a versions feed this gateway reads',
   },
   changes:
-    'A plugin installed here runs from the next start, on trial. A plugin pinned in the plugins directory changes when the operator changes the directory, then restarts.',
+    'A plugin installed here runs as soon as it is activated, on trial: if it does not load, the previous version keeps serving. A plugin pinned in the plugins directory changes when the operator changes the directory, then restarts.',
   howToPin: 'How to pin a plugin',
   installed: 'installed here',
   replacesImage: 'replaces the image’s',
@@ -1169,8 +1169,8 @@ export const INSTALL_WORDS = {
       ? 'No active mission uses this service'
       : `${formatNumber(n)} active ${n === 1 ? 'mission uses' : 'missions use'} this service`,
   typeToConfirm: (id: string) => `Type ${id} to confirm`,
-  activate: 'Activate at the next start',
-  goBack: 'Go back to this version at the next start',
+  activate: 'Activate',
+  goBack: 'Go back to this version',
   refuse: 'Refuse',
   followImage: 'Stop using the installed version',
   cannotRun: 'This gateway cannot run it',
@@ -1179,13 +1179,14 @@ export const INSTALL_WORDS = {
     'plugins.safe_mode is on: this start runs the image’s plugins and the operator’s pins only. Every installed version is kept as it was; turn safe mode off and restart to run them again.',
   restartTitle: 'A restart applies the change',
   restartLede:
-    'A version marked for a trial starts at the next start. If it does not load, the previous version stays and this page says why.',
+    'A version of a plugin the image or the plugins directory provides starts on trial at the next start. If it does not load, the previous version stays and this page says why.',
   restart: 'Restart now',
   done: {
     uploaded: 'Uploaded. It runs nothing until it is activated.',
     'catalog-installed':
       'Downloaded from the catalog, signature verified. It runs nothing until it is activated.',
     activated: 'Marked to start on trial at the next start.',
+    'activated-live': 'Active: the next call of this service runs this version.',
     refused: 'Refused and deleted.',
     'followed-image': 'The installed version is no longer used from the next start.',
     restarting: 'Restarting: this page answers again once the instance is back.',
@@ -1216,7 +1217,7 @@ export const INSTALL_WORDS = {
     'catalog-unreachable': 'The catalog did not answer; nothing was installed',
     'not-the-catalog-version': 'The catalog served another plugin or version; nothing was kept',
     'not-enabled': 'This instance runs only the plugins its configuration names',
-    'did-not-load': 'The plugin did not load; the instance runs as before',
+    'did-not-load': 'The version did not pass its trial; what ran before keeps running',
   },
   installFromCatalog: (version: string) => `Install ${version}`,
   firstInstallTitle: (service: string) => `Connect ${service}`,

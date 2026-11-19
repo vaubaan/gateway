@@ -51,3 +51,38 @@ for a rare act.
 ### Refusing to start on a version that does not load
 
 Leaves the instance down until someone with deployment access steps in.
+
+## Amendment 2026-11-19: an installed version is activated without a restart
+
+### Context
+
+Since the image compiles no service plugin, every fix to a service is a plugin release. The
+"rare act" this record weighed is now the common one, and a restart cuts every session of every
+service to update one. Node never needs to unload a module: each version lives in its own folder
+(`<data dir>/plugins/<sha256>`) and is imported beside the one it replaces.
+
+### Decision
+
+Activating a version of a plugin that runs from an installed version, or that does not run yet,
+runs its trial at once, in the running instance: the version is read from its folder, classifies
+its own examples, and passes the boot's checks over the registry it would make. Only then is the
+registry's entry replaced, once no call of that service is running; a call of that service
+arriving meanwhile waits for the swap, so a call is classified and executed by one version. A
+failed trial leaves the previous version serving and records the failure. A plugin served by the
+image or by the operator's pins, an instance in `plugins.safe_mode`, and a version activated by a
+start keep the trial at the next start.
+
+### Consequences
+
+- The replaced module stays in memory until the next start: a few megabytes per swap.
+- Work a plugin started outside a call (a discovery under way) finishes on the version it began
+  with.
+- MCP clients see the new tools at their next `tools/list`; no `listChanged` is sent.
+- The restart button stays for what still applies at a start.
+
+### Rejected alternatives
+
+#### Swap without waiting for the calls of the service
+
+A call already classified by the old version would run on the new one, whose classifier never
+saw it.

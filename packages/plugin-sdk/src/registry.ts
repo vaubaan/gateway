@@ -82,10 +82,13 @@ export class PluginRegistry {
   /** A plugin checked against itself and the registry, ready to add; never adds. */
   private prepare(
     plugin: ServicePlugin,
+    { replacing = false }: { readonly replacing?: boolean } = {},
   ): { readonly registered: RegisteredPlugin } | { readonly issues: readonly string[] } {
     const own = pluginIssues(plugin);
     if (own.length > 0) return { issues: own.map((m) => `plugin '${String(plugin.id)}': ${m}`) };
-    if (this.byId.has(plugin.id)) return { issues: [`plugin '${plugin.id}' is registered twice`] };
+    if (!replacing && this.byId.has(plugin.id)) {
+      return { issues: [`plugin '${plugin.id}' is registered twice`] };
+    }
     let catalog: IndexedRiskCatalog;
     try {
       catalog = prepareCatalog(plugin.catalog, { warn: () => undefined });
@@ -111,12 +114,34 @@ export class PluginRegistry {
 
   /**
    * Adds a plugin to a running registry (ADR plugins-installed-when-first-needed): the
-   * same checks as the constructor; a plugin is only ever added, never replaced nor
-   * removed. Throws `PluginRegistryError` and leaves the registry as it was.
+   * same checks as the constructor; an id it holds is refused (`replace` swaps a version)
+   * and nothing is ever removed. Throws `PluginRegistryError` and leaves the registry as it was.
    */
   register(plugin: ServicePlugin): RegisteredPlugin {
     const prepared = this.prepare(plugin);
     if ('issues' in prepared) throw new PluginRegistryError(prepared.issues);
+    this.add(prepared.registered);
+    return prepared.registered;
+  }
+
+  /**
+   * Replaces the registered version of a plugin by another of the same id (ADR
+   * plugins-activated-by-an-administrator-on-trial, amendment 2026-11-19): the same checks
+   * as `register`, then the entry and its tool names swapped at once, in place in the
+   * registration order. Throws `PluginRegistryError` and leaves the registry as it was,
+   * also when no plugin of that id is registered.
+   */
+  replace(plugin: ServicePlugin): RegisteredPlugin {
+    const previous = this.byId.get(plugin.id);
+    if (!previous) {
+      throw new PluginRegistryError([`plugin '${String(plugin.id)}' is not registered`]);
+    }
+    const prepared = this.prepare(plugin, { replacing: true });
+    if ('issues' in prepared) throw new PluginRegistryError(prepared.issues);
+    for (const tool of previous.plugin.tools) {
+      if (this.byToolName.get(tool.name) === previous) this.byToolName.delete(tool.name);
+    }
+    // `Map.set` on a key it holds keeps its place: the registration order stays.
     this.add(prepared.registered);
     return prepared.registered;
   }

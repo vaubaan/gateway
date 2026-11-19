@@ -1,10 +1,10 @@
 /**
  * An installed plugin, end to end over a real SQLite file and real archives (ADR
  * plugins-activated-by-an-administrator-on-trial; intents install-a-plugin-on-my-gateway):
- * an upload stays inert, an activation takes effect at the next start on trial, a
- * version that does not load gives way to the previous one and the instance starts,
- * going back to a kept version works, a folder modified on the volume is not loaded, and
- * `plugins.safe_mode` loads none.
+ * an upload stays inert, an activation runs the version's trial at once in the running
+ * instance (amendment 2026-11-19), a version that does not pass its trial is never served
+ * and the previous one keeps serving, going back to a kept version works, a folder
+ * modified on the volume is not loaded, and `plugins.safe_mode` loads none.
  *
  * The plugin is the SDK's `acme` fixture built by esbuild into a self-contained bundle,
  * packed as `vaubaan-plugin build` packs one.
@@ -131,7 +131,7 @@ describe('installing a plugin, on trial', () => {
     return result.version.digest;
   }
 
-  it('keeps an upload inert, then runs it from the next start once activated', async () => {
+  it('keeps an upload inert, then serves it as soon as it is activated, with no restart', async () => {
     const root = await start();
     const digest = await upload(root, v100);
     expect(digest).toBe(sha256Hex(v100));
@@ -142,52 +142,69 @@ describe('installing a plugin, on trial', () => {
       ok: false,
       code: 'confirmation-mismatch',
     });
-    expect(await root.pluginInstall.service.activate(digest, 'acme', ADMIN)).toEqual({ ok: true });
-    expect(root.registry.get('acme')).toBeUndefined();
-
-    const next = await start();
-    expect(next.registry.get('acme')?.plugin.version).toBe('1.0.0');
-    expect(next.plugins.entries.find((e) => e.id === 'acme')).toMatchObject({
+    expect(await root.pluginInstall.service.activate(digest, 'acme', ADMIN)).toEqual({
+      ok: true,
+      live: true,
+    });
+    expect(root.registry.get('acme')?.plugin.version).toBe('1.0.0');
+    expect(root.plugins.entries.find((e) => e.id === 'acme')).toMatchObject({
       origin: 'installed',
       version: '1.0.0',
     });
-    expect((await next.store.pluginVersions.get(digest))?.state).toBe('active');
-    const acts = (await next.store.audit.list({ kind: 'admin' })).flatMap((e) =>
+    expect((await root.store.pluginVersions.get(digest))?.state).toBe('active');
+    const acts = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
       e.kind === 'admin' ? [e.act] : [],
     );
-    expect(acts).toEqual(
-      expect.arrayContaining(['plugin-uploaded', 'plugin-activated', 'plugin-trial-ended']),
-    );
+    expect(acts).toEqual(expect.arrayContaining(['plugin-uploaded', 'plugin-activated']));
+
+    // The next start runs the same version, without a trial.
+    const next = await start();
+    expect(next.registry.get('acme')?.plugin.version).toBe('1.0.0');
   });
 
-  it('gives way to the previous version when a trial does not load, and starts', async () => {
+  it('never serves a version that fails its trial: the previous one keeps serving and the failure is shown', async () => {
     const root = await start();
+    const running = root.registry.get('acme')?.plugin;
     const digest = await upload(root, broken);
-    expect(await root.pluginInstall.service.activate(digest, 'acme', ADMIN)).toEqual({ ok: true });
+    expect(await root.pluginInstall.service.activate(digest, 'acme', ADMIN)).toMatchObject({
+      ok: false,
+      code: 'did-not-load',
+      message: expect.stringMatching(/broken at import/) as string,
+    });
+    expect(root.registry.get('acme')?.plugin).toBe(running);
+    const failed = await root.store.pluginVersions.get(digest);
+    expect(failed?.state).toBe('failed');
+    expect(failed?.failure).toMatch(/broken at import/);
+    expect((await root.store.pluginVersions.get(sha256Hex(v100)))?.state).toBe('active');
 
     const next = await start();
     expect(next.registry.get('acme')?.plugin.version).toBe('1.0.0');
-    const failed = await next.store.pluginVersions.get(digest);
-    expect(failed?.state).toBe('failed');
-    expect(failed?.failure).toMatch(/broken at import/);
   });
 
-  it('moves to a newer version, then back to the kept one', async () => {
+  it('moves to a newer version, then back to the kept one, without a restart', async () => {
     const root = await start();
+    const toolName = root.registry.get('acme')!.plugin.tools[0]!.name;
     const newer = await upload(root, v110);
-    await root.pluginInstall.service.activate(newer, 'acme', ADMIN);
-    const next = await start();
-    expect(next.registry.get('acme')?.plugin.version).toBe('1.1.0');
-    expect((await next.store.pluginVersions.get(sha256Hex(v100)))?.state).toBe('previous');
-
-    const view = await next.pluginInstall.service.activationView(sha256Hex(v100));
-    expect(view?.running).toEqual({ version: '1.1.0', origin: 'installed' });
-    expect(await next.pluginInstall.service.activate(sha256Hex(v100), 'acme', ADMIN)).toEqual({
+    expect(await root.pluginInstall.service.activate(newer, 'acme', ADMIN)).toEqual({
       ok: true,
+      live: true,
     });
+    expect(root.registry.get('acme')?.plugin.version).toBe('1.1.0');
+    // The next call of the service meets the new version.
+    expect(root.registry.serviceForTool(toolName)?.plugin.version).toBe('1.1.0');
+    expect((await root.store.pluginVersions.get(sha256Hex(v100)))?.state).toBe('previous');
+
+    const view = await root.pluginInstall.service.activationView(sha256Hex(v100));
+    expect(view?.running).toEqual({ version: '1.1.0', origin: 'installed' });
+    expect(await root.pluginInstall.service.activate(sha256Hex(v100), 'acme', ADMIN)).toEqual({
+      ok: true,
+      live: true,
+    });
+    expect(root.registry.get('acme')?.plugin.version).toBe('1.0.0');
+    expect((await root.store.pluginVersions.get(newer))?.state).toBe('previous');
+
     const back = await start();
     expect(back.registry.get('acme')?.plugin.version).toBe('1.0.0');
-    expect((await back.store.pluginVersions.get(newer))?.state).toBe('previous');
   });
 
   it('starts without any installed plugin in safe mode', async () => {
@@ -214,6 +231,7 @@ describe('installing a plugin, on trial', () => {
     const again = await start();
     expect(await again.pluginInstall.service.activate(sha256Hex(v100), 'acme', ADMIN)).toEqual({
       ok: true,
+      live: true,
     });
     appendFileSync(join(dir, 'plugins', sha256Hex(v100), 'index.js'), '\n// planted\n');
     const root = await start();
@@ -221,5 +239,16 @@ describe('installing a plugin, on trial', () => {
     const failed = await root.store.pluginVersions.get(sha256Hex(v100));
     expect(failed).toMatchObject({ state: 'failed' });
     expect(failed?.failure).toMatch(/index\.js was modified/);
+  });
+
+  it('keeps the trial for the next start in safe mode, where installed versions do not run', async () => {
+    const root = await start({ VAUBAAN_PLUGINS_SAFE_MODE: 'true' });
+    const newer = sha256Hex(v110);
+    expect(await root.pluginInstall.service.activate(newer, 'acme', ADMIN)).toEqual({
+      ok: true,
+      live: false,
+    });
+    expect(root.registry.get('acme')).toBeUndefined();
+    expect((await root.store.pluginVersions.get(newer))?.state).toBe('trial');
   });
 });

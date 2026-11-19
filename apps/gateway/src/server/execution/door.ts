@@ -85,6 +85,7 @@ import type { BuildInfo } from '../compose/root';
 import type { AnsweredCall } from '../accounts/discovery-after-call';
 import { budgetMissionOf, type SessionService } from '../budget';
 import type { Logger } from '../logging';
+import type { PluginCallGate } from '../plugins/call-gate';
 import { maskedToken } from '../missions';
 import { systemClock, type Clock } from '../store/clock';
 import { isDenial, MissionAdmission, type Admitted, type MissionAdmissionDeps } from './admission';
@@ -128,6 +129,11 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   readonly clock?: Clock;
   /** Where the catalog says the git remote of each repository is; absent: no git remote. */
   readonly gitRemote?: GitRemoteView;
+  /**
+   * Holds the call's service from its first stage to what follows it, so a swap of the
+   * plugin's version never falls inside a call (`plugins/call-gate.ts`); absent: nothing held.
+   */
+  readonly callGate?: PluginCallGate;
 }
 
 /** What one authenticated request carries to the handlers. */
@@ -344,54 +350,64 @@ export class ExecutionDoor {
         return response;
       }
       const onPart = this.progressForwarder(mcpReq, ctx);
-      const outcome = await this.deps.pipeline.execute(ctx, {
-        tool: name,
-        args: args ?? {},
-        agent_label: this.agentLabel(scope, meta),
-        client: scope.client,
-        ...(onPart ? { onPart } : {}),
-        signal: mcpReq.signal,
-      });
-      // Arguments are never logged; the audit entry carries their fingerprint.
-      this.deps.logger.info('tools/call', {
-        mission_id: ctx.mission.id,
-        token_prefix: ctx.token.prefix,
-        token_kind: ctx.token.holder.kind,
-        // The holder as the instance names them (an email, or the token's name).
-        holder_label: tokenHolderLabel(ctx.token.holder),
-        tool: name,
-        outcome: outcome.kind,
-        refusal_code: outcome.audit.refusal_code,
-        arguments_hash: outcome.audit.arguments_hash,
-        agent_label: outcome.audit.agent_label,
-      });
-      switch (outcome.kind) {
-        case 'allowed':
-          await this.followCall(ctx, {
-            tool: name,
-            accountId: outcome.audit.account_id,
-            resourceSetIds: outcome.audit.resource_set_ids ?? [],
-            result: outcome.result,
-            args: args ?? {},
-          });
-          // What the plugin returned (`McpToolResult`), forwarded as is.
-          return outcome.result as CallToolResult;
-        case 'refused':
-          throw refusalError(outcome.refusal);
-        case 'rejected':
-          throw new ProtocolError(
-            CALL_REJECTED_RPC_CODE,
-            `Vaubaan rejected the call: ${outcome.reason}`,
-            { reason: outcome.reason },
-          );
-        case 'failed':
-          if (outcome.refusal) throw refusalError(outcome.refusal);
-          // The call was allowed and counted; the service failed. A tool-level
-          // error, so the model reads it and can react.
-          return {
-            isError: true,
-            content: [{ type: 'text', text: `Upstream error: ${outcome.error}` }],
-          };
+      // One version of the plugin from the first stage to what follows the call.
+      const service = this.deps.registry.serviceForTool(name)?.plugin.id ?? null;
+      const release =
+        service !== null && this.deps.callGate
+          ? await this.deps.callGate.enter(service)
+          : () => undefined;
+      try {
+        const outcome = await this.deps.pipeline.execute(ctx, {
+          tool: name,
+          args: args ?? {},
+          agent_label: this.agentLabel(scope, meta),
+          client: scope.client,
+          ...(onPart ? { onPart } : {}),
+          signal: mcpReq.signal,
+        });
+        // Arguments are never logged; the audit entry carries their fingerprint.
+        this.deps.logger.info('tools/call', {
+          mission_id: ctx.mission.id,
+          token_prefix: ctx.token.prefix,
+          token_kind: ctx.token.holder.kind,
+          // The holder as the instance names them (an email, or the token's name).
+          holder_label: tokenHolderLabel(ctx.token.holder),
+          tool: name,
+          outcome: outcome.kind,
+          refusal_code: outcome.audit.refusal_code,
+          arguments_hash: outcome.audit.arguments_hash,
+          agent_label: outcome.audit.agent_label,
+        });
+        switch (outcome.kind) {
+          case 'allowed':
+            await this.followCall(ctx, {
+              tool: name,
+              accountId: outcome.audit.account_id,
+              resourceSetIds: outcome.audit.resource_set_ids ?? [],
+              result: outcome.result,
+              args: args ?? {},
+            });
+            // What the plugin returned (`McpToolResult`), forwarded as is.
+            return outcome.result as CallToolResult;
+          case 'refused':
+            throw refusalError(outcome.refusal);
+          case 'rejected':
+            throw new ProtocolError(
+              CALL_REJECTED_RPC_CODE,
+              `Vaubaan rejected the call: ${outcome.reason}`,
+              { reason: outcome.reason },
+            );
+          case 'failed':
+            if (outcome.refusal) throw refusalError(outcome.refusal);
+            // The call was allowed and counted; the service failed. A tool-level
+            // error, so the model reads it and can react.
+            return {
+              isError: true,
+              content: [{ type: 'text', text: `Upstream error: ${outcome.error}` }],
+            };
+        }
+      } finally {
+        release();
       }
     });
     return server;

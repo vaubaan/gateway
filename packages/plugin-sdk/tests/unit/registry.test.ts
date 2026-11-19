@@ -181,3 +181,37 @@ describe('PluginRegistry — conflicts', () => {
     expect(() => createRegistry([broken])).toThrow(/plugin 'broken': version: expected semver/);
   });
 });
+
+describe('PluginRegistry — replace (a version swapped while the instance runs)', () => {
+  test('swaps the entry in place: the new version serves its tools, the order stays', () => {
+    const registry = createRegistry([acmePlugin, beta]);
+    const newer: ServicePlugin = {
+      ...acmePlugin,
+      version: '9.9.9',
+      tools: acmePlugin.tools.slice(1),
+    };
+    const dropped = acmePlugin.tools[0]!.name;
+    const registered = registry.replace(newer);
+    expect(registered.plugin.version).toBe('9.9.9');
+    expect(registry.get('acme')?.plugin).toBe(newer);
+    expect(registry.ids).toEqual(['acme', 'beta-cloud']);
+    expect(registry.serviceForTool(acmePlugin.tools[1]!.name)?.plugin).toBe(newer);
+    // A tool the new version no longer declares falls to the prefix rule, on the new version.
+    expect(registry.serviceForTool(dropped)?.plugin).toBe(newer);
+  });
+
+  test('an ill-formed version is refused and the registry stays as it was', () => {
+    const registry = createRegistry([acmePlugin]);
+    expect(() => registry.replace({ ...acmePlugin, version: 'latest' })).toThrow(
+      PluginRegistryError,
+    );
+    expect(registry.get('acme')?.plugin).toBe(acmePlugin);
+    expect(registry.serviceForTool('acme__list_things')?.plugin).toBe(acmePlugin);
+  });
+
+  test('replacing an id the registry does not hold is refused', () => {
+    const registry = createRegistry([acmePlugin]);
+    expect(() => registry.replace(beta)).toThrow(/not registered/);
+    expect(registry.ids).toEqual(['acme']);
+  });
+});

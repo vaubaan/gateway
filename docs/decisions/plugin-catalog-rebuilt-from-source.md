@@ -49,3 +49,36 @@ A service to operate (accounts, storage, moderation) for a volume a reviewed rep
 
 The signature would vouch for a binary nobody read; rebuilding the declared commit ties it to the
 source the review saw.
+
+## Amendment 2026-11-19: the catalog publishes its own index
+
+### Context
+
+The site's `versions.json` and the gateway's `catalog-versions.json` were written by hand in the
+gateway's repository for each plugin version: a commit and a site deployment per release of any
+plugin, against this record's own consequence that both are built from the catalog.
+
+### Decision
+
+After each release, the catalog's workflow publishes `index.json` on the catalog repository's
+GitHub Pages: per plugin, its service's name (from its declaration), its latest version and the
+sha256 of its archive. An instance reads it beside the versions feed and takes the plugins'
+versions from it; the feed keeps the gateway's version and the advisories. A gateway release
+copies the index of that day into `catalog-versions.json` (`npm run release:prepare`), its
+fallback when the index cannot be read. A plugin version is the catalog's pull request alone.
+
+### Consequences
+
+- The index is not trusted: an archive is kept only if the catalog's signature verifies and it
+  is the id and version asked for; the sha256 only lets an instance refuse a different download
+  early.
+- A declaration names its service (`name:`), shown in the connect picker before installation.
+- Gateways released before read plugin versions from `versions.json`, whose plugin entries no
+  longer move.
+
+### Rejected alternatives
+
+#### The site rebuilds `versions.json` from the catalog
+
+A site deployment per plugin release, and the site's host between the catalog and every
+instance.

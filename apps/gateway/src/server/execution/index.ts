@@ -35,6 +35,7 @@ import { withDecisionTelemetry, type TelemetrySink } from './telemetry-sink';
 import { createRiskStage } from './risk-stage';
 import { TokenVerifier } from './token-verifier';
 import { createUpstreamStage, type HostComposedExecute } from './upstream-stage';
+import type { PluginCallGate } from '../plugins/call-gate';
 
 export interface ExecutionModuleDeps {
   readonly config: Pick<
@@ -64,6 +65,8 @@ export interface ExecutionModuleDeps {
   readonly clock?: Clock;
   /** Receives each `plugin.execute` outcome (community telemetry); default: nothing. */
   readonly telemetry?: TelemetrySink;
+  /** Holds a call's service against a swap of its plugin's version; absent: nothing held. */
+  readonly callGate?: PluginCallGate;
   /** The `execute` of each plugin the host composes itself (`compose/vaubaan.ts`), by plugin id. */
   readonly hostExecutes?: ReadonlyMap<string, HostComposedExecute>;
   /** Told of a permission request the agent opened (spec §4.2 bis); default: nobody. */
@@ -183,6 +186,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     // one (`registry.gitRemoteOf`), read at each request — a plugin installed at a first
     // connection included.
     gitRemote: { publicUrl: deps.config.publicUrl },
+    ...(deps.callGate ? { callGate: deps.callGate } : {}),
   });
 
   return {

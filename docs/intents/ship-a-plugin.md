@@ -3,7 +3,7 @@ title: Ship a plugin
 status: proposed
 actors: [author, agent]
 spec: ../spec/plugin-authoring.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-19
 ---
 
 # Ship a plugin
@@ -96,3 +96,15 @@ acceptance:
 - The change's build runs without secrets and reports the risk catalog, each tool's classification, the dependencies added and the execution code's diff
 - Once accepted, the archive is published signed by Vaubaan and the plugin appears in the versions feed and on its page
 - Only the owners the declaration names can change it
+
+### Publish a new version with the catalog alone
+
+status: proposed
+requires: submission, archive
+spec: ../spec/plugin-authoring.md#2-submission
+acceptance:
+
+- Merging a declaration's new version on the catalog is the whole release: no commit in the gateway's repository and no deployment of its website
+- Once the catalog published the version, its index names it with its service's name and the archive's sha256, and every instance offers it at its next versions check
+- An instance that cannot read the index still installs the versions its own release knows
+- A gateway release records the catalog's versions of that day, read from the index, without a plugin bump in the gateway's repository

@@ -57,7 +57,12 @@ export type UploadRefusalCode =
   | 'not-the-catalog-version';
 
 export type PluginActRefusalCode =
-  'not-found' | 'wrong-state' | 'confirmation-mismatch' | 'accounts-depend' | 'sdk-out-of-range';
+  | 'not-found'
+  | 'wrong-state'
+  | 'confirmation-mismatch'
+  | 'accounts-depend'
+  | 'sdk-out-of-range'
+  | 'did-not-load';
 
 export type UploadResult =
   | { readonly ok: true; readonly version: PluginVersionRecord }
@@ -71,7 +76,8 @@ export type ConnectionInstallResult =
   | { readonly ok: false; readonly code: ConnectionInstallCode; readonly message: string };
 
 export type PluginActResult =
-  | { readonly ok: true }
+  /** `live`: the version serves now, activated in the running instance. */
+  | { readonly ok: true; readonly live?: boolean }
   | { readonly ok: false; readonly code: PluginActRefusalCode; readonly message: string };
 
 /** What the activation page shows before an administrator confirms. */
@@ -95,6 +101,12 @@ export interface ActivationView {
   /** The active missions on those accounts: what the version's permissions apply to. */
   readonly missions: readonly { readonly id: string; readonly name: string }[];
 }
+
+/** What an activation in the running instance gave. */
+export type LiveActivation =
+  | { readonly kind: 'next-start' }
+  | { readonly kind: 'activated'; readonly replaced: string | null }
+  | { readonly kind: 'failed'; readonly failure: string };
 
 export interface PluginInstallDeps {
   readonly versions: PluginVersionsRepo;
@@ -135,6 +147,13 @@ export interface PluginInstallDeps {
    * why it was not.
    */
   readonly loadNow: (pin: PinnedPlugin) => string | null;
+  /**
+   * Runs a version's trial in the running instance and swaps it in (ADR
+   * plugins-activated-by-an-administrator-on-trial, amendment 2026-11-19): `next-start`
+   * when it cannot run there (the plugin is the image's or a pin's, `plugins.safe_mode`, no
+   * data directory), else what the trial gave. Absent: every activation waits for a start.
+   */
+  readonly activateNow?: (version: PluginVersionRecord) => Promise<LiveActivation>;
   /** Downloads a version's archive from the catalog (`catalog.ts`); `null` when there is none. */
   readonly catalog: ((pluginId: string, version: string) => Promise<CatalogFetch>) | null;
   readonly audit: AuditWriter;
@@ -200,6 +219,7 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     act:
       | 'plugin-uploaded'
       | 'plugin-activated'
+      | 'plugin-trial-ended'
       | 'plugin-refused'
       | 'plugin-followed-image'
       | 'plugin-signer-added'
@@ -451,11 +471,48 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
           message: `a version ${marked.state ?? 'unknown'} cannot be activated`,
         };
       }
+      const live: LiveActivation = deps.activateNow
+        ? await deps.activateNow(version)
+        : { kind: 'next-start' };
+      if (live.kind === 'failed') {
+        await deps.versions.recordStart(
+          [{ digest, outcome: 'failed', failure: live.failure }],
+          actor.userId,
+        );
+        await audit(
+          actor,
+          'plugin-trial-ended',
+          digest,
+          { ...summary(version), state: 'trial' },
+          {
+            ...summary(version),
+            state: 'failed',
+            failure: live.failure,
+          },
+        );
+        deps.logger.error(`plugin ${version.pluginId} ${version.version} failed its trial`, {
+          digest,
+          failure: live.failure,
+        });
+        return { ok: false, code: 'did-not-load', message: live.failure };
+      }
+      if (live.kind === 'activated') {
+        await deps.versions.recordStart(
+          [{ digest, outcome: 'activated', replaced: live.replaced }],
+          actor.userId,
+        );
+        await audit(actor, 'plugin-activated', digest, summary(version), {
+          ...summary(version),
+          state: 'active',
+          at: 'activation',
+        });
+        return { ok: true, live: true };
+      }
       await audit(actor, 'plugin-activated', digest, summary(version), {
         ...summary(version),
         state: 'trial',
       });
-      return { ok: true };
+      return { ok: true, live: false };
     },
 
     async refuse(digest, actor) {
