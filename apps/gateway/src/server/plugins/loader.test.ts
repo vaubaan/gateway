@@ -241,7 +241,7 @@ describe('loadPlugins', () => {
       write: (_level, line) => lines.push(line),
     });
     const { registry, inventory } = await loadPlugins(
-      { plugins: { dir, enabled: null, allowUnsigned: [], safeMode: false } },
+      { plugins: { dir, enabled: null, allowUnsigned: [], safeMode: false, privateHosts: [] } },
       logger,
       {
         bundled: [bundled.acmePlugin],
@@ -267,7 +267,9 @@ describe('loadPlugins', () => {
 
   it('reads no directory when plugins.dir is unset', async () => {
     const { registry, inventory } = await loadPlugins(
-      { plugins: { dir: null, enabled: null, allowUnsigned: [], safeMode: false } },
+      {
+        plugins: { dir: null, enabled: null, allowUnsigned: [], safeMode: false, privateHosts: [] },
+      },
       quiet,
       {
         bundled: [],

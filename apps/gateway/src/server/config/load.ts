@@ -17,6 +17,7 @@ import { isTelemetryLevel, TELEMETRY_LEVELS, type TelemetryLevel } from '@vaubaa
 
 import { KEY_BYTES } from '../crypto/aead';
 import { isClientIpHeader, isTrustedProxyEntry, type ClientIpHeader } from '../http/client-ip';
+import { parsePrivateHosts } from '../http/private-hosts';
 import { parseDuration } from './duration';
 import { checkInstanceName, INSTANCE_NAME_PROBLEMS } from './instance-name';
 import {
@@ -736,7 +737,17 @@ function readPlugins(r: Reader): PluginsConfig {
   const dir = r.string('plugins.dir')?.trim() ?? null;
   const safeMode = r.bool(keySpec('plugins.safe_mode'));
   const allowUnsigned = pluginIds(r, 'plugins.allow_unsigned') ?? [];
-  return { dir, enabled: pluginIds(r, 'plugins.enabled'), allowUnsigned, safeMode };
+  const privateHosts = [...new Set(r.stringList('plugins.private_hosts'))];
+  try {
+    parsePrivateHosts(privateHosts);
+  } catch (err) {
+    r.issues.add(
+      'plugins.private_hosts',
+      err instanceof Error ? err.message.replace(/^plugins\.private_hosts: /, '') : String(err),
+      envNamesFor('plugins.private_hosts'),
+    );
+  }
+  return { dir, enabled: pluginIds(r, 'plugins.enabled'), allowUnsigned, safeMode, privateHosts };
 }
 
 /** A list of plugin ids, deduplicated; `null` when absent or empty. */

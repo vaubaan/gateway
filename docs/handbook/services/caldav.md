@@ -35,6 +35,10 @@ before anything is sent (that is `google-calendar`). Rules common to every plugi
   most five); `https` → `http` is refused. The residue: on a multi-tenant suffix
   (`*.duckdns.org`), the typed server's own principal can still name a stranger's host as its home,
   once, at discovery.
+- **An internal server must be listed by the operator.** Like every plugin, CalDAV reaches the
+  public internet only; a server on a private address (or `localhost`) is refused at connect
+  unless `plugins.private_hosts` lists it (ADR
+  [plugins-reach-the-public-internet-only](../../decisions/plugins-reach-the-public-internet-only.md)).
 - **Who a write notifies is what is priced**: a server with scheduling mails the attendees. Zones as
   Gmail's (account `none`, `internal`, `allowlist`, anybody else or a non-`mailto:` address
   `external`); the call's zone is the worst of its people. Zone lists are discovered empty: until

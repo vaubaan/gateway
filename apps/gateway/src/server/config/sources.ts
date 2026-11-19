@@ -400,6 +400,9 @@ const KEY_TABLE = [
   // A start with the image's versions only, ignoring what was installed (ADR
   // plugins-activated-by-an-administrator-on-trial): the way back without the interface.
   { path: 'plugins.safe_mode', env: 'VAUBAAN_PLUGINS_SAFE_MODE', kind: 'bool', default: false },
+  // What plugins may reach besides the public internet (ADR
+  // plugins-reach-the-public-internet-only): an internal CalDAV server, a self-hosted API.
+  { path: 'plugins.private_hosts', env: 'VAUBAAN_PLUGINS_PRIVATE_HOSTS', kind: 'list' },
   // The published versions feed, read at start and daily; a GET carrying nothing
   // about the instance (`server/updates`).
   { path: 'updates.check', env: 'VAUBAAN_UPDATES_CHECK', kind: 'bool', default: true },

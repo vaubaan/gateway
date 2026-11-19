@@ -11,6 +11,7 @@ import type { Authenticator } from '../auth/authenticator';
 import type { AuthorityService, MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
+import { parsePrivateHosts, pluginFetch } from '../http/plugin-fetch';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { bundledInventory, readConnectFile, type PluginInventoryEntry } from '../plugins';
@@ -87,7 +88,14 @@ export interface AccountsModule {
 export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'accounts' });
-  const outbound: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init));
+  // The services' side (plugins, their token endpoints): the public internet and what
+  // `plugins.private_hosts` lists, never the rest of the network (ADR
+  // plugins-reach-the-public-internet-only). The OAuth brokers are the operator's own
+  // addresses and keep the plain fetch. Tests and the demo inject their own.
+  const plain: typeof fetch = (input, init) => fetch(input, init);
+  const outbound: typeof fetch =
+    deps.fetch ??
+    pluginFetch({ privateHosts: parsePrivateHosts(deps.config.plugins.privateHosts) });
   const clients = new OAuth2Clients({
     config: deps.store.config,
     publicUrl: deps.config.publicUrl,
@@ -96,8 +104,8 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
     logger,
   });
   const brokers = new OAuthBrokers(deps.config.oauthBrokers, {
-    fetch: outbound,
-    attestation: productionAttestationKit({ fetch: outbound }),
+    fetch: deps.fetch ?? plain,
+    attestation: productionAttestationKit({ fetch: deps.fetch ?? plain }),
   });
   const credentials = new CredentialBroker({
     accounts: deps.store.accounts,

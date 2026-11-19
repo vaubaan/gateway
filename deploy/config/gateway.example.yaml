@@ -299,14 +299,17 @@
 # `allow_unsigned` lists the plugins an administrator may install without a signature
 # (none by default; no interface sets it). `safe_mode: true` starts with the image's and
 # the pinned versions only, ignoring what was installed in Administration › Plugins: the
-# way back when the interface cannot be reached.
+# way back when the interface cannot be reached. `private_hosts` lists what plugins may
+# reach inside the network besides the public internet (host names, addresses, CIDR
+# ranges; none by default): an internal CalDAV server, a self-hosted API.
 # env: VAUBAAN_PLUGINS_DIR, VAUBAAN_PLUGINS_ENABLED, VAUBAAN_PLUGINS_ALLOW_UNSIGNED
-# (comma-separated), VAUBAAN_PLUGINS_SAFE_MODE
+# (comma-separated), VAUBAAN_PLUGINS_SAFE_MODE, VAUBAAN_PLUGINS_PRIVATE_HOSTS
 # plugins:
 #   dir: /plugins
 #   enabled: [github, notion]
 #   allow_unsigned: [crm]
 #   safe_mode: false
+#   private_hosts: [nextcloud.corp, 10.20.0.0/16]
 
 # The versions check: at start and daily, a GET of the published versions feed that
 # carries nothing about this instance; Administration › Plugins shows what is behind

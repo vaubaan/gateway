@@ -27,6 +27,7 @@ describe('plugins.*', () => {
       dir: null,
       enabled: null,
       allowUnsigned: [],
+      privateHosts: [],
       safeMode: false,
     });
   });
@@ -42,6 +43,7 @@ describe('plugins.*', () => {
       dir: '/plugins',
       enabled: ['github', 'notion'],
       allowUnsigned: [],
+      privateHosts: [],
       safeMode: false,
     });
   });
@@ -55,6 +57,16 @@ describe('plugins.*', () => {
     expect(issuesOf(validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github,Notion' }))).toEqual([
       'plugins.enabled',
     ]);
+  });
+
+  it('reads the private hosts plugins may reach, and refuses one that is not a host, an address or a range', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_PLUGINS_PRIVATE_HOSTS: '10.0.0.0/8, nextcloud.corp,10.0.0.0/8' }),
+    });
+    expect(config.plugins.privateHosts).toEqual(['10.0.0.0/8', 'nextcloud.corp']);
+    expect(issuesOf(validEnv({ VAUBAAN_PLUGINS_PRIVATE_HOSTS: 'https://nextcloud.corp' }))).toEqual(
+      ['plugins.private_hosts'],
+    );
   });
 });
 

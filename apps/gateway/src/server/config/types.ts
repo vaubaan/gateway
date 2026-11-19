@@ -255,6 +255,11 @@ export interface PluginsConfig {
   readonly allowUnsigned: readonly string[];
   /** Start with the image's and the pinned versions only, ignoring installed ones. */
   readonly safeMode: boolean;
+  /**
+   * What plugins may reach inside the network (ADR plugins-reach-the-public-internet-only):
+   * host names, IP addresses and CIDR ranges, as written; none by default.
+   */
+  readonly privateHosts: readonly string[];
 }
 
 /** The published versions feed (`updates.*`, spec §4.3). */
