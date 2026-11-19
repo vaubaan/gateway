@@ -32,6 +32,34 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **Plugins reach the public internet only, unless the operator lists a host.** A service whose
+  address the person types (CalDAV) could be pointed at the instance's loopback or network, and
+  the connect page told the outcomes apart. The `fetch` plugins receive now refuses every address
+  that is not public, checked on each socket and redirect, unless `plugins.private_hosts`
+  lists it (host names, addresses, CIDR ranges). **Action for operators** reaching an internal
+  CalDAV server or self-hosted API: list it in `plugins.private_hosts`.
+- **GitHub: Read no longer searches beyond the mission's repositories** (plugin 5.4.0, catalog
+  16). `search_code` and `search_issues` reach every repository the account sees, and the Read
+  macro-action ticked them: a mission on one repository could read another's code with a `repo:`
+  query. The global search is now a macro-action of its own, Search everywhere. Missions issued
+  before keep the permissions they list.
+- **Supabase: setting a user's password, email, phone or app metadata is a permission of its own**
+  (plugin 6.1.0, catalog 10). `update_user` with a password signs in as that user, as a sign-in
+  link does, and was priced as an ordinary user edit. It now also needs
+  `supabase.auth.user-credential-write`. A signed URL lives at most a day (`expires_in` above
+  86400 is refused).
+- **SSH: more secret paths are marked** (plugin 2.0.6): `/run/secrets`, `/var/run/secrets`, shell
+  histories, Terraform states, `~/.azure`, `~/.vault-token`.
+- **The plugin signature is checked more strictly.** A Sigstore bundle signing a DSSE envelope is
+  refused (only a signature of the manifest itself counts); the certificate's issuer and
+  repository are read from the parsed certificate, never searched for in its bytes; an archive
+  file named like a signature is hashed in the manifest unless it is the root's own signature; and
+  the versions feed can no longer offer a plugin version below the one this release knows.
+- **An enrolment begun in Settings no longer opens a session.** A session cookie could be turned
+  into a fresh session through the sign-in route of the second factor, passing the "recent
+  sign-in" check of the master-key download. Replacing a second factor now also needs a session
+  opened in the last ten minutes.
+
 - **Vercel: an account scoped to one project reads its project and deployments** (plugin 4.2.2).
   Vercel's MCP server rejects a project-scoped token (`401 invalid_token`), so every rewrapped tool
   of a "One project" account failed. `get_project`, `list_deployments`, `get_deployment` and
