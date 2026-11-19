@@ -89,10 +89,11 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 
 ## Branch model
 
-- `main` is the trunk, unprotected. Maintainers push a squashed, signed-off commit per feature
-  directly to `main`; contributors work on `feature/*` or `fix/*` from `origin/main`, rebased right
-  before the push, and open a pull request. `v5` stays a pre-release
-  source until `2.0.0`.
+- `main` is the trunk. Its protection refuses a force-push, a deletion and a merge commit
+  (linear history), and asks for no pull request: maintainers push a squashed, signed-off commit
+  per feature directly to `main`; contributors work on `feature/*` or `fix/*` from
+  `origin/main`, rebased right before the push, and open a pull request. Every release, the
+  pre-releases included, is tagged on `main`.
 
 ## Release
 
