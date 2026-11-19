@@ -4,8 +4,11 @@ description: >-
   exact Node version (the ABI of the native addons) and the hash of
   package-lock.json: on a hit nothing is installed; on a miss `npm ci`
   installs exactly the lockfile (or fails) and the result is cached. The cache
-  is written by a run of this repository from that same lockfile; `npm audit
-  signatures` (job `audit` of ci.yml) verifies what it holds on every run.
+  is written by a run of this repository from that same lockfile, and GitHub
+  scopes it to the branch that wrote it and the default branch: that scoping is
+  what keeps a fork's run from planting files in it. `npm audit signatures`
+  (job `audit` of ci.yml) checks the registry signatures of the installed
+  versions, not the bytes of the files.
 runs:
   using: composite
   steps:

@@ -3,6 +3,7 @@
 [![CI](https://github.com/vaubaan/gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/vaubaan/gateway/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/vaubaan/gateway?include_prereleases&sort=semver)](https://github.com/vaubaan/gateway/releases)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/vaubaan/gateway/badge)](https://scorecard.dev/viewer/?uri=github.com/vaubaan/gateway)
 [![Node.js 26+](https://img.shields.io/badge/node-%3E%3D26-339933)](package.json)
 
 An MCP gateway you run on your own network, for teams whose coding agents act on GitHub,

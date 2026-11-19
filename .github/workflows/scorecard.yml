@@ -1,0 +1,43 @@
+name: scorecard
+
+# OpenSSF Scorecard: the supply-chain checks a newcomer reads before
+# trusting the project — pinned actions, token permissions, signed releases, branch
+# protection, SAST… — run weekly and on every push to main, published to the public
+# Scorecard API (the README's badge reads it) and to the repository's code scanning.
+# The job holds an OIDC token only to publish its result; it reads the repository and
+# writes security events, nothing else.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: scorecard.sarif

@@ -23,6 +23,8 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 ## CI pipeline
 
 - The [workflows](../../.github/workflows/) state their triggers and steps in their header comments.
+  `scorecard.yml` publishes the OpenSSF Scorecard of the repository weekly and on every push to
+  `main` (the README's badge).
   Required check: the job `audit`. Locally, `npm run check:changed` checks only what a change can
   break (type-check of the touched workspaces and their dependents, ESLint and Prettier on the
   changed files, the related Vitest tests, the harness linters, the Next build and its standalone tests when the build's inputs changed, and, with Docker, Semgrep as CI runs it); `npm run ci` is the full run (lint
