@@ -56,7 +56,7 @@ Then steps 1 to 11 in order.
 - Specs are read-only from here; report a gap, do not work around it.
 - Fail closed: what the classifier cannot tell is `{ denied }` or every slice it could touch, never
   a guess.
-- Register the plugin in `shipped-plugins.ts` only: it is the single service list.
+- Never register the plugin in the server (`shipped-plugins.ts` holds `vaubaan` and `ssh` only): add it to `tests/support/plugins/repository.ts` for the tests, and hand back the catalog declaration it needs (plugins/README.md, step 10).
 - No pull request, no commit unless asked. Hand back the file list, the test output
   (`npx vitest run plugins/<vendor>`, then `npm run ci`), the service docs used, what you decided
   alone, and the open questions.

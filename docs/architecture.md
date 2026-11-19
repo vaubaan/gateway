@@ -69,8 +69,10 @@ them, each by its explicit identifier: no wildcard is ever stored. Handbook:
 One folder per service under `plugins/`, written against `@vaubaan/plugin-sdk`. A plugin
 describes the service's data model, ships its risk catalog (`risk-catalog.yaml`), classifies each
 call into slices, declares how a credential is obtained, discovers resources, and executes the call
-with the credential the gateway hands it. A plugin classifies; it never decides. The registry in
-`apps/gateway/src/server/compose/shipped-plugins.ts` is the only list of services. Guide:
+with the credential the gateway hands it. A plugin classifies; it never decides. Only `vaubaan` and
+`ssh` are compiled into the server (`compose/shipped-plugins.ts`); every other plugin is signed and
+published by the [catalog](https://github.com/vaubaan/gateway-plugins) and installed when a person
+first connects its service, so the registry of a running gateway is the list of services. Guide:
 [`plugins/README.md`](../plugins/README.md); handbooks: [plugin-sdk](handbook/plugin-sdk.md),
 [services](handbook/services/README.md).
 

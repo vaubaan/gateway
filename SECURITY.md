@@ -139,6 +139,18 @@ third-party GitHub Action. A finding of these tools that you believe we
 missed is welcome as a report — with its impact on an instance (see Scope:
 findings without a demonstrated impact are out of scope).
 
+## Past reviews
+
+No third-party review has happened yet. The code cites the maintainers' own reviews by date and
+finding, so that a reader finds why a guard exists:
+
+- **security review 2026-10-15** and **security audit 2026-10-31** (findings `L1`, `M2`…): two
+  internal reviews before the repository was made public. A comment cites a finding where the
+  code answers it; no report of either is published.
+- **2026-11-19**: an internal review of the code, the architecture and the CI/CD. Its fixes are
+  in the [changelog](CHANGELOG.md) under that date's entries (plugins' egress, the second-factor
+  enrolment, the catalog's release job and signature checks, the plugins' risk classification).
+
 ## Trust model
 
 1. **One instance, one company, one trust domain.** Whoever operates the

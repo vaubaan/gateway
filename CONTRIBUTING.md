@@ -66,8 +66,11 @@ npm ci            # installs every workspace
 npm run ci        # the gate: type-check, lint, format check, build, tests
 ```
 
-`npm run ci` takes a few minutes and must be green before you change
-anything; if it is not, that is a bug worth reporting.
+`npm run ci` is the whole gate: from about ten minutes on a fast machine to thirty on a small
+one, and it must be green before you change anything; if it is not, that is a bug worth reporting.
+Day to day, `npm run check:changed` checks only what your change can break, in a few minutes.
+It needs Node.js 26 (`.nvmrc`); `better-sqlite3` ships prebuilt binaries for it, so no compiler is
+needed on Linux x64, macOS and Windows.
 
 ## Look at the product
 

@@ -18,10 +18,17 @@ end with a command that checks your work; between steps 4 and 8 the copied
 tests are broken on purpose, and `npx tsc -p plugins/<id> --noEmit` is the
 check to run after each file.
 
-- Shipped plugins: every folder of `plugins/` but `_template`, registered in
-  [`shipped-plugins.ts`](../apps/gateway/src/server/compose/shipped-plugins.ts).
-  Their modelling notes are indexed in
-  [`docs/handbook/services/README.md`](../docs/handbook/services/README.md).
+- Two ways to write one. **Outside this repository** (the usual way for a new service):
+  `npx @vaubaan/plugin-cli init`, write it against the published `@vaubaan/plugin-sdk`, then
+  `vaubaan-plugin submit` declares it in the
+  [catalog](https://github.com/vaubaan/gateway-plugins). **Inside it**, as the official plugins
+  are: this guide. Either way a gateway installs it from the catalog when a person first
+  connects its service; nothing is compiled into the server but `vaubaan` and `ssh`
+  (ADR [plugins-installed-when-first-needed](../docs/decisions/plugins-installed-when-first-needed.md)).
+- The official plugins: every folder of `plugins/` but `_template`, the catalog's sources and
+  the set the tests and the demo run
+  ([`repository.ts`](../apps/gateway/tests/support/plugins/repository.ts)). Their modelling notes
+  are indexed in [`docs/handbook/services/README.md`](../docs/handbook/services/README.md).
 - The scaffold: [`_template`](./_template/README.md), a complete plugin for an
   imaginary service.
 - The contract: `@vaubaan/plugin-sdk` (`packages/plugin-sdk`), described in
@@ -931,24 +938,28 @@ npx prettier --write plugins/acme docs/handbook/services
 grep -rniE 'template|widget|example\.com' plugins/acme
 ```
 
-## Step 10 — Register the plugin
+## Step 10 — Make the plugin reachable
 
-A plugin under `plugins/` is tested by `npm run ci` but is not part of the
-gateway until it is registered. One list holds the services; everything else
-("Connect an account", the setup checklist, Reference, the tool list)
-derives from it.
+A plugin under `plugins/` is tested by `npm run ci`; it reaches a gateway through the catalog,
+never by being compiled into the server.
 
-1. `apps/gateway/package.json`: add `"@vaubaan/plugin-acme": "*"` to
-   `dependencies`, then run `npm install`.
-2. `apps/gateway/src/server/compose/shipped-plugins.ts`: one import of the
-   default export, placed in alphabetical order of the package names, and
-   one entry at the end of `SHIPPED_PLUGINS`.
+1. The tests, the demo and the browser tests: `apps/gateway/package.json`, add
+   `"@vaubaan/plugin-acme": "*"` to `devDependencies` and run `npm install`; then
+   [`tests/support/plugins/repository.ts`](../apps/gateway/tests/support/plugins/repository.ts),
+   one import of the default export in alphabetical order and one entry in the list.
+2. Once the plugin is on `main`: a pull request to
+   [vaubaan/gateway-plugins](https://github.com/vaubaan/gateway-plugins) adds
+   `catalog/acme.yaml` (`repo: https://github.com/vaubaan/gateway`, `path: plugins/acme`, its
+   `version`, and the `main` commit). Merged, the catalog rebuilds it from that commit, signs it
+   and publishes it; every gateway then offers it at the first connection of the service.
+3. `apps/gateway/src/server/plugins/catalog-versions.json`: the version and the sha256 the
+   catalog's release names, so that this gateway's next release knows it
+   (`catalog-versions.test.ts`).
 
-Add the service to no other list; if a test or a page needs the service
-list, it reads the registry. Every registered plugin is offered in the
-connect and issuance flows and lists its tools to agents: there is no
-"experimental" state (docs/handbook/plugin-sdk.md); a young plugin says so
-with a version below `1.0.0`.
+Add the service to no other list; if a test or a page needs the service list, it reads the
+registry. Every plugin a gateway runs is offered in the connect and issuance flows and lists its
+tools to agents: there is no "experimental" state (docs/handbook/plugin-sdk.md); a young plugin
+says so with a version below `1.0.0`.
 
 ```bash
 npm run ci                         # type-check, lint, format check, build, tests

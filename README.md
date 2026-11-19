@@ -93,7 +93,9 @@ domain — keeps the names it had. The same things, under both:
 ## Status
 
 **Pre-release.** Versions `2.0.0-alpha.N`, then `2.0.0-rc.N`, are tagged from `main` and
-published as a `linux/amd64` image on the GitHub Container Registry; the
+published for `linux/amd64` and `linux/arm64` on the GitHub Container Registry, with an SBOM and a
+signed build provenance you can check before you run it
+(`gh attestation verify oci://ghcr.io/vaubaan/gateway:<version> --repo vaubaan/gateway`); the
 [changelog](CHANGELOG.md) lists each one. Expect
 breaking changes until a `v2.0.0` tag exists. The code has had no third-party security audit yet;
 how to report a vulnerability, and what is in scope, is in [SECURITY.md](SECURITY.md).
