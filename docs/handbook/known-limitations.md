@@ -30,7 +30,6 @@ in the change that removes it.
 - **Miro's tool calls have not run live**: sign-in and the tool list were verified on a real account; every discovery logs a difference from the captured list. → [miro](services/miro.md)
 - **Railway account tokens were not checked against Railway's MCP server** (a workspace token was): a refusal fails the call naming the token kind, the account stays usable. → [railway](services/railway.md)
 - **The git remote has not seen every move live**: a fast-forward of an existing branch and a force-push were not; tests run the real `git` client against `git http-backend`. → [git-remote](git-remote.md)
-- **No `linux/arm64` image and no attestation have been published**: every release so far came from a private repository, which publishes `linux/amd64` only and signs nothing. → [coding workflow](../workflow/coding-workflow.md)
 - **Community statistics start empty**: telemetry is off by default, so the "validated by the community" tag stays absent until a plugin version gathers enough reports. → [telemetry](telemetry.md)
 
 ## Not enforced, or more coarsely than expected
@@ -45,6 +44,8 @@ in the change that removes it.
 ## One process
 
 - **Single process**: rate windows, the derived-credential cache, per-account refresh, pending connect attempts and consents, the IdP discovery cache, the telemetry queue and the timers live in one Node process (`// single-process only`); a second process would share none of it. → [configuration](configuration.md)
+- **Plugins run in the gateway's process**, beside every credential it decrypts: the signature of a plugin is the boundary, not an isolation (threat model A-rows on plugins). → [plugin-loading](plugin-loading.md)
+- **Long store work blocks every request**: the store is synchronous (`better-sqlite3`), so the audit retention's purge and a scheduled backup's copy hold the event loop while they run; on a store of several gigabytes that is seconds. → [store](store.md)
 - **No high availability**: one image, one process, one SQLite file; a restart or a lost host is an outage, and what changed since the last scheduled backup is lost with the host. → [store](store.md)
 
 ## Backups

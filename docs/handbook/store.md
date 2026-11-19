@@ -30,6 +30,9 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
 
 - Applied migrations are immutable: a changed checksum aborts the boot, and so does a database
   recording a migration the image does not ship (downgrade). A fix is a new file.
+- Migrations go forward only: there is no down migration. Going back to an older image is a
+  restore of a backup made by that image or before the upgrade (`restore`), never a rollback of
+  the schema in place; back up before an upgrade.
 - Every closed-set column is read through `parseEnum`: an unknown value throws `InvariantError`
   (`corrupt-rows.test.ts`). Some columns have no schema `CHECK` (`audit.act`…): the list is their
   only guard.
