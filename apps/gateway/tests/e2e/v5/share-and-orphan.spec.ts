@@ -197,7 +197,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(joan.getByTestId('allowed-permissions')).toHaveCount(0);
   await received.getByRole('link', { name: `2 of ${GITHUB_PERMISSIONS}` }).click();
   await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_CODE);
-  await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_META);
+  await expect(joan.getByTestId('allowed-permissions')).toContainText('github.search-global');
   await snap(joan, 'shares-received');
   // The account is not hers: she owns none, and its own page does not exist for her.
   await expect(joan.getByTestId('accounts-yours')).toHaveCount(0);
