@@ -4,6 +4,7 @@
  * finding, now holding the other way, and the signed commit the owner asked
  * about. Real git against `git http-backend`; nothing reaches github.com.
  */
+import { gzipSync } from 'node:zlib';
 import { execFile } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -334,6 +335,22 @@ describe('F8 — a v2 request head names exactly one command', () => {
     );
     expect(text).not.toContain('PACK');
     expect((await callsOf(developer, FETCH)).length).toBe(before + 1);
+  });
+
+  it('a gzip-compressed ls-refs is read like any other: without temporary refs', async () => {
+    const answer = await fetch(`${rig.remote()}/git-upload-pack`, {
+      method: 'POST',
+      headers: {
+        authorization: basic(developer),
+        'content-type': 'application/x-git-upload-pack-request',
+        'content-encoding': 'gzip',
+        'git-protocol': 'version=2',
+      },
+      body: gzipSync(v2(['command=ls-refs', 'object-format=sha1'], ['peel'])),
+    });
+    const text = Buffer.from(await answer.arrayBuffer()).toString('latin1');
+    expect(text).toContain('refs/heads/main');
+    expect(text).not.toContain('refs/vaubaan/');
   });
 
   it('ls-refs with its capabilities first is a free listing, without temporary refs', async () => {

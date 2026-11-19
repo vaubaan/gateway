@@ -85,8 +85,18 @@ export class FetchSide {
       headers: request.headers,
       body: request.body,
     };
-    if (!isProtocolV2(request) || request.headers.get('content-encoding')) {
-      return this.relayDecided(scope, relayed);
+    if (!isProtocolV2(request)) return this.relayDecided(scope, relayed);
+    // A compressed v2 request is read like any other: relayed as it came, its `ls-refs`
+    // would reach the agent unfiltered, other missions' temporary refs included.
+    if (request.headers.get('content-encoding')) {
+      const inflated = await inflatedRequest(request);
+      if (inflated === null) {
+        return errPacket(
+          UPLOAD_PACK_SERVICE,
+          `a compressed fetch request is read in gzip only, at most ${MAX_INFLATED_REQUEST_BYTES} bytes once inflated`,
+        );
+      }
+      return this.uploadPack(inflated, scope);
     }
     const reader = new PktLineReader(request.body);
     let command: string;
@@ -227,6 +237,44 @@ async function readBounded(response: Response, max: number): Promise<Uint8Array 
     at += part.length;
   }
   return out;
+}
+
+/** The most a compressed fetch request may inflate to: its wants and haves, never a pack. */
+export const MAX_INFLATED_REQUEST_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The request with its gzip body inflated and its encoding headers dropped; `null` for
+ * another encoding, a body that does not inflate, or one beyond
+ * {@link MAX_INFLATED_REQUEST_BYTES}.
+ */
+async function inflatedRequest(request: Request): Promise<Request | null> {
+  const encoding = (request.headers.get('content-encoding') ?? '').trim().toLowerCase();
+  if ((encoding !== 'gzip' && encoding !== 'x-gzip') || !request.body) return null;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    const reader = request.body.pipeThrough(new DecompressionStream('gzip')).getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_INFLATED_REQUEST_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  }
+  const headers = new Headers(request.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  return new Request(request.url, {
+    method: request.method,
+    headers,
+    body: Buffer.concat(chunks),
+  });
 }
 
 function isProtocolV2(request: Request): boolean {

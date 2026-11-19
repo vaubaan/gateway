@@ -61,6 +61,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **A password reset ends every open session**, and a recovery code is spent once even when
   posted twice at the same instant. The codes of the second factor have their own rate windows:
   anonymous password posts filling theirs no longer stop a person typing their code.
+- **Git: a gzip-compressed fetch request is read like any other.** A compressed protocol v2
+  `ls-refs` was relayed raw, so its answer listed other missions' pending `refs/vaubaan/*`; it is
+  now inflated (at most 16 MiB) and filtered.
 - **An enrolment begun in Settings no longer opens a session.** A session cookie could be turned
   into a fresh session through the sign-in route of the second factor, passing the "recent
   sign-in" check of the master-key download. Replacing a second factor now also needs a session
