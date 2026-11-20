@@ -47,6 +47,33 @@ describe('checkLockfile', () => {
     ).toEqual([]);
   });
 
+  it("passes a package's bundled dependencies, inside its verified tarball, and nothing else marked so", () => {
+    const bundler = {
+      resolved: 'https://registry.npmjs.org/wasm/-/wasm-1.0.0.tgz',
+      integrity: SHA,
+    };
+    expect(
+      problemsOf({
+        'node_modules/wasm': bundler,
+        'node_modules/wasm/node_modules/tslib': { version: '2.8.1', inBundle: true },
+        'node_modules/wasm/node_modules/@scope/b/node_modules/c': { inBundle: true },
+        'node_modules/wasm/node_modules/@scope/b': { inBundle: true },
+      }),
+    ).toEqual([]);
+    expect(problemsOf({ 'node_modules/tslib': { inBundle: true } })).toEqual([
+      'bundled, but under no downloaded package that bundles it',
+    ]);
+    expect(
+      problemsOf({
+        'node_modules/wasm': bundler,
+        'node_modules/wasm/node_modules/tslib': {
+          inBundle: true,
+          resolved: 'https://evil.example/tslib.tgz',
+        },
+      }),
+    ).toEqual(['bundled, with a download (https://evil.example/tslib.tgz)']);
+  });
+
   it.each([
     ['another host', 'https://evil.example/js-yaml/-/js-yaml-4.1.0.tgz', /not from/],
     ['plain http', 'http://registry.npmjs.org/js-yaml/-/js-yaml-4.1.0.tgz', /not from/],

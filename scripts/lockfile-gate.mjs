@@ -18,7 +18,9 @@
  *
  * and the entries that are not downloaded must be this repository's own
  * workspaces (a `link` to a path inside the repository, or the workspace
- * folder itself). Exit 1 with one line per offending entry; 2 when the
+ * folder itself), or a package's bundled dependencies (`inBundle`): files of
+ * the tarball of the package that bundles them, nested under its entry and
+ * covered by its integrity, never downloaded on their own. Exit 1 with one line per offending entry; 2 when the
  * lockfile cannot be read.
  *
  * The same checks as the lockfile-lint package, written here so the gate adds
@@ -66,6 +68,27 @@ function insideRepository(path) {
   );
 }
 
+/**
+ * The entry key of the package whose tarball holds a bundled entry: its
+ * nearest enclosing `node_modules/` entry that is not bundled itself, or null.
+ * That entry is checked as any download is.
+ * @param {string} key
+ * @param {Record<string, any>} packages
+ * @returns {string | null}
+ */
+function bundlerOf(key, packages) {
+  let at = key.lastIndexOf('/' + NODE_MODULES);
+  while (at > 0) {
+    const parent = key.slice(0, at);
+    const entry = packages[parent];
+    if (entry !== undefined && entry.inBundle !== true) {
+      return nameOfKey(parent) !== null && entry.link !== true ? parent : null;
+    }
+    at = parent.lastIndexOf('/' + NODE_MODULES);
+  }
+  return null;
+}
+
 /** @typedef {{ key: string, problem: string }} Problem */
 
 /**
@@ -94,6 +117,13 @@ export function checkLockfile(lock) {
       if (!insideRepository(entry.resolved)) {
         add(key, `links to ${String(entry.resolved)}, outside the repository`);
       }
+      continue;
+    }
+    if (entry.inBundle === true) {
+      const bundler = bundlerOf(key, lock.packages);
+      if (bundler === null) add(key, 'bundled, but under no downloaded package that bundles it');
+      if (entry.resolved !== undefined)
+        add(key, `bundled, with a download (${String(entry.resolved)})`);
       continue;
     }
     if (name === null) {
