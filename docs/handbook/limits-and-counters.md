@@ -6,7 +6,7 @@ tracks:
   - apps/gateway/src/app/ops/stats/route.ts
   - apps/gateway/src/server/setup/state.ts
   - apps/gateway/src/server/compose/root.ts
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-20
 ---
 
 # Ceilings and counters — handbook
@@ -30,7 +30,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
   nothing — tests rely on that.
 - Where each count is enforced, and its refusal:
   - users — `completeLogin` for an unknown identity (`LoginError` `user-limit-reached`),
-    the local invitation link before `createAccountFromLink`, an invitation for an address no
+    the local invitation link before `createSignInAccountFromLink`, an invitation for an address no
     active person holds, a reactivation, the setup's first administrator (`UserAdminError`
     `limit-reached`), naming an administrator from a sign-in test (`LimitReachedError`);
   - accounts — `AccountService.start` before any service is reached, and `persist`
