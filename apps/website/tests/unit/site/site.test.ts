@@ -24,6 +24,8 @@ import {
   LIVE_FILES,
   NAMED_CRAWLERS,
   robotsTxt,
+  SECURITY_TXT_VALIDITY_DAYS,
+  securityTxt,
   twinPathOf,
 } from '../../../src/content/outputs';
 import { loadPlugins } from '../../../src/content/plugins';
@@ -136,6 +138,16 @@ describe('robots.txt and sitemap.xml', () => {
     expect(robots).toContain('User-agent: *\nAllow: /\n');
     expect(robots).not.toMatch(/Disallow/);
     expect(robots).toContain('Sitemap: https://vaubaan.com/sitemap.xml');
+  });
+
+  it('security.txt names the private reporting channel and expires within the year', () => {
+    expect(site.files.get('.well-known/security.txt')).toMatch(/^Contact: /);
+    const built = new Date('2026-11-20T10:00:00Z');
+    const text = securityTxt(built);
+    expect(text).toContain('Contact: https://github.com/vaubaan/gateway/security/advisories/new\n');
+    expect(text).toContain('Expires: 2027-05-19T10:00:00Z\n');
+    expect(text).toContain('Canonical: https://vaubaan.com/.well-known/security.txt\n');
+    expect(SECURITY_TXT_VALIDITY_DAYS).toBeLessThan(365);
   });
 
   it('sitemap.xml lists every page by its canonical address', () => {

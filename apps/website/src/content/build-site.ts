@@ -17,7 +17,7 @@ import { configKeysMarkdown, CONFIG_HANDBOOK, parseConfigKeys } from './config-k
 import { loadHandwrittenDocs, orderDocs, withSectionLists, type DocPage } from './docs';
 import { unreadSnapshot, type HealthSnapshot } from './health';
 import { escapeMdx, rewriteRelativeLinks, splitFrontmatter, splitTitle } from './markdown';
-import { llmsTxt, robotsTxt, siteDir, sitemapXml, type SitePage } from './outputs';
+import { llmsTxt, robotsTxt, securityTxt, siteDir, sitemapXml, type SitePage } from './outputs';
 import {
   PLUGIN_GROUP_PATH,
   pluginGroupMarkdown,
@@ -224,6 +224,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   files.set('llms.txt', llmsTxt(pages.filter((p) => p.group !== 'home')));
   files.set('sitemap.xml', sitemapXml(pages));
   files.set('robots.txt', robotsTxt());
+  files.set('.well-known/security.txt', securityTxt());
 
   const data: SiteData = {
     thresholds,

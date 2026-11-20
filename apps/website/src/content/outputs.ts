@@ -349,6 +349,26 @@ export function robotsTxt(): string {
   return `${groups.join('\n')}\nSitemap: ${absolute('/sitemap.xml')}\n`;
 }
 
+/** How long a published security.txt stays valid (RFC 9116 §2.5.5: less than a year). */
+export const SECURITY_TXT_VALIDITY_DAYS = 180;
+
+/**
+ * /.well-known/security.txt (RFC 9116): where to report a vulnerability, the one
+ * channel SECURITY.md gives. `Expires` is counted from the build: every deployment
+ * renews it.
+ */
+export function securityTxt(builtAt: Date = new Date()): string {
+  const expires = new Date(builtAt.getTime() + SECURITY_TXT_VALIDITY_DAYS * 86_400_000);
+  return [
+    `Contact: ${GITHUB_REPO}/security/advisories/new`,
+    `Expires: ${expires.toISOString().replace(/\.\d{3}Z$/, 'Z')}`,
+    `Policy: ${GITHUB_REPO}/blob/main/SECURITY.md`,
+    `Canonical: ${absolute('/.well-known/security.txt')}`,
+    'Preferred-Languages: en, fr',
+    '',
+  ].join('\n');
+}
+
 /**
  * robots.txt of the collector's host: it serves no page, so crawlers are
  * asked to stay away (website spec §2.6: "except the collector's host").

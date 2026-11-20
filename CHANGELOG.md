@@ -11,6 +11,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **`vaubaan.com/.well-known/security.txt`** (RFC 9116): the private reporting channel, where a
+  researcher's tools look for it first.
 - **A plugin version is activated without a restart.** Activating a newer (or a kept) version of
   an installed plugin runs its trial at once in the running instance: the next call of that service
   runs the new version, the sessions of every other service go on, and a call already running
