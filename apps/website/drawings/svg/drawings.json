@@ -1,0 +1,134 @@
+{
+  "hero": {
+    "w": 1200,
+    "h": 440,
+    "title": "Vaubaan: let your agent work alone",
+    "desc": "Your coding agent holds a mission key. Vaubaan holds the credentials, runs what the mission allows, refuses the rest, and asks you before what is hard to undo."
+  },
+  "token-or-mission": {
+    "w": 1200,
+    "h": 480,
+    "title": "A secret in the agent, or a mission",
+    "desc": "Left: the agent holds the GitHub token itself, with everything it allows and no limit. Right: the token stays in Vaubaan; the agent holds a mission key that opens named permissions with limits."
+  },
+  "repair-scale": {
+    "w": 1200,
+    "h": 560,
+    "title": "One question for every permission",
+    "desc": "Every permission of every service answers one question: if your agent gets it wrong, how hard is it to repair? Four steps, from Harmless (read code) to Cannot be repaired (delete a release)."
+  },
+  "modelled-then-verbs": {
+    "w": 1200,
+    "h": 680,
+    "title": "Modelled, then folded into verbs",
+    "desc": "Supabase, modelled: one project carries the environment (preview, staging, prod) over 4 planes (db, storage, auth, functions) and their entities. A migration becomes one permission per environment; bulk row writes have no production form. The 25 permissions fold into 5 verbs a person ticks."
+  },
+  "the-map": {
+    "w": 1200,
+    "h": 786,
+    "title": "GitHub, mapped",
+    "desc": "The 18 GitHub permissions placed in 5 verbs (Read, Search everywhere, Propose, Ship, Administer) and four rows, from Cannot be repaired to Harmless. Most of the agent’s work sits in Harmless; what is costly to undo gathers in Ship and Administer."
+  },
+  "two-ticks": {
+    "w": 1200,
+    "h": 560,
+    "title": "You tick verbs, Vaubaan writes the lines",
+    "desc": "Ticking Read and Propose at Trusting on a GitHub repository writes 11 explicit lines: each permission gets its gate from its row and the trust level, and its limit from the base budget times three. The other verbs stay out."
+  },
+  "path-of-a-call": {
+    "w": 1200,
+    "h": 560,
+    "title": "How a call goes through Vaubaan",
+    "desc": "The agent calls a tool with its mission key. The plugin names the permission the call needs, Vaubaan checks it against the mission and its limits, then runs it with a credential the agent never sees, asks the mission creator first, or refuses with what to do. Every call is recorded."
+  },
+  "ask-me-first": {
+    "w": 1200,
+    "h": 470,
+    "title": "Ask me first",
+    "desc": "The agent calls a merge; Vaubaan refuses with approval-required and the page of the request; you see it waiting for you, read the exact call and approve; when you tell the agent, it replays the same call and it runs."
+  },
+  "alone-then-team": {
+    "w": 1200,
+    "h": 460,
+    "title": "Alone first, then your team",
+    "desc": "Alone: one person, their agent and the accounts they connected, on an instance of their own. Then the team: the same missions behind the team’s sign-in, accounts shared permission by permission, one key per person."
+  },
+  "agent-terminal": {
+    "w": 1200,
+    "h": 400,
+    "title": "What your agent sees",
+    "desc": "A coding agent session through Vaubaan: reads and pushes run, a staging migration runs, a production migration is refused because it is not in the mission, a merge asks the mission creator first."
+  },
+  "for-plugin-authors": {
+    "w": 1200,
+    "h": 580,
+    "title": "For plugin authors: five questions per permission",
+    "desc": "A plugin author answers five plain questions for each permission in the risk catalog. Merging into main is costly to undo, so it lands on Repairable, at a price; the kit checks it and a reviewer reads it in the catalog pull request."
+  },
+  "hero-consultant": {
+    "w": 1200,
+    "h": 440,
+    "title": "Vaubaan: let your agent work alone",
+    "desc": "Your assistant holds a mission key. Vaubaan holds the access to your mail, notes and calendar, runs what the mission allows, refuses the rest, and asks you before a mail leaves for a client."
+  },
+  "token-or-mission-consultant": {
+    "w": 1200,
+    "h": 480,
+    "title": "A secret in the agent, or a mission",
+    "desc": "Left: the assistant holds the Gmail app password itself, with every mail and no limit. Right: the password stays in Vaubaan; the assistant holds a mission key that opens named permissions with limits."
+  },
+  "repair-scale-consultant": {
+    "w": 1200,
+    "h": 560,
+    "title": "One question for every permission",
+    "desc": "Every permission of every service answers one question: if your assistant gets it wrong, how hard is it to repair? Four steps, from Harmless (draft a reply) to Cannot be repaired (send to a client)."
+  },
+  "modelled-then-verbs-consultant": {
+    "w": 1200,
+    "h": 680,
+    "title": "Modelled, then folded into verbs",
+    "desc": "Gmail, modelled: one mailbox plane with what Gmail keeps, plus zones Gmail does not have: who wrote a mail and who receives it, read from your domains and your client list. Sending becomes four permissions, one per recipient zone, each on its own row. The 19 permissions fold into 4 verbs a person ticks."
+  },
+  "the-map-consultant": {
+    "w": 1200,
+    "h": 698,
+    "title": "Gmail, mapped",
+    "desc": "The 19 Gmail permissions placed in 4 verbs (Search the mail, Draft, Send, Tidy) and four rows, from Cannot be repaired to Harmless. Reading and drafting sit in Harmless; a mail that leaves for a client cannot be called back."
+  },
+  "two-ticks-consultant": {
+    "w": 1200,
+    "h": 560,
+    "title": "You tick verbs, Vaubaan writes the lines",
+    "desc": "Ticking Search and Send at Trusting on a Gmail account writes 12 explicit lines: reading runs freely, and every mail that leaves for someone else asks first. Limits are the base budgets times three. Draft and Tidy stay out."
+  },
+  "path-of-a-call-consultant": {
+    "w": 1200,
+    "h": 560,
+    "title": "How a call goes through Vaubaan",
+    "desc": "The assistant calls a tool with its mission key. The Gmail plugin names the permission the call needs (sending to a client), Vaubaan checks it against the mission and its limits, then sends with an access the assistant never sees, asks you first, or refuses with what to do. Every call is recorded."
+  },
+  "ask-me-first-consultant": {
+    "w": 1200,
+    "h": 470,
+    "title": "Ask me first",
+    "desc": "The assistant sends the recap to a client; Vaubaan refuses with approval-required and the page of the request; you see it waiting for you, read the exact mail and approve; when you tell the assistant, it replays the same call and the mail leaves."
+  },
+  "alone-then-team-consultant": {
+    "w": 1200,
+    "h": 460,
+    "title": "Alone first, then your team",
+    "desc": "Alone: one person, their assistant and the accounts they connected, on an instance of their own. Then the firm: the same missions behind the firm’s sign-in, accounts shared permission by permission, one key per person."
+  },
+  "agent-terminal-consultant": {
+    "w": 1200,
+    "h": 400,
+    "title": "What your agent sees",
+    "desc": "An assistant session through Vaubaan: mail search, calendar and notes run, a thread under the sensitive Finance label is refused because that permission is not in the mission, the mail to the client asks you first."
+  },
+  "for-plugin-authors-consultant": {
+    "w": 1200,
+    "h": 580,
+    "title": "For plugin authors: five questions per permission",
+    "desc": "A plugin author answers five plain questions for each permission in the risk catalog. Sending to a pre-approved client can never be undone, so it lands on Cannot be repaired; the kit checks it and a reviewer reads it in the catalog pull request."
+  }
+}

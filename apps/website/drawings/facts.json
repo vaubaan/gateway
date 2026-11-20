@@ -1,0 +1,1146 @@
+{
+  "totals": {
+    "services": 21,
+    "planes": 29,
+    "permissions": 279,
+    "macroActions": 85
+  },
+  "services": {
+    "github": {
+      "name": "GitHub",
+      "permissions": 18,
+      "planes": [
+        "repo"
+      ],
+      "macroActions": [
+        {
+          "id": "read",
+          "label": "Read",
+          "description": "Code and metadata of the mission's repositories.",
+          "entries": [
+            {
+              "id": "github.read-code",
+              "row": 1,
+              "reason": null,
+              "quota": 5000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.read-meta",
+              "row": 1,
+              "reason": null,
+              "quota": 5000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "search",
+          "label": "Search everywhere",
+          "description": "GitHub's code and issue search, beyond the mission's repositories.",
+          "entries": [
+            {
+              "id": "github.search-global",
+              "row": 2,
+              "reason": "whole-account",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "propose",
+          "label": "Propose",
+          "description": "Work branches, push, pull requests, issues, comments and labels.",
+          "entries": [
+            {
+              "id": "github.feature-branch-write",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.bulk-file-write",
+              "row": 1,
+              "reason": null,
+              "quota": 1000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.create-pr",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.comment-write",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.label-write",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.issue-write",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.git-push",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.force-push",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.branch-delete",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "ship",
+          "label": "Ship",
+          "description": "Merge on protected branches, tags and releases.",
+          "entries": [
+            {
+              "id": "github.merge-protected",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.create-release",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.delete-release",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 5,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": null
+            },
+            {
+              "id": "github.tag-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "administer",
+          "label": "Administer",
+          "description": "Branch protection and workflow files.",
+          "entries": [
+            {
+              "id": "github.workflow-write-via-file",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "github.branch-protection-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        }
+      ]
+    },
+    "supabase": {
+      "name": "Supabase",
+      "permissions": 25,
+      "planes": [
+        "db",
+        "storage",
+        "auth",
+        "functions"
+      ],
+      "macroActions": [
+        {
+          "id": "query",
+          "label": "Query",
+          "description": "Data, storage objects, functions, users and managed schemas.",
+          "entries": [
+            {
+              "id": "supabase.read-data",
+              "row": 1,
+              "reason": null,
+              "quota": 2000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "supabase.read-managed-schemas",
+              "row": 2,
+              "reason": "secret-data",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.storage.object-read",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 1000,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "supabase.storage.signed-url-read",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "supabase.auth.read-users",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.functions.read",
+              "row": 2,
+              "reason": "secret-data",
+              "quota": 1000,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "change-data",
+          "label": "Change data",
+          "description": "Rows, storage objects, users and sign-in links.",
+          "entries": [
+            {
+              "id": "supabase.bulk-row-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging"
+              ]
+            },
+            {
+              "id": "supabase.storage.object-write-one",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 1000,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.storage.bulk-object-write",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 50,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": [
+                "preview",
+                "staging"
+              ]
+            },
+            {
+              "id": "supabase.auth.user-write-one",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.auth.bulk-user-write",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 50,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": [
+                "preview",
+                "staging"
+              ]
+            },
+            {
+              "id": "supabase.auth.user-credential-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 100,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.auth.generate-link",
+              "row": 2,
+              "reason": "secret-data",
+              "quota": 100,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "change-schema",
+          "label": "Change the schema",
+          "description": "Migrations, row-level security, extensions and buckets.",
+          "entries": [
+            {
+              "id": "supabase.migration-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.policy-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 10,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.extension-write",
+              "row": 2,
+              "reason": "whole-account",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.bucket-write",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 50,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "ship-functions",
+          "label": "Ship functions",
+          "description": "Code, deployment and secrets of Edge Functions.",
+          "entries": [
+            {
+              "id": "supabase.functions.body-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.functions.deploy",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 200,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.function-secret-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "administer",
+          "label": "Administer",
+          "description": "Database roles, storage and auth configuration, SSO.",
+          "entries": [
+            {
+              "id": "supabase.db-role-write",
+              "row": 2,
+              "reason": "whole-account",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.storage-config-write",
+              "row": 1,
+              "reason": null,
+              "quota": 50,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.sso-provider-write",
+              "row": 2,
+              "reason": "whole-account",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.third-party-auth-write",
+              "row": 2,
+              "reason": "whole-account",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            },
+            {
+              "id": "supabase.auth-config-write",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging",
+                "prod"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "gmail": {
+      "name": "Gmail",
+      "permissions": 19,
+      "planes": [
+        "mailbox"
+      ],
+      "macroActions": [
+        {
+          "id": "search",
+          "label": "Search the mail",
+          "description": "Read the structure, the threads and the messages, whoever sent them.",
+          "entries": [
+            {
+              "id": "gmail.read-mailbox",
+              "row": 1,
+              "reason": null,
+              "quota": 2000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-from-zone-automated",
+              "row": 1,
+              "reason": null,
+              "quota": 1000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-from-zone-internal",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-from-zone-known-external",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-from-zone-unknown",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-drafts",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.read-sensitive-label",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.bulk-read",
+              "row": 2,
+              "reason": "in-bulk",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "draft",
+          "label": "Draft",
+          "description": "Write and edit drafts. Nothing leaves.",
+          "entries": [
+            {
+              "id": "gmail.draft-write",
+              "row": 1,
+              "reason": null,
+              "quota": 300,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.draft-to-zone-self",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.draft-to-zone-internal",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.draft-to-zone-allowlist",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "send",
+          "label": "Send",
+          "description": "Send a message or a draft. Nothing can call it back.",
+          "entries": [
+            {
+              "id": "gmail.send-to-zone-self",
+              "row": 1,
+              "reason": null,
+              "quota": 50,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.send-to-zone-internal",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.send-to-zone-allowlist",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 20,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": null
+            },
+            {
+              "id": "gmail.send-to-zone-external",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 10,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "tidy",
+          "label": "Tidy",
+          "description": "Apply, remove and create labels.",
+          "entries": [
+            {
+              "id": "gmail.label-write",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.label-create",
+              "row": 1,
+              "reason": null,
+              "quota": 20,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "gmail.bulk-label-write",
+              "row": 2,
+              "reason": "in-bulk",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        }
+      ]
+    },
+    "notion": {
+      "name": "Notion",
+      "permissions": 14,
+      "planes": [
+        "content"
+      ],
+      "macroActions": [
+        {
+          "id": "read",
+          "label": "Read",
+          "description": "Pages, databases and comments.",
+          "entries": [
+            {
+              "id": "notion.read-content",
+              "row": 1,
+              "reason": null,
+              "quota": 3000,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.query-databases",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.read-comments",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 500,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "comment",
+          "label": "Comment",
+          "description": "Leave comments.",
+          "entries": [
+            {
+              "id": "notion.comment-create",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "write",
+          "label": "Write",
+          "description": "Create and edit pages, their content and database entries.",
+          "entries": [
+            {
+              "id": "notion.page-create",
+              "row": 1,
+              "reason": null,
+              "quota": 200,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.page-update",
+              "row": 1,
+              "reason": null,
+              "quota": 300,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.content-append",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.block-update",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 300,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.entry-create",
+              "row": 1,
+              "reason": null,
+              "quota": 300,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.entry-update",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "reorganize",
+          "label": "Reorganize",
+          "description": "Delete blocks, move to the trash and restore.",
+          "entries": [
+            {
+              "id": "notion.block-delete",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.page-trash",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.page-restore",
+              "row": 2,
+              "reason": "in-bulk",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "notion.root-trash",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 50,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        }
+      ]
+    },
+    "google-calendar": {
+      "name": "Google Calendar",
+      "permissions": 10,
+      "planes": [
+        "calendar"
+      ],
+      "macroActions": [
+        {
+          "id": "read",
+          "label": "Read the agenda",
+          "description": "Calendars, events and free/busy.",
+          "entries": [
+            {
+              "id": "google-calendar.calendar-list",
+              "row": 1,
+              "reason": null,
+              "quota": 500,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.event-read",
+              "row": 2,
+              "reason": "personal-data",
+              "quota": 2000,
+              "careful": "approval",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.free-busy-read",
+              "row": 1,
+              "reason": null,
+              "quota": 300,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "schedule",
+          "label": "Schedule",
+          "description": "Create, change, delete and answer events.",
+          "entries": [
+            {
+              "id": "google-calendar.event-create",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.event-change",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 200,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.event-delete",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 30,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.event-respond",
+              "row": 1,
+              "reason": null,
+              "quota": 100,
+              "careful": "auto",
+              "trusting": "auto",
+              "autonomous": "auto",
+              "envs": null
+            }
+          ]
+        },
+        {
+          "id": "invite",
+          "label": "Invite",
+          "description": "Invite people and let Google email them.",
+          "entries": [
+            {
+              "id": "google-calendar.invite-internal",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 100,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.invite-external",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 30,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": null
+            },
+            {
+              "id": "google-calendar.notify-guests",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 50,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

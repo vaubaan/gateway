@@ -29,3 +29,6 @@ apps/gateway/tests/fixtures/sigstore/
 # Rendered by packages/design-tokens (npm run generate --workspace @vaubaan/design-tokens).
 packages/design-tokens/tokens.css
 packages/design-tokens/theme.css
+
+# Written by apps/website/scripts/drawing-facts.ts (JSON.stringify), read by drawings/gen.py.
+apps/website/drawings/facts.json
