@@ -2,6 +2,7 @@
  * vercel.json as Vercel validates it: a schema failure stops every deployment
  * before any build (2026-11-20: an `ignoreCommand` over 256 characters).
  */
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,5 +30,14 @@ describe('vercel.json', () => {
     )) {
       expect(script, name).toContain(`packages/${name.slice('@vaubaan/'.length)}`);
     }
+  });
+
+  it('answers 0 or 1 only, and builds when the last deployed commit is missing from the clone', () => {
+    const run = (env: Record<string, string>) =>
+      spawnSync('sh', ['scripts/vercel-ignore.sh'], { cwd: SITE, env: { ...process.env, ...env } })
+        .status;
+    expect(run({ VERCEL_GIT_COMMIT_REF: 'some-branch' })).toBe(0);
+    expect(run({ VERCEL_GIT_COMMIT_REF: 'main', VERCEL_GIT_PREVIOUS_SHA: 'f'.repeat(40) })).toBe(1);
+    expect(run({ VERCEL_GIT_COMMIT_REF: 'main', VERCEL_GIT_PREVIOUS_SHA: 'HEAD' })).toBe(0);
   });
 });
