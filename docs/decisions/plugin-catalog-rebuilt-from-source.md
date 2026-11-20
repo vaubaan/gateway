@@ -28,7 +28,10 @@ plugin is preinstalled: an instance installs a catalog plugin when it first need
   build runs without secrets and never signs.
 - A plugin id belongs to the owners its declaration names (`CODEOWNERS`); a new version is a pull
   request changing the commit, reviewed on the diff from the previous one.
-- The site's plugin pages and `versions.json` are built from the catalog, not from `plugins/`.
+- The plugin versions an instance reads come from the catalog (amendment below), not from the
+  site. The site's plugin pages are still built from `plugins/`; building them from the catalog is
+  the proposed intent
+  [Read each service's page from the catalog](../intents/believe-what-the-site-says.md#read-each-services-page-from-the-catalog).
 
 ## Rejected alternatives
 
@@ -56,7 +59,7 @@ source the review saw.
 
 The site's `versions.json` and the gateway's `catalog-versions.json` were written by hand in the
 gateway's repository for each plugin version: a commit and a site deployment per release of any
-plugin, against this record's own consequence that both are built from the catalog.
+plugin, against this record's aim that both come from the catalog.
 
 ### Decision
 
