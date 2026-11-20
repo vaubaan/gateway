@@ -102,8 +102,7 @@ function hasJsonType(type: unknown, value: unknown): boolean {
  * the argument (`limit: at most 50.`).
  */
 export function argumentTypeIssue(name: string, schema: unknown, value: unknown): string | null {
-  const declared: ArgumentSchema =
-    typeof schema === 'object' && schema !== null ? (schema) : {};
+  const declared: ArgumentSchema = typeof schema === 'object' && schema !== null ? schema : {};
   if (value === null && declared.nullable === true) return null;
   if (!hasJsonType(declared.type, value)) return `${name}: expected ${String(declared.type)}.`;
   if (Array.isArray(declared.enum) && !declared.enum.includes(value)) {
