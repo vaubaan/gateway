@@ -18,8 +18,8 @@
     },
     "cloudflare-dns": {
       "name": "Cloudflare DNS",
-      "version": "4.0.0",
-      "sha256": "e0cc4032bf17cc705a3b3bd5f9d2bc482f9280af4d39da79c797322957395257"
+      "version": "4.0.2",
+      "sha256": "175f34c045056d377e3934655324c4a1dc81b5cee00157240ee0afd2f4339ded"
     },
     "context7": {
       "name": "Context7",
@@ -28,8 +28,8 @@
     },
     "fly": {
       "name": "Fly.io",
-      "version": "0.4.0",
-      "sha256": "38e23928bac93fd4e45995f6bf0e936730b5bdd2c2473d2fc6681363d463a6b7"
+      "version": "0.4.2",
+      "sha256": "9af4f088f8edc75e3afaeaf2ae42ef71823fc35228a0d85113af4b8797564d9d"
     },
     "github": {
       "name": "GitHub",
@@ -48,13 +48,13 @@
     },
     "google-calendar": {
       "name": "Google Calendar",
-      "version": "0.4.0",
-      "sha256": "025675d9e43568783d110a7aa9bb603ea645cc7a5c82e3ccf153e3a1b6183481"
+      "version": "0.4.2",
+      "sha256": "68881dc320878f709b8474ad8b6227e0b1c6c48a6d9adbe2abd3d22b3fbfd62b"
     },
     "miro": {
       "name": "Miro",
-      "version": "0.5.1",
-      "sha256": "690fd2eeb9897179f4639e56691fffd8d01f305a276b88f7939b4e13c7207769"
+      "version": "0.5.3",
+      "sha256": "20dfa36243d120341cabbd4555612966a8589d85a2c45c98b2b6fd4208eb7501"
     },
     "notion": {
       "name": "Notion",
@@ -63,8 +63,8 @@
     },
     "outlook": {
       "name": "Outlook",
-      "version": "0.1.0",
-      "sha256": "6244536d9ca3d44ee08305a6add6de3272e81a48235aa97d05fe031971ed75b7"
+      "version": "0.1.2",
+      "sha256": "d0460f08eb89aad58b22336be8b83e4eaaf4b88e4cda309c8858946fb0d871b0"
     },
     "railway": {
       "name": "Railway",
@@ -73,28 +73,28 @@
     },
     "resend": {
       "name": "Resend",
-      "version": "0.6.0",
-      "sha256": "18bb029c4d46edcad308fe739c660ce90f0f185d05e9ea4f499b764d64a2be5a"
+      "version": "0.6.2",
+      "sha256": "921b37b4c17045f9c01453dd7399e55cfb76001b250d39e6b8ac798a272f30ab"
     },
     "stripe": {
       "name": "Stripe",
-      "version": "0.5.0",
-      "sha256": "a78306aeb465092434108d22edc332b98bf82343111f8464361b22dc090ced9e"
+      "version": "0.5.2",
+      "sha256": "f18707bd16a94855160a97e85559c318e4803562de62b1dbfcf966f86be50d53"
     },
     "supabase": {
       "name": "Supabase",
-      "version": "6.1.0",
-      "sha256": "42d302876f26161181ad67d2aa4b219a2845b9bd545e1e93181902c2bcf7e9ec"
+      "version": "6.1.2",
+      "sha256": "2adb15f8c85d6b4704df54f55392af8878e2b2ddf85a09d416450be9b7e674f2"
     },
     "upstash-redis": {
       "name": "Upstash Redis",
-      "version": "4.0.0",
-      "sha256": "8ad6bd00a3c9ca883b39ca25c4470454148c5ac0363d0ce0273927e6079710f6"
+      "version": "4.0.2",
+      "sha256": "2bb5cbd9ebdb4cb5c3e98d50bfefc67cd06962e5cfb255e7b09d36f8f9336fbb"
     },
     "vercel": {
       "name": "Vercel",
-      "version": "4.2.2",
-      "sha256": "de28881ed4573924371ccbc21d48b45176fd690d8c2cc37e4547c2b17560120b"
+      "version": "4.2.4",
+      "sha256": "824e27bc82288ae517abda78427a48e17a7a9e9c380eb32a811d2bfd4fad01dc"
     }
   }
 }
