@@ -18,8 +18,8 @@
     },
     "cloudflare-dns": {
       "name": "Cloudflare DNS",
-      "version": "4.0.2",
-      "sha256": "175f34c045056d377e3934655324c4a1dc81b5cee00157240ee0afd2f4339ded"
+      "version": "4.1.0",
+      "sha256": "52650bb65dddbc5f826859bab80513ca5dfdb42b256103e84918c3c26e359a98"
     },
     "context7": {
       "name": "Context7",
@@ -68,8 +68,8 @@
     },
     "railway": {
       "name": "Railway",
-      "version": "6.0.0",
-      "sha256": "5a120876d905831c655ba6b7a30268d17bd5cf2eebf2644eaefeab5e0a9d7cae"
+      "version": "6.1.0",
+      "sha256": "276192b608512a91393255f51148103f54c607d2ba686f098c786b09a76263f0"
     },
     "resend": {
       "name": "Resend",
@@ -83,18 +83,18 @@
     },
     "supabase": {
       "name": "Supabase",
-      "version": "6.1.2",
-      "sha256": "2adb15f8c85d6b4704df54f55392af8878e2b2ddf85a09d416450be9b7e674f2"
+      "version": "6.2.0",
+      "sha256": "71cdc42230ef97d6f9b8d71e126868f743e4e03af88dbc0c00f2d1b62ab6eee9"
     },
     "upstash-redis": {
       "name": "Upstash Redis",
-      "version": "4.0.2",
-      "sha256": "2bb5cbd9ebdb4cb5c3e98d50bfefc67cd06962e5cfb255e7b09d36f8f9336fbb"
+      "version": "4.1.0",
+      "sha256": "f9f9215da7bace204bd5b6cd6ad9177105801ce7b3246a0d5f47771ef0dcbacd"
     },
     "vercel": {
       "name": "Vercel",
-      "version": "4.2.4",
-      "sha256": "824e27bc82288ae517abda78427a48e17a7a9e9c380eb32a811d2bfd4fad01dc"
+      "version": "4.3.0",
+      "sha256": "6d8f06d0f6065333f68834f2b6f553345f80f3afd0973c9eca606d862218035f"
     }
   }
 }
