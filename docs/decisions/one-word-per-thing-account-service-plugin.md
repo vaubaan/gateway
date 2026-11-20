@@ -71,8 +71,9 @@ shared with the deployed brokers and the RFC.
 - Stored bytes do not move: a RiskId holds a service id, never the word; ids, AAD and keys are
   unchanged. The migration rewrites the audit's JSON by the sense of each act (a sign-in act's
   `provider` → `sign_in_provider`, any other → `service…`), and the web sessions.
-- The SDK keeps `ProviderPlugin`, `ProviderLabel`, `providerForTool` and a catalog's `provider:`
-  until 0.10; a plugin pinned from an earlier SDK is read in the new words both ways.
+- The SDK kept `ProviderPlugin`, `ProviderLabel`, `providerForTool` and a catalog's `provider:`
+  through 0.9.x; SDK 1.0 removed them and refuses a pin of an earlier SDK
+  ([plugin-sdk-1-0-keeps-the-0-9-4-contract](./plugin-sdk-1-0-keeps-the-0-9-4-contract.md)).
 - No configuration key changes (none named the service); the retired `providers.<id>.*` and
   `VAUBAAN_PROVIDER_*` keep their names. The site's `/docs/providers` redirects to
   `/docs/services`. The guard test also refuses provider for a service and "the <Name> plugin"

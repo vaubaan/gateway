@@ -44,6 +44,7 @@ import {
   packArchive,
   type ArchiveManifest,
 } from '@vaubaan/plugin-sdk/archive';
+import { sdkBuildRange } from '@vaubaan/plugin-sdk';
 
 import type * as Esbuild from 'esbuild';
 
@@ -90,7 +91,7 @@ export function archivePackage(manifest: PluginPackage, sdkVersion: string): Arc
     ...(manifest.description !== undefined ? { description: manifest.description } : {}),
     type: 'module',
     exports: { '.': './index.js' },
-    peerDependencies: { [SDK_PACKAGE]: `^${sdkVersion}` },
+    peerDependencies: { [SDK_PACKAGE]: sdkBuildRange(sdkVersion) },
     license: manifest.license ?? 'UNLICENSED',
   };
 }

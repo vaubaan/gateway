@@ -51,12 +51,6 @@ export interface ServiceLabel {
   readonly summary: string | null;
 }
 
-/**
- * @deprecated Renamed `ServiceLabel` (ADR one-word-per-thing-account-service-plugin, R2);
- * kept for one minor. Removed in 0.10.
- */
-export type ProviderLabel = ServiceLabel;
-
 export class PluginRegistryError extends Error {
   constructor(readonly issues: readonly string[]) {
     super(`Invalid plugin registry:\n  - ${issues.join('\n  - ')}`);
@@ -186,11 +180,6 @@ export class PluginRegistry {
     const split = splitToolName(toolName);
     if (!split) return null;
     return this.byId.get(split.serviceId) ?? null;
-  }
-
-  /** @deprecated Renamed `serviceForTool` (rename R2); kept for one minor. Removed in 0.10. */
-  providerForTool(toolName: string): RegisteredPlugin | null {
-    return this.serviceForTool(toolName);
   }
 
   /**

@@ -136,14 +136,13 @@ describe('readPinnedPlugins', () => {
     expect(pins[0]?.plugin.catalog.service).toBe('acme');
   });
 
-  it("reads a bundle of an SDK before 0.9.4 in this SDK's words (provider became service)", async () => {
+  it('refuses a bundle of an SDK before 0.9.4 (it says provider), asking for a rebuild', async () => {
     const dir = freshDir('legacy');
-    pin(dir, 'acme', { code: await bundleAcme('1.2.4', undefined, 'legacy') });
-    const [pinned] = await readPinnedPlugins(dir, { sdkVersion: SDK });
-    expect(pinned?.plugin.catalog.service).toBe('acme');
-    expect(pinned?.plugin.dataModel.service).toBe('acme');
-    const outcome = pinned?.plugin.classify('acme__list_things', { space: 'sp' }, []);
-    expect(outcome && 'slices' in outcome && outcome.slices[0]?.service).toBe('acme');
+    const path = pin(dir, 'acme', { code: await bundleAcme('1.2.4', undefined, 'legacy') });
+    const message = await refusal(() => readPinnedPlugins(dir, { sdkVersion: SDK }));
+    expect(message).toContain(path);
+    expect(message).toContain('before 0.9.4');
+    expect(message).toContain('pin a build of the plugin for this gateway');
   });
 
   it('recognises an error of the pinned copy of the SDK by its brand, not instanceof', async () => {
@@ -321,5 +320,17 @@ describe('sdkInRange', () => {
     expect(sdkInRange('0.6.0', '^0.5.1')).toBe(false);
     expect(sdkInRange('0.7.0-rc.1', '^0.7.0-rc.0')).toBe(true);
     expect(sdkInRange('0.6.1-beta.1', '^0.6.0')).toBe(true);
+  });
+
+  it('runs on a 1.x host a build of the 0.9.4 contract, never an earlier one nor a later SDK', () => {
+    // ADR plugin-sdk-1-0-keeps-the-0-9-4-contract.
+    expect(sdkInRange('1.0.0', '^0.9.4')).toBe(true);
+    expect(sdkInRange('1.3.0', '^0.9.5')).toBe(true);
+    expect(sdkInRange('1.0.0', '^0.9.4 || ^1.0.0')).toBe(true);
+    expect(sdkInRange('0.9.4', '^0.9.4 || ^1.0.0')).toBe(true);
+    expect(sdkInRange('1.0.0', '^0.9.3')).toBe(false);
+    expect(sdkInRange('1.0.0', '^1.1.0')).toBe(false);
+    expect(sdkInRange('2.0.0', '^0.9.4', '2.0.0')).toBe(false);
+    expect(sdkInRange('1.0.0', 'not a range')).toBe(false);
   });
 });

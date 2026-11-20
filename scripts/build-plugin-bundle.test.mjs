@@ -51,7 +51,7 @@ describe('build-plugin-bundle', () => {
         version: result.version,
         type: 'module',
         exports: { '.': './index.js' },
-        peerDependencies: { '@vaubaan/plugin-sdk': `^${SDK_VERSION}` },
+        peerDependencies: { '@vaubaan/plugin-sdk': `^0.9.4 || ^${SDK_VERSION}` },
         license: 'Apache-2.0',
       });
       expect(readFileSync(join(result.path, 'risk-catalog.yaml'), 'utf8')).toContain('risks');

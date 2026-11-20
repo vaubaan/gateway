@@ -31,6 +31,7 @@ import {
   SIGNATURE_FILE,
   verifyManifestSignature,
 } from '@vaubaan/plugin-sdk/archive';
+import { sdkBuildRange } from '@vaubaan/plugin-sdk';
 
 const TEMPLATE = fileURLToPath(new URL('../../../../plugins/_template', import.meta.url));
 const SDK_VERSION = (
@@ -72,7 +73,7 @@ describe('buildArchive', () => {
       description: expect.any(String) as string,
       type: 'module',
       exports: { '.': './index.js' },
-      peerDependencies: { '@vaubaan/plugin-sdk': `^${SDK_VERSION}` },
+      peerDependencies: { '@vaubaan/plugin-sdk': sdkBuildRange(SDK_VERSION) },
       license: 'Apache-2.0',
     });
   });
@@ -134,12 +135,12 @@ describe('buildArchive', () => {
 
 describe('archive helpers', () => {
   it('names the package from the plugin, unlicensed by default', () => {
-    expect(archivePackage({ name: '@acme/crm', version: '1.0.0' }, '0.9.4')).toEqual({
+    expect(archivePackage({ name: '@acme/crm', version: '1.0.0' }, '1.0.0')).toEqual({
       name: '@acme/crm',
       version: '1.0.0',
       type: 'module',
       exports: { '.': './index.js' },
-      peerDependencies: { '@vaubaan/plugin-sdk': '^0.9.4' },
+      peerDependencies: { '@vaubaan/plugin-sdk': '^0.9.4 || ^1.0.0' },
       license: 'UNLICENSED',
     });
   });

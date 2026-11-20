@@ -52,20 +52,19 @@ export interface StructuralResult {
 }
 
 /**
- * The name `service` had before SDK 0.9.4 (ADR one-word-per-thing-account-service-plugin):
- * a catalog that still writes `provider:` loads, read as `service:`. Removed in 0.10.
+ * The name `service` had before SDK 0.9.4 (ADR one-word-per-thing-account-service-plugin),
+ * refused since 1.0 with the word to write instead.
  */
-const DEPRECATED_SERVICE_KEY = 'provider';
+const FORMER_SERVICE_KEY = 'provider';
 
-/** A document that names its service by the deprecated key, read with the current one. */
+/** A document that still names its service by the former key: the issue, the key dropped. */
 function withCurrentServiceKey(doc: Rec, issues: string[]): Rec {
-  if (!(DEPRECATED_SERVICE_KEY in doc)) return doc;
-  const { [DEPRECATED_SERVICE_KEY]: deprecated, ...rest } = doc;
-  if ('service' in doc) {
-    issues.push(`${DEPRECATED_SERVICE_KEY}: the former name of service; write service only`);
-    return rest;
-  }
-  return { ...rest, service: deprecated };
+  if (!(FORMER_SERVICE_KEY in doc)) return doc;
+  const { [FORMER_SERVICE_KEY]: _former, ...rest } = doc;
+  issues.push(
+    `${FORMER_SERVICE_KEY}: the name of service before SDK 0.9.4; write service (rebuild the plugin)`,
+  );
+  return rest;
 }
 
 /** Check the shape of a parsed document and build a typed catalog from it. */

@@ -43,8 +43,6 @@ export interface CallUnderTest {
   readonly accepted: readonly RiskId[];
   /** The account's public form fields, when the classifier reads them. */
   readonly account?: ClassifyAccount;
-  /** @deprecated The former name of `account`, read when `account` is absent. Removed in 0.10. */
-  readonly connection?: ClassifyAccount;
   /** The plugin's indexed catalog ; built from `plugin.catalog` when absent. */
   readonly catalog?: IndexedRiskCatalog;
 }
@@ -61,12 +59,7 @@ export type CallDecision =
  * a mission allows, not of how much.
  */
 export function decideCall(plugin: ServicePlugin, call: CallUnderTest): CallDecision {
-  const classified = plugin.classify(
-    call.tool,
-    call.args,
-    call.resources,
-    call.account ?? call.connection,
-  );
+  const classified = plugin.classify(call.tool, call.args, call.resources, call.account);
   if ('denied' in classified) return { outcome: 'classify-denied', reason: classified.denied };
   return evaluateCall({
     executed_slices: classified.slices,

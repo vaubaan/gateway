@@ -71,18 +71,6 @@ export interface AccountContext {
 }
 
 /**
- * @deprecated Renamed `AccountContext` (ADR one-word-per-thing-account-service-plugin);
- * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
- */
-export type ConnectionContext = AccountContext;
-
-/**
- * @deprecated Renamed `ClassifyAccount` (ADR one-word-per-thing-account-service-plugin);
- * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
- */
-export type ClassifyConnection = ClassifyAccount;
-
-/**
  * A small key/value cache the host scopes to ONE account and hands to
  * `execute`, for the short-lived upstream credential a plugin derives on
  * every call (a GitHub installation token minted from the App key). The
@@ -377,9 +365,3 @@ export interface ServicePlugin {
    */
   readonly manualRevocation?: string;
 }
-
-/**
- * @deprecated Renamed `ServicePlugin` (ADR one-word-per-thing-account-service-plugin, R2);
- * kept for one minor so that a plugin pinned by an operator still compiles. Removed in 0.10.
- */
-export type ProviderPlugin = ServicePlugin;

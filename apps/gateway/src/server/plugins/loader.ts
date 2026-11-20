@@ -21,12 +21,11 @@ import { pathToFileURL } from 'node:url';
 
 import {
   createRegistry,
-  fromLegacyPlugin,
-  isLegacyPlugin,
   PluginRegistryError,
+  SDK_CONTRACT_SINCE,
   type ServicePlugin,
 } from '@vaubaan/plugin-sdk';
-import { satisfies, valid, validRange } from 'semver';
+import { satisfies, subset, valid, validRange } from 'semver';
 
 import { ConfigError, envNamesFor, type ConfigIssue } from '../config';
 
@@ -138,12 +137,30 @@ export function readPinManifest(
   return { ok: true, manifest: { name, version, sdkRange, entry } };
 }
 
+const PRERELEASES = { includePrerelease: true } as const;
+
 /**
- * Whether the host's SDK is inside the range a pin was built against. Prereleases
- * count (`0.7.0-rc.1` satisfies `^0.7.0-rc.0`, and a release host a prerelease range).
+ * Whether a host of the SDK `sdkVersion` runs a plugin built for `range`: its version
+ * is in the range, or the whole range lies between the first SDK of the contract it keeps
+ * and itself (ADR plugin-sdk-1-0-keeps-the-0-9-4-contract: a 1.0 host runs a `^0.9.4`
+ * build, never a `^0.9.3` one nor one built for a later SDK). Prereleases count
+ * (`0.7.0-rc.1` satisfies `^0.7.0-rc.0`, and a release host a prerelease range).
  */
-export function sdkInRange(sdkVersion: string, range: string): boolean {
-  return satisfies(sdkVersion, range, { includePrerelease: true });
+export function sdkInRange(
+  sdkVersion: string,
+  range: string,
+  contractSince: string = SDK_CONTRACT_SINCE,
+): boolean {
+  if (validRange(range) === null || valid(sdkVersion) === null) return false;
+  if (satisfies(sdkVersion, range, PRERELEASES)) return true;
+  return subset(range, `>=${contractSince} <=${sdkVersion}`, PRERELEASES);
+}
+
+/** A plugin built against an SDK before 0.9.4: its catalog names a `provider`, not a `service`. */
+function builtBeforeTheServiceWord(plugin: unknown): boolean {
+  if (!isRecord(plugin) || !isRecord(plugin['catalog'])) return false;
+  const catalog = plugin['catalog'];
+  return catalog['service'] === undefined && typeof catalog['provider'] === 'string';
 }
 
 /** The directories of `dir` a pin may sit in: no dotfile, no plain file, sorted. */
@@ -236,13 +253,15 @@ async function readPin(path: string, options: PinReadOptions): Promise<PinnedPlu
     // `definePlugin` throws here, at import, for a plugin it refuses.
     refuse(path, `the plugin failed to load: ${errorText(err)}`);
   }
-  const exported = isRecord(loaded) ? loaded['default'] : undefined;
+  const plugin = isRecord(loaded) ? loaded['default'] : undefined;
   // A pin built against an SDK before 0.9.4 says provider where this host says service
-  // (ADR one-word-per-thing-account-service-plugin): put in this SDK's words, both ways.
-  const plugin =
-    isRecord(exported) && isLegacyPlugin(exported)
-      ? fromLegacyPlugin(exported as unknown as ServicePlugin)
-      : exported;
+  // (ADR plugin-sdk-1-0-keeps-the-0-9-4-contract): no longer translated.
+  if (builtBeforeTheServiceWord(plugin)) {
+    refuse(
+      path,
+      `${manifest.name} ${manifest.version} was built against an SDK before 0.9.4 (it says provider, not service): pin a build of the plugin for this gateway, or remove the directory`,
+    );
+  }
   const issues = registrationIssues(plugin);
   if (issues.length > 0) {
     throw new ConfigError(issues.map((issue) => issueAt(path, `refused: ${issue}`)));

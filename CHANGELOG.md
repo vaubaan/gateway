@@ -9,6 +9,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Plugin SDK
+
+- **1.0.0 — the 0.9.4 contract made stable** (ADR plugin-sdk-1-0-keeps-the-0-9-4-contract): from
+  now on a break of the contract or of an export is a major. A build declares
+  `sdkBuildRange(SDK_VERSION)`, `^0.9.4 || ^1.0.0`, so a gateway still on 0.9.4 loads it, and a 1.x
+  gateway runs the `^0.9.4` builds of the catalog. Removed: the `@deprecated` `ConnectionContext`,
+  `ClassifyConnection`, `ProviderPlugin`, `ProviderLabel`, `providerForTool`, the kit's
+  `connection` (write `account`), the reading of a catalog's `provider:` and of a pin built before
+  0.9.4 (both refused: rebuild the plugin). `@vaubaan/plugin-cli` 0.2.0 writes that range.
+
 ### Added
 
 - **`vaubaan.com/.well-known/security.txt`** (RFC 9116): the private reporting channel, where a

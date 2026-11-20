@@ -38,7 +38,6 @@ export * from './registry.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';
 export * from './version.ts';
-export * from './legacy.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {

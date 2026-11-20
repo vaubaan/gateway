@@ -18,6 +18,7 @@ import {
   isUpstreamAuthError,
   isUpstreamHttpError,
   isUpstreamProtocolError,
+  sdkBuildRange,
   SDK_VERSION,
   UpstreamAnswerTooLarge,
   UpstreamAuthError,
@@ -103,5 +104,12 @@ describe('SDK_VERSION', () => {
       version: string;
     };
     expect(SDK_VERSION).toBe(manifest.version);
+  });
+  it('builds a 1.x plugin for the 0.9.4 contract too, another major for itself only', () => {
+    // ADR plugin-sdk-1-0-keeps-the-0-9-4-contract.
+    expect(sdkBuildRange('1.0.0')).toBe('^0.9.4 || ^1.0.0');
+    expect(sdkBuildRange('1.2.3')).toBe('^0.9.4 || ^1.2.3');
+    expect(sdkBuildRange('0.9.4')).toBe('^0.9.4');
+    expect(sdkBuildRange('2.0.0')).toBe('^2.0.0');
   });
 });

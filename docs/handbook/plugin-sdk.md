@@ -95,18 +95,19 @@ in the same pull request, with its line under `### Plugin SDK` in `CHANGELOG.md`
 | A fix that makes a check do what its documentation says, wording of a message                                                                                                                                                                                                             | patch        | patch          |
 
 `SDK_VERSION` (`src/version.ts`) equals the manifest's `version` (`error-brands.test.ts`). It is the
-host's side of a pin's range check (`peerDependencies["@vaubaan/plugin-sdk"]`, `^<SDK_VERSION>` in a
-bundle): before `1.0.0` a caret range holds one minor, so **every SDK minor turns away every pin built
-against the previous one** until it is rebuilt. A change the host relies on to read what a plugin
-returns or throws (a brand, a field) is therefore a minor even when it only adds exports.
+host's side of a pin's range check (`peerDependencies["@vaubaan/plugin-sdk"]`). A build declares
+`sdkBuildRange(SDK_VERSION)`, never a range written by hand: `^0.9.4 || ^<SDK_VERSION>` for a 1.x SDK,
+so a gateway still on 0.9.4 loads it, and a 1.x host also runs a `^0.9.4` build
+(`SDK_CONTRACT_SINCE`; ADR
+[plugin-sdk-1-0-keeps-the-0-9-4-contract](../decisions/plugin-sdk-1-0-keeps-the-0-9-4-contract.md)).
+**A change the host relies on to read what a plugin returns or throws (a brand, a field) is
+therefore a 2.0**, even when it only adds exports: it ends the 0.9.4 half of every range.
 
 **A rename is a patch when the old name keeps working** (ADR
 one-word-per-thing-account-service-plugin): 0.9.3 (connection → account) and 0.9.4 (provider →
-service) kept every old export as a `@deprecated` alias, and 0.9.4 reads what a pin of an earlier
-SDK hands the host in the new words (`fromLegacyPlugin`, `src/legacy.ts`: the catalog's and data
-model's `provider`, a slice's and a resource's, the expiry `provider-reports`; and back, the
-resources it is given carry `provider` too), while the catalog loader reads a `provider:` key as
-`service:`. The aliases and the adapter go in 0.10. The OAuth broker's `broker: { provider }` is
+service) kept every old export as a `@deprecated` alias and read a pin of an earlier SDK in the
+new words. 1.0 removed the aliases and that adapter: a pin of an SDK before 0.9.4 and a catalog
+writing `provider:` are refused, with the word to write. The OAuth broker's `broker: { provider }` is
 not a rename: it is the broker protocol's word.
 
 ## Publication
