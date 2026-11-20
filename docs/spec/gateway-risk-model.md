@@ -17,6 +17,9 @@ status: stable
 > [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md));
 > what each trust level writes did not change.
 >
+> 2026-11-20 — row 2 is named "Worth a look" (was "Repairable, worth a look"), owner decision;
+> its number, branches and gates did not change.
+>
 > 2026-11-13 — the gate of a permission comes from an explicit decision tree over five facts (§4.6);
 > the `persistence` axis left the catalogs (§4.2) and the severity word (low, medium, high,
 > critical) left the product: a permission is printed with its row and the reason that put it there
@@ -187,12 +190,12 @@ What a creator ticks per account, in the connector's words
 - **Row**, read from the vector in the environment of the line by a decision tree whose branches are
   read in order; the first that answers decides:
 
-  | Row | Name                     | Reached when                                                                                   |
-  | --- | ------------------------ | ---------------------------------------------------------------------------------------------- |
-  | 4   | Cannot be repaired       | `reversibility: irreversible`                                                                  |
-  | 3   | Repairable, at a price   | `reversibility: costly`, or `cost: unbounded`                                                  |
-  | 2   | Repairable, worth a look | `data: secret` or `pii`, `blast: account` or `bulk`, `cost: moderate`, or `visibility: public` |
-  | 1   | Harmless                 | none of the above                                                                              |
+  | Row | Name                   | Reached when                                                                                   |
+  | --- | ---------------------- | ---------------------------------------------------------------------------------------------- |
+  | 4   | Cannot be repaired     | `reversibility: irreversible`                                                                  |
+  | 3   | Repairable, at a price | `reversibility: costly`, or `cost: unbounded`                                                  |
+  | 2   | Worth a look           | `data: secret` or `pii`, `blast: account` or `bulk`, `cost: moderate`, or `visibility: public` |
+  | 1   | Harmless               | none of the above                                                                              |
 
   The **reason** of a permission is the one branch that decided, in tree order: `irreversible`,
   `costly-to-undo`, `unbounded-cost`, `secret-data`, `personal-data`, `whole-account`, `in-bulk`,

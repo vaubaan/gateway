@@ -68,7 +68,7 @@ public effect raised nothing, and authors filled the sixth axis, `persistence`, 
 The gate comes from an explicit **decision tree** over five facts, read in order, the first branch
 deciding the **row** (numbers kept, 4 the worst): irreversible → 4 "Cannot be repaired"; costly to
 undo or unbounded cost → 3 "Repairable, at a price"; secret or personal data, whole account or
-bulk, moderate cost, or public → 2 "Repairable, worth a look"; else 1 "Harmless". The branch that
+bulk, moderate cost, or public → 2 "Worth a look"; else 1 "Harmless". The branch that
 decided is the permission's **reason**. The gates per row and trust level do not change. The
 `persistence` axis leaves the vector and the catalogs (an SDK minor: the loader refuses it). The
 severity word leaves the product: a permission is printed with its row and, in quiet type, its

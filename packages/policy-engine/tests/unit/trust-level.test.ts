@@ -137,7 +137,7 @@ describe('the words of the rows', () => {
     expect(ROW_WORDS).toEqual({
       4: 'Cannot be repaired',
       3: 'Repairable, at a price',
-      2: 'Repairable, worth a look',
+      2: 'Worth a look',
       1: 'Harmless',
     });
     expect(Object.keys(REASON_WORDS).sort()).toEqual([...REASONS].sort());

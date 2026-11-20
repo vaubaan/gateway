@@ -93,7 +93,7 @@ export const REASON_AXIS: Readonly<Record<Reason, keyof RiskVector>> = {
  * The row of a vector: irreversible → 4 "Cannot be repaired"; costly to undo
  * or of unbounded cost → 3 "Repairable, at a price"; secret or personal
  * data, a whole account or many items, a moderate cost, or public → 2
- * "Repairable, worth a look"; otherwise 1 "Harmless".
+ * "Worth a look"; otherwise 1 "Harmless".
  */
 export function rowOf(vector: RiskVector): Row {
   const reason = reasonOf(vector);

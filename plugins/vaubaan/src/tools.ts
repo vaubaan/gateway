@@ -38,7 +38,7 @@ const DESCRIPTIONS: Readonly<Record<VaubaanActName, string>> = {
   ].join(' '),
   getCatalog: [
     'Returns the risk catalog of one service as explicit RiskIds — label, reason, row and the reason of the row, environment, macro-action —, its `macro_actions` with every risk and its base budget, and `trust_levels`: per trust level, the gate each row gets (`null`: left out) and the factor on the base budget.',
-    'Each risk sits in a row (`row`): 1 harmless, 2 repairable but worth a look, 3 repairable at a price, 4 cannot be repaired. Careful runs row 1 freely, asks before rows 2 and 3 and leaves row 4 out; Trusting runs rows 1 and 2 freely, limits ×3; Autonomous asks only before row 4, limits ×10.',
+    'Each risk sits in a row (`row`): 1 harmless, 2 worth a look, 3 repairable at a price, 4 cannot be repaired. Careful runs row 1 freely, asks before rows 2 and 3 and leaves row 4 out; Trusting runs rows 1 and 2 freely, limits ×3; Autonomous asks only before row 4, limits ×10.',
     'A policy accepts ids from this list only, written exactly as shown; an id qualified with an environment (`service[staging].x`) is a different id from the same risk in another environment.',
     'Pass `account_id` to have each id flagged `in_my_authority` for that account.',
     'With `account_id`, `everything_i_hold` is the built-in expansion written out for that account, entry by entry.',

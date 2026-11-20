@@ -89,7 +89,7 @@ disagreed, and the word "medium" said nothing a person could act on.
 ### Decision
 
 Risk is one concept in the interface: the **row** of the permission, named in words (Harmless,
-Repairable, worth a look, Repairable, at a price, Cannot be repaired), and the **reason** that put
+Worth a look, Repairable, at a price, Cannot be repaired), and the **reason** that put
 it there, in quiet type (personal data, costly to undo…), from the decision tree of
 [macro-actions-and-trust-levels-prefill-the-policy](macro-actions-and-trust-levels-prefill-the-policy.md)
 (amendment 2026-11-13). `SeverityChip` becomes `RowChip`; lists are ordered by row, the hardest to

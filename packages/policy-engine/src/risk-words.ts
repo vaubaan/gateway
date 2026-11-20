@@ -26,7 +26,7 @@ export const ROW_LABEL = 'Risk';
 export const ROW_WORDS: Readonly<Record<Row, string>> = {
   4: 'Cannot be repaired',
   3: 'Repairable, at a price',
-  2: 'Repairable, worth a look',
+  2: 'Worth a look',
   1: 'Harmless',
 };
 

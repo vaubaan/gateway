@@ -77,7 +77,7 @@ One word per thing; a person never learns the protocol's word. The word list is
 - **Roles are said in sentences** ("you own it with Platform", "waiting for Alice's yes"); never
   "principal" or "beneficiary".
 - **Risk is one concept: the row and its reason.** A permission is printed with the name of its row
-  — Harmless, Repairable, worth a look, Repairable, at a price, Cannot be repaired — and, in quiet
+  — Harmless, Worth a look, Repairable, at a price, Cannot be repaired — and, in quiet
   type where it helps, the reason that put it there (personal data, costly to undo…). No severity
   word (low, medium, high, critical), no score, never the word "tier" (risk model §4.6).
 - **The five facts are words**, behind "why?" in the Reference only: Undo, Blast radius, Data,

@@ -103,7 +103,7 @@ section opens with a numbered kicker ("3 · The map"), in order:
    one card per macro-action in catalog order: number, label, description, narrative
    ([gateway-risk-model](./gateway-risk-model.md) §4.6), its count of permissions.
 4. **The map** — every permission placed by macro-action (columns) and by its row of the tree,
-   worst first (Cannot be repaired, Repairable at a price, Repairable worth a look, Harmless),
+   worst first (Cannot be repaired, Repairable at a price, Worth a look, Harmless),
    each row tinted with its glyph and the sentence of what the trust levels do with it. A chip
    is a permission: its label, its reason (rows 2–4), the catalog's reason behind an (i), and
    for the chosen trust level "yes / ask me / no · <quota> a day" (the base budget ×1, ×3, ×10),

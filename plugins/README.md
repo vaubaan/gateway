@@ -315,8 +315,8 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   answers gives the risk its **row** and its **reason** (risk model §4.6):
   `irreversible` → 4 "Cannot be repaired"; `costly` to undo or `unbounded`
   cost → 3 "Repairable, at a price"; `secret` or `pii` data, `account` or
-  `bulk` blast, `moderate` cost, or `public` visibility → 2 "Repairable,
-  worth a look"; otherwise 1 "Harmless". Fill each fact for what the act does
+  `bulk` blast, `moderate` cost, or `public` visibility → 2 "Worth a
+  look"; otherwise 1 "Harmless". Fill each fact for what the act does
   at the service, not for whether it writes: a read that spends a paid quota
   is `moderate`, a read that changes nothing is `reversible` even when the
   question leaves the company (say that in the `reason`). There is no sixth

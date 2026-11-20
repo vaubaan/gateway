@@ -1,8 +1,8 @@
 /**
  * The three small marks of a permission, the same on every page.
  *
- * - `RowChip` — the row of the permission in words (Harmless, Repairable,
- *   worth a look, Repairable, at a price, Cannot be repaired), with the reason
+ * - `RowChip` — the row of the permission in words (Harmless, Worth a
+ *   look, Repairable, at a price, Cannot be repaired), with the reason
  *   that put it there in quiet type when asked. Harmless is written plainly;
  *   only rows 2 and above take a colour.
  * - `GateMark` — what happens when the agent uses the permission: it **runs
