@@ -9,6 +9,21 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Highlights
+
+What an operator or a plugin author reads first; every point is detailed below.
+
+- **A security review closed three serious paths**: a stolen session can no longer enrol a second
+  factor and open a fresh session, a plugin can no longer reach the instance's own network
+  (`plugins.private_hosts` lists the hosts it may), and the catalog's signing job never runs
+  plugin code. Upgrade.
+- **The plugin SDK is 1.0**: a stable contract under semver, with builds and gateways of either
+  side of 0.9.4 / 1.0 loading each other. Plugins pinned from an SDK before 0.9.4 are refused:
+  rebuild them.
+- **Stricter permissions in GitHub, Supabase and SSH**, and a mission an agent issues never
+  outlives the mission that issued it.
+- **Plugin versions come from the catalog's index** and activate without a restart.
+
 ### Plugin SDK
 
 - **1.0.0 — the 0.9.4 contract made stable** (ADR plugin-sdk-1-0-keeps-the-0-9-4-contract): from
