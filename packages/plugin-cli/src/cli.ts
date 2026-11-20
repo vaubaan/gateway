@@ -43,7 +43,7 @@ import {
   runCommand,
   type Runner,
 } from './submit.ts';
-import { TRUST_LEVELS, tryProjectCall, type TrustLevel } from './try.ts';
+import { TRUST_LEVELS, type TrustLevel } from './trust-levels.ts';
 
 export const USAGE = [
   'usage: vaubaan-plugin init <dir> --id <id> [--name <display name>]',
@@ -229,6 +229,9 @@ async function execute(command: Command, io: CliIo): Promise<number> {
       return 0;
     }
     case 'try': {
+      // Loaded here: `try` imports the SDK's root, which Node's type stripping cannot read, and
+      // the catalog runs `build` and `pack` with plain Node (packages/plugin-cli: plain-node test).
+      const { tryProjectCall } = await import('./try.ts');
       const report = await tryProjectCall({
         pluginDir: command.pluginDir,
         tool: command.tool,

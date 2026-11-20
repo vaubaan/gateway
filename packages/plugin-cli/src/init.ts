@@ -29,7 +29,7 @@ import {
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { SDK_VERSION } from '@vaubaan/plugin-sdk';
+import { SDK_VERSION } from '@vaubaan/plugin-sdk/version';
 
 import { ArchiveError } from './archive.ts';
 

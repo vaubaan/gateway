@@ -15,7 +15,14 @@ import { readFileSync } from 'node:fs';
 import { readArchive } from '@vaubaan/plugin-sdk/archive';
 
 import { ArchiveError } from './archive.ts';
-import { isRecord } from '@vaubaan/plugin-sdk';
+
+/**
+ * A JSON object. The SDK's root has its own, but `build`, `pack` and `deploy` import none of it:
+ * the catalog runs this CLI with Node's type stripping, which cannot read the SDK's root.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export const MISSION_TOKEN_ENV = 'VAUBAAN_MISSION_TOKEN';
 export const UPLOAD_TOOL = 'vaubaan__upload_plugin';

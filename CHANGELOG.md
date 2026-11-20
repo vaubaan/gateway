@@ -29,6 +29,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Google Calendar 0.4.2, Miro 0.5.3, Outlook 0.1.2, Resend 0.6.2, Stripe 0.5.2, Supabase 6.1.2,
   Upstash Redis 4.0.2 and Vercel 4.2.4. The previous patch was built by the catalog's former
   toolchain, which wrote `^1.0.0`: a gateway still on SDK 0.9.4 refused it.
+- **`@vaubaan/plugin-cli` builds and packs under plain Node again** (the catalog's toolchain runs it
+  that way): `build`, `pack` and `deploy` no longer load the SDK's root, `try` is loaded when it
+  runs, and the SDK's version comes from the new `@vaubaan/plugin-sdk/version` subpath.
 
 ### Added
 

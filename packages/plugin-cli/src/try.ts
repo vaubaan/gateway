@@ -31,8 +31,9 @@ import { decideCall, policyFromMacroActions, type CallDecision } from '@vaubaan/
 
 import { ArchiveError } from './archive.ts';
 
-export const TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
-export type TrustLevel = (typeof TRUST_LEVELS)[number];
+import { type TrustLevel } from './trust-levels.ts';
+
+export { TRUST_LEVELS, type TrustLevel } from './trust-levels.ts';
 
 export interface TryOptions {
   readonly pluginDir: string;

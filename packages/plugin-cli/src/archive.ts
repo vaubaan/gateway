@@ -44,7 +44,7 @@ import {
   packArchive,
   type ArchiveManifest,
 } from '@vaubaan/plugin-sdk/archive';
-import { sdkBuildRange } from '@vaubaan/plugin-sdk';
+import { sdkBuildRange } from '@vaubaan/plugin-sdk/version';
 
 import type * as Esbuild from 'esbuild';
 

@@ -28,7 +28,8 @@
     ".": "./src/index.ts",
     "./testing": "./src/testing/index.ts",
     "./git": "./src/git/index.ts",
-    "./archive": "./src/archive/index.ts"
+    "./archive": "./src/archive/index.ts",
+    "./version": "./src/version.ts"
   },
   "files": [
     "dist"
@@ -52,6 +53,10 @@
       "./archive": {
         "types": "./dist/archive/index.d.ts",
         "default": "./dist/archive/index.js"
+      },
+      "./version": {
+        "types": "./dist/version.d.ts",
+        "default": "./dist/version.js"
       }
     }
   },
