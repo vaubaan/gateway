@@ -1,0 +1,1 @@
+Vaubaan: let your agent work alone. It stops where you said. Self-hosted MCP gateway, open source.

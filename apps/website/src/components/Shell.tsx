@@ -1,39 +1,40 @@
 /**
- * The header and footer of every page: the brand, four destinations, and
- * what the reader should know about the project in one line each.
+ * The header and footer of every page: the Trace lockup, four destinations,
+ * and what the reader should know about the project in one line each.
  */
 import Link from 'next/link';
 
+import { Lockup } from '@/components/Lockup';
 import { GITHUB_REPO, LICENSE_NAME } from '@/site/constants';
 
-export function Logo() {
-  return (
-    <svg viewBox="0 0 256 256" aria-hidden="true" focusable="false">
-      <rect width="256" height="256" rx="56" fill="currentColor" />
-      <path d="M56 64 L96 64 L128 168 L160 64 L200 64 L144 200 L112 200 Z" fill="var(--paper)" />
-    </svg>
-  );
-}
+const NAV_LINK =
+  'rounded-md px-2 py-1 text-sm text-muted-foreground no-underline transition-colors hover:bg-accent hover:text-foreground';
 
 export function SiteHeader() {
   return (
-    <header className="site-header">
-      <div className="site-header-inner">
-        <Link href="/" className="brand" prefetch={false}>
-          <Logo />
-          Vaubaan Gateway
+    <header className="border-b border-border">
+      <div className="mx-auto flex max-w-page flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 md:px-6">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-foreground no-underline hover:text-foreground"
+          prefetch={false}
+        >
+          <Lockup className="h-7 w-auto" />
+          <span className="sr-only">Vaubaan Gateway</span>
         </Link>
-        <nav className="site-nav" aria-label="Main">
-          <Link href="/docs" prefetch={false}>
+        <nav className="-mx-2 flex flex-wrap gap-x-1 sm:ml-auto" aria-label="Main">
+          <Link href="/docs" className={NAV_LINK} prefetch={false}>
             Docs
           </Link>
-          <Link href="/plugins" prefetch={false}>
+          <Link href="/plugins" className={NAV_LINK} prefetch={false}>
             Plugins
           </Link>
-          <Link href="/trust" prefetch={false}>
+          <Link href="/trust" className={NAV_LINK} prefetch={false}>
             Trust
           </Link>
-          <a href={GITHUB_REPO}>GitHub</a>
+          <a href={GITHUB_REPO} className={NAV_LINK}>
+            GitHub
+          </a>
         </nav>
       </div>
     </header>
@@ -42,8 +43,9 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer">
-      <div className="site-footer-inner">
+    <footer className="mt-16 border-t border-border text-sm text-muted-foreground">
+      <div className="mx-auto flex max-w-page flex-col gap-2 px-4 pb-10 pt-8 md:px-6">
+        <Lockup className="mb-2 h-5 w-auto self-start text-foreground" />
         <p>
           Vaubaan Gateway is open source under the {LICENSE_NAME} licence. Pre-release: the 2.0.0
           pre-releases are published, 2.0.0 itself is not yet.
