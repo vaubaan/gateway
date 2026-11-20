@@ -9,9 +9,8 @@ What the maintainers intend to do next, without dates. The project is pre-releas
 - **What is missing today**, one line each, is in
   [known limitations](docs/handbook/known-limitations.md). To argue for closing one, open an issue.
 - **Security**: the current state is in [SECURITY.md](SECURITY.md) and the
-  [threat model](docs/handbook/threat-model.md). Still to come: plugins out of the gateway's
-  process (today a plugin runs beside every decrypted credential, its signature the boundary) and
-  a third-party security review.
+  [threat model](docs/handbook/threat-model.md). What comes next for it is in
+  [trust the gateway with my credentials](docs/intents/trust-the-gateway-with-my-credentials.md).
 
 ## Not planned
 
