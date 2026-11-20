@@ -52,7 +52,7 @@ minutes.
 - [gateway-core](gateway-core.md) — the decision core: refusals, audit entry, mission context, pipeline.
 - [policy-engine](policy-engine.md) — pure modules around slices and risk catalogs.
 - [plugin-sdk](plugin-sdk.md) — what a plugin is written against; the one list of services.
-- [plugin-loading](plugin-loading.md) — bundled and pinned plugins, `plugins.enabled`, the boot refusals, the versions check, plugin bundles and images.
+- [plugin-loading](plugin-loading.md) — the two plugins compiled into the server, catalog plugins installed when a person first connects their service or by an administrator, pins, `plugins.enabled`, the boot refusals, the versions check.
 - [telemetry](telemetry.md) — community telemetry, off at installation.
 - [services/README](services/README.md) — index of the per-service handbooks.
 
