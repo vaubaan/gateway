@@ -25,6 +25,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   0.1.1, Resend 0.6.1, Stripe 0.5.1, Supabase 6.1.1, Upstash Redis 4.0.1 and Vercel 4.2.3 use
   them: Miro now also refuses an argument outside its schema's `enum` or bounds, and Google
   Calendar and Outlook encode a space in a query as `%20`.
+- **The same ten plugins rebuilt to declare `^0.9.4 || ^1.0.0`**: Cloudflare DNS 4.0.2, Fly 0.4.2,
+  Google Calendar 0.4.2, Miro 0.5.3, Outlook 0.1.2, Resend 0.6.2, Stripe 0.5.2, Supabase 6.1.2,
+  Upstash Redis 4.0.2 and Vercel 4.2.4. The previous patch was built by the catalog's former
+  toolchain, which wrote `^1.0.0`: a gateway still on SDK 0.9.4 refused it.
 
 ### Added
 

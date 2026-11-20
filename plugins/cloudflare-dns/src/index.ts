@@ -33,7 +33,7 @@ export const cloudflareDnsPlugin = definePlugin({
   icon: CLOUDFLARE_DNS_ICON,
   iconColor: CLOUDFLARE_DNS_ICON_COLOR,
   resourceNoun: { one: 'zone', other: 'zones' },
-  version: '4.0.1',
+  version: '4.0.2',
   description:
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',

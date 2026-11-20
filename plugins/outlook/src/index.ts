@@ -35,7 +35,7 @@ export const outlookPlugin = definePlugin({
   iconColor: OUTLOOK_ICON_COLOR,
   resourceNoun: { one: 'mailbox', other: 'mailboxes' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.1',
+  version: '0.1.2',
   description:
     'Mail and calendar of a Microsoft 365 or Outlook.com account, through Microsoft Graph',
   summary:

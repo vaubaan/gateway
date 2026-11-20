@@ -29,7 +29,7 @@ export const flyPlugin = definePlugin({
   icon: FLY_ICON,
   iconColor: FLY_ICON_COLOR,
   resourceNoun: { one: 'app', other: 'apps' },
-  version: '0.4.1',
+  version: '0.4.2',
   description:
     'Apps on Fly.io: machines, images, volumes and snapshots, secrets, IP addresses and ' +
     'certificates — one resource per app.',

@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-stripe",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Stripe — billing operations with test and live modes as separate resources",
