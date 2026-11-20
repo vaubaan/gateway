@@ -52,9 +52,60 @@ can I trust it with my cloud credentials; does the plugin for my service work.
 
 ### 2.1 Landing — `/`
 
-The pitch for a reader new to MCP gateways: the problem, missions as the answer, the shape (on-prem,
-your identity provider), supported services from the plugin list, the licence, two calls to action
-(**try the demo**, **install**), links to the trust center and the repository.
+The pitch for one person first, then the team they bring. Its job is that a reader sees an agent
+refused and a yes awaited within seconds, before installing anything. One promise ("let your agent
+work alone; it stops where you said"), the category in the line under it ("an open-source MCP gateway
+you run yourself"), and nine sections in order:
+
+1. **Hero** — the promise, the category, a call log with a call refused and one waiting for a yes,
+   the pre-release line linking to the known limitations. One primary call to action, **Try it**
+   (`/try`), and a link to how it works.
+2. **Not a token** — a token in the agent's configuration against a mission; answers "my client
+   already asks before tool calls".
+3. **The mission** — named permissions, limits, ask me first; ticking verbs writes the lines; links
+   to a real service page.
+4. **Ask me first** — the yes, with the exact call shown; the agent replays the call when it is told.
+5. **Today, for you** — the steps from install to the first governed call, each one marked built or
+   planned.
+6. **Then your team** — the same missions on a server, behind the team's sign-in, one key per person;
+   links to `/teams`.
+7. **Services** — the list and the count, generated from the plugins; a missing service leads to
+   `/write-a-plugin`.
+8. **For the person who says yes** — what it protects and what it does not, four lines each; links to
+   the trust center.
+9. **Questions** — the questions and answers (§2.6).
+
+**Every claim is true on the day it is published**, each with a link to what proves it (a plugin page,
+the trust center, a docs page). A planned feature is named planned next to it, never offered as a
+button.
+
+**Two projects** carry every example and drawing: a developer ("Rate limiter for the API", their
+code host and database) and a consultant ("Weekly client recap", their mail, notes and calendar).
+A switch on the landing and the product pages shows one or the other; it works without scripts,
+the developer is the default, and a browser that allows it remembers the choice on that browser
+only (nothing is sent). The consultant's examples carry a line saying which of their services have
+not yet run against the real service.
+
+Every drawing exists in a light and a dark version and in both projects, with a text alternative
+that says what it shows; a reader without images or styles reads the same facts in the text.
+
+### 2.1 bis Product pages
+
+Each page opens with a defining sentence, has one primary call to action and a Markdown twin
+(§2.6), and promises nothing that is not built.
+
+| Path              | For whom, and its job                                                                                                                                                                                                       | Primary action                 |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `/how-it-works`   | Anyone at three minutes: the path of a call, the repair question, a service modelled then folded into verbs, the trust levels, ask me first, and what the agent sees                                                        | Try it                         |
+| `/consultants`    | The landing with the consultant's project shown first, its own title and description                                                                                                                                        | Try it                         |
+| `/try`            | The honest choice of how to start today: the demo on a laptop, an instance for a team, the install with a coding agent; what each needs, how long, what one sees; the desktop app named planned, without a download         | Run the demo                   |
+| `/teams`          | The team lead: the same missions on a server, sign-in, accounts shared permission by permission, one key per person, the yes from a phone, who did what; what one process means; a link to forward to the security reviewer | Install with your coding agent |
+| `/write-a-plugin` | The plugin author: five questions per permission, the kit (what is built and what is planned), a real catalog to read; the author guide holds the procedure                                                                 | Start a plugin project         |
+
+The navigation names five destinations — How it works, Services, Teams, Security, Docs — and one
+button, **Try it**. The foot of every page holds the long tail in four groups (product, docs, trust,
+build), the privacy page among them, and one line: pre-release, the licence, no cookie and no
+tracker.
 
 ### 2.2 User docs — `/docs`
 
