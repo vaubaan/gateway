@@ -101,7 +101,7 @@ export default function Home() {
 
         <h2>Supported services</h2>
         <p>
-          One plugin per service ships with the gateway:{' '}
+          One plugin per service, from the catalog:{' '}
           {plugins.map((p, i) => (
             <span key={p.id}>
               {i > 0 ? ', ' : ''}

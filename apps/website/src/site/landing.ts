@@ -49,7 +49,7 @@ export const MISSION_POINTS: readonly { readonly term: string; readonly text: st
 
 export const SHAPE_POINTS: readonly string[] = [
   'On your network: one Docker image, one process, one embedded database, behind your TLS proxy.',
-  'Behind your identity provider (OpenID Connect) or GitHub sign-in.',
+  'Behind your identity provider (OpenID Connect), GitHub sign-in, or the instance’s own sign-in accounts.',
   'With your company’s own apps at each service: no app shared with anyone else, no hosted tenant.',
 ];
 
@@ -70,16 +70,16 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Does the agent ever see a credential?',
       answer:
-        'No stored credential is ever returned to an agent. Git goes through the gateway’s own remote, so no token leaves for a clone or a push. A plugin may declare a tool that hands the agent a short-lived token; each is a permission of its own, refused unless the mission holds it, and no shipped plugin declares one today.',
+        'No stored credential is ever returned to an agent. Git goes through the gateway’s own remote, so no token leaves for a clone or a push. No tool hands the agent a service token, short-lived or not: a plugin that declares one is refused.',
     },
     {
       question: 'Which services does it support?',
-      answer: `One plugin per service ships with the gateway: ${services}. Each plugin is a catalog of named permissions grouped into macro-actions; a plugin for another service can be written from the kit in the repository.`,
+      answer: `One plugin per service, from the catalog: ${services}. The first person who connects a service installs its plugin, signed by Vaubaan. Each plugin is a catalog of named permissions grouped into macro-actions; a plugin for another service can be written with the plugin kit.`,
     },
     {
       question: 'Which agents and MCP clients work with it?',
       answer:
-        'Any MCP client that can call a server over HTTP with a bearer header, such as Claude Code or Cursor: the mission key goes in the Authorization header. The project’s own test suites drive the gateway with the official MCP client; no person has yet run Claude Code against a running instance.',
+        'Any MCP client that can call a server over HTTP with a bearer header, such as Claude Code or Cursor: the mission key goes in the Authorization header. The project’s own development runs through Claude Code on a running instance, and its test suites drive the gateway with the official MCP client; the other clients follow their own documentation.',
     },
     {
       question: 'Is there a hosted version?',
