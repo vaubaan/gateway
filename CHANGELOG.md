@@ -58,6 +58,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **A rate window counts an action recorded late in its place.** Two calls timed before either
+  reached the budget could record their actions out of order: the earlier one then stayed in the
+  window past its time and the announced wait was wrong.
 - **A large audit purge no longer holds the calls back.** The retention purge deleted every
   expired entry in one transaction, under the write lock every allowed call needs to append its
   own: it now goes by batches of 5 000, letting the calls in between.

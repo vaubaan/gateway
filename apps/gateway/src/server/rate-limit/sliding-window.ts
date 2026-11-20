@@ -63,6 +63,17 @@ function assertWindow(windowMs: number): void {
   if (!(windowMs > 0)) throw new RangeError(`rate window must be positive (got ${windowMs} ms)`);
 }
 
+/**
+ * Records `atMs` in its place: the hits stay ascending, which `prune` and the probe's oldest
+ * hit rely on, even when an action is recorded after a later one (two calls timed before
+ * either reached the budget). Nearly always the last place.
+ */
+function insertHit(hits: number[], atMs: number): void {
+  let at = hits.length;
+  while (at > 0 && (hits[at - 1] as number) > atMs) at--;
+  hits.splice(at, 0, atMs);
+}
+
 /** Drops the actions that left the window `(nowMs - windowMs, nowMs]`. */
 function prune(window: Window, nowMs: number): void {
   const cutoff = nowMs - window.windowMs;
@@ -107,7 +118,7 @@ export class SlidingWindowRateLimiter implements SlidingWindows, RateLimiter {
     const window = this.windows.get(key);
     if (window) {
       window.windowMs = windowMs;
-      window.hits.push(nowMs);
+      insertHit(window.hits, nowMs);
     } else {
       this.windows.set(key, { hits: [nowMs], windowMs });
     }

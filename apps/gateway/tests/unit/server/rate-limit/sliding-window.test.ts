@@ -39,6 +39,15 @@ describe('SlidingWindowRateLimiter — peek / push', () => {
     expect(limiter.size).toBe(0);
   });
 
+  it('keeps an action recorded after a later one in its place', () => {
+    const limiter = new SlidingWindowRateLimiter();
+    limiter.push('k', WINDOW, T0 + 30_000);
+    limiter.push('k', WINDOW, T0); // timed before the first, recorded after it
+    // The oldest is T0: it leaves first, and the probe counts from it.
+    expect(limiter.peek('k', WINDOW, T0 + 40_000)).toEqual({ count: 2, retryAfterMs: 20_000 });
+    expect(limiter.peek('k', WINDOW, T0 + 60_000)).toEqual({ count: 1, retryAfterMs: 30_000 });
+  });
+
   it('keys are independent', () => {
     const limiter = new SlidingWindowRateLimiter();
     limiter.push('a', WINDOW, T0);
