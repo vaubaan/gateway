@@ -1,128 +1,27 @@
 # `@vaubaan/plugin-miro`
 
-Miro boards for Vaubaan Gateway, through **Miro's official MCP server**
-(`https://mcp.miro.com/`): read and draw on boards, tables, comments,
-prototypes — one resource per board.
+Miro boards for Vaubaan Gateway, through **Miro's official MCP server** (`https://mcp.miro.com/`):
+read and draw on boards, tables, comments, prototypes — one resource per board.
 
-A person connects Miro from Accounts → Connect: they sign in at Miro, choose
-a team and allow the gateway. There is **no Miro app to create and nothing to
-paste**: the gateway registers its own OAuth client at Miro the first time
-someone connects (RFC 7591). On a Miro Enterprise plan, an administrator
-first enables Miro's MCP server for the organisation.
+A person connects Miro from Accounts → Connect: they sign in at Miro, choose a team and allow the
+gateway. There is **no Miro app to create and nothing to paste**: the gateway registers its own
+OAuth client at Miro the first time someone connects (RFC 7591). On a Miro Enterprise plan, an
+administrator first enables Miro's MCP server for the organisation.
 
-The model and the reasons behind it are in the handbook
-[`docs/handbook/services/miro.md`](../../docs/handbook/services/miro.md);
-the decision in the ADR
-[`oauth-client-registered-by-the-gateway`](../../docs/decisions/oauth-client-registered-by-the-gateway.md).
+- **What it lets an agent do, permission by permission**: its page,
+  [vaubaan.com/plugins/miro](https://vaubaan.com/plugins/miro) — the data model, every
+  permission and its five facts, the macro-actions and what each trust level does with them,
+  the tools, and how to connect an account. Generated from this folder; nothing here repeats it.
+- **How it is modelled, and why**: handbook
+  [`docs/handbook/services/miro.md`](../../docs/handbook/services/miro.md).
+- **Writing or changing a plugin**: the
+  [author's guide](https://vaubaan.com/docs/plugins-guide); for the plugins of this repository,
+  [`plugins/README.md`](../README.md).
 
-## Files
+## Tests
 
-| File                                | What is in it                                                                              |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/identity.ts`                   | `SERVICE_ID`, Miro's URLs, `MIRO_MCP_SERVER`, OAuth endpoints, upstream names, `TOOL`      |
-| `src/identifiers.ts`                | The grammars: board ref, board URL, item id, comment id; `boardUrlOf`                      |
-| `src/upstream-tools.json`           | Miro's `tools/list` of 2026-11-19 (42 tools) and 10 a team's features may hide (52)        |
-| `src/tools.ts`                      | The 28 tools: Miro's, with `board` / `item_id` for `miro_url`, plus `list_boards`          |
-| `src/call.ts`                       | `readMiroCall`: the one reader of a call, for `classify` and `execute`                     |
-| `src/classify.ts`                   | The slices of a call                                                                       |
-| `src/execute.ts`                    | Execution and discovery through the SDK's MCP client (`callUpstreamTool`), the drift check |
-| `src/created.ts`                    | The board `board_create` made, read from its answer (`createdResources`)                   |
-| `src/credential.ts`                 | The `oauth2` spec with `clientRegistration`                                                |
-| `src/data-model.ts`                 | The `board` and `guide` planes                                                             |
-| `src/risk-catalog.yaml`             | Thirteen risks, the fallback, four macro-actions (catalog 5)                               |
-| `scripts/capture-upstream-tools.ts` | Captures `tools/list` into `src/upstream-tools.json` (needs a Miro account)                |
-
-## Credential and resources
-
-Kind `oauth2`, against the authorization server of Miro's MCP server
-(`https://mcp.miro.com/authorize`, `/token`), with PKCE, the scopes
-`boards:read` and `boards:write` only, and the MCP server as the audience
-of the token (`resource=https://mcp.miro.com/`). The client is **registered
-by the gateway itself** at `https://mcp.miro.com/register` the first time
-someone connects, named "Vaubaan Gateway (<your gateway's host>)", and
-reused for every account: no administrator declares anything. Access
-tokens are short-lived and refreshed by the gateway.
-
-On Miro's consent page the person **chooses one team**: the account reaches
-that team's boards; a second team is a second account. On a Miro
-Enterprise plan, an administrator first enables Miro's MCP server for the
-organisation (Miro's admin guide, "Miro MCP Server"); until then Miro
-refuses the account and the account page says so.
-
-Discovery lists the team's boards (`board_search_boards`, 50 per page), **at most 500**.
-One resource per board: `ref` is the board id with its trailing `=` written
-`~` (`uXjVOD6LSME=` → `uXjVOD6LSME~`), `displayName` its name, `metadata`
-its URL. To disconnect at Miro, remove "Vaubaan Gateway" from the apps of
-your Miro profile.
-
-Accounts connected with the plugin 0.1.0 (the access token of a Miro app)
-run nothing after the upgrade: reconnect them from Accounts.
-
-## Tools
-
-`miro__list_boards` (answered by the gateway from the mission's boards) and
-27 of Miro's 52 known tools, renamed `miro__<name>`: `board_create`,
-`canvas_search`, `canvas_read_as_svg`, `canvas_create_from_svg`,
-`canvas_update_from_svg`, `canvas_get_canvas_composer_skill`,
-`canvas_load_format_skill`, `comment_list_comments`, `comment_create`,
-`comment_reply`, `comment_resolve`, `image_get_data`, `image_get_url`,
-`image_create`, `prototype_read`, `prototype_create`, `table_create`,
-`table_list_rows`, `table_sync_rows`, `table_get_latest_update_history`,
-`table_update_view`, and (0.3.0) `board_get_space`,
-`board_update_metadata`, `content_item_list_roles`, `board_share`,
-`board_role_update`, `create_boardcast`.
-
-Each tool that acts on a board takes `board` — a board of the mission, as
-its ref (`uXjVOD6LSME~`) or its URL (`https://miro.com/app/board/uXjVOD6LSME=/`)
-— and, where it acts on an item, `item_id`. The gateway writes Miro's
-`miro_url` (`content_item_url` for `content_item_list_roles`) itself; an
-agent that sends it is refused. Every other argument is Miro's, except:
-
-- `invocation_source` and `is_repository`, which Miro asks agents to fill
-  with facts about their own environment: never offered, never sent;
-- `board_create`'s `parent_space_url`, `image_create`'s `image_token`,
-  `prototype_create`'s `html_tokens` and `image_tokens`: not offered, so
-  `prototype_create` requires `html_contents`.
-
-Left out (refused as unknown tools, the reason in `LEFT_OUT_UPSTREAM_TOOLS`, declared as the plugin's `excludedTools`):
-`board_search_boards` (discovery only), the three tools that hand out an
-upload URL, `user_who_am_i`, `user_search_organization_users`,
-`get_brand_context`, `board_create_format`, `board_move`,
-`board_move_to_team`, `board_restore`, and the space, section and blog-post
-tools.
-
-## Risks and macro-actions
-
-A creator ticks macro-actions, each at a trust level (Careful / Trusting /
-Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
-multiplies the base budget. The fallback sits apart, under "Anything else".
-
-| Macro-action | What it covers                                                         | Its risks                                                                                           |
-| ------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `look`       | Read the boards, what is on them, their details and who can open them. | `read-boards`, `read-board-content`, `read-format-guide`, `read-board-details`, `read-board-access` |
-| `draw`       | Add content, in bulk too, and record a walkthrough.                    | `content-write`, `bulk-create`, `boardcast-create`                                                  |
-| `rework`     | Delete items and frames.                                               | `item-delete`, `frame-delete`                                                                       |
-| `manage`     | Create, rename and share boards.                                       | `board-create`, `board-details-write`, `board-share`                                                |
-
-An update of the canvas (`canvas_update_from_svg`) may delete what the new
-SVG no longer holds: it needs `item-delete` and `frame-delete`. Sharing a
-board or changing a role on it (`board-share`) gives whoever is named
-everything on the board, possibly outside the company: it is in `manage`
-only, left out at Careful and asked first above.
-
-## Refreshing the tool list
-
-With a Miro account:
-
-```
-npm run capture-upstream-tools --workspace @vaubaan/plugin-miro
+```bash
+npx vitest run plugins/miro
 ```
 
-Open the printed address, sign in, choose a team, allow. The script writes
-`src/upstream-tools.json` and prints the differences with the previous
-model; then run the plugin's tests, align the model, bump the version.
-Miro's list depends on the team's features (tables, prototypes, blog
-posts…): a tool of the model the team does not list is kept, so a capture
-never takes a tool away from the teams that have it. `--drop-gone` drops
-them, once Miro is known to have retired a tool. Remove the throw-away app "Vaubaan Gateway (tool list capture)"
-from your Miro profile afterwards.
+No test calls the service, and none needs a credential.

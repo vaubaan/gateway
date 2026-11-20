@@ -1,59 +1,25 @@
 # `@vaubaan/plugin-google-calendar`
 
 Google Calendar for Vaubaan Gateway, through **Google's Calendar REST API v3**
-(`https://www.googleapis.com/calendar/v3`), with tools of its own. The access token comes
-from the **OAuth broker** the instance is enrolled with: the broker owns the
-Google OAuth client and keeps no token; the instance keeps the refresh token
-and the current access token, and verifies the broker's attestation before
-it sends it anything. Calendar data never goes through the broker.
+(`https://www.googleapis.com/calendar/v3`), with tools of its own. The access token comes from the
+**OAuth broker** the instance is enrolled with: the broker owns the Google OAuth client and keeps no
+token; the instance keeps the refresh token and the current access token, and verifies the broker's
+attestation before it sends it anything. Calendar data never goes through the broker.
 
-Handbook: [`docs/handbook/services/google-calendar.md`](../../docs/handbook/services/google-calendar.md).
-ADRs: [`google-calendar-through-an-oauth-broker`](../../docs/decisions/google-calendar-through-an-oauth-broker.md),
-[`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
-Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).
+- **What it lets an agent do, permission by permission**: its page,
+  [vaubaan.com/plugins/google-calendar](https://vaubaan.com/plugins/google-calendar) — the data model, every
+  permission and its five facts, the macro-actions and what each trust level does with them,
+  the tools, and how to connect an account. Generated from this folder; nothing here repeats it.
+- **How it is modelled, and why**: handbook
+  [`docs/handbook/services/google-calendar.md`](../../docs/handbook/services/google-calendar.md).
+- **Writing or changing a plugin**: the
+  [author's guide](https://vaubaan.com/docs/plugins-guide); for the plugins of this repository,
+  [`plugins/README.md`](../README.md).
 
-## Files
+## Tests
 
-| File                    | What                                                                  |
-| ----------------------- | --------------------------------------------------------------------- |
-| `src/index.ts`          | `definePlugin`, the default export                                    |
-| `src/identity.ts`       | ids, the API base URL, the scopes, `sendUpdates` and its defaults     |
-| `src/identifiers.ts`    | calendar id ↔ ref (`@` ↔ `~`), event id, path segment, strict address |
-| `src/data-model.ts`     | the `calendar` plane                                                  |
-| `src/risk-catalog.yaml` | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`       |
-| `src/credential.ts`     | the brokered `oauth2` spec, the granted-scope check                   |
-| `src/tools.ts`          | the nine tool declarations                                            |
-| `src/call.ts`           | the one reader of a call, for classify and execute                    |
-| `src/classify.ts`       | slices                                                                |
-| `src/execute.ts`        | REST requests through the SDK's `httpJson`, discovery                 |
-| `src/free-slots.ts`     | the free slots of `suggest_time`, from freeBusy's busy blocks         |
+```bash
+npx vitest run plugins/google-calendar
+```
 
-## Credential and resources
-
-`oauth2` with `broker: { provider: 'google' }`. An administrator enrolls the
-instance with a broker (`oauth_brokers.<name>.url` and `.key`, handbook
-configuration); without one, the plugin is listed as not configured. One
-resource per calendar of the account (ref `alice~acme.example`), with
-`internal_domains`, the list that decides who is a colleague.
-
-## Tools
-
-`google_calendar__list_calendars` (answered by the gateway),
-`list_events`, `search_events`, `get_event`, `suggest_time`, `create_event`,
-`update_event`, `delete_event`, `respond_to_event`. `calendarId` is a calendar
-of the mission (ref or id), the primary one when omitted; `sendUpdates`
-(`all`, `externalOnly`, `none`) says whom Google emails.
-
-## Risks and macro-actions
-
-| Macro-action | What it covers                            | Risks                                                           |
-| ------------ | ----------------------------------------- | --------------------------------------------------------------- |
-| `read`       | Calendars, events and free/busy.          | `calendar-list`, `event-read`, `free-busy-read`                 |
-| `schedule`   | Create, change, delete and answer events. | `event-create`, `event-change`, `event-delete`, `event-respond` |
-| `invite`     | Invite people and let Google email them.  | `invite-internal`, `invite-external`, `notify-guests`           |
-
-A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
-risk model §4.6); the trust level sets each risk's gate from its vector and
-multiplies the base budget. The mission stores the explicit list. Deleting an event asks
-first below Autonomous; inviting outside the company and notifying guests are
-irreversible and never run freely.
+No test calls the service, and none needs a credential.
