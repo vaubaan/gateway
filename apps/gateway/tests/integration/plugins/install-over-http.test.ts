@@ -12,10 +12,11 @@ import { fileURLToPath } from 'node:url';
 
 import { SDK_VERSION } from '@vaubaan/plugin-sdk';
 import { ARCHIVE_MANIFEST_FILE, manifestOfFiles, packArchive } from '@vaubaan/plugin-sdk/archive';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
+import { RESTART_AFTER_MS } from '../../../src/server/plugins/handlers';
 import { loadInstanceConfig } from '../../../src/server/config';
 import {
   ARCHIVE_FIELD,
@@ -169,8 +170,8 @@ describe('Administration › Plugins over HTTP', () => {
 
     const restarted = await post(PLUGIN_ACTIONS.restart, new FormData());
     expect(location(restarted).searchParams.get('done')).toBe('restarting');
-    await new Promise((r) => setTimeout(r, 700));
-    expect(restarts).toBe(1);
+    // The restart waits for its answer to leave (RESTART_AFTER_MS).
+    await vi.waitFor(() => expect(restarts).toBe(1), { timeout: 10_000, interval: 50 });
 
     const acts = (await root.store.audit.list({ kind: 'admin' })).flatMap((e) =>
       e.kind === 'admin' ? [e.act] : [],
@@ -206,7 +207,8 @@ describe('Administration › Plugins over HTTP', () => {
     expect(foreign.status).toBeGreaterThanOrEqual(400);
     const restart = await post(PLUGIN_ACTIONS.restart, new FormData(), { as: 'user' });
     expect(restart.status).toBeGreaterThanOrEqual(400);
-    await new Promise((r) => setTimeout(r, 700));
+    // Past the moment an accepted restart would have run.
+    await new Promise((r) => setTimeout(r, RESTART_AFTER_MS + 200));
     expect(restarts).toBe(0);
     expect((await root.store.pluginVersions.list()).length).toBe(before);
   });

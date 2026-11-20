@@ -48,6 +48,9 @@ export const VERSION_PARAM = 'version';
 
 const SEE_OTHER = 303;
 
+/** How long a restart waits after its answer, so the redirect reaches the browser first. */
+export const RESTART_AFTER_MS = 500;
+
 export interface PluginHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
@@ -260,7 +263,7 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
           deps.logger.error('audit entry not written for a restart', { err });
         }
         // Answer first: the redirect reaches the browser before the process ends.
-        setTimeout(() => deps.requestRestart(), 500).unref();
+        setTimeout(() => deps.requestRestart(), RESTART_AFTER_MS).unref();
         return back({ [DONE_PARAM]: 'restarting' });
       }),
   };

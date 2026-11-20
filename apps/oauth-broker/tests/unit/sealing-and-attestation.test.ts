@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AttestationCache } from '../../src/attestation.ts';
 import { createLogger } from '../../src/log.ts';
 import { type PlatformAdapter, PlatformError } from '../../src/platform/types.ts';
@@ -96,13 +96,20 @@ describe('cached attestation', () => {
   });
 
   it('refreshes in the background, sooner after a failure', async () => {
-    const p = platform(['fail', 'ok', 'ok']);
-    const cache = new AttestationCache(p, 'k', log, { refreshMs: 300, retryMs: 10 });
-    await cache.start();
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(p.calls.length).toBe(2); // retried after 10 ms, not 300
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(p.calls.length).toBe(3);
-    cache.stop();
+    vi.useFakeTimers();
+    try {
+      const p = platform(['fail', 'ok', 'ok']);
+      const cache = new AttestationCache(p, 'k', log, { refreshMs: 300, retryMs: 10 });
+      await cache.start();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(p.calls.length).toBe(2); // retried after 10 ms, not 300
+      await vi.advanceTimersByTimeAsync(299);
+      expect(p.calls.length).toBe(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(p.calls.length).toBe(3);
+      cache.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

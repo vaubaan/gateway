@@ -26,6 +26,7 @@ import defaultExport, {
   classifyVaubaan,
   createVaubaanExecute,
   EXAMPLE_MISSION_ID,
+  discoverVaubaanResources,
   executeOutsideTheHost,
   HostOnlyPluginError,
   INTERNAL_ERROR_RESULT,
@@ -203,6 +204,9 @@ describe('the two executes', () => {
   test('the declared execute refuses every call: only the host runs one', async () => {
     await expect(executeOutsideTheHost()).rejects.toBeInstanceOf(HostOnlyPluginError);
     expect(vaubaanPlugin.execute).toBe(executeOutsideTheHost);
+    // A Vaubaan account lists no resource: the account itself is what a mission reaches.
+    expect(await discoverVaubaanResources()).toEqual([]);
+    expect(vaubaanPlugin.discoverResources).toBe(discoverVaubaanResources);
   });
 
   test('the host-bound execute hands the caller and the arguments to the act of the tool', async () => {

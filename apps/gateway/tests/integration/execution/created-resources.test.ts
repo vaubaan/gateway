@@ -10,7 +10,7 @@
  */
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import type { Resource } from '@vaubaan/plugin-sdk';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_SPACES,
@@ -129,8 +129,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
     await instance.call(mission, 'depot__create_space', { space: 'fresh' });
     // The first attempt ran and missed the space; the retry waits (2 s): stop it there.
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(instance.depot.discoveries()).toBe(1);
+    await vi.waitFor(() => expect(instance.depot.discoveries()).toBe(1), { interval: 5 });
     await instance.root.accounts.discoveryAfterCall.stop();
 
     expect((await rowOf('fresh'))?.staleSince).toBeNull();
