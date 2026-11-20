@@ -14,6 +14,9 @@ npm install
 npm run check        # type check and the SDK's test kit: passes before any change
 ```
 
+The author's guide explains each step for a person:
+[vaubaan.com/docs/plugins-guide](https://vaubaan.com/docs/plugins-guide).
+
 Then open your coding agent in this folder (Claude Code reads `CLAUDE.md`, other agents
 `AGENTS.md`) and ask it to build the plugin for the real service, giving it the link to the
 service's API documentation. It follows the skills in this order, each ending on a command that

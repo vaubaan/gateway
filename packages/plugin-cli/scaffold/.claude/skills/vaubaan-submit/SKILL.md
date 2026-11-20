@@ -5,6 +5,8 @@ description: Use when the human wants to publish the plugin in the public Vaubaa
 
 # Submit to the public catalog
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/submit (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 The catalog is the public repository `vaubaan/gateway-plugins`. It holds no plugin code: one
 declaration per plugin, `catalog/<id>.yaml`, naming a public repository and an exact commit. A
 pull request adding or changing a declaration is rebuilt from that commit without any secret and

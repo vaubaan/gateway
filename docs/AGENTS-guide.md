@@ -69,15 +69,15 @@ Checked by tests or review; the reasons are in the linked documents.
 
 ## Where to read first
 
-| Task                                   | Start with                                                                                                                                                               |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Anything                               | [spec](spec/vaubaan-gateway.md) §0 (vocabulary), then the [handbook index](handbook/README.md)                                                                           |
-| A change to how a call is decided      | [risk model](spec/gateway-risk-model.md), handbooks [policy-engine](handbook/policy-engine.md) and [gateway-core](handbook/gateway-core.md)                              |
-| A new service, or a change to a plugin | [`plugins/README.md`](../plugins/README.md), [`docs/skills/service-modeler.md`](skills/service-modeler.md), [plugin-sdk](handbook/plugin-sdk.md), the service's handbook |
-| A page of the interface                | [web-app](handbook/web-app.md), [style guide](spec/style-guide.md)                                                                                                       |
-| The database                           | [store](handbook/store.md)                                                                                                                                               |
-| Configuration, deployment              | [configuration](handbook/configuration.md), [`deploy/README.md`](../deploy/README.md)                                                                                    |
-| The process itself                     | [`CONTRIBUTING.md`](../CONTRIBUTING.md), [workflow](workflow/coding-workflow.md)                                                                                         |
+| Task                                   | Start with                                                                                                                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anything                               | [spec](spec/vaubaan-gateway.md) §0 (vocabulary), then the [handbook index](handbook/README.md)                                                                                                           |
+| A change to how a call is decided      | [risk model](spec/gateway-risk-model.md), handbooks [policy-engine](handbook/policy-engine.md) and [gateway-core](handbook/gateway-core.md)                                                              |
+| A new service, or a change to a plugin | the site's [author guide](https://vaubaan.com/docs/plugins-guide), [`plugins/README.md`](../plugins/README.md) (this repository's plugins), [plugin-sdk](handbook/plugin-sdk.md), the service's handbook |
+| A page of the interface                | [web-app](handbook/web-app.md), [style guide](spec/style-guide.md)                                                                                                                                       |
+| The database                           | [store](handbook/store.md)                                                                                                                                                                               |
+| Configuration, deployment              | [configuration](handbook/configuration.md), [`deploy/README.md`](../deploy/README.md)                                                                                                                    |
+| The process itself                     | [`CONTRIBUTING.md`](../CONTRIBUTING.md), [workflow](workflow/coding-workflow.md)                                                                                                                         |
 
 ## Before you report a change as done
 

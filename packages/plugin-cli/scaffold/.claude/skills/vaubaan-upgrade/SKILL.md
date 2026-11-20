@@ -5,6 +5,8 @@ description: Use when a gateway refuses the plugin for its SDK version, or to mo
 
 # Upgrade the SDK
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/sign-and-deploy#upgrade-the-sdk (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 An archive declares the SDK it was built against (`^<version>`). Before `1.0.0` a caret range
 holds one minor version: a gateway on SDK 0.10 turns away a plugin built against 0.9 until it is
 rebuilt. The fix is always on this side: upgrade, check, rebuild, upload again.

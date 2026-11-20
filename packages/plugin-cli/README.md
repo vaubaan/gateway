@@ -23,7 +23,10 @@ instructions and skills a coding agent follows to replace it by the real service
 | `vaubaan-plugin deploy --gateway <url>`                  | Uploads the archive, pending (token in `VAUBAAN_MISSION_TOKEN`); never activates  |
 | `vaubaan-plugin submit [--owners …] [--dry-run]`         | The pull request that proposes the plugin to the public catalog                   |
 
-Specification: [plugin authoring](https://github.com/vaubaan/gateway/blob/main/docs/spec/plugin-authoring.md).
+The author's guide, from this first command to a plugin in the catalog:
+[vaubaan.com/docs/plugins-guide](https://vaubaan.com/docs/plugins-guide) — a tutorial,
+[your first plugin](https://vaubaan.com/docs/plugins-guide/first-plugin), one page per step, and
+the [command line reference](https://vaubaan.com/docs/plugins-guide/reference/cli).
 
 ## License
 

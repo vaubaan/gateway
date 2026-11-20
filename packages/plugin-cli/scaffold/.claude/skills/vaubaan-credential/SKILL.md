@@ -5,6 +5,8 @@ description: Use after vaubaan-classify, to write src/credential.ts, how a perso
 
 # Write the credential
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/credential (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 You declare **how** an account is obtained; the gateway runs the form, stores the secret encrypted
 and hands it to `execute` for one call at a time. The plugin writes no route, never reads the
 environment, never sees an OAuth client secret. One way of connecting per plugin.

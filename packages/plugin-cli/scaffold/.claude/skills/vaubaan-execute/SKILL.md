@@ -5,6 +5,8 @@ description: Use after vaubaan-credential, to write src/execute.ts, the calls to
 
 # Write the execution
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/execute and https://vaubaan.com/docs/plugins-guide/test (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 `execute(ctx, tool, args)` performs a call the gateway already allowed and counted, and returns an
 MCP result. `discoverResources(ctx)` lists what a credential reaches when an account is connected.
 No test ever calls the real service.

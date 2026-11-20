@@ -11,7 +11,8 @@ Ways to contribute:
   specification says;
 - propose a feature;
 - **write a plugin**, or correct the risk catalog of an existing
-  one: see [`plugins/README.md`](plugins/README.md), the step-by-step guide;
+  one: see the [plugin author's guide](https://vaubaan.com/docs/plugins-guide), and
+  [`plugins/README.md`](plugins/README.md) for the plugins of this repository;
 - improve the documentation.
 
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -27,9 +28,10 @@ maintainers would welcome help on. Leave a comment on the issue before you start
 do not do the same work.
 
 The usual first contribution is a plugin or a catalog correction: the
-[plugin kit](plugins/README.md) is a step-by-step guide that assumes you have never seen the
-project, and [`plugins/_template`](plugins/_template/README.md) is a complete plugin for an
-imaginary service to copy. A correction to a risk catalog needs no knowledge of the rest of the
+[plugin author's guide](https://vaubaan.com/docs/plugins-guide) is a step-by-step guide that assumes
+you have never seen the project, [`plugins/README.md`](plugins/README.md) says what differs for a
+plugin of this repository, and [`plugins/_template`](plugins/_template/README.md) is a complete
+plugin for an imaginary service to copy. A correction to a risk catalog needs no knowledge of the rest of the
 code base.
 
 The labels in use:

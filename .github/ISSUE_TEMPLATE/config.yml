@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/vaubaan/gateway/tree/main/docs
     about: Read the specification, the decisions and the handbooks before filing a design question.
   - name: Writing a plugin
-    url: https://github.com/vaubaan/gateway/blob/main/plugins/README.md
-    about: The step-by-step guide to write, test and submit a plugin.
+    url: https://vaubaan.com/docs/plugins-guide
+    about: The step-by-step guide to write, test, sign and submit a plugin.

@@ -98,6 +98,9 @@ the catalog does not cover. Pass `--accept` to prove exactly which risks a call 
 
 ## Where to read more
 
+- The author's guide, one page per skill, written for a person:
+  https://vaubaan.com/docs/plugins-guide (append `.md` to any page's path for Markdown; the whole
+  site as one file: https://vaubaan.com/llms-full.txt).
 - The contract: `node_modules/@vaubaan/plugin-sdk/README.md` and the types of `ServicePlugin`.
 - The SDK's changes: the "Plugin SDK" sections of
   https://github.com/vaubaan/gateway/blob/main/CHANGELOG.md

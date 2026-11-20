@@ -5,6 +5,8 @@ description: Use after vaubaan-model-service, to write src/risk-catalog.yaml: th
 
 # Write the risk catalog
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/risk-catalog (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 The catalog is the plugin's security statement: the file a reviewer and an administrator read
 first. One entry per **intent that deserves its own decision**, not one per tool or per endpoint.
 

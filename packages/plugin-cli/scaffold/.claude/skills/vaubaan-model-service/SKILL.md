@@ -5,6 +5,8 @@ description: Use first, when the project still describes the imaginary widgets s
 
 # Model the service
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/model-a-service (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 You replace the imaginary service (workspaces holding widgets) with the real one: what one resource
 is, which entities a call can touch, which tools the plugin offers. No classification yet, no
 credential, no call to the service.

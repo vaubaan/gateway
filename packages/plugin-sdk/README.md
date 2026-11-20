@@ -38,10 +38,13 @@ every problem at once. Three entry points:
 
 ## Write one
 
-The step-by-step guide, from the scaffold to the pull request, is
-[`plugins/README.md`](https://github.com/vaubaan/gateway/blob/main/plugins/README.md);
-[`plugins/_template`](https://github.com/vaubaan/gateway/tree/main/plugins/_template)
-is a complete plugin to copy. The contract's rules and traps are in the
+Start a project with the command line, `npx @vaubaan/plugin-cli init` (a
+complete plugin for an imaginary service, its tests passing), then follow the
+author's guide,
+[vaubaan.com/docs/plugins-guide](https://vaubaan.com/docs/plugins-guide): the
+data model, the risk catalog, the classifier, the credential, execution, the
+test kit, signing, deploying and submitting to the catalog. The contract's
+rules and traps, for the SDK's own maintainers, are in the
 [plugin SDK handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/plugin-sdk.md).
 
 ## Versions

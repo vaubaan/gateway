@@ -38,7 +38,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
   **unlabelled resource cannot run env-scoped operations** (`risk-not-accepted`) until the owner
   labels it.
 - A catalog, classifier or macro-action change updates the handbook in the same pull request and bumps
-  `catalog_version` and the plugin `version` (`plugins/README.md`, "Step 11"). A stricter
+  `catalog_version` and the plugin `version` (the guide's [versions](https://vaubaan.com/docs/plugins-guide/sign-and-deploy#versions)). A stricter
   classification, or an executor refusing what it forwarded, is breaking (major; minor before 1.0).
 
 ## Index

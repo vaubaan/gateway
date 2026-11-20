@@ -5,6 +5,8 @@ description: Use when the plugin's checks pass and it should run on a gateway th
 
 # Ship to a gateway
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/sign-and-deploy (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 A plugin reaches a gateway as one file, `dist/plugin.tgz`: the bundled plugin, its risk catalog, a
 manifest of file digests, and a signature of that manifest. An uploaded archive stays inert until
 an administrator activates it in the gateway's interface; it then starts **on trial** at the next

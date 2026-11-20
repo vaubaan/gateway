@@ -5,6 +5,8 @@ description: Use after vaubaan-risk-catalog, to write src/classify.ts (pure, fai
 
 # Write the classifier
 
+The same step for a person, with its reasons: https://vaubaan.com/docs/plugins-guide/classify (append `.md` to the path for Markdown). Read it when a rule below is unclear; this skill decides what you do and where you stop.
+
 `classify(tool, args, resources)` returns `{ slices }` or `{ denied: '<sentence>' }`. `resources`
 are the mission's resources. The gateway decides from the slices alone: a slice that understates a
 call lets the call through. This is the file reviewers read line by line.
