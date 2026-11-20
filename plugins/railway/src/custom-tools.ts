@@ -15,12 +15,9 @@ import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 import { TOOL } from './identity.ts';
 
+/** The schema the GraphQL inputs take ; what an agent reads of it is `PROJECT_ID_PROPERTY` (`tools.ts`). */
 const projectIdArg = {
-  projectId: {
-    type: 'string',
-    description:
-      'Railway project id (UUID), one of the mission resources. Resolved from the mission when it touches a single Railway project.',
-  },
+  projectId: { type: 'string', description: 'Railway project id (UUID).' },
 } as const;
 const envIdArg = {
   environmentId: {

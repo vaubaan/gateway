@@ -19,7 +19,8 @@ import { TOOL, type SupabaseToolName } from './identity.ts';
 const projectArg = {
   project_ref: {
     type: 'string',
-    description: 'Supabase project ref (the `xxx` in `xxx.supabase.co`), as listed in the mission.',
+    description:
+      'Supabase project ref (the `xxx` in `xxx.supabase.co`) or the project name, as listed in the mission ; the request always carries the ref.',
   },
 };
 

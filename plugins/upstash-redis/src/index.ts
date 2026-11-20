@@ -45,7 +45,9 @@ import {
   buildCommand,
   discoverUpstashRedisResources,
   executeUpstashRedis,
+  LIST_DATABASES_NOTE,
   MAX_DISCOVERED_DATABASES,
+  missionDatabases,
   redactDatabases,
   REDACTED_DATABASE_FIELDS,
   UPSTASH_REST_HOST_SUFFIX,
@@ -68,7 +70,7 @@ export const upstashRedisPlugin = definePlugin({
   icon: UPSTASH_REDIS_ICON,
   iconColor: UPSTASH_REDIS_ICON_COLOR,
   resourceNoun: { one: 'database', other: 'databases' },
-  version: '4.0.2',
+  version: '4.1.0',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:
@@ -121,7 +123,9 @@ export {
   KNOWN_WRITES,
   TRANSACTION_CONTROL,
   type RedisCommandClass,
+  LIST_DATABASES_NOTE,
   MAX_DISCOVERED_DATABASES,
+  missionDatabases,
   REDACTED_DATABASE_FIELDS,
   UPSTASH_API_KEYS_URL,
   UPSTASH_EMAIL_PATTERN,

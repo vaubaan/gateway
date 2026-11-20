@@ -385,16 +385,18 @@ describe('classifyRailway — denied paths', () => {
       stagingResource(),
       { ...prodResource(), ref: '00000000-0000-4000-8000-000000000099' },
     ]);
-    expect(result).toEqual({ denied: 'ambiguous railway target: specify projectId.' });
+    expect('denied' in result && result.denied).toMatch(
+      /^projectId: argument required — the mission touches 2 Railway projects — name one by its id or its name\. Projects of this mission: .+ \(00000000-0000-4000-8000-000000000099\)/,
+    );
   });
 
   test('projectId arg not among the resources → denied', () => {
     const result = classifyRailway('railway__list-services', { projectId: 'unbound-project-id' }, [
       stagingResource(),
     ]);
-    expect(result).toEqual({
-      denied: "railway project 'unbound-project-id' is not a resource of this mission.",
-    });
+    expect('denied' in result && result.denied).toMatch(
+      /^railway project 'unbound-project-id' is not a resource of this mission\. Projects of this mission: /,
+    );
   });
 
   test('single resource auto-fills projectId', () => {

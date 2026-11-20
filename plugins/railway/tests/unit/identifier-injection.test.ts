@@ -323,7 +323,7 @@ describe('railway identifiers — execute runs on the target the classifier reso
       const fetch = mockFetch(upstream);
       expect(
         await refusalText(railwayPlugin.execute(execCtx(fetch, [project, other]), tool, args)),
-      ).toMatch(/projectId: argument required/);
+      ).toMatch(/^environmentId: not an environment of a Railway project of this mission/);
       expect(fetch.calls).toHaveLength(0);
     },
   );

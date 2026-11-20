@@ -11,11 +11,12 @@
  *
  * Conventions :
  *   - The resource is the Railway **project** (UUID). Project-scoped tools
- *     take `projectId` explicitly ; when absent, the classifier falls back to
- *     the mission's single Railway project, or to the project whose
- *     discovered environments contain the `environmentId` argument
- *     (`accept-deploy` carries no `projectId`). Anything else is ambiguous
- *     and denied.
+ *     take `projectId` explicitly, the id or the exact name (display name)
+ *     of a resource of the mission, and the request carries its id ; when
+ *     absent, the classifier falls back to the mission's single Railway
+ *     project, or to the project whose discovered environments contain the
+ *     `environmentId` argument. Anything else is denied, and the refusal
+ *     names the mission's projects so the agent can pick one.
  *   - `environmentId` is forwarded upstream as given, so it must designate
  *     an environment of the project the call is classified on : it is
  *     checked against the environments discovery stored on that project
@@ -159,8 +160,12 @@ function isAccountKind(kind: Kind): kind is AccountKind {
 
 /**
  * Tools whose upstream schema has no `projectId` : `environmentId` is the
- * only argument that designates their target, so it is mandatory.
+ * only argument the request carries to designate their target, so it is
+ * mandatory. The agent may still name the project in `projectId` (declared
+ * to it, `tools.ts`) : it is read here, then dropped by `execute`.
  */
+const ENVIRONMENT_REQUIRED =
+  'environmentId: required, it is the only id the request carries to name the target.';
 const TOOLS_ADDRESSED_BY_ENVIRONMENT: ReadonlySet<string> = new Set([TOOL.acceptDeploy]);
 
 /** True when the tool needs a Railway project resource to be classified. */
@@ -173,9 +178,13 @@ export function isProjectScopedTool(tool: string): boolean {
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Every project-scoped tool declares `projectId` (`tools.ts`), checked by
+ * `resolveTarget` and written again by `execute` where the upstream schema
+ * takes it ; an account-level tool declares none, so one given there is
+ * refused like any undeclared argument, never forwarded unread.
+ */
 const DECLARED_ARGUMENTS = declaredArgumentsOf(railwayTools);
-/** Checked by `resolveTarget` ; `execute` writes it again where the tool takes it and drops it elsewhere. */
-const ROUTING_ARGUMENTS: ReadonlySet<string> = new Set(['projectId']);
 
 /**
  * The refusal for an argument `tool` does not declare, `null` when there is none :
@@ -186,10 +195,7 @@ export function undeclaredArgument(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): string | null {
-  return (
-    unboundArgument(tool, args) ??
-    undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS)
-  );
+  return unboundArgument(tool, args) ?? undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args);
 }
 
 /**
@@ -251,9 +257,20 @@ export interface Denial {
   readonly denied: string;
 }
 
-/** Refusals of a call that names no project the mission could resolve ; `execute` reads them. */
-export const NO_RAILWAY_PROJECT = 'railway target: the mission touches no Railway project.';
-export const AMBIGUOUS_RAILWAY_TARGET = 'ambiguous railway target: specify projectId.';
+/** The refusal of a project-scoped call on a mission that holds no Railway project of this account. */
+export const NO_RAILWAY_PROJECT =
+  'projectId: the mission touches no Railway project of this account.';
+
+/** Most projects a refusal names ; `list-projects` lists them all. */
+const HINT_MAX_PROJECTS = 10;
+
+/** The mission's projects, as a refusal names them : `name (id)`, then where to read them all. */
+export function missionProjectsHint(own: readonly Resource[]): string {
+  if (own.length === 0) return 'The mission holds no Railway project of this account.';
+  const shown = own.slice(0, HINT_MAX_PROJECTS).map((r) => `${r.displayName} (${r.ref})`);
+  const more = own.length > HINT_MAX_PROJECTS ? `, and ${own.length - HINT_MAX_PROJECTS} more` : '';
+  return `Projects of this mission: ${shown.join(', ')}${more} — ${TOOL.listProjects} lists them with their environments and services.`;
+}
 
 /**
  * What a project-scoped call runs on, as `classify` and `execute` both read
@@ -280,7 +297,7 @@ export function resolveTarget(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): RailwayTarget | Denial {
-  const project = locateProject(args, resources);
+  const project = locateProject(tool, args, resources);
   if ('denied' in project) return project;
   // The ref of the resource is sent like an argument is : same grammar.
   if (railwayId(project.ref) === null) {
@@ -380,32 +397,66 @@ function readService(
   return { id: serviceId };
 }
 
-/** The mission's Railway project the call targets : explicit, single, or found by environment. */
+/**
+ * The mission's Railway project the call targets : explicit, single, or found
+ * by environment. Explicit, `projectId` names a resource of the mission by
+ * its ref or by its exact display name (the project's name) — never a
+ * partial or case-folded match — and the answer is the resource, whose ref
+ * the request carries. A name two mission projects share is refused : the
+ * agent names one by its id. Every refusal names the mission's projects.
+ */
 function locateProject(
+  tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): Resource | Denial {
   const own = resources.filter((r) => r.service === SERVICE_ID);
 
   if (args.projectId !== undefined) {
-    const explicit = railwayId(args.projectId);
-    if (explicit === null) return { denied: 'projectId: malformed ref.' };
-    const match = own.find((r) => r.ref === explicit);
-    if (!match) {
-      return { denied: `railway project '${explicit}' is not a resource of this mission.` };
+    const given = args.projectId;
+    const byRef = own.find((r) => r.ref === given);
+    if (byRef !== undefined) return byRef;
+    const byName = own.filter((r) => r.displayName === given);
+    if (byName.length === 1) return byName[0]!;
+    if (byName.length > 1) {
+      return {
+        denied: `projectId: ${byName.length} Railway projects of this mission are named '${String(given)}' — name one by its id. ${missionProjectsHint(own)}`,
+      };
     }
-    return match;
+    const explicit = railwayId(given);
+    if (explicit === null) {
+      return {
+        denied: `projectId: malformed ref, and not the name of a project of this mission. ${missionProjectsHint(own)}`,
+      };
+    }
+    return {
+      denied: `railway project '${explicit}' is not a resource of this mission. ${missionProjectsHint(own)}`,
+    };
   }
 
   if (own.length === 1) return own[0]!;
   if (own.length === 0) return { denied: NO_RAILWAY_PROJECT };
 
-  // `accept-deploy` carries no projectId : find the project owning the environment.
-  if (typeof args.environmentId === 'string') {
+  // Several projects and no projectId : the environment, when given, names its project.
+  if (args.environmentId !== undefined) {
     const byEnv = own.filter((r) => environmentsOf(r).some((e) => e.id === args.environmentId));
     if (byEnv.length === 1) return byEnv[0]!;
+    if (byEnv.length === 0) {
+      return {
+        denied:
+          `environmentId: not an environment of a Railway project of this mission as last discovered — ` +
+          `pass an environmentId of one of them, or name the project in projectId (its id or its name) ; ` +
+          `an environment created since appears once the account owner refreshes the resources. ${missionProjectsHint(own)}`,
+      };
+    }
+  } else if (TOOLS_ADDRESSED_BY_ENVIRONMENT.has(tool)) {
+    return {
+      denied: `${ENVIRONMENT_REQUIRED} ${missionProjectsHint(own)}`,
+    };
   }
-  return { denied: AMBIGUOUS_RAILWAY_TARGET };
+  return {
+    denied: `projectId: argument required — the mission touches ${own.length} Railway projects — name one by its id or its name. ${missionProjectsHint(own)}`,
+  };
 }
 
 /**
@@ -422,7 +473,7 @@ function readEnvironment(
 ): { readonly id: string | null } | Denial {
   if (args.environmentId === undefined) {
     return TOOLS_ADDRESSED_BY_ENVIRONMENT.has(tool)
-      ? { denied: 'environmentId: required, it is the only argument naming the target.' }
+      ? { denied: ENVIRONMENT_REQUIRED }
       : { id: null };
   }
   const environmentId = railwayId(args.environmentId);

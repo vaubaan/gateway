@@ -14,6 +14,9 @@
  *   - the public GraphQL API, https://backboard.railway.com/graphql/v2, for
  *     the four variable tools and for resource discovery.
  *
+ * `list-projects` reaches neither : it answers the mission's projects from
+ * the resources the gateway passes (`missionProjects`).
+ *
  * Rules : `fetch` comes from the context (tests inject `mockFetch`) ;
  * 401 / 403 → `UpstreamAuthError` so the host can refresh and retry ; the
  * API bases are facts about the service, not instance configuration.
@@ -51,9 +54,11 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import {
-  AMBIGUOUS_RAILWAY_TARGET,
-  NO_RAILWAY_PROJECT,
+  environmentsOf,
   isProjectScopedTool,
+  servicesOf,
+  type RailwayEnvironmentRef,
+  type RailwayServiceRef,
   railwayId,
   readVariableWrite,
   resolveTarget,
@@ -63,7 +68,7 @@ import { CUSTOM_TOOL_NAMES } from './custom-tools.ts';
 import { explainMcpRefusal, railwayBearerOf } from './credential.ts';
 import { askRailwayGraphql, nodesOf, railwayGraphql, type GraphqlRequest } from './graphql.ts';
 import { SERVICE_ID, RAILWAY_MCP_SERVER, TOOL } from './identity.ts';
-import { railwayTools, toUpstreamName } from './tools.ts';
+import { forwardTakesProjectId, railwayTools, toUpstreamName } from './tools.ts';
 
 /** Projects fetched per GraphQL page during discovery. */
 export const RAILWAY_PROJECT_PAGE_SIZE = 100;
@@ -216,11 +221,6 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
 
 const DECLARED_TOOLS: ReadonlySet<string> = new Set(railwayTools.map((t) => t.name));
 
-/** Tools whose input schema declares a `projectId` : the single mission project fills it when absent. */
-const TOOLS_TAKING_PROJECT_ID: ReadonlySet<string> = new Set(
-  railwayTools.filter((t) => 'projectId' in (t.inputSchema.properties ?? {})).map((t) => t.name),
-);
-
 export async function executeRailway(
   ctx: ExecuteContext,
   tool: string,
@@ -232,6 +232,8 @@ export async function executeRailway(
     const effective = pinTarget(tool, args, ctx.resources);
     // Declined here, before any request : a result the agent reads, not an upstream failure.
     if ('refused' in effective) return refusalResult(effective.refused);
+    // Answered from the mission, never forwarded : Railway's answer lists every project the token sees.
+    if (tool === TOOL.listProjects) return jsonResult(missionProjects(ctx.resources));
     if (CUSTOM_TOOL_NAMES.has(tool)) {
       return jsonResult(await executeVariableTool(ctx, token, tool, effective.args));
     }
@@ -453,13 +455,51 @@ function isProjectsPage(x: unknown): x is ProjectsPage {
   );
 }
 
+/** The note `list-projects` answers with : what it lists, and how to name a project. */
+export const LIST_PROJECTS_NOTE =
+  'The Railway projects of this mission on this account; other projects the token sees are left out. ' +
+  'Name one in `projectId` by its id or its name.';
+
+/** One project of the mission, as `list-projects` answers it. */
+export interface MissionProject {
+  readonly id: string;
+  readonly name: string;
+  readonly label: string | null;
+  readonly environments: readonly RailwayEnvironmentRef[];
+  readonly services: readonly RailwayServiceRef[];
+}
+
+/**
+ * `list-projects` : the mission's Railway projects of this account, read from
+ * the resources the gateway passes, never from Railway. Railway's answer is
+ * free text listing every project the token sees ; filtering it would trust
+ * its format to keep another project out. Here a project outside the mission
+ * is never named, and the names listed are the names `projectId` accepts.
+ */
+export function missionProjects(resources: readonly Resource[]): {
+  projects: MissionProject[];
+  note: string;
+} {
+  const projects = resources
+    .filter((r) => r.service === SERVICE_ID)
+    .map((r) => ({
+      id: r.ref,
+      name: r.displayName,
+      label: r.env ?? null,
+      environments: environmentsOf(r),
+      services: servicesOf(r) ?? [],
+    }));
+  return { projects, note: LIST_PROJECTS_NOTE };
+}
+
 /**
  * The arguments to send, with every id written from what the classifier's
- * own functions resolved : the project (filled in when the tool takes one and
- * the caller named none), the environment, the service. A call they deny is
- * refused, and so is one that names a deployment or an agent thread, which
- * nothing can bind to the project (`undeclaredArgument`). Account-level tools name no resource of the
- * mission and are forwarded as received.
+ * own functions resolved : the project (its id, whether the caller named it by
+ * id or by name or not at all), the environment, the service. A call they
+ * deny is refused, and so is one that names a deployment or an agent thread,
+ * which nothing can bind to the project (`undeclaredArgument`). Account-level
+ * tools name no resource of the mission and declare no `projectId` : their
+ * declared arguments are forwarded as received.
  *
  * Every denial is a refusal the agent reads, a call that names no project the
  * mission can resolve included : nothing was sent, so nothing failed upstream.
@@ -475,20 +515,16 @@ function pinTarget(
   if (!isProjectScopedTool(tool)) return { args };
 
   const target = resolveTarget(tool, args, resources);
-  if ('denied' in target) {
-    if (target.denied === NO_RAILWAY_PROJECT || target.denied === AMBIGUOUS_RAILWAY_TARGET) {
-      return { refused: `projectId: argument required (${target.denied})` };
-    }
-    return { refused: target.denied };
-  }
+  if ('denied' in target) return { refused: target.denied };
   const write = readVariableWrite(tool, args);
   if (write !== null && 'denied' in write) return { refused: write.denied };
 
-  // `projectId` is the mission's, written where the tool takes one and dropped where it
-  // does not (the upstream schema of `accept-deploy` is closed and has no such property).
+  // `projectId` is the resolved project's id — never the name the agent may have given —
+  // written where the upstream schema takes one and dropped where it does not (the
+  // upstream schema of `accept-deploy` is closed and has no such property).
   const { projectId: _given, ...rest } = args;
   const out: Record<string, unknown> = { ...rest };
-  if (TOOLS_TAKING_PROJECT_ID.has(tool)) out.projectId = target.project.ref;
+  if (forwardTakesProjectId(tool)) out.projectId = target.project.ref;
   if (target.environmentId !== null) out.environmentId = target.environmentId;
   if (target.serviceId !== null) out.serviceId = target.serviceId;
   return { args: out };

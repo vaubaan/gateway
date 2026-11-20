@@ -724,13 +724,66 @@ describe('classifySupabase — strict-fail', () => {
   test('project_ref outside the mission resources → denied', () => {
     const r = classifySupabase('supabase__get_project', { project_ref: 'rogue-ref' }, [staging]);
     expect(r).toEqual({
-      denied: "supabase project 'rogue-ref' is not a resource of this mission.",
+      denied: `supabase project 'rogue-ref' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}).`,
     });
   });
 
   test('several resources without explicit project_ref → denied', () => {
     const r = classifySupabase('supabase__get_project', {}, [staging, prod]);
-    expect(r).toEqual({ denied: 'ambiguous supabase target: specify project_ref.' });
+    expect(r).toEqual({
+      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: ${STAGING_REF} (${STAGING_REF}), ${PROD_REF} (${PROD_REF}).`,
+    });
+  });
+
+  test('no Supabase resource and no project_ref → denied, saying so', () => {
+    expect(classifySupabase('supabase__get_project', {}, [])).toEqual({
+      denied: 'project_ref: argument missing and the mission touches no Supabase project.',
+    });
+  });
+
+  test('project_ref names a project by its exact name : the slice carries its ref', () => {
+    const named = { ...prod, displayName: 'Acme / shop' };
+    expect(
+      classifySerialized('supabase__get_project', { project_ref: 'Acme / shop' }, [staging, named]),
+    ).toEqual([`supabase.project[${PROD_REF}].project-settings.R`]);
+    // Exact match only : no case folding, no trimming, no partial name.
+    for (const project_ref of ['acme / shop', 'Acme / shop ', 'shop']) {
+      const r = classifySupabase('supabase__get_project', { project_ref }, [staging, named]);
+      expect('denied' in r, project_ref).toBe(true);
+    }
+  });
+
+  test('a ref wins over a name that spells it', () => {
+    const impostor = { ...prod, displayName: STAGING_REF };
+    expect(
+      classifySerialized('supabase__get_project', { project_ref: STAGING_REF }, [
+        impostor,
+        staging,
+      ]),
+    ).toEqual([`supabase.project[${STAGING_REF}].project-settings.R`]);
+  });
+
+  test('a name two mission projects share is refused, asking for the ref', () => {
+    const a = { ...staging, displayName: 'shop' };
+    const b = { ...prod, displayName: 'shop' };
+    expect(classifySupabase('supabase__get_project', { project_ref: 'shop' }, [a, b])).toEqual({
+      denied: `project_ref: 2 Supabase projects of this mission are named 'shop' — name one by its ref. Projects of this mission: shop (${STAGING_REF}), shop (${PROD_REF}).`,
+    });
+  });
+
+  test('a refusal names ten mission projects at most', () => {
+    const many = Array.from({ length: 12 }, (_, i) => mkResource(`proj${i}`, 'staging'));
+    const r = classifySupabase('supabase__get_project', {}, many);
+    expect('denied' in r && r.denied).toMatch(/proj9 \(proj9\), and 2 more\.$/);
+    expect('denied' in r && r.denied).not.toContain('proj10');
+  });
+
+  test('a name never matches a resource of another service', () => {
+    const vercel = { service: 'vercel', ref: 'prj_x', env: 'prod', displayName: 'shop' } as const;
+    const r = classifySupabase('supabase__get_project', { project_ref: 'shop' }, [staging, vercel]);
+    expect(r).toEqual({
+      denied: `supabase project 'shop' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}).`,
+    });
   });
 
   test('single resource without project_ref → resolves from the resource', () => {

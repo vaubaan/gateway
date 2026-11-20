@@ -34,6 +34,7 @@ import {
 import {
   basicAuthHeader,
   classifyUpstashRedis,
+  LIST_DATABASES_NOTE,
   MAX_DISCOVERED_DATABASES,
   redactDatabases,
   upstashAuth,
@@ -55,6 +56,10 @@ const queue: Resource = {
   displayName: 'app-queue',
 };
 const foreign: Resource = { service: 'github', ref: 'acme/app', displayName: 'acme/app' };
+
+/** How a refusal names a mission holding `cache` alone. */
+const ONLY_CACHE =
+  'Databases of this mission: app-cache (db-abc-123) — upstash_redis__list_databases lists them.';
 
 const credential = {
   kind: 'api-key' as const,
@@ -236,9 +241,13 @@ describe('classifyUpstashRedis — database resolution against mission resources
   test('refuses a database the mission does not hold, an ambiguous or missing one, a malformed ref', () => {
     expect(
       classifyUpstashRedis('upstash_redis__get', { databaseId: 'db-other', key: 'k' }, [cache]),
-    ).toEqual({ denied: "upstash-redis database 'db-other' is not a resource of this mission." });
+    ).toEqual({
+      denied: `upstash-redis database 'db-other' is not a resource of this mission. ${ONLY_CACHE}`,
+    });
     expect(classifyUpstashRedis('upstash_redis__get', { key: 'k' }, [cache, queue])).toEqual({
-      denied: 'databaseId: argument missing and the mission touches 2 Upstash databases — name one',
+      denied:
+        'databaseId: argument missing and the mission touches 2 Upstash databases — name one by its id or its name. ' +
+        'Databases of this mission: app-cache (db-abc-123), app-queue (db-def-456) — upstash_redis__list_databases lists them.',
     });
     expect(classifyUpstashRedis('upstash_redis__get', { key: 'k' }, [foreign])).toEqual({
       denied: 'databaseId: argument missing and the mission touches no Upstash database',
@@ -251,6 +260,61 @@ describe('classifyUpstashRedis — database resolution against mission resources
     ).toEqual({ denied: 'databaseId: malformed database ref' });
   });
 
+  test('databaseId takes a database of the mission by its exact name : the slice names its id', () => {
+    expect(
+      slices('upstash_redis__get', { databaseId: 'app-queue', key: 'k' }, [cache, queue]),
+    ).toEqual(['upstash-redis.database[db-def-456].key-space[k].R']);
+    expect(
+      slices('upstash_redis__get_database', { database_id: 'app-cache' }, [cache, queue]),
+    ).toEqual(['upstash-redis.database[db-abc-123].R']);
+    // Exact : no case folding, no trimming, no prefix.
+    for (const near of ['App-Cache', ' app-cache', 'app-cache ', 'app']) {
+      const out = classifyUpstashRedis('upstash_redis__get', { databaseId: near, key: 'k' }, [
+        cache,
+      ]);
+      expect('denied' in out, near).toBe(true);
+    }
+    // A name outside the mission, or another service's resource name, is refused.
+    expect(
+      'denied' in
+        classifyUpstashRedis('upstash_redis__get', { databaseId: 'acme/app', key: 'k' }, [
+          cache,
+          foreign,
+        ]),
+    ).toBe(true);
+  });
+
+  test('a name two mission databases share is refused, asking for the id', () => {
+    const twin: Resource = { ...queue, displayName: 'app-cache' };
+    expect(
+      classifyUpstashRedis('upstash_redis__get', { databaseId: 'app-cache', key: 'k' }, [
+        cache,
+        twin,
+      ]),
+    ).toEqual({
+      denied:
+        "databaseId: 2 Upstash databases of this mission are named 'app-cache' — name one by its id. " +
+        'Databases of this mission: app-cache (db-abc-123), app-cache (db-def-456) — upstash_redis__list_databases lists them.',
+    });
+    // The id still names each of them.
+    expect(
+      slices('upstash_redis__get', { databaseId: 'db-def-456', key: 'k' }, [cache, twin]),
+    ).toEqual(['upstash-redis.database[db-def-456].key-space[k].R']);
+  });
+
+  test('a refusal names ten mission databases at most', () => {
+    const many: Resource[] = Array.from({ length: 12 }, (_, i) => ({
+      service: 'upstash-redis',
+      ref: `db-${i}`,
+      displayName: `cache-${i}`,
+    }));
+    const out = classifyUpstashRedis('upstash_redis__get', { key: 'k' }, many);
+    expect('denied' in out && out.denied).toMatch(
+      /cache-9 \(db-9\), and 2 more — upstash_redis__list_databases lists them\.$/,
+    );
+    expect('denied' in out && out.denied).not.toContain('cache-10');
+  });
+
   test('account-level tools need no database but still refuse a foreign databaseId', () => {
     expect(slices('upstash_redis__list_databases', {}, [])).toEqual([
       'upstash-redis.account.database[*].R',
@@ -260,7 +324,9 @@ describe('classifyUpstashRedis — database resolution against mission resources
     ).toEqual(['upstash-redis.account.database.W']);
     expect(
       classifyUpstashRedis('upstash_redis__list_databases', { databaseId: 'db-other' }, [cache]),
-    ).toEqual({ denied: "upstash-redis database 'db-other' is not a resource of this mission." });
+    ).toEqual({
+      denied: `upstash-redis database 'db-other' is not a resource of this mission. ${ONLY_CACHE}`,
+    });
   });
 
   test('unknown tool is refused before any database resolution', () => {
@@ -385,7 +451,7 @@ describe('upstash-redis credential spec', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('executeUpstashRedis with mockFetch', () => {
-  test('management tool : Basic auth, GET /redis/databases, REST tokens redacted from the answer', async () => {
+  test("management tool : Basic auth, GET /redis/databases, the mission's databases alone, REST tokens redacted", async () => {
     const fetch = mockFetch([
       {
         method: 'GET',
@@ -397,6 +463,8 @@ describe('executeUpstashRedis with mockFetch', () => {
             rest_token: 'secret',
             password: 'pw',
           },
+          { database_id: 'db-outside', database_name: 'billing-prod', rest_token: 'other' },
+          { database_name: 'no-id' },
         ],
       },
     ]);
@@ -408,8 +476,20 @@ describe('executeUpstashRedis with mockFetch', () => {
     expect(result.isError).toBeUndefined();
     expect(fetch.calls[0]!.headers.authorization).toBe(EXPECTED_BASIC);
     const text = (result.content[0] as { text: string }).text;
-    expect(JSON.parse(text)).toEqual([{ database_id: 'db-abc-123', database_name: 'app-cache' }]);
+    expect(JSON.parse(text)).toEqual({
+      databases: [{ database_id: 'db-abc-123', database_name: 'app-cache' }],
+      note: LIST_DATABASES_NOTE,
+    });
     expect(text).not.toContain('secret');
+    expect(text).not.toContain('db-outside');
+    expect(text).not.toContain('billing-prod');
+  });
+
+  test('list_databases : an answer that is not a list is an upstream protocol failure', async () => {
+    const fetch = mockFetch([{ url: /\/redis\/databases$/, body: { databases: [] } }]);
+    await expect(
+      upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__list_databases', {}),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('data tool : reads the REST endpoint and token from the Management API, then POSTs the command with the Bearer', async () => {
@@ -461,6 +541,39 @@ describe('executeUpstashRedis with mockFetch', () => {
     expect(ambiguous.isError).toBe(true);
     expect((ambiguous.content[0] as { text: string }).text).toMatch(/2 Upstash databases/);
     expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('a database named by its name : execute sends its id, the one the slice names', async () => {
+    const fetch = mockFetch([
+      databaseRoute,
+      { method: 'POST', url: REST_URL, body: { result: 'v' } },
+    ]);
+    const args = { databaseId: 'app-cache', key: 'k' };
+    expect(classifyUpstashRedis('upstash_redis__get', args, [cache, queue])).toMatchObject({
+      slices: [expect.anything()],
+    });
+    const result = await upstashRedisPlugin.execute(
+      ctx(fetch, [cache, queue]),
+      'upstash_redis__get',
+      args,
+    );
+    expect(result.isError).toBeUndefined();
+    expect(fetch.calls.map((c) => c.url)).toEqual([DATABASE_URL, REST_URL]);
+    expect(fetch.calls[1]!.json).toEqual(['GET', 'k']);
+
+    const stats = mockFetch([
+      { method: 'GET', url: `${UPSTASH_MANAGEMENT_API}/redis/stats/db-def-456`, body: {} },
+    ]);
+    await upstashRedisPlugin.execute(
+      ctx(stats, [cache, queue]),
+      'upstash_redis__get_database_stats',
+      {
+        databaseId: 'app-queue',
+      },
+    );
+    expect(stats.calls.map((c) => c.url)).toEqual([
+      `${UPSTASH_MANAGEMENT_API}/redis/stats/db-def-456`,
+    ]);
   });
 
   test('401 / 403 become UpstreamAuthError on both surfaces', async () => {

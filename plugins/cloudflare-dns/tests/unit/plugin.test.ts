@@ -141,18 +141,68 @@ describe('classifyCloudflareDns — zone resolution', () => {
   test('refuses an ambiguous, absent, unknown or malformed zone', () => {
     const both = [exampleCom, exampleOrg];
     expect(denied('cloudflare_dns__get_zone', {}, both)).toBe(
-      'zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one',
+      'zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one by its id or its name. ' +
+        'Zones of this mission: example.com (z1), example.org (z2) — cloudflare_dns__list_zones lists them.',
     );
     expect(denied('cloudflare_dns__get_zone', {}, [])).toBe(
       'zone_id: argument missing and the mission touches no Cloudflare DNS zone',
     );
     expect(denied('cloudflare_dns__get_zone', { zone_id: 'z9' }, both)).toBe(
-      "zone_id: 'z9' is not a Cloudflare DNS zone of this mission",
+      "zone_id: 'z9' is not a Cloudflare DNS zone of this mission. " +
+        'Zones of this mission: example.com (z1), example.org (z2) — cloudflare_dns__list_zones lists them.',
+    );
+    expect(denied('cloudflare_dns__get_zone', { zone_id: 'secret.io' }, both)).toMatch(
+      /^zone_id: 'secret\.io' is not a Cloudflare DNS zone of this mission\. Zones of this mission: /,
     );
     expect(denied('cloudflare_dns__get_zone', { zone_id: 'z 1' })).toBe(
       'zone_id: malformed zone id',
     );
     expect(denied('cloudflare_dns__get_zone', { zone_id: 42 })).toBe('zone_id: malformed zone id');
+  });
+
+  test('zone_id takes the zone name, case-insensitive, and the slice carries the id', () => {
+    const both = [exampleCom, exampleOrg];
+    for (const zoneId of ['example.org', 'Example.ORG', 'example.org.']) {
+      expect(slices('cloudflare_dns__list_records', { zone_id: zoneId }, both)).toEqual([
+        'cloudflare-dns.account[acct1].zone[z2].record[*].R',
+      ]);
+    }
+    // The name metadata wins over a display name the owner may have relabelled.
+    const relabelled: Resource = { ...exampleOrg, displayName: 'Marketing site' };
+    expect(slices('cloudflare_dns__get_zone', { zone_id: 'example.org' }, [relabelled])).toEqual([
+      'cloudflare-dns.account[acct1].zone[z2].R',
+    ]);
+    // A name is matched whole : no prefix, suffix or subdomain.
+    expect(denied('cloudflare_dns__get_zone', { zone_id: 'www.example.org' }, both)).toMatch(
+      /not a Cloudflare DNS zone of this mission/,
+    );
+    expect(denied('cloudflare_dns__get_zone', { zone_id: 'example' }, both)).toMatch(
+      /not a Cloudflare DNS zone of this mission/,
+    );
+  });
+
+  test('a name two zones of the mission share asks for the id ; the hint stops at ten zones', () => {
+    const twin: Resource = {
+      ...exampleCom,
+      ref: 'z8',
+      metadata: { account_id: 'acct2', zone_name: 'example.com' },
+    };
+    expect(denied('cloudflare_dns__get_zone', { zone_id: 'example.com' }, [exampleCom, twin])).toBe(
+      "zone_id: 2 Cloudflare DNS zones of this mission are named 'example.com' — name one by its id. " +
+        'Zones of this mission: example.com (z1), example.com (z8) — cloudflare_dns__list_zones lists them.',
+    );
+    expect(slices('cloudflare_dns__get_zone', { zone_id: 'z8' }, [exampleCom, twin])).toEqual([
+      'cloudflare-dns.account[acct2].zone[z8].R',
+    ]);
+    const many = Array.from({ length: 12 }, (_, i): Resource => ({
+      service: 'cloudflare-dns',
+      ref: `z${i}`,
+      displayName: `d${i}.com`,
+      metadata: { zone_name: `d${i}.com` },
+    }));
+    const refusal = denied('cloudflare_dns__get_zone', {}, many);
+    expect(refusal).toContain('d9.com (z9), and 2 more — cloudflare_dns__list_zones lists them.');
+    expect(refusal).not.toContain('d10.com');
   });
 
   test('ignores resources of other services ; account[*] when the metadata lacks it', () => {
@@ -391,27 +441,47 @@ describe('executeCloudflareDns with mockFetch', () => {
     expect(fetch.calls[0]!.headers.authorization).toBe('Bearer cf_token_0123456789abcdef');
   });
 
-  test('list_zones is filtered to the zones of the mission', async () => {
-    const fetch = mockFetch([
-      {
-        method: 'GET',
-        url: `${BASE}/zones?per_page=50`,
-        body: {
-          result: [
-            { id: 'z1', name: 'example.com' },
-            { id: 'z9', name: 'secret.io' },
-          ],
-          result_info: { count: 2 },
-        },
-      },
-    ]);
-    const result = await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__list_zones', {
-      per_page: 50,
-    });
+  test('list_zones answers every zone of the mission from the resources, without a request', async () => {
+    const fetch = mockFetch([]);
+    const bare: Resource = { service: 'cloudflare-dns', ref: 'z7', displayName: 'bare.io' };
+    const result = await cloudflareDnsPlugin.execute(
+      ctx(fetch, [exampleCom, otherNet, bare, github]),
+      'cloudflare_dns__list_zones',
+      {},
+    );
     expect(JSON.parse(text(result))).toEqual({
-      result: [{ id: 'z1', name: 'example.com' }],
-      result_info: { count: 2 },
+      zones: [
+        { id: 'z1', name: 'example.com', account: { id: 'acct1', name: null } },
+        { id: 'z3', name: 'other.net', account: { id: 'acct2', name: null } },
+        { id: 'z7', name: 'bare.io' },
+      ],
+      note:
+        "The 3 Cloudflare DNS zone(s) of this mission ; the account's other zones are left out. " +
+        "zone_id takes a zone's id or its name ; cloudflare_dns__get_zone reads its status and nameservers.",
     });
+    expect(fetch.calls).toHaveLength(0);
+    // Pagination is gone : the answer is whole.
+    expect(
+      refusalOf(
+        await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__list_zones', {
+          per_page: 50,
+        }),
+      ),
+    ).toMatch(/per_page/);
+  });
+
+  test('execute resolves zone_id by name like classify, and sends the id', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: `${BASE}/zones/z2`, body: { result: { id: 'z2' } } },
+    ]);
+    await cloudflareDnsPlugin.execute(
+      ctx(fetch, [exampleCom, exampleOrg]),
+      'cloudflare_dns__get_zone',
+      {
+        zone_id: 'EXAMPLE.org',
+      },
+    );
+    expect(fetch.calls.map((c) => c.url)).toEqual([`${BASE}/zones/z2`]);
   });
 
   test('refuses to run without a resolvable zone or with a foreign zone id', async () => {
@@ -797,21 +867,15 @@ describe('executeCloudflareDns with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
   });
 
-  test('an answer that is not JSON is an UpstreamProtocolError ; list_zones reads its envelope', async () => {
+  test('an answer that is not JSON is an UpstreamProtocolError', async () => {
     const fetch = mockFetch([
       { method: 'GET', url: `${BASE}/zones/z1`, body: '<html>maintenance</html>' },
-      { method: 'GET', url: /\/zones\?/, body: { result: { id: 'z1' } } },
     ]);
     const notJson = cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__get_zone', {
       zone_id: 'z1',
     });
     await expect(notJson).rejects.toBeInstanceOf(UpstreamProtocolError);
     await expect(notJson).rejects.toThrow(`GET ${BASE}/zones/z1: the answer is not JSON`);
-    // A list it cannot filter to the mission's zones is never passed through.
-    const unfiltered = cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__list_zones', {
-      per_page: 5,
-    });
-    await expect(unfiltered).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('unknown tool is an error result, not a call ; a secret of another kind is refused', async () => {

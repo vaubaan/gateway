@@ -3,7 +3,7 @@ title: Supabase plugin
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/README.md
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-20
 ---
 
 # Supabase plugin — handbook
@@ -24,7 +24,11 @@ resource per project, the owner's label as environment.
 
 - **One project resolution**: `execute` builds every URL from `resolveProjectRef` and never reads
   `args.project_ref`. The ref must be a host label (it becomes `https://{ref}.supabase.co`) and a
-  mission resource.
+  mission resource. `project_ref` also takes a project's exact name (the resource's display name),
+  answered as its ref: the name never reaches a slice or a URL. A name two mission projects share is
+  refused (ask for the ref); a ref wins over a name that spells it.
+- No tool lists the mission's projects: every project refusal (ambiguous, not a mission resource,
+  shared name) names them as `name (ref)`, ten at most. That refusal text is the agent's discovery.
 - Every argument landing in a path, query, host, header or plugin-written SQL is read by
   `readIdentifiers` / `tableSchemas`, refused when out of grammar, never escaped:
   `encodeURIComponent` leaves `..`, so `delete_function` with `..` would hit the project endpoint
@@ -60,6 +64,8 @@ resource per project, the owner's label as environment.
 
 ## Traps
 
+- A project's name is the discovered display name, `Organization / project`
+  (`discoverSupabaseResources`), not Supabase's bare project name: `app` does not match `Acme / app`.
 - `get_anon_key` stays priced as `supabase.read-data` (decided 2026-11-01): the anon key is public by
   design and opens only what RLS allows; a leaf of its own would price a public value as a secret.
 - Known limits by construction: a recognised statement can evaluate an existing function

@@ -3,7 +3,7 @@ title: Upstash Redis plugin
 tracks:
   - plugins/upstash-redis/src/
   - plugins/upstash-redis/README.md
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-20
 ---
 
 # Upstash Redis plugin — handbook
@@ -43,6 +43,13 @@ plane, the database as resource, its owner label as environment. No upstream MCP
   (`/redis/database/..` would become `/redis/`,
   [ADR](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)). Keys travel in
   the JSON body; a key the slice grammar cannot carry becomes `[*]` (audit precision only).
+- **`databaseId` takes the id or the exact name of a mission database; the slice and the URL carry
+  the id**, through the one `resolveDatabase` that `classify` and `execute` share. The id wins over
+  a name; a name two mission databases share is refused, asking for the id; every refusal names up
+  to ten mission databases as `name (id)`.
+- **`list_databases` answers the mission's databases only** (`{ databases, note }`): the account
+  list is fetched, then kept to the refs of `ctx.resources`. Its slice stays
+  `account.database[*]`, an upper bound.
 
 ## Traps
 
@@ -53,6 +60,9 @@ plane, the database as resource, its owner label as environment. No upstream MCP
   waits for approval.
 - The environment label is `development`, not `dev`: an unlabelled or mislabelled database refuses
   every write.
+- The name `databaseId` accepts is the gateway resource's display name, set at discovery: a database
+  renamed at Upstash (`rename_database` included) answers to its old name until the account's
+  resources are refreshed, while `list_databases` already shows the new one. The id always works.
 - Without a `databaseId`, the single database applies to data tools only; a management tool acts on
   the database the call names.
 

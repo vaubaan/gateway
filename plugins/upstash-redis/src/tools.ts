@@ -9,8 +9,8 @@
  *   - 15 data tools (per-database REST endpoint, Bearer token).
  *
  * Names are `TOOL` (`identity.ts`), prefixed `upstash_redis__` (the SDK
- * prefix rule : `-` → `_`, then `__`). Every database-scoped tool takes the database id as the
- * explicit `databaseId` argument, which must be a resource of the mission ;
+ * prefix rule : `-` → `_`, then `__`). Every database-scoped tool takes the database id or
+ * name as the explicit `databaseId` argument, which must be a resource of the mission ;
  * absent, the mission's single Upstash database applies.
  */
 
@@ -24,7 +24,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: TOOL.listDatabases,
     description:
-      'List all Redis databases in the Upstash account. Backed by GET /v2/redis/databases.',
+      "List the Redis databases of this mission on the Upstash account (id, name, region, state…); the account's other databases are left out. Name one in `databaseId` by its id or its name. Backed by GET /v2/redis/databases.",
     inputSchema: {
       type: 'object',
       properties: {},
@@ -39,7 +39,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id.',
+          description: 'The Upstash database id or name.',
         },
       },
       required: ['databaseId'],
@@ -88,7 +88,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id to delete.',
+          description: 'The Upstash database id or name to delete.',
         },
       },
       required: ['databaseId'],
@@ -102,7 +102,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id to rename.',
+          description: 'The Upstash database id or name to rename.',
         },
         name: {
           type: 'string',
@@ -120,7 +120,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
       properties: {
         databaseId: {
           type: 'string',
-          description: 'The Upstash database id.',
+          description: 'The Upstash database id or name.',
         },
       },
       required: ['databaseId'],
@@ -141,7 +141,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         command: {
           type: 'array',
@@ -161,7 +161,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -180,7 +180,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -219,7 +219,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         keys: {
           type: 'array',
@@ -239,7 +239,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         pattern: {
           type: 'string',
@@ -259,7 +259,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         cursor: {
           type: 'number',
@@ -287,7 +287,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -307,7 +307,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -330,7 +330,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -353,7 +353,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -372,7 +372,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -396,7 +396,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -423,7 +423,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -447,7 +447,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
         key: {
           type: 'string',
@@ -466,7 +466,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
         databaseId: {
           type: 'string',
           description:
-            'The Upstash database id — a resource of the mission. Defaults to the single database of the mission.',
+            'The Upstash database id or name — a resource of the mission. Defaults to the single database of the mission.',
         },
       },
     },

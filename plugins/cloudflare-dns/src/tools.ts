@@ -5,8 +5,8 @@
  *   - 8 writes : record create / update / delete, BIND import, zone
  *                settings, cache purge, DNSSEC, zone delete.
  *
- * Every zone-scoped tool takes `zone_id` : the ref of one of the mission's
- * Cloudflare DNS zones. `update_record` requires `type` and `name` so the
+ * Every zone-scoped tool takes `zone_id` : the ref (or the DNS name) of one
+ * of the mission's Cloudflare DNS zones. `update_record` requires `type` and `name` so the
  * gateway can tell an apex / MX / NS change from an ordinary record update
  * before the call ; `delete_record` takes them as optional arguments and a
  * deletion that omits them is classified as a critical record write (see
@@ -19,7 +19,8 @@ import { TOOL } from './identity.ts';
 
 const ZONE_ID = {
   type: 'string',
-  description: 'The zone identifier — one of the Cloudflare DNS zones of the mission.',
+  description:
+    'One of the Cloudflare DNS zones of the mission, by its id or its name (example.com) — list_zones lists them.',
 } as const;
 
 const RECORD_ID = { type: 'string', description: 'The DNS record identifier.' } as const;
@@ -28,14 +29,8 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: TOOL.listZones,
     description:
-      'List the DNS zones of the mission with their status and nameservers. Backed by GET /zones ; the answer is filtered to the zones the mission may touch.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page: { type: 'number', description: 'Page number (default 1).' },
-        per_page: { type: 'number', description: 'Zones per page (default 20, max 50).' },
-      },
-    },
+      "List every DNS zone of the mission : id, name and account. The account's other zones are left out. A zone's status and nameservers : get_zone.",
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: TOOL.getZone,

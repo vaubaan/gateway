@@ -3,7 +3,7 @@ title: Railway plugin
 tracks:
   - plugins/railway/src/
   - plugins/railway/README.md
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-20
 ---
 
 # Railway plugin — handbook
@@ -30,8 +30,24 @@ tools. Resource: the Railway project.
   the workspace. `environmentId` must be in `metadata.environments` of `P`, `serviceId` in
   `metadata.services`. A resource with no list (older discovery) is denied until refreshed, never
   read as "no service".
-- `P` is `projectId` if a mission resource, else the single Railway project, else the project whose
-  environments contain `environmentId` (the only way for `accept-deploy`), else denied.
+- `P` is `projectId` if it names a mission resource by its ref **or its exact display name** (the
+  Railway project name; no case folding, no prefix), else the single Railway project, else the
+  project whose environments contain `environmentId`, else denied. The request always carries `P`'s
+  id, never the name given. A name two mission projects share is refused (ask for the id).
+- `locateProject` (via `resolveTarget`) is the one resolver for classify and execute: a lookup added
+  on one side only sends a project the slices did not name.
+- Every refusal of a target names the mission's projects as `name (id)`, ten at most, and points to
+  `list-projects`: the agent must be able to act on it without guessing.
+- **`list-projects` never reaches Railway**: it answers the mission's projects from `ctx.resources`
+  (id, name, owner label, environments, services). Railway's answer is free text over every project
+  the token sees; filtering it would trust its format to keep the others out. A project created
+  after discovery shows up once it is a resource (created hook or refresh).
+- Two schemas: the declared one (what the agent reads) gives every project-scoped tool a `projectId`
+  (`accept-deploy` gains one for routing); the forward one (frozen upstream, custom tools' own)
+  decides where the resolved id is sent (`forwardTakesProjectId`). Deriving the forward set from the
+  declared schemas would send `projectId` to `accept-deploy`, whose upstream schema is closed.
+- Account-level tools (`whoami`, `list-projects`, `create-project`) declare no `projectId`: one
+  given there is refused as undeclared, never forwarded unread.
 - **Ids that cannot be bound are refused** and left out of the schema (`UNBOUND_ARGUMENTS`):
   `deploymentId` and the agent tool's `threadId`. `get-logs` reads the latest deployment of a bound
   service; every `railway-agent` call starts a new conversation. A test checks no other id-like
@@ -70,8 +86,13 @@ tools. Resource: the Railway project.
 
 ## Debug
 
-- `ambiguous railway target: specify projectId.` → several projects and no known `environmentId`;
-  refresh resources if the environment is new.
+- `projectId: argument required — the mission touches N Railway projects` → several projects, no
+  `projectId`, no `environmentId`; the refusal lists them.
+- `environmentId: not an environment of a Railway project of this mission as last discovered` →
+  several projects and an `environmentId` found in none: another project's, or created after
+  discovery (refresh resources).
+- `projectId: N Railway projects of this mission are named '…'` → duplicate names (e.g. across
+  workspaces); pass the id.
 - `not an environment/service of railway project` → another project's, or created after discovery
   (refresh); `… are unknown` → resource predates the metadata field (refresh once).
 - `risk-not-accepted` with hint "no environment label" → the owner labels the project; naming

@@ -595,12 +595,19 @@ const DECLARED_ARGUMENTS = declaredArgumentsOf(supabaseTools);
  * Which project the call targets — the **only** place that decides it, for
  * `classifySupabase` and for `executeSupabase` alike.
  *
- *   - `project_ref` present : it must be a string made of ref characters
- *     (anything else, an array or an object included, is a denial — never
- *     coerced, never skipped) and one of the mission's Supabase resources ;
+ *   - `project_ref` present : it names one of the mission's Supabase
+ *     resources, by its ref or by its exact name (the resource's display
+ *     name) ; the answer is always the resource's ref, held to the ref
+ *     grammar. A name two mission projects share is refused (name it by its
+ *     ref) ; anything else, an array or an object included, is a denial —
+ *     never coerced, never skipped ;
  *   - `project_ref` absent : the mission's single Supabase project ;
  *   - the camelCase `projectRef` is not an argument of any tool : a call
  *     carrying it is denied, so no second spelling can name another project.
+ *
+ * Every refusal about the project names the mission's projects
+ * (`missionProjectsHint`) : no tool lists them, so the refusal is how the
+ * agent learns which refs it may use.
  */
 export function resolveProjectRef(
   args: Args,
@@ -611,15 +618,46 @@ export function resolveProjectRef(
   }
   const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.project_ref !== undefined) {
-    const explicit = projectRefIdent(args.project_ref);
+    const given = args.project_ref;
+    const byRef = own.find((r) => r.ref === given);
+    if (byRef !== undefined) return refOf(byRef);
+    const byName = own.filter((r) => r.displayName === given);
+    if (byName.length === 1) return refOf(byName[0]!);
+    if (byName.length > 1) {
+      return {
+        denied: `project_ref: ${byName.length} Supabase projects of this mission are named '${String(given)}' — name one by its ref. ${missionProjectsHint(own)}`,
+      };
+    }
+    const explicit = projectRefIdent(given);
     if (explicit === null) return { denied: missing('project_ref') };
-    return own.some((r) => r.ref === explicit)
-      ? { ref: explicit }
-      : { denied: `supabase project '${explicit}' is not a resource of this mission.` };
+    return {
+      denied: `supabase project '${explicit}' is not a resource of this mission. ${missionProjectsHint(own)}`,
+    };
   }
-  if (own.length !== 1) return { denied: 'ambiguous supabase target: specify project_ref.' };
-  const only = projectRefIdent(own[0]!.ref);
-  return only === null ? { denied: missing('project_ref') } : { ref: only };
+  if (own.length === 1) return refOf(own[0]!);
+  return {
+    denied:
+      own.length === 0
+        ? 'project_ref: argument missing and the mission touches no Supabase project.'
+        : `ambiguous supabase target: the mission touches ${own.length} Supabase projects, specify project_ref (a ref or a name). ${missionProjectsHint(own)}`,
+  };
+}
+
+/** The resource's ref as the call sends it : a URL path segment and a host label. */
+function refOf(resource: Resource): { ref: string } | { denied: string } {
+  const ref = projectRefIdent(resource.ref);
+  return ref === null ? { denied: missing('project_ref') } : { ref };
+}
+
+/** Most projects a refusal names. */
+const HINT_MAX_PROJECTS = 10;
+
+/** The mission's projects, as a refusal names them : `name (ref)`. */
+function missionProjectsHint(own: readonly Resource[]): string {
+  if (own.length === 0) return 'The mission holds no Supabase project.';
+  const shown = own.slice(0, HINT_MAX_PROJECTS).map((r) => `${r.displayName} (${r.ref})`);
+  const more = own.length > HINT_MAX_PROJECTS ? `, and ${own.length - HINT_MAX_PROJECTS} more` : '';
+  return `Projects of this mission: ${shown.join(', ')}${more}.`;
 }
 
 export function classifySupabase(

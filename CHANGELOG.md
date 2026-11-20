@@ -83,6 +83,15 @@ What an operator or a plugin author reads first; every point is detailed below.
   is the one sent. `get_project`, `list_deployments`, `get_deployment` and
   `get_deployment_build_logs` read Vercel's REST API in both modes: the MCP server had dropped the
   build logs ("Tool not found") and renamed `get_project`'s argument.
+- **The same in Railway, Cloudflare DNS, Upstash Redis and Supabase.** Each list tool answers
+  the mission's resources only and says the others are left out: Railway 6.1.0 `list-projects`
+  and Cloudflare DNS 4.1.0 `list_zones` from the gateway's resources (Cloudflare's filtered one
+  20-zone page and could miss a mission zone; `page`/`per_page` are gone), Upstash Redis 4.1.0
+  `list_databases` filtered to the mission. `projectId`, `zone_id` (a domain, case-insensitive),
+  `databaseId` and Supabase 6.2.0's `project_ref` (`Organization / project`) take a resource's id
+  or its exact name; the request carries the id, a shared name asks for the id, and every refusal
+  names the mission's resources. Railway's `accept-deploy` declares `projectId`, and its
+  account-level tools refuse one instead of forwarding it unread.
 - **Plugin SDK: a tool the upstream server no longer has says so.** `callUpstreamTool` turns a
   "tool not found" JSON-RPC error into `UpstreamToolMissing` (still an `UpstreamProtocolError`),
   whose message names the plugin as behind the service.

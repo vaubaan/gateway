@@ -6,7 +6,8 @@
  *
  * Pure : no IO, no credential, no `Date`. Every zone-scoped slice is rooted
  * at `cloudflare-dns.account[<account id>].zone[<zone id>]` where the zone is
- * the mission resource the call targets (`zone_id` argument, or the single
+ * the mission resource the call targets (`zone_id` argument, its id or its
+ * name, resolved by `resolveZoneResource` like `execute` does ; or the single
  * zone of the mission) and the account id comes from that resource's
  * metadata (`*` when unknown).
  *
@@ -26,8 +27,8 @@
  *      `execute` verifies the declared sensitivity against the record's
  *      current state before an update or a deletion.
  *   3. **`list_zones` is account-wide.** It emits `zone[*].R` on the account
- *      shared by the mission's zones (or `account[*]`) ; `execute` filters
- *      the upstream answer to the mission's zones.
+ *      shared by the mission's zones (or `account[*]`) ; `execute` answers
+ *      the mission's zones from the gateway's resources, without a request.
  *   4. Identifiers that reach the request path (`zone_id`, `record_id`) must
  *      pass `pathIdent` — one path segment, no dot, no separator — the same
  *      function `execute` applies ; a malformed one is `denied`, never

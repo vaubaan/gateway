@@ -18,7 +18,14 @@
  *     record when the call declared an ordinary one (`type` + `name`) : if
  *     the record is apex, wildcard, MX or NS, or cannot be read back, the
  *     call is refused before the PATCH / DELETE ;
- *   - `list_zones` is filtered to the mission's zones ;
+ *   - `list_zones` reads no API : it answers the mission's zones of this
+ *     account as the gateway holds them (`missionZones`). `GET /zones` is
+ *     paginated (20 per page by default) and filtering one page to the
+ *     mission left zones out, or answered nothing, as soon as the account
+ *     held more zones than a page ; walking every page would read the
+ *     account's other zones only to drop them. The answer is exactly the
+ *     set `zone_id` accepts ; `get_zone` reads a zone's live status and
+ *     nameservers ;
  *   - a service failure is **thrown**, never turned into a result : 401 /
  *     403 from Cloudflare → `UpstreamAuthError`, any other failed status →
  *     `UpstreamHttpError`, an answer that is not JSON (but for the BIND
@@ -184,8 +191,7 @@ async function executeRoute(
 ): Promise<McpToolResult> {
   if (tool === TOOL.listZones) {
     refuseUndeclared(tool, args);
-    const answer = await callCloudflareApi(ctx, token, route, '/zones', args, isZoneListAnswer);
-    return jsonResult(zonesOfTheMission(answer, ctx.resources));
+    return jsonResult(missionZones(ctx.resources));
   }
 
   const target = resolveZoneResource(args, ctx.resources);
@@ -223,7 +229,6 @@ function isZoneList(value: unknown): value is readonly ZoneDto[] {
   return isList(value) && value.every(isZoneDto);
 }
 
-const isZoneListAnswer = envelopeOf(isList);
 const isZonePage = envelopeOf(isZoneList);
 
 /**
@@ -283,21 +288,33 @@ function recordIdArg(value: unknown): string {
 }
 
 /**
- * The `GET /zones` answer with only the zones of the mission ; `result_info`
- * and the rest of the envelope are left as upstream sent them. A listed
- * entry without an id is dropped : it cannot be a zone of the mission.
+ * The mission's zones of this account, as the gateway holds them : the id
+ * `zone_id` takes, the DNS name it also accepts, the account. Nothing else :
+ * the status recorded at discovery may be stale, `get_zone` reads it live.
  */
-function zonesOfTheMission(
-  answer: { readonly result: readonly unknown[] },
-  resources: readonly Resource[],
-): unknown {
-  const refs = new Set(resources.filter((x) => x.service === SERVICE_ID).map((x) => x.ref));
+function missionZones(resources: readonly Resource[]): unknown {
+  const own = resources.filter((x) => x.service === SERVICE_ID);
   return {
-    ...answer,
-    result: answer.result.filter(
-      (zone) => isRecord(zone) && typeof zone.id === 'string' && refs.has(zone.id),
-    ),
+    zones: own.map((zone) => {
+      const accountId = metadataOf(zone, 'account_id');
+      const accountName = metadataOf(zone, 'account_name');
+      return {
+        id: zone.ref,
+        name: zoneNameOf(zone),
+        ...(accountId || accountName
+          ? { account: { id: accountId ?? null, name: accountName ?? null } }
+          : {}),
+      };
+    }),
+    note:
+      `The ${own.length} Cloudflare DNS zone(s) of this mission ; the account's other zones are left out. ` +
+      `zone_id takes a zone's id or its name ; ${TOOL.getZone} reads its status and nameservers.`,
   };
+}
+
+function metadataOf(resource: Resource, key: string): string | undefined {
+  const value = resource.metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 /**

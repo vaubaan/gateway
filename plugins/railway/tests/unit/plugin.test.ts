@@ -246,7 +246,7 @@ describe('classifyRailway', () => {
       `environmentId: not an environment of railway project '${PROJECT_STG}'.`,
     );
     expect(denied('railway__accept-deploy', {})).toBe(
-      'environmentId: required, it is the only argument naming the target.',
+      'environmentId: required, it is the only id the request carries to name the target.',
     );
     expect(denied('railway__accept-deploy', { environmentId: 42 })).toBe(
       'environmentId: malformed ref.',
@@ -277,17 +277,28 @@ describe('classifyRailway', () => {
   });
 
   test('refuses an unknown project, an ambiguous target, a mission without Railway project', () => {
+    const hint = `Projects of this mission: api (staging) (${PROJECT_STG}), api (prod) (${PROJECT_PRD}) — railway__list-projects lists them with their environments and services.`;
     expect(denied('railway__list-services', { projectId: PROJECT_PRD })).toBe(
-      `railway project '${PROJECT_PRD}' is not a resource of this mission.`,
+      `railway project '${PROJECT_PRD}' is not a resource of this mission. Projects of this mission: api (staging) (${PROJECT_STG}) — railway__list-projects lists them with their environments and services.`,
     );
     expect(denied('railway__list-services', {}, [staging, prod])).toBe(
-      'ambiguous railway target: specify projectId.',
+      `projectId: argument required — the mission touches 2 Railway projects — name one by its id or its name. ${hint}`,
     );
+    // accept-deploy: what to pass instead, an environment of one of the projects or the project.
     expect(
       denied('railway__accept-deploy', { environmentId: 'unknown-env' }, [staging, prod]),
-    ).toBe('ambiguous railway target: specify projectId.');
+    ).toBe(
+      'environmentId: not an environment of a Railway project of this mission as last discovered — ' +
+        'pass an environmentId of one of them, or name the project in projectId (its id or its name) ; ' +
+        `an environment created since appears once the account owner refreshes the resources. ${hint}`,
+    );
+    expect(denied('railway__accept-deploy', {}, [staging, prod])).toBe(
+      `environmentId: required, it is the only id the request carries to name the target. ${hint}`,
+    );
     expect(denied('railway__list-services', {}, [foreign])).toMatch(/touches no Railway project/);
-    expect(denied('railway__list-services', { projectId: 42 })).toBe('projectId: malformed ref.');
+    expect(denied('railway__list-services', { projectId: 42 })).toMatch(
+      /^projectId: malformed ref, and not the name of a project of this mission\. Projects of this mission: /,
+    );
   });
 
   test('refuses malformed identifiers instead of embedding them in a slice', () => {
@@ -353,18 +364,18 @@ describe('executeRailway with mockFetch', () => {
         method: 'POST',
         url: RAILWAY_MCP_URL,
         headers: { 'content-type': 'text/event-stream' },
-        respond: (c) => sseFrame(c, { content: [{ type: 'text', text: '[{"id":"p1"}]' }] }),
+        respond: (c) => sseFrame(c, { content: [{ type: 'text', text: '[{"id":"s1"}]' }] }),
       },
     ]);
-    const result = await railwayPlugin.execute(execCtx(fetch), 'railway__list-projects', {});
-    expect(result).toEqual({ content: [{ type: 'text', text: '[{"id":"p1"}]' }] });
+    const result = await railwayPlugin.execute(execCtx(fetch), 'railway__list-services', {});
+    expect(result).toEqual({ content: [{ type: 'text', text: '[{"id":"s1"}]' }] });
     const call = fetch.calls[0]!;
     expect(call.headers.authorization).toBe('Bearer rlwy_at');
     expect(call.headers['mcp-protocol-version']).toBe('2025-06-18');
     expect(call.json).toMatchObject({
       jsonrpc: '2.0',
       method: 'tools/call',
-      params: { name: 'list-projects', arguments: {} },
+      params: { name: 'list-services', arguments: { projectId: PROJECT_STG } },
     });
   });
 
@@ -636,6 +647,174 @@ describe('executeRailway with mockFetch', () => {
       ),
     ).rejects.toMatchObject({ name: 'CredentialKindMismatch' });
     expect(never.calls).toHaveLength(0);
+  });
+});
+
+// ─── The mission's projects, found by the agent ──────────────────────────────
+
+describe("an agent finds its mission's projects", () => {
+  const argsOf = (fetch: ReturnType<typeof mockFetch>, i = 0) =>
+    (fetch.calls[i]!.json as { params: { arguments: unknown } }).params.arguments;
+  const answering = () =>
+    mockFetch([
+      {
+        url: RAILWAY_MCP_URL,
+        respond: (c) => sseFrame(c, { content: [{ type: 'text', text: 'ok' }] }),
+      },
+    ]);
+  const PROJECT_OTHER = '00000000-0000-4000-8000-000000000003';
+  const twin: Resource = { ...prod, ref: PROJECT_OTHER, displayName: 'api (staging)' };
+
+  test('list-projects answers the mission projects from the resources, no request, others left out', async () => {
+    const never = mockFetch([]);
+    const result = await railwayPlugin.execute(
+      execCtx(never, [staging, prod, foreign]),
+      'railway__list-projects',
+      {},
+    );
+    expect(never.calls).toHaveLength(0);
+    const answer = JSON.parse((result.content[0] as { text: string }).text) as {
+      projects: unknown[];
+      note: string;
+    };
+    expect(answer.projects).toEqual([
+      {
+        id: PROJECT_STG,
+        name: 'api (staging)',
+        label: 'staging',
+        environments: [{ id: ENV_STG, name: 'staging' }],
+        services: [{ id: SERVICE, name: 'api' }],
+      },
+      {
+        id: PROJECT_PRD,
+        name: 'api (prod)',
+        label: 'prod',
+        environments: [{ id: ENV_PRD, name: 'production' }],
+        services: [{ id: SERVICE, name: 'api' }],
+      },
+    ]);
+    expect(answer.note).toMatch(/left out/);
+    const declared = railwayPlugin.tools.find((t) => t.name === 'railway__list-projects')!;
+    expect(declared.description).toMatch(/only the Railway projects of the mission/);
+  });
+
+  test('an account-level tool takes no projectId: refused, never forwarded unread', async () => {
+    const never = mockFetch([]);
+    for (const tool of ['railway__list-projects', 'railway__whoami']) {
+      expect(classifyRailway(tool, { projectId: PROJECT_STG }, [staging])).toEqual({
+        denied: `projectId: not an argument of '${tool}' — nothing classifies it, so it is not sent.`,
+      });
+      expect(
+        await refusalText(railwayPlugin.execute(execCtx(never), tool, { projectId: PROJECT_STG })),
+      ).toMatch(/^projectId: not an argument/);
+    }
+    expect(never.calls).toHaveLength(0);
+  });
+
+  test('projectId takes the exact name; the slice and the request carry the id', async () => {
+    const out = classifyRailway('railway__list-services', { projectId: 'api (prod)' }, [
+      staging,
+      prod,
+    ]);
+    expect('slices' in out && out.slices.map(serializeSlice)).toEqual([
+      `railway.project[${PROJECT_PRD}].environment[*].service[*].R`,
+    ]);
+    const fetch = answering();
+    await railwayPlugin.execute(execCtx(fetch, [staging, prod]), 'railway__list-services', {
+      projectId: 'api (prod)',
+    });
+    expect(argsOf(fetch)).toEqual({ projectId: PROJECT_PRD });
+    // The GraphQL tools too.
+    expect(
+      classifyRailway(
+        'railway__list-variables',
+        { projectId: 'api (prod)', environmentId: ENV_PRD },
+        [staging, prod],
+      ),
+    ).toHaveProperty('slices');
+  });
+
+  test('a name is matched exactly, never loosely', () => {
+    for (const projectId of ['API (PROD)', 'api', 'api (prod) ', 'prod']) {
+      const out = classifyRailway('railway__list-services', { projectId }, [staging, prod]);
+      expect('denied' in out && out.denied, projectId).toMatch(/Projects of this mission: /);
+    }
+  });
+
+  test('a name two mission projects share asks for the id', async () => {
+    const out = classifyRailway('railway__list-services', { projectId: 'api (staging)' }, [
+      staging,
+      twin,
+    ]);
+    expect('denied' in out && out.denied).toMatch(
+      /^projectId: 2 Railway projects of this mission are named 'api \(staging\)' — name one by its id\./,
+    );
+    // The id still reaches either.
+    expect(
+      classifyRailway('railway__list-services', { projectId: PROJECT_OTHER }, [staging, twin]),
+    ).toHaveProperty('slices');
+    const never = mockFetch([]);
+    expect(
+      await refusalText(
+        railwayPlugin.execute(execCtx(never, [staging, twin]), 'railway__list-services', {
+          projectId: 'api (staging)',
+        }),
+      ),
+    ).toMatch(/name one by its id/);
+    expect(never.calls).toHaveLength(0);
+  });
+
+  test('accept-deploy declares projectId to the agent; it routes, the environment stays bound, it is not sent', async () => {
+    const declared = railwayPlugin.tools.find((t) => t.name === 'railway__accept-deploy')!;
+    expect(Object.keys(declared.inputSchema.properties ?? {})).toContain('projectId');
+    expect(declared.inputSchema.required).toEqual(['environmentId']);
+
+    const fetch = answering();
+    await railwayPlugin.execute(execCtx(fetch, [staging, prod]), 'railway__accept-deploy', {
+      projectId: 'api (prod)',
+      environmentId: ENV_PRD,
+    });
+    expect(argsOf(fetch)).toEqual({ environmentId: ENV_PRD });
+
+    // The named project does not own the environment: refused, nothing sent.
+    const never = mockFetch([]);
+    const crossed = { projectId: 'api (staging)', environmentId: ENV_PRD };
+    expect(classifyRailway('railway__accept-deploy', crossed, [staging, prod])).toEqual({
+      denied: `environmentId: not an environment of railway project '${PROJECT_STG}'.`,
+    });
+    expect(
+      await refusalText(
+        railwayPlugin.execute(execCtx(never, [staging, prod]), 'railway__accept-deploy', crossed),
+      ),
+    ).toMatch(/^environmentId: not an environment/);
+    expect(never.calls).toHaveLength(0);
+  });
+
+  test('every project-scoped tool declares projectId, naming the id or the name', () => {
+    for (const tool of railwayPlugin.tools) {
+      const props = tool.inputSchema.properties ?? {};
+      if (
+        ['railway__whoami', 'railway__list-projects', 'railway__create-project'].includes(tool.name)
+      ) {
+        expect(props, tool.name).not.toHaveProperty('projectId');
+      } else {
+        expect((props.projectId as { description: string }).description, tool.name).toMatch(
+          /its id \(UUID\) or its name/,
+        );
+      }
+    }
+  });
+
+  test('a refusal names ten projects at most, then how many more', () => {
+    const many: Resource[] = Array.from({ length: 12 }, (_, i) => ({
+      ...staging,
+      ref: `00000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`,
+      displayName: `p${i}`,
+    }));
+    const out = classifyRailway('railway__list-services', {}, many);
+    const text = 'denied' in out ? out.denied : '';
+    expect(text).toMatch(/p9 \([^)]+\), and 2 more — railway__list-projects lists them/);
+    expect(text).not.toMatch(/p10/);
   });
 });
 

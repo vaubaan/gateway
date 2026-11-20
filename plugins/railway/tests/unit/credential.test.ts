@@ -227,26 +227,24 @@ describe('railway token — discovery', () => {
 
 describe('railway token — execution', () => {
   test('an MCP-server tool runs with the token as Bearer on mcp.railway.com', async () => {
-    const fetch = mockFetch([mcpRoute('vaubaan: 1 project')]);
+    const fetch = mockFetch([mcpRoute('vaubaan: me')]);
     const result = await railwayPlugin.execute(
       { ...ctx(fetch), resources: [] },
-      'railway__list-projects',
+      'railway__whoami',
       {},
     );
     expect(result.isError).toBeUndefined();
-    expect((result.content[0] as { text: string }).text).toBe('vaubaan: 1 project');
+    expect((result.content[0] as { text: string }).text).toBe('vaubaan: me');
     expect(fetch.calls).toHaveLength(1);
     expect(fetch.calls[0]!.url).toBe(RAILWAY_MCP_URL);
     expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${TOKEN}`);
     expect(fetch.calls[0]!.headers['user-agent']).toBe('vaubaan-gateway');
-    expect((fetch.calls[0]!.json as { params: { name: string } }).params.name).toBe(
-      'list-projects',
-    );
+    expect((fetch.calls[0]!.json as { params: { name: string } }).params.name).toBe('whoami');
   });
 
   test('a token the MCP server and the API both refuse is a rejected credential (401)', async () => {
     const fetch = mockFetch([mcpRefuses(401), graphqlRoute(DEAD_TOKEN_API)]);
-    const failure = await failureOf(fetch, 'railway__list-projects');
+    const failure = await failureOf(fetch, 'railway__whoami');
     expect(failure.upstreamStatus).toBe(401);
     expect(failure.message).toMatch(/deleted or has expired.*new workspace token/);
   });
@@ -262,7 +260,7 @@ describe('railway token — execution', () => {
 
   test('a workspace token the MCP server refuses but the API accepts: 403, naming the kind', async () => {
     const fetch = mockFetch([mcpRefuses(403), graphqlRoute(WORKSPACE_TOKEN_API)]);
-    const failure = await failureOf(fetch, 'railway__list-projects');
+    const failure = await failureOf(fetch, 'railway__whoami');
     expect(failure.upstreamStatus).toBe(403);
     expect(failure.message).toMatch(/refused this workspace token \(HTTP 403\)/);
   });
@@ -272,7 +270,7 @@ describe('railway token — execution', () => {
       mcpRefuses(401),
       { method: 'POST', url: RAILWAY_GRAPHQL_URL, status: 502, body: '' },
     ]);
-    const failure = await failureOf(fetch, 'railway__list-projects');
+    const failure = await failureOf(fetch, 'railway__whoami');
     expect(failure.upstreamStatus).toBe(401);
     expect(failure.message).toMatch(/^Railway MCP server, tools\/call failed with HTTP 401/);
   });

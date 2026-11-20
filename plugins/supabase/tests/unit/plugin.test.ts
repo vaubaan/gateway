@@ -131,10 +131,10 @@ describe('supabase plugin — structural kit', () => {
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: PROD_REF }, [staging]),
     ).toEqual({
-      denied: `supabase project '${PROD_REF}' is not a resource of this mission.`,
+      denied: `supabase project '${PROD_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${STAGING_REF}).`,
     });
     expect(supabasePlugin.classify('supabase__get_project', {}, [staging, prod])).toEqual({
-      denied: 'ambiguous supabase target: specify project_ref.',
+      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${STAGING_REF}), Acme / app (${PROD_REF}).`,
     });
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: 'a b' }, [staging]),

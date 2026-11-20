@@ -160,7 +160,8 @@ describe('the database — a segment of the Management API path', () => {
       await expectRefused(
         tool,
         { ...rest, databaseId: 'db-other' },
-        "upstash-redis database 'db-other' is not a resource of this mission.",
+        "upstash-redis database 'db-other' is not a resource of this mission. " +
+          `Databases of this mission: app-cache (${DATABASE_ID}) — upstash_redis__list_databases lists them.`,
       );
     });
 

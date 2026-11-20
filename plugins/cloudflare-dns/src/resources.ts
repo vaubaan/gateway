@@ -19,7 +19,7 @@
 import { PATH_IDENT, pathIdent } from '@vaubaan/plugin-sdk';
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-import { SERVICE_ID } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
 /** The SDK's path identifier grammar, re-exported for this plugin's modules. */
 export { PATH_IDENT, pathIdent };
@@ -91,11 +91,19 @@ export function zoneNameOf(resource: Resource): string | null {
 }
 
 /**
- * Which zone a call targets : the explicit `zone_id` argument (a ref listed
- * in the mission), else the mission's single Cloudflare DNS zone. Anything
- * else is refused — never mapped to a broad slice. The resolved ref is
- * always path-safe (`pathIdent`), whichever branch found it : it is the
- * zone segment of the request path.
+ * Which zone a call targets : the explicit `zone_id` argument, else the
+ * mission's single Cloudflare DNS zone. Anything else is refused — never
+ * mapped to a broad slice — and the refusal names the mission's zones.
+ *
+ * `zone_id` names one of the mission's zones by its id (the resource's ref,
+ * matched as given) or by its DNS name (`zoneNameOf`, the name Cloudflare
+ * listed at discovery). A DNS name is case-insensitive : both sides are read
+ * by `dnsName` (lower case, no trailing dot) and must then be equal, so
+ * `Example.COM.` names `example.com` and nothing else. A name that two zones
+ * of the mission carry (the same domain in two accounts) is refused, asking
+ * for the id. Whichever branch found it, the answer is the resource, whose
+ * ref is path-safe (`pathIdent`) : it is the zone segment of the request
+ * path and of the slice — the name given never reaches either.
  */
 export function resolveZoneResource(
   args: Readonly<Record<string, unknown>>,
@@ -104,23 +112,45 @@ export function resolveZoneResource(
   const own = resources.filter((r) => r.service === SERVICE_ID);
   const explicit = args.zone_id;
   if (explicit !== undefined && explicit !== null && explicit !== '') {
+    const byRef = own.find((r) => r.ref === explicit);
+    if (byRef !== undefined) return pathSafe(byRef);
+    const name = dnsName(explicit);
+    const byName = name === null ? [] : own.filter((r) => dnsName(zoneNameOf(r)) === name);
+    if (byName.length === 1) return pathSafe(byName[0]!);
+    if (byName.length > 1) {
+      return {
+        denied: `zone_id: ${byName.length} Cloudflare DNS zones of this mission are named '${name}' — name one by its id. ${missionZonesHint(own)}`,
+      };
+    }
     const zoneId = pathIdent(explicit);
-    if (zoneId === null) return { denied: MALFORMED_ZONE_ID };
-    const found = own.find((r) => r.ref === zoneId);
-    return found
-      ? { resource: found }
-      : { denied: `zone_id: '${zoneId}' is not a Cloudflare DNS zone of this mission` };
+    if (zoneId === null && name === null) return { denied: MALFORMED_ZONE_ID };
+    return {
+      denied: `zone_id: '${zoneId ?? name}' is not a Cloudflare DNS zone of this mission. ${missionZonesHint(own)}`,
+    };
   }
-  if (own.length === 1) {
-    const only = own[0]!;
-    return pathIdent(only.ref) === null ? { denied: MALFORMED_ZONE_ID } : { resource: only };
-  }
+  if (own.length === 1) return pathSafe(own[0]!);
   return {
     denied:
       own.length === 0
         ? 'zone_id: argument missing and the mission touches no Cloudflare DNS zone'
-        : `zone_id: argument missing and the mission touches ${own.length} Cloudflare DNS zones — name one`,
+        : `zone_id: argument missing and the mission touches ${own.length} Cloudflare DNS zones — name one by its id or its name. ${missionZonesHint(own)}`,
   };
+}
+
+/** The resource, when its ref may be a path segment. */
+function pathSafe(resource: Resource): ResolvedZone {
+  return pathIdent(resource.ref) === null ? { denied: MALFORMED_ZONE_ID } : { resource };
+}
+
+/** Most zones a refusal names ; `list_zones` lists them all. */
+const HINT_MAX_ZONES = 10;
+
+/** The mission's zones, as a refusal names them : `name (id)`. */
+function missionZonesHint(own: readonly Resource[]): string {
+  if (own.length === 0) return 'The mission holds no Cloudflare DNS zone of this account.';
+  const shown = own.slice(0, HINT_MAX_ZONES).map((r) => `${zoneNameOf(r) ?? '?'} (${r.ref})`);
+  const more = own.length > HINT_MAX_ZONES ? `, and ${own.length - HINT_MAX_ZONES} more` : '';
+  return `Zones of this mission: ${shown.join(', ')}${more} — ${TOOL.listZones} lists them.`;
 }
 
 /**

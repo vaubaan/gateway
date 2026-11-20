@@ -31,8 +31,9 @@
  *     `command` is refused here — no pipeline endpoint is wired — whatever
  *     it was classified as ;
  *   - the database a call runs on is resolved by the classifier's own
- *     `resolveDatabase` : a resource of the mission whose ref is one path
- *     segment (`pathIdent`), or the mission's single database when a data
+ *     `resolveDatabase` : a resource of the mission, named by its id or its
+ *     exact name, whose ref is one path segment (`pathIdent`), or the
+ *     mission's single database when a data
  *     tool names none ; anything else is refused before any network call.
  *     The resolved ref is what is interpolated into the Management API
  *     path — the argument is not read a second time ;
@@ -41,7 +42,9 @@
  *     part of a URL ;
  *   - Management API answers about a database are **redacted** : the REST
  *     tokens and password never reach the agent (`read-database-metadata`
- *     promises "no credential leak").
+ *     promises "no credential leak") ;
+ *   - `list_databases` answers the mission's databases alone
+ *     (`missionDatabases`) : the account's other databases are not named.
  */
 
 import {
@@ -126,7 +129,7 @@ export async function executeUpstashRedis(
       // A management tool acts on the database the call names : the mission's
       // single database is not a default for it (its schema requires the id).
       const named = databaseArg(args) === undefined ? null : ref;
-      return toToolResult(await executeManagementTool(call, tool, args, named));
+      return toToolResult(await executeManagementTool(call, tool, args, named, ctx.resources));
     }
     if (ref === null) {
       throw new ExecutorRefusal(`Upstash Redis data tool '${tool}' requires a databaseId.`);
@@ -223,10 +226,14 @@ async function executeManagementTool(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   databaseId: string | null,
+  resources: readonly Resource[],
 ): Promise<unknown> {
   switch (tool) {
     case TOOL.listDatabases:
-      return redactDatabases(await passThroughManagementApi(call, 'GET', '/redis/databases'));
+      return missionDatabases(
+        await callManagementApi(call, 'GET', '/redis/databases', isList),
+        resources,
+      );
     case TOOL.getDatabase:
       return redactDatabases(
         // `credentials=hide`: Upstash leaves the credentials out of the answer
@@ -262,6 +269,28 @@ async function executeManagementTool(
     default:
       throw new ExecutorRefusal(`Upstash Redis management tool not implemented: ${tool}`);
   }
+}
+
+/** The note `list_databases` answers with : what it lists, and how to name a database. */
+export const LIST_DATABASES_NOTE =
+  "The Upstash Redis databases of this mission on this account; the account's other databases are left out. " +
+  'Name one in `databaseId` by its id or its name.';
+
+/**
+ * `list_databases` : the account's databases (`GET /v2/redis/databases`, a
+ * list or the service's failure) kept to the mission's, by `database_id`
+ * against the refs of the gateway's resources, and redacted. A database
+ * outside the mission is not named ; an entry without an id is dropped.
+ */
+export function missionDatabases(
+  listed: readonly unknown[],
+  resources: readonly Resource[],
+): { databases: unknown[]; note: string } {
+  const own = new Set(resources.filter((r) => r.service === SERVICE_ID).map((r) => r.ref));
+  const databases = listed
+    .filter((d) => isNamedDatabase(d) && own.has(d.database_id))
+    .map(redactDatabases);
+  return { databases, note: LIST_DATABASES_NOTE };
 }
 
 function databasePath(databaseId: string | null): string {

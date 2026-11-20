@@ -180,13 +180,38 @@ describe('the grammars', () => {
 describe('`zone_id` — the zone segment of the request path', () => {
   for (const tool of [...ZONE_TOOLS, ...RECORD_TOOLS]) {
     test(`${tool} : a hostile zone_id is refused by classify and reaches no request`, async () => {
-      for (const zone_id of HOSTILE) {
+      // `a.b` reads as a DNS name : it is refused as no zone of the mission.
+      for (const zone_id of HOSTILE.filter((v) => v !== 'a.b')) {
         await expectRefused(
           tool,
           declared(tool, { zone_id, record_id: RECORD_ID }),
           'zone_id: malformed zone id',
           /zone_id: malformed zone id/,
         );
+      }
+      await expectRefused(
+        tool,
+        declared(tool, { zone_id: 'a.b', record_id: RECORD_ID }),
+        `zone_id: 'a.b' is not a Cloudflare DNS zone of this mission. Zones of this mission: example.com (${ZONE_ID}) — cloudflare_dns__list_zones lists them.`,
+        /'a\.b' is not a Cloudflare DNS zone of this mission/,
+      );
+    });
+
+    test(`${tool} : a zone named by its name reaches the request by its id only`, async () => {
+      const fetch = permissiveFetch();
+      const args = declared(tool, {
+        zone_id: 'EXAMPLE.com.',
+        record_id: RECORD_ID,
+        type: 'A',
+        name: 'www.example.com',
+      });
+      const outcome = classify(tool, args);
+      expect(Array.isArray(outcome) && outcome.every((s) => s.startsWith(ROOT))).toBe(true);
+      await cloudflareDnsPlugin.execute(ctx(fetch), tool, args);
+      expect(fetch.calls.length).toBeGreaterThan(0);
+      for (const call of fetch.calls) {
+        expect(call.url.startsWith(`${CLOUDFLARE_API_BASE}/zones/${ZONE_ID}`)).toBe(true);
+        expect(call.url.toLowerCase()).not.toContain('example.com.');
       }
     });
 

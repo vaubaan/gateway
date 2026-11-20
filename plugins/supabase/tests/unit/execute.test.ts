@@ -388,7 +388,9 @@ describe('executeSupabase — the target project is resolved like the classifier
     const ctx: ExecuteContext = { ...execCtx(fetch), resources: [project, other] };
     const result = await supabasePlugin.execute(ctx, 'supabase__get_project', {});
     expect(result.isError).toBe(true);
-    expect(resultText(result)).toBe('ambiguous supabase target: specify project_ref.');
+    expect(resultText(result)).toBe(
+      `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${REF}), Acme / other (${OTHER_REF}).`,
+    );
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -401,13 +403,26 @@ describe('executeSupabase — the target project is resolved like the classifier
     expect(fetch.pending()).toEqual([]);
   });
 
+  test('a project named by its name is called by its ref', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: `${SUPABASE_API_BASE}/projects/${OTHER_REF}`, body: {}, times: 1 },
+    ]);
+    const ctx: ExecuteContext = { ...execCtx(fetch), resources: [project, other] };
+    const result = await supabasePlugin.execute(ctx, 'supabase__get_project', {
+      project_ref: 'Acme / other',
+    });
+    expect(result.isError).not.toBe(true);
+    expect(fetch.pending()).toEqual([]);
+    expect(fetch.calls.every((c) => !String(c.url).includes('Acme'))).toBe(true);
+  });
+
   test('the refusal names the same reason the classifier gives', async () => {
     const fetch = mockFetch([]);
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_project', {
       project_ref: OTHER_REF,
     });
     expect(resultText(result)).toBe(
-      `supabase project '${OTHER_REF}' is not a resource of this mission.`,
+      `supabase project '${OTHER_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${REF}).`,
     );
   });
 

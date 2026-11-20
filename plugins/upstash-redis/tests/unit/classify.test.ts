@@ -256,7 +256,9 @@ describe('classifyUpstashRedis — denials', () => {
       [database],
     );
     expect(result).toEqual({
-      denied: "upstash-redis database 'db-unbound' is not a resource of this mission.",
+      denied:
+        "upstash-redis database 'db-unbound' is not a resource of this mission. " +
+        'Databases of this mission: db-abc-123 (db-abc-123) — upstash_redis__list_databases lists them.',
     });
   });
 });

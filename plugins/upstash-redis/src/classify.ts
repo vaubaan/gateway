@@ -10,11 +10,14 @@
  * ambiguous database is `denied` — never mapped to a broad slice.
  *
  * Conventions :
- *   - the database ref comes from `databaseId` (or `database_id`) and must be
- *     a resource of the mission ; absent, it falls back to the mission's
- *     single Upstash database, and is refused when the mission holds several ;
+ *   - the database ref comes from `databaseId` (or `database_id`), the id or
+ *     the exact name of a resource of the mission, and the slice names its
+ *     id ; absent, it falls back to the mission's single Upstash database,
+ *     and is refused when the mission holds several ;
  *   - two account-level tools need no database (`list_databases`,
  *     `create_database`) but still refuse a foreign `databaseId` ;
+ *     `list_databases` answers the mission's databases alone (`execute`),
+ *     so its `account.database[*]` slice is an upper bound ;
  *   - the environment is the owner's label on the database resource : the
  *     slice carries `database[<id>]`, which the host's default
  *     `resourceEnvResolver` maps to the label — no plugin hook needed ;
@@ -620,10 +623,14 @@ const MALFORMED_DATABASE = 'databaseId: malformed database ref';
 
 /**
  * Resolve the database a call touches, for `classify` and `execute` alike.
- * The explicit argument wins and must be one of the mission's Upstash
- * databases ; absent, the mission's single database applies ; anything else
- * is a refusal. The resolved ref is always a `pathIdent`, whichever branch
- * found it : it is a segment of the Management API path.
+ * The explicit argument wins and must name one of the mission's Upstash
+ * databases, by its id or by its name (the resource's display name, Upstash's
+ * `database_name`, matched exactly) : the answer is always the resource's id,
+ * a `pathIdent`, whichever branch found it — it is a segment of the
+ * Management API path, and the name is never sent. A name two mission
+ * databases share is refused, asking for the id. Absent, the mission's single
+ * database applies ; anything else is a refusal that names the mission's
+ * databases, so the agent can pick one.
  */
 export function resolveDatabase(
   args: Readonly<Record<string, unknown>>,
@@ -631,26 +638,49 @@ export function resolveDatabase(
   required: boolean,
 ): { ref: string | null } | { denied: string } {
   const own = resources.filter((r) => r.service === SERVICE_ID);
-  const raw = databaseArg(args);
-  if (raw !== undefined) {
-    const explicit = pathIdent(raw);
-    if (explicit === null) return { denied: MALFORMED_DATABASE };
-    if (!own.some((r) => r.ref === explicit)) {
-      return { denied: `upstash-redis database '${explicit}' is not a resource of this mission.` };
+  const given = databaseArg(args);
+  if (given !== undefined) {
+    const byRef = own.find((r) => r.ref === given);
+    if (byRef !== undefined) return refOf(byRef);
+    const byName = own.filter((r) => r.displayName === given);
+    if (byName.length === 1) return refOf(byName[0]!);
+    if (byName.length > 1) {
+      return {
+        denied: `databaseId: ${byName.length} Upstash databases of this mission are named '${String(given)}' — name one by its id. ${missionDatabasesHint(own)}`,
+      };
     }
-    return { ref: explicit };
+    const explicit = pathIdent(given);
+    if (explicit === null) return { denied: MALFORMED_DATABASE };
+    return {
+      denied: `upstash-redis database '${explicit}' is not a resource of this mission. ${missionDatabasesHint(own)}`,
+    };
   }
   if (!required) return { ref: null };
-  if (own.length === 1) {
-    const only = pathIdent(own[0]!.ref);
-    return only === null ? { denied: MALFORMED_DATABASE } : { ref: only };
-  }
+  if (own.length === 1) return refOf(own[0]!);
   return {
     denied:
       own.length === 0
         ? 'databaseId: argument missing and the mission touches no Upstash database'
-        : `databaseId: argument missing and the mission touches ${own.length} Upstash databases — name one`,
+        : `databaseId: argument missing and the mission touches ${own.length} Upstash databases — name one by its id or its name. ${missionDatabasesHint(own)}`,
   };
+}
+
+/** The resource's id as the call sends it : it reaches the request path like an argument does. */
+function refOf(resource: Resource): { ref: string } | { denied: string } {
+  const ref = pathIdent(resource.ref);
+  return ref === null ? { denied: MALFORMED_DATABASE } : { ref };
+}
+
+/** Most databases a refusal names ; `list_databases` lists them all. */
+const HINT_MAX_DATABASES = 10;
+
+/** The mission's databases, as a refusal names them : `name (id)`. */
+function missionDatabasesHint(own: readonly Resource[]): string {
+  if (own.length === 0) return 'The mission holds no Upstash database of this account.';
+  const shown = own.slice(0, HINT_MAX_DATABASES).map((r) => `${r.displayName} (${r.ref})`);
+  const more =
+    own.length > HINT_MAX_DATABASES ? `, and ${own.length - HINT_MAX_DATABASES} more` : '';
+  return `Databases of this mission: ${shown.join(', ')}${more} — ${TOOL.listDatabases} lists them.`;
 }
 
 /**
