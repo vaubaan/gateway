@@ -19,6 +19,7 @@ import { MISSION_ACTIONS, MISSION_WORDS } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 
 import styles from './missions.module.css';
+import { isRecord } from '@vaubaan/shared/guards';
 
 function KitStep({
   n,
@@ -152,10 +153,6 @@ export function RevealDialog({ revealed, onDone }: { revealed: RevealedKey; onDo
       <KeyReveal secret={revealed.secret} kit={revealed.kit} label={revealed.label} />
     </Dialog>
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 /** The key and the kit of an answer that carries a secret, once; `null` for any other body. */

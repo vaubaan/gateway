@@ -111,6 +111,7 @@ import {
   type PeriodChoice,
 } from './form-state';
 import { editDraftOf, initialEditState, raisedEditState, type EditSource } from './edit-state';
+import { isRecord } from '@vaubaan/shared/guards';
 
 export interface InitialDraft {
   readonly name: string;
@@ -876,10 +877,6 @@ function toLocalInput(iso: string): string {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return '';
   return new Date(at.getTime() - at.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function isCreatedBody(body: unknown): body is { mission: { id: string; name: string } } {

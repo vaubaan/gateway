@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { readArchive } from '@vaubaan/plugin-sdk/archive';
 
 import { ArchiveError } from './archive.ts';
+import { isRecord } from '@vaubaan/plugin-sdk';
 
 export const MISSION_TOKEN_ENV = 'VAUBAAN_MISSION_TOKEN';
 export const UPLOAD_TOOL = 'vaubaan__upload_plugin';
@@ -32,10 +33,6 @@ export interface DeployResult {
   readonly digest: string;
   readonly activationUrl: string;
   readonly next: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** The door's URL from the gateway's address (`https://gw.example.com` → `…/mcp`). */

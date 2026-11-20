@@ -40,6 +40,7 @@ import {
 import type { IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
 import { IdpSettingsError } from './errors';
+import { isRecord } from '@vaubaan/shared';
 
 /** A sign-in provider without its secret (the union kept: `kind` still tells the two apart). */
 export type SignInProviderWithoutSecret =
@@ -176,10 +177,6 @@ interface StoredSettings {
 /** What `carryIntoStore` wrote: the ids of the sign-in providers, never a secret. */
 export interface CarriedSignIn {
   readonly signInProviders: readonly string[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function parseStored(raw: string): StoredSettings | null {

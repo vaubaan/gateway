@@ -91,6 +91,7 @@ import { systemClock, type Clock } from '../store/clock';
 import { isDenial, MissionAdmission, type Admitted, type MissionAdmissionDeps } from './admission';
 import { readAgentLabel } from './request-meta';
 import { buildCatalog, callableTools, type GitRemoteView } from './tools';
+import { isRecord } from '@vaubaan/shared';
 
 /** Name the door announces to MCP clients. */
 export const MCP_SERVER_INFO_NAME = 'vaubaan-gateway';
@@ -489,10 +490,6 @@ export class ExecutionDoor {
 /** The request scope the door put in `AuthInfo.extra` for the per-request server. */
 function scopeOf(authInfo: AuthInfo | undefined): RequestScope | undefined {
   return authInfo?.extra?.[SCOPE_KEY] as RequestScope | undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

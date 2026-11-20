@@ -17,6 +17,7 @@
 
 import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
+import { isRecord } from '../guards.ts';
 
 /** The file of an archive that lists the digest of every other file. */
 export const ARCHIVE_MANIFEST_FILE = 'vaubaan-manifest.json';
@@ -209,10 +210,6 @@ function untar(tar: Buffer): Map<string, Uint8Array> {
     offset += Math.ceil(size / BLOCK) * BLOCK;
   }
   throw new ArchiveFormatError('a truncated archive (no end marker)');
-}
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
 /** Reads a manifest's JSON; the problem, or the manifest. Pure. */

@@ -6,6 +6,7 @@
  */
 import { CREDENTIAL_KINDS, type CredentialKind } from '@vaubaan/shared';
 import type { CredentialSecret } from '@vaubaan/plugin-sdk';
+import { isRecord } from '@vaubaan/shared';
 
 export class CredentialFormatError extends Error {
   constructor(message: string) {
@@ -94,10 +95,6 @@ export function parseSecret(text: string): CredentialSecret {
       // platform-management-is-a-plugin-on-the-execution-door).
       return { kind: 'host', metadata };
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function requireString(value: unknown, name: string): string {

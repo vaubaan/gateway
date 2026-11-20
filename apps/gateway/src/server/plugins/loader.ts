@@ -28,6 +28,7 @@ import {
 import { satisfies, subset, valid, validRange } from 'semver';
 
 import { ConfigError, envNamesFor, type ConfigIssue } from '../config';
+import { isRecord } from '@vaubaan/shared';
 
 /** The peer dependency that names the SDK range a pinned plugin was built against. */
 export const SDK_PACKAGE = '@vaubaan/plugin-sdk';
@@ -79,10 +80,6 @@ function issueAt(path: string, message: string): ConfigIssue {
 
 function refuse(path: string, message: string): never {
   throw new ConfigError([issueAt(path, message)]);
-}
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
 /** The entry a manifest names: `exports["."]` (a string, or its `import` / `default`), else `main`. */

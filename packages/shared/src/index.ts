@@ -26,6 +26,7 @@ export {
   UpstreamHttpError,
 } from './mcp.ts';
 export { brandError, errorBrand, hasErrorBrand } from './brand.ts';
+export { isRecord } from './guards.ts';
 export {
   isAdvisorySubject,
   isSemverVersion,

@@ -28,6 +28,7 @@ import { githubApiBase, issuerKey, type GithubSignInProvider } from '../config/s
 import type { IdentityClaims } from './claims';
 import { LoginError } from './errors';
 import type { CustomFetch, LoginChecks, StartedLogin } from './relying-party';
+import { isRecord } from '@vaubaan/shared';
 
 const BASE_SCOPES = ['read:user', 'user:email'] as const;
 const TEAM_SCOPE = 'read:org';
@@ -69,10 +70,6 @@ function sameSecret(a: string, b: string): boolean {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
   return left.length === right.length && timingSafeEqual(left, right);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export class GithubSignIn {

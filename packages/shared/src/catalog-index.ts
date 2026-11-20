@@ -1,3 +1,4 @@
+import { isRecord } from './guards.ts';
 /**
  * The catalog's index (`index.json` on the catalog repository's GitHub Pages; ADR
  * plugin-catalog-rebuilt-from-source, amendment 2026-11-19): every plugin the catalog
@@ -38,10 +39,6 @@ export const CATALOG_INDEX_LIMITS = { plugins: 500, name: 80, short: 200 } as co
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
 
 /** Whether `x` is one entry of the index. */
 export function isCatalogIndexEntry(x: unknown): x is CatalogIndexEntry {

@@ -1,3 +1,4 @@
+import { isRecord } from './guards.ts';
 /**
  * The published versions feed (`versions.json`): what the project's website serves and
  * what an instance reads at start and daily to tell its operator what is behind (ADR
@@ -62,10 +63,6 @@ const SEMVER =
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
 const ADVISORY_ID = /^VBN-\d{4}-\d{3,}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
 
 function isText(x: unknown, max: number): x is string {
   return typeof x === 'string' && x.trim() !== '' && x.length <= max;
