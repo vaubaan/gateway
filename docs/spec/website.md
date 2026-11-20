@@ -104,7 +104,7 @@ section opens with a numbered kicker ("3 · The map"), in order:
    ([gateway-risk-model](./gateway-risk-model.md) §4.6), its count of permissions.
 4. **The map** — every permission placed by macro-action (columns) and by its row of the tree,
    worst first (Cannot be repaired, Repairable at a price, Worth a look, Harmless),
-   each row tinted with its glyph and the sentence of what the trust levels do with it. A chip
+   each row tinted and named by its word (no glyph: the word carries the order), with the sentence of what the trust levels do with it. A chip
    is a permission: its label, its reason (rows 2–4), the catalog's reason behind an (i), and
    for the chosen trust level "yes / ask me / no · <quota> a day" (the base budget ×1, ×3, ×10),
    written for a day, the default period; a sum line per level and the period note. Two
@@ -208,6 +208,13 @@ Each claim in the reader's words, linked to the document or code behind it: the 
 instance** (nothing by default; with telemetry, the exact fields per level, what is never sent, how
 the collector handles addresses), what is not covered, how to report a vulnerability. Only what the
 code does today; a planned control is marked planned.
+
+### 2.5 bis Privacy — `/privacy`
+
+What the project's own services do with personal data: the site (nothing collected), the collector
+(§3), and Vaubaan's OAuth broker (what it keeps and never keeps, [oauth-broker](./oauth-broker.md)
+§3), with the statements the providers require of an application they verify. Data a person's
+instance handles is that instance's operator's, never the project's.
 
 ### 2.6 Readable by language models and agents
 

@@ -79,6 +79,17 @@ acceptance:
 - `/trust/review-pack` serves one HTML page and its Markdown twin: proposition, controls, accepted risks, what leaves the instance, supply chain, limitations, version
 - Every section is generated from its source in the repository, never written by hand
 
+### Read how Vaubaan handles my Google data
+
+status: proposed
+requires: site
+spec: ../spec/website.md#25-bis-privacy--privacy
+acceptance:
+
+- `/privacy` and its Markdown twin say what Vaubaan's OAuth broker keeps, what it never keeps, and that calendar data goes only to the person's own instance
+- The page carries Google's Limited Use sentence word for word, and the URL is the one on Google's consent screen
+- Every page of the site links to it from its footer
+
 ### Follow releases without an account
 
 status: proposed
