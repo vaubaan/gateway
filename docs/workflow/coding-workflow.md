@@ -94,6 +94,8 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
   per feature directly to `main`; contributors work on `feature/*` or `fix/*` from
   `origin/main`, rebased right before the push, and open a pull request. Every release, the
   pre-releases included, is tagged on `main`.
+- These protections, the release tags' and the catalog's: `.github/settings/`, checked and
+  reapplied by `scripts/github-settings.sh` (handbook [github-settings](../handbook/github-settings.md)).
 
 ## Release
 

@@ -27,6 +27,7 @@ minutes.
 - [threat-model](threat-model.md) — what the gateway defends, against whom, with which control and proof.
 - [known-limitations](known-limitations.md) — what has not been done and what is not there (published on the website).
 - [website](website.md) — the public site, generated from the repository.
+- [github-settings](github-settings.md) — the repositories' protections and security as code (`.github/settings/`), what stays manual.
 
 ## Humans
 
