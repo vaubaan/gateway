@@ -21,7 +21,7 @@ Before you start, ask me and wait for the answers:
 3. How people will sign in: my company's OpenID Connect identity provider, or GitHub. I will add it in the
    interface after the first sign-in unless I give you its client id and secret now.
 
-Check that Docker with Compose v2, git, openssl and Node.js 26 or later are installed. Do not install
+Check that Docker with Compose v2, git and openssl are installed. Do not install
 anything else without asking me.
 
 Then run, from a directory of my choice:
@@ -30,19 +30,17 @@ Then run, from a directory of my choice:
   cd gateway
   cp deploy/config/.env.example deploy/config/.env
   cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
-  npm run gen-master-key
   openssl rand -hex 24
 
 Edit deploy/config/.env only (leave gateway.yaml as copied, every key commented out):
 - GATEWAY_DOMAIN = the DNS name
 - VAUBAAN_PUBLIC_URL = https:// followed by the DNS name
 - VAUBAAN_ADMIN_EMAILS = the administrators' addresses, comma-separated
-- VAUBAAN_MASTER_KEY = the output of npm run gen-master-key
 - VAUBAAN_BOOTSTRAP_TOKEN = the output of openssl rand -hex 24
 
-Never print the master key or the bootstrap token in your answers or logs, never commit
-deploy/config/.env, and tell me to keep a copy of the master key outside this host: losing it
-loses every stored credential.
+Leave VAUBAAN_MASTER_KEY_FILE and VAUBAAN_MASTER_KEY_GENERATE as copied: the gateway writes its
+encryption key on the gateway-key volume at its first start. Never print the bootstrap token or the
+key file in your answers or logs, and never commit deploy/config/.env.
 
 Start it:
 
@@ -56,6 +54,8 @@ Verify:
 Finish by telling me:
 - to open https://<the DNS name>/login, follow the bootstrap link and paste the bootstrap token
   (give me the command that prints it from .env, not the value);
+- to download the encryption key at the setup's first step and keep it outside this host: losing it
+  loses every stored credential;
 - to add the sign-in provider on Settings → Administration → Sign-in, then sign in through it;
 - where the docs for connecting accounts and creating missions are: https://vaubaan.com/docs/services
   and https://vaubaan.com/docs/missions.
