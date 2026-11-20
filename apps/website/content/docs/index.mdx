@@ -1,32 +1,67 @@
 ---
 title: Vaubaan Gateway docs
-description: How to try, install, configure and run a Vaubaan Gateway instance, and how to give agents missions.
+description: How to try, install and run Vaubaan Gateway for yourself and then your team, give agents missions, review its security, write a plugin — a path for each reader.
 ---
 
-Vaubaan Gateway is a server you run for yourself, then for your team, so that your coding agents can use your cloud services through MCP without being handed your credentials; these pages are for the people who install it, run it and use it.
+Vaubaan Gateway is a server you run for yourself, then for your team, so that your agents can use your services through MCP without being handed your credentials; these pages are for the people who install it, use it, review it or extend it, and for the agents working through it.
 
 **Pre-release.** Versions `2.0.0-alpha.*` are tagged and published as images; expect breaking changes until `v2.0.0`. Every command on these pages is one that works on the repository today. What was never tried or is not built is listed under [known limitations](/docs/known-limitations).
 
-## Start here
+## Pick your path
 
-- [Concepts](/docs/concepts): instance, account, resource, mission, key, permission, macro-action, trust level, limit, "ask me first", activity.
-- [Quick look](/docs/quick-look): the whole interface on a laptop in a few minutes, nothing to register.
-- [Install](/docs/install): Docker Compose with the bundled proxy, or Railway.
-- [Install with your coding agent](/docs/install/with-your-coding-agent): one block to paste into an agent.
+### You code alone with an agent
 
-## Run an instance
+A developer with a coding agent on GitHub and Supabase.
 
-- [Configuration](/docs/configuration) and [every configuration key](/docs/configuration/keys).
-- [Connect a service](/docs/services): the three ways; each service's guide is on its plugin page.
-- [Accounts](/docs/accounts): environment labels, giving access, accounts without an owner.
-- [The interface](/docs/interface) and [Administration](/docs/administration): what each page of an instance is for; the (i) beside a page's title explains it and links there.
-- [Missions and agents](/docs/missions): create and edit a mission, configure the agent's MCP client, platform management, the git remote.
+1. [Quick look](/docs/quick-look): the whole interface on a laptop in a few minutes, nothing to register.
+2. [Install](/docs/install) an instance for yourself, or [let your coding agent install it](/docs/install/with-your-coding-agent); sign in with an account the instance keeps, no identity provider needed.
+3. [Connect](/docs/services) your accounts: [GitHub](/plugins/github#connect), [Supabase](/plugins/supabase#connect). Label the Supabase projects `staging` and `prod` ([environment labels](/docs/accounts#environment-labels)).
+4. [Create a mission](/docs/missions#create-a-mission) and give its key to your agent: [MCP clients](/docs/missions/mcp-clients), [git remote](/docs/missions/git-remote).
+5. Read [how a permission is decided](/docs/concepts/permissions) before you choose a trust level.
+
+### You work alone with an assistant
+
+A consultant with an assistant on Gmail, Notion and Google Calendar.
+
+1. [Quick look](/docs/quick-look), then [install](/docs/install) an instance for yourself.
+2. [Connect](/docs/services) [Gmail](/plugins/gmail#connect), [Notion](/plugins/notion#connect) and [Google Calendar](/plugins/google-calendar#connect).
+3. [Create a mission](/docs/missions#create-a-mission) where sending asks you first, and add it to your assistant: [MCP clients](/docs/missions/mcp-clients).
+4. Be told when something waits for you: [notifications](/docs/missions/notifications).
+5. [How a permission is decided](/docs/concepts/permissions) shows the consultant's mission at each trust level.
+
+### You bring your team
+
+The administrator of an instance for several people.
+
+- [Configuration](/docs/configuration): sign-in through your identity provider, GitHub, Google or Microsoft, and [every configuration key](/docs/configuration/keys).
+- [Administration](/docs/administration): people, teams, sign-in, plugins, encryption.
+- [Give access](/docs/accounts#give-access) to an account, and add [teammates and machine keys](/docs/missions#teammates-and-keys) to a mission.
 - [Operations](/docs/operations): backup and restore, master key rotation, upgrade, telemetry.
 
-## Decide
+### You review its security
 
-- [How Vaubaan compares](/docs/compare) with handing an agent a token, with a secrets manager and with other MCP gateways.
-- [Trust center](/trust): what protects the credentials an instance holds, and what does not.
-- [Plugins](/plugins): every service, its permissions and macro-actions.
+- [Trust center](/trust): what protects the credentials an instance holds, what is not covered, what leaves an instance.
+- [How a call flows](/docs/concepts/how-a-call-flows): the checks every call goes through, and the three credentials that never cross.
+- [Known limitations](/docs/known-limitations) and [how Vaubaan compares](/docs/compare) with handing an agent a token, a secrets manager and other MCP gateways.
+
+### You write a plugin
+
+- [Plugins](/plugins): every published plugin, its permissions, macro-actions and connect guide, the shape yours will have.
+- [How a permission is decided](/docs/concepts/permissions): the five facts and four rows your catalog sorts each permission into.
+- The plugin kit, `npx @vaubaan/plugin-cli init`: its [commands](https://github.com/vaubaan/gateway/tree/main/packages/plugin-cli) and the [SDK](https://github.com/vaubaan/gateway/tree/main/packages/plugin-sdk).
+
+### You are an agent
+
+- [For agents](/docs/reference/for-agents): the reference every instance serves at `/agent-bootstrap.md`.
+- [Refusals](/docs/reference/refusals): every code, and what to do about it.
+- `/llms.txt` lists every page of this site as Markdown.
+
+## Every section
+
+- **Understand**: [concepts](/docs/concepts), [how a permission is decided](/docs/concepts/permissions), [how a call flows](/docs/concepts/how-a-call-flows).
+- **Install and configure**: [install](/docs/install), [configuration](/docs/configuration).
+- **Use**: [connect a service](/docs/services), [accounts](/docs/accounts), [missions and agents](/docs/missions), [the interface](/docs/interface); the (i) beside a page's title in the interface links to its part of these docs.
+- **Run**: [administration](/docs/administration), [operations](/docs/operations).
+- **Reference**, generated from the code: [refusals](/docs/reference/refusals), [rows by trust level](/docs/reference/trust-levels), [words](/docs/reference/words), [for agents](/docs/reference/for-agents), [configuration keys](/docs/configuration/keys), [plugins](/plugins).
 
 These docs describe how to use the gateway. How its code works is in the repository's [handbooks](https://github.com/vaubaan/gateway/tree/main/docs/handbook), written for contributors; the docs link to them rather than copy them.
