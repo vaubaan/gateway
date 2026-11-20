@@ -13,14 +13,12 @@ import {
   RELEASE_BODY_MAX_CHARS,
   ReleaseError,
   assertMovesForward,
-  assertPluginTag,
   assertReleasableTag,
   bumpLockfile,
   bumpManifest,
   compareVersions,
   extractReleaseNotes,
   imageTags,
-  parsePluginTag,
   parseReleasesData,
   parseVersion,
   platformsText,
@@ -30,7 +28,6 @@ import {
   serializeReleasesData,
   unreleasedNotes,
   versionOfTag,
-  withPluginRelease,
   catalogVersionsFrom,
 } from './release-lib.mjs';
 
@@ -351,36 +348,6 @@ describe('released versions for the versions feed', () => {
     expect(parseReleasesData(serializeReleasesData(data))).toEqual(data);
     expect(() => releasesData({ gatewayVersion: '2.0', date: '2026-11-06', plugins: {} })).toThrow(
       ReleaseError,
-    );
-  });
-
-  it('moves one plugin forward on a hotfix, and only forward', () => {
-    expect(withPluginRelease(data, 'notion', '0.2.1').plugins).toEqual({
-      github: '5.0.0',
-      notion: '0.2.1',
-    });
-    expect(withPluginRelease(data, 'acme', '0.1.0').plugins).toHaveProperty('acme', '0.1.0');
-    expect(() => withPluginRelease(data, 'notion', '0.2.0')).toThrow(/does not come after/);
-    expect(() => withPluginRelease(data, '_template', '9.0.0')).toThrow(/never released/);
-  });
-
-  it('reads a plugin release tag', () => {
-    expect(parsePluginTag('plugin-cloudflare-dns-v4.0.1')).toEqual({
-      id: 'cloudflare-dns',
-      version: '4.0.1',
-    });
-    expect(parsePluginTag('plugin-notion-v0.3.0-rc.1').version).toBe('0.3.0-rc.1');
-    expect(() => parsePluginTag('v2.0.0')).toThrow(/not a plugin release tag/);
-    expect(() => parsePluginTag('plugin-notion-v0.3')).toThrow(/not a release version/);
-    expect(assertPluginTag({ tag: 'plugin-notion-v0.3.0', manifestVersion: '0.3.0' })).toEqual({
-      id: 'notion',
-      version: '0.3.0',
-    });
-    expect(() =>
-      assertPluginTag({ tag: 'plugin-notion-v0.3.0', manifestVersion: '0.2.0' }),
-    ).toThrow(/does not match the version in plugins\/notion\/package.json \(0.2.0\)/);
-    expect(() => assertPluginTag({ tag: 'plugin-jira-v1.0.0', manifestVersion: null })).toThrow(
-      /names no plugin/,
     );
   });
 });

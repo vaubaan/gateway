@@ -3,7 +3,7 @@ name: publish-plugin-kit
 # Publishes the plugin author's kit to npm: @vaubaan/plugin-sdk on a tag
 # `npm-plugin-sdk-v<version>`, @vaubaan/plugin-cli on a tag `npm-plugin-cli-v<version>`
 # (docs/workflow/coding-workflow.md, "Release" › "The plugin kit").
-# Not `plugin-…-v…`: release.yml takes those for a plugin's image.
+# A plugin has no tag here: the catalog (vaubaan/gateway-plugins) releases it.
 #
 # No token: npm trusted publishing. This workflow, by its file name, is declared
 # as the trusted publisher of each package on npmjs.com; npm accepts the

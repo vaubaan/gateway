@@ -159,8 +159,8 @@ owner doing anything:
 
 - `@vaubaan/plugin-sdk` and `@vaubaan/plugin-cli` are published to npm by
   [`publish-plugin-kit.yml`](../../.github/workflows/publish-plugin-kit.yml), on a tag
-  `npm-plugin-sdk-v<version>` or `npm-plugin-cli-v<version>` (never `plugin-…-v…`: `release.yml`
-  takes those for a plugin's image). Bump the package's `version`, CHANGELOG, merge, then a
+  `npm-plugin-sdk-v<version>` or `npm-plugin-cli-v<version>` (a plugin has no tag here: the catalog
+  releases it). Bump the package's `version`, CHANGELOG, merge, then a
   maintainer pushes the tag on the merged commit. The SDK goes first when the CLI needs its new
   version: the job refuses a CLI whose SDK is not on npm.
 - Before publishing, the job runs `scripts/plugin-kit-smoke.sh`: both packages packed, installed

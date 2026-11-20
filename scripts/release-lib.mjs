@@ -551,27 +551,6 @@ export function catalogVersionsFrom(index, comment, compiled) {
 }
 
 /**
- * The released versions after a plugin hotfix: that plugin's entry alone moves, and
- * only forward.
- * @param {ReleasesData} data
- * @param {string} id
- * @param {string} version
- * @returns {ReleasesData}
- */
-export function withPluginRelease(data, id, version) {
-  if (id === PLUGIN_TEMPLATE) throw new ReleaseError('the plugin template is never released');
-  const current = data.plugins[id];
-  if (current !== undefined) assertMovesForward(current, version);
-  else parseVersion(version);
-  return {
-    ...data,
-    plugins: Object.fromEntries(
-      Object.entries({ ...data.plugins, [id]: version }).sort(([a], [b]) => a.localeCompare(b)),
-    ),
-  };
-}
-
-/**
  * Reads releases.json as `release:prepare` wrote it.
  * @param {string} text
  * @returns {ReleasesData}
@@ -608,39 +587,4 @@ export function parseReleasesData(text) {
  */
 export function serializeReleasesData(data) {
   return `${JSON.stringify(data, null, 2)}\n`;
-}
-
-const PLUGIN_TAG = /^plugin-([a-z][a-z0-9-]*)-v(.+)$/;
-
-/**
- * The plugin and version a plugin release tag names: `plugin-cloudflare-dns-v4.0.1`.
- * @param {string} tag
- * @returns {{ id: string, version: string }}
- */
-export function parsePluginTag(tag) {
-  const match = PLUGIN_TAG.exec(tag);
-  if (!match) {
-    throw new ReleaseError(
-      `tag "${tag}" is not a plugin release tag (plugin-<id>-v<version>, for example plugin-notion-v0.3.0)`,
-    );
-  }
-  const [, id = '', version = ''] = match;
-  return { id, version: parseVersion(version).raw };
-}
-
-/**
- * A plugin release tag must name the version of that plugin's package.json.
- * @param {{ tag: string, manifestVersion: string | null }} input
- * @returns {{ id: string, version: string }}
- */
-export function assertPluginTag({ tag, manifestVersion }) {
-  const { id, version } = parsePluginTag(tag);
-  if (id === PLUGIN_TEMPLATE) throw new ReleaseError('the plugin template is never released');
-  if (manifestVersion === null) throw new ReleaseError(`tag "${tag}" names no plugin of plugins/`);
-  if (manifestVersion !== version) {
-    throw new ReleaseError(
-      `tag "${tag}" does not match the version in plugins/${id}/package.json (${manifestVersion})`,
-    );
-  }
-  return { id, version };
 }
