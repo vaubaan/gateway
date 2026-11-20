@@ -146,21 +146,8 @@ OAuth App) or none at all with local accounts.
 
 ## Repository layout
 
-```
-apps/gateway/            the deployable: both doors, the web interface, the store
-apps/website/            vaubaan.com: user docs, plugin pages, trust center, the telemetry collector
-apps/oauth-broker/       the OAuth broker: keeps no token, runs in an attested enclave
-packages/shared/         domain and risk types
-packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget (protocol names)
-packages/gateway-core/   the call pipeline, refusals, the audit entry
-packages/plugin-sdk/     the plugin contract, catalog loader, registry, test kit
-packages/telemetry/      opt-in, anonymous plugin reports (off by default)
-packages/oauth-providers/ the OAuth provider table the gateway and the broker share
-packages/plugin-page/    a service's page from its plugin, drawn by the site and the gateway's Reference
-plugins/<service>/      one plugin per service; plugins/_template to start one
-deploy/                  Dockerfile, Compose file, example configuration
-docs/                    spec, decisions, handbook, tests, workflow
-```
+npm workspaces under `apps/`, `packages/` and `plugins/`; what each one holds:
+[CONTRIBUTING.md](CONTRIBUTING.md#repository-layout).
 
 ## Contributing
 

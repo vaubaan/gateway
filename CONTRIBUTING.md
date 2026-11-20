@@ -129,18 +129,22 @@ CI runs the same gate, then the browser tests and the image build.
 ## Repository layout
 
 ```
-apps/gateway/            the application: server and web interface    @vaubaan/gateway-app
-packages/shared/         shared types and helpers                      @vaubaan/shared
-packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget  @vaubaan/policy-engine
-packages/plugin-sdk/     the plugin contract, registry and test kit    @vaubaan/plugin-sdk
-packages/gateway-core/   call pipeline, decisions, refusals, audit     @vaubaan/gateway-core
-packages/telemetry/      opt-in telemetry report                       @vaubaan/telemetry
-packages/oauth-providers/ OAuth provider table, copied into the broker @vaubaan/oauth-providers
-packages/plugin-page/    a service's page (site and Reference)         @vaubaan/plugin-page
-plugins/<service>/      one service plugin per folder                @vaubaan/plugin-<service>
-plugins/_template/       the scaffold for a new plugin                 @vaubaan/plugin-template
-deploy/                  Dockerfile, Compose file, example configuration
-docs/                    specification, decisions, handbooks, test plans, workflow
+apps/gateway/             the deployable: both doors, the web interface, the store   @vaubaan/gateway-app
+apps/website/             vaubaan.com: user docs, plugin pages, trust center, the telemetry collector   @vaubaan/website
+apps/oauth-broker/        the OAuth broker: keeps no token, runs in an attested enclave   @vaubaan/oauth-broker
+packages/shared/          domain and risk types                                     @vaubaan/shared
+packages/policy-engine/   slices, matching, the risk decision, the validity rule of a budget   @vaubaan/policy-engine
+packages/gateway-core/    the call pipeline, refusals, the audit entry              @vaubaan/gateway-core
+packages/plugin-sdk/      the plugin contract, catalog loader, registry, test kit   @vaubaan/plugin-sdk
+packages/plugin-cli/      the plugin kit: init, try, build, submit                  @vaubaan/plugin-cli
+packages/plugin-page/     a service's page, drawn by the site and the gateway's Reference   @vaubaan/plugin-page
+packages/telemetry/       opt-in, anonymous plugin reports (off by default)         @vaubaan/telemetry
+packages/oauth-providers/ the OAuth provider table the gateway and the broker share  @vaubaan/oauth-providers
+plugins/<service>/        one plugin per service                                    @vaubaan/plugin-<service>
+plugins/_template/        the scaffold for a new plugin                             @vaubaan/plugin-template
+deploy/                   Dockerfile, Compose file, example configuration
+scripts/                  release, check and build scripts
+docs/                     spec, decisions, handbook, intents, tests, workflow
 ```
 
 These are npm workspaces (`apps/*`, `packages/*`, `plugins/*`). A plugin
@@ -154,13 +158,14 @@ In this project the documentation is part of the change, and it is written
 **before or with** the code, never after. A pull request whose code and
 documentation disagree is not merged.
 
-| Folder                               | What it holds                                                                                           | When you touch it                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| [`docs/spec/`](docs/spec/)           | **What** the product does and **why**, independent of the technology. The functional source of truth.   | A change of behaviour starts here. Open an issue first: the specification is discussed before any code. |
-| [`docs/decisions/`](docs/decisions/) | **Decisions** (ADRs): one file per choice, with Context, Decision, Consequences, Rejected alternatives. | Any choice somebody could question in six months: a library, a public contract, a structural change.    |
-| [`docs/handbook/`](docs/handbook/)   | **How the code works today**, one file per subsystem and one per plugin.                                | Whenever you change the code a handbook describes.                                                      |
-| [`docs/tests/`](docs/tests/)         | The integration and end-to-end scenarios.                                                               | When you add or change a scenario.                                                                      |
-| [`docs/workflow/`](docs/workflow/)   | CI, branches, releases.                                                                                 | When you change the pipeline or the tooling.                                                            |
+| Folder                               | What it holds                                                                                           | When you touch it                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`docs/spec/`](docs/spec/)           | **What** the product does and **why**, independent of the technology. The functional source of truth.   | A change of behaviour starts here: the specification is discussed before any code.                   |
+| [`docs/decisions/`](docs/decisions/) | **Decisions** (ADRs): one file per choice, with Context, Decision, Consequences, Rejected alternatives. | Any choice somebody could question in six months: a library, a public contract, a structural change. |
+| [`docs/handbook/`](docs/handbook/)   | **How the code works today**, one file per subsystem and one per plugin.                                | Whenever you change the code a handbook describes.                                                   |
+| [`docs/intents/`](docs/intents/)     | **What a person will be able to do**, `proposed` until the code does it: the backlog.                   | Before a visible change of behaviour, and for any work deferred.                                     |
+| [`docs/tests/`](docs/tests/)         | The integration and end-to-end scenarios.                                                               | When you add or change a scenario.                                                                   |
+| [`docs/workflow/`](docs/workflow/)   | CI, branches, releases.                                                                                 | When you change the pipeline or the tooling.                                                         |
 
 The order of work:
 
@@ -169,8 +174,8 @@ The order of work:
    place to start), the decisions that constrain it, and the handbook of the
    code you will modify.
 2. **Fill the gaps first.** If the specification is silent on what you want
-   to change, open an issue instead of coding around it. If you are about to
-   make a real choice, write the ADR.
+   to change, do not code around it: open an issue to discuss it. If you are
+   about to make a real choice, write the ADR.
 3. **Code and test.**
 4. **Update the documentation in the same pull request**: the handbook says
    what the code does now.
@@ -178,20 +183,22 @@ The order of work:
 Three rules about these documents:
 
 - An **ADR states the decision in force.** When the decision changes, rewrite
-  the file and add one dated line to its `## History` section; a decision
-  replaced by another is deleted and summarised in one History line of its
-  successor. Name the file after the decision (`docs/decisions/<slug>.md`, no
-  number), with `status: accepted` and the date in its frontmatter.
+  the file; a decision replaced by another is deleted, and its option goes to
+  the successor's Rejected alternatives. Name the file after the decision
+  (`docs/decisions/<slug>.md`, no number), with `status: accepted` and the
+  date in its frontmatter.
 - A **handbook** starts with a `tracks:` list in its frontmatter: the source
   files it describes. Keep it complete; it is what lets a drift check compare
   the document with the code.
+- **Deferred work is a `proposed` intent** in [`docs/intents/`](docs/intents/README.md):
+  maintainers record there what they leave for later, never in an issue. From outside, open an
+  issue (a bug report, a plugin request, a feature request); a maintainer turns what is accepted
+  into a proposed intent.
 
 ## English only
 
 Code, comments, commit messages, documentation, issues and pull requests are
-written in English. A few words of the interface and the catalogs (the names of
-the trust levels) are still provisional and will be renamed in English
-([ROADMAP.md](ROADMAP.md)); they are not a model to follow.
+written in English.
 
 ## Rules the code follows
 
