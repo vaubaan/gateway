@@ -1,0 +1,53 @@
+---
+title: Run behind your own proxy
+description: Run the gateway's image without Compose, behind a reverse proxy you already have; what the proxy must and must not do.
+---
+
+Running the gateway behind your own proxy means starting its one image with `docker run` (or your platform's equivalent) and putting a reverse proxy you already operate in front of it; the gateway speaks plain HTTP on `PORT` (3000 by default) and leaves TLS to the proxy.
+
+## Start the image
+
+Build the image from the repository, or use a [released one](/docs/install/verify-an-image) by digest:
+
+```bash
+docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .
+docker run -d --name vaubaan -p 127.0.0.1:3000:3000 \
+  -v vaubaan-data:/data \
+  -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_STORE_PATH=/data/gateway.db \
+  -v vaubaan-key:/keys \
+  -e VAUBAAN_MASTER_KEY_FILE=/keys/master.key -e VAUBAAN_MASTER_KEY_GENERATE=1 \
+  -e VAUBAAN_TRUSTED_PROXIES=<address of your reverse proxy> \
+  -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
+  -e VAUBAAN_BOOTSTRAP_TOKEN="$(openssl rand -hex 24)" \
+  vaubaan-gateway:local
+```
+
+The key goes on a volume of its own (`/keys`), apart from the store (`/data`): see [the encryption key](/docs/install/docker-compose#the-encryption-key). Then the [first sign-in](/docs/install#first-sign-in).
+
+Give the container what the reference Compose file gives it when your platform offers it: a read-only root filesystem, every capability dropped, `no-new-privileges`, and `/tmp` as a tmpfs. The server writes nothing but `/data` and `/tmp`. Started as root on a root-owned volume, the image gives `/data` to its own user (uid 10001) and drops root before the server starts.
+
+## What the proxy must do
+
+- **Terminate TLS** for the host of `public_url`. The gateway builds every URL from `public_url`, never from forwarded host or scheme headers.
+- **Not buffer responses**: the MCP door streams.
+- **Not cap or buffer request bodies under `/git/`**: a push streams the pack through, and `git.max_pack_mb` (200 MiB by default) is the gateway's own cap.
+- **Append the client address to `X-Forwarded-For`**, and be listed in `trusted_proxies` (`VAUBAAN_TRUSTED_PROXIES`) so that header is believed. Behind an edge that overwrites a client-address header of its own, set `client_ip_header` (`VAUBAAN_CLIENT_IP_HEADER`) instead; the two exclude each other.
+- **Receive only its host name**, never the gateway's environment, which holds the master key, the bootstrap token and the sign-in provider's secret.
+
+The image runs with `NODE_ENV=production`, where the gateway **refuses to start** without `trusted_proxies` or `client_ip_header`, unless `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` says you accept what follows: no client address is believed, the per-address limits (sign-in, the bootstrap token, the request page, client registration and token requests of the authorization server) become one window shared by all callers, and the activity records no address. Never trust a whole network range such as a Docker pool: every container on it could then pick the address it is limited and audited under.
+
+## The security headers are the gateway's
+
+The gateway sets these on every response; your proxy must not add or override them.
+
+| Header                      | Value                                                                                         | Why                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `Content-Security-Policy`   | `default-src 'self'; script-src 'self' 'nonce-…' 'strict-dynamic'; …; frame-ancestors 'none'` | only the gateway's own scripts run; no page can frame the interface                             |
+| `X-Frame-Options`           | `DENY`                                                                                        | framing refused by browsers that ignore `frame-ancestors`                                       |
+| `X-Content-Type-Options`    | `nosniff`                                                                                     | a response is never re-interpreted as another type                                              |
+| `Referrer-Policy`           | `same-origin`                                                                                 | no path leaks to another site; same-origin requests keep `Referer`, the origin check's fallback |
+| `Permissions-Policy`        | camera, microphone, geolocation… `=()`                                                        | no page may use a device                                                                        |
+| `Strict-Transport-Security` | `max-age=31536000`, when `public_url` is https                                                | browsers never fall back to http for this host                                                  |
+
+They do not affect the MCP door: non-browser clients ignore them and streaming is untouched. The OAuth consent pages (`/oauth/authorize`) carry a stricter policy of their own.

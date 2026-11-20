@@ -1,6 +1,6 @@
 ---
 title: Operations
-description: Running an instance day to day — health, logs, audit retention, the reverse proxy — and the procedures for backup, key rotation, upgrade and telemetry.
+description: Running an instance day to day — health, logs, audit retention, the reverse proxy, the git remote — and the procedures for backup, key rotation, upgrade, plugins and telemetry.
 ---
 
 Operating an instance means keeping one process, one SQLite file and one master key healthy: checking its health, reading its logs, backing up the file and the key apart, rotating the key, upgrading the image.
@@ -8,11 +8,13 @@ Operating an instance means keeping one process, one SQLite file and one master 
 - [Backup and restore](/docs/operations/backup-and-restore)
 - [Master key rotation](/docs/operations/master-key-rotation)
 - [Upgrade](/docs/operations/upgrade)
+- [Plugins on an instance](/docs/operations/plugins)
 - [Telemetry](/docs/operations/telemetry)
+- [Your own OAuth broker](/docs/operations/oauth-broker)
 
 ## Health
 
-`GET /healthz` answers 200 `{"status":"ok",...}` with the version and the commit; 503 `degraded` when the store does not answer, 503 `unavailable` when the process could not start. The image's health check and the Compose file use it.
+`GET /healthz` answers 200 `{"status":"ok",...}` with the version and the commit; 503 `degraded` when the store does not answer, 503 `unavailable` when the process could not start. The image's health check and the Compose file use it. With a scheduled backup, it also reports the latest one (`backup`).
 
 ## Logs
 
@@ -22,12 +24,29 @@ JSON lines on stdout and stderr. Mission keys appear by prefix only and configur
 
 `retention_days` (90 by default) purges the activity entries and the session history older than that, at start and then every hour. What the current period of a limit is computed from is kept; decided requests and approvals are not purged.
 
+## Data
+
+Everything is in `/data`: `gateway.db` and its WAL files, and the plugins installed from Administration. The encryption key lives apart, on its own volume or in a secret. Back the two up separately: [backup and restore](/docs/operations/backup-and-restore).
+
 ## The reverse proxy
 
-Declare it in `trusted_proxies` so the client address it appends to `X-Forwarded-For` is believed: without it, the per-address limits are one window shared by all callers and the activity records no address. The proxy must terminate TLS for the host of `public_url`, must not buffer responses (the MCP door streams), must not cap request bodies under `/git/`, and must not add or override the security headers the gateway sets itself.
+Declare it in `trusted_proxies` so the client address it appends to `X-Forwarded-For` is believed, or set `client_ip_header` behind an edge that overwrites a header of its own. In production the gateway refuses to start with neither, unless `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` accepts that the per-address limits become one window shared by all callers and that the activity records no address. The proxy must terminate TLS for the host of `public_url`, must not buffer responses (the MCP door streams), must not cap request bodies under `/git/`, and must not add or override the security headers the gateway sets itself. Details: [run behind your own proxy](/docs/install/own-proxy).
+
+The request page keys its window on the signed-in person when there is one, so an anonymous flood never holds a mission's creator out of an approval link.
+
+## The git remote
+
+`https://your-domain/git/<service>/<owner>/<repo>.git` is the agents' git remote ([git remote](/docs/missions/git-remote)). A push body is the pack itself, streamed and never stored: the proxy must not cap or buffer request bodies under `/git/` (the reference Caddyfile does neither).
+
+- `git.max_pack_mb` (200 MiB by default) caps a push, and `git.request_timeout` (10 minutes by default) caps one git request. Node's own server stops receiving a request body after 5 minutes, which bounds the upload time whatever the key says.
+- Temporary refs (`refs/vaubaan/*`) appear in the repositories for the length of a push, or of a pending approval; the instance removes them, and a sweep every five minutes takes those a crash left behind.
+
+## Agents that prepare missions
+
+There is no second MCP door: a person connects their Vaubaan account in one click and gives the agent the key of a mission on it; the agent calls the `vaubaan__*` tools on `/mcp` ([platform management](/docs/missions/platform-management)). The former `oauth.*` keys (`VAUBAAN_OAUTH_*`) are ignored, with one warning at start: remove them. Nothing to configure on the proxy.
 
 ## One process
 
 The instance is one process: rate-limit windows, caches and timers live in its memory, and a second process would neither share nor replace them. A restart or the loss of the host is an outage; durability is what your backups give.
 
-More: [deploy README, Operations](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#operations).
+What the image contains and how it is built: [deploy README](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#what-the-image-contains).

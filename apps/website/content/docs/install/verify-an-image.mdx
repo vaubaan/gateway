@@ -1,0 +1,83 @@
+---
+title: Verify an image
+description: Which released image tag to run, how to check its signed build provenance with the GitHub CLI or cosign, pin its digest, and read its bill of materials.
+---
+
+Verifying an image means checking, before its first start, that the image you pulled is the one the project's release workflow built from the tagged commit, then running it by the digest you checked.
+
+## The released images
+
+Every release publishes one image for `linux/amd64` and `linux/arm64` at `ghcr.io/vaubaan/gateway`.
+
+| Tag               | Moves?                            | Use it for                                    |
+| ----------------- | --------------------------------- | --------------------------------------------- |
+| `2.1.3`           | never                             | production: pin it, or better, pin its digest |
+| `2.1`             | to each patch of 2.1              | following the fixes of one minor              |
+| `latest`          | to each final release             | trying the product                            |
+| `2.2.0-rc.1`, ... | never; pre-releases have no alias | testing what comes next                       |
+
+```bash
+docker pull ghcr.io/vaubaan/gateway:2.1.3
+```
+
+A release cut while the repository is private is `linux/amd64` only and carries no attestation; its release notes say so under "Built from a private repository". The version you run is on `/healthz` (`version`, `commit`) and in the footer of every page.
+
+## Check the provenance
+
+The release pipeline signs a build-provenance attestation: it states that this digest was built by the `release` workflow of `vaubaan/gateway`, from the commit of the tag, on GitHub's runners. With the GitHub CLI (a recent one, signed in):
+
+```bash
+gh attestation verify oci://ghcr.io/vaubaan/gateway:2.1.3 \
+  --repo vaubaan/gateway \
+  --signer-workflow vaubaan/gateway/.github/workflows/release.yml \
+  --source-ref refs/tags/v2.1.3
+```
+
+A zero exit code means the image is the one that tag built; anything else, do not run it. The release pipeline runs this same verification right after it signs, and publishes no release when it fails.
+
+The identity to expect, whatever the tool: a certificate issued by GitHub Actions' OIDC provider to **the `release.yml` workflow of `vaubaan/gateway`, running on a `v2.*` tag**. Sigstore's `cosign` (2.4 or later) checks the same thing:
+
+```bash
+cosign verify-attestation \
+  --new-bundle-format \
+  --type slsaprovenance1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/vaubaan/gateway/\.github/workflows/release\.yml@refs/tags/v2\.' \
+  ghcr.io/vaubaan/gateway:2.1.3 > /dev/null && echo verified
+```
+
+A release without an attestation gives no verify command: pin its digest and rely on its bill of materials.
+
+## Run the digest you verified
+
+A tag can be moved; a digest cannot. Read it, then name it in your Compose file or platform:
+
+```bash
+docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3    # the "Digest:" line
+```
+
+```yaml
+services:
+  gateway:
+    image: ghcr.io/vaubaan/gateway@sha256:<digest>
+```
+
+With the reference Compose file, this line replaces the `build:` block and the `image:` line of the `gateway` service; start it without `--build` ([Docker Compose](/docs/install/docker-compose#run-a-released-image-instead)).
+
+## The bill of materials
+
+Each GitHub release carries the SBOM of the image (SPDX JSON, one file per architecture): every Debian and npm package in it, with its version. Feed it to your own scanner to follow advisories published after the release:
+
+```bash
+trivy sbom vaubaan-gateway-2.1.3-linux-amd64.spdx.json
+grype sbom:vaubaan-gateway-2.1.3-linux-amd64.spdx.json
+```
+
+Every release was scanned before it was published (no HIGH or CRITICAL vulnerability with a fix, as of that day). The image also carries BuildKit's own SBOM and provenance:
+
+```bash
+docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3 --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/vaubaan/gateway:2.1.3 --format '{{ json .Provenance }}'
+```
+
+What a version number promises (configuration keys, refusal codes, the plugin contract, catalog ids): the [versioning policy](https://github.com/vaubaan/gateway/blob/main/docs/workflow/coding-workflow.md#versioning-policy).

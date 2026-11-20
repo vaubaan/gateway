@@ -1,1 +1,1 @@
-{ "title": "Install", "pages": ["docker-compose", "railway"] }
+{ "title": "Install", "pages": ["docker-compose", "railway", "own-proxy", "verify-an-image"] }

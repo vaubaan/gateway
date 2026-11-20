@@ -45,6 +45,35 @@ beforeAll(async () => {
   });
 }, 60_000);
 
+/** A link to a Markdown file of the repository with an anchor: file, anchor. */
+const GITHUB_MD_ANCHOR =
+  /https:\/\/github\.com\/vaubaan\/gateway\/blob\/main\/([^)\]#\s'`]+\.md)#([^)\]\s'`]+)/g;
+
+/**
+ * The anchors GitHub gives the headings of a Markdown file: lower case, inline code and link
+ * targets dropped, punctuation but `-` and `_` removed, each space a `-`, a repeated slug
+ * suffixed `-1`, `-2`. Headings inside fenced code are not headings.
+ */
+function headingSlugs(markdown: string): Set<string> {
+  const slugs = new Set<string>();
+  const seen = new Map<string, number>();
+  let fence = false;
+  for (const line of markdown.split('\n')) {
+    if (/^\s*(`{3,}|~{3,})/.test(line)) fence = !fence;
+    const heading = fence ? null : /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (!heading) continue;
+    const base = (heading[1] ?? '')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\p{M}\s_-]/gu, '')
+      .replace(/\s/g, '-');
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    slugs.add(count === 0 ? base : `${base}-${count}`);
+  }
+  return slugs;
+}
+
 /** Every path the site answers besides its pages: the public files and the live ones. */
 function servedFiles(): Set<string> {
   return new Set([
@@ -245,6 +274,32 @@ describe('links into the repository', () => {
       )) {
         const path = decodeURI(match[1] ?? '').replace(/\/$/, '');
         if (!existsSync(join(REPO_ROOT, path))) missing.add(`${page.path} → ${path}`);
+      }
+    }
+    expect([...missing]).toEqual([]);
+  });
+
+  it('land on a heading of the Markdown file they name, from the site and from the gateway', () => {
+    const links = site.pages.flatMap((page) =>
+      [...page.markdown.matchAll(GITHUB_MD_ANCHOR)].map((match) => ({ from: page.path, match })),
+    );
+    // The gateway's pages link to repository documents too (`project-docs.ts`), and deployed
+    // instances keep those addresses: a heading they land on stays.
+    const projectDocs = readRepoFile('apps/gateway/src/lib/project-docs.ts');
+    links.push(
+      ...[...projectDocs.matchAll(GITHUB_MD_ANCHOR)].map((match) => ({
+        from: 'apps/gateway/src/lib/project-docs.ts',
+        match,
+      })),
+    );
+    expect(links.length).toBeGreaterThan(0);
+    const missing = new Set<string>();
+    for (const { from, match } of links) {
+      const [, file = '', anchor = ''] = match;
+      const path = decodeURI(file);
+      if (!existsSync(join(REPO_ROOT, path))) continue; // the test above reports it
+      if (!headingSlugs(readRepoFile(path)).has(decodeURIComponent(anchor))) {
+        missing.add(`${from} → ${path}#${anchor}`);
       }
     }
     expect([...missing]).toEqual([]);

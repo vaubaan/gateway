@@ -15,7 +15,7 @@ Upgrading an instance means backing it up, running the image of the new version,
    docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d
    ```
 
-   If you build the image from the sources, as the quick start does, check out the new release tag (`git fetch --tags && git checkout v<version>`) and run the same command with `--build`. On Railway, deploy a verified build of the new version ([Railway, step 5](/docs/install/railway#5-deploy-a-verified-build)). The commands to verify an image: [deploy README, Released images](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#released-images).
+   If you build the image from the sources, as the quick start does, check out the new release tag (`git fetch --tags && git checkout v<version>`) and run the same command with `--build`. On Railway, deploy a verified build of the new version ([Railway, step 5](/docs/install/railway#5-deploy-a-verified-build)). The commands to verify an image: [verify an image](/docs/install/verify-an-image).
 
 4. **Check** `/healthz`: it answers the new version and commit.
 

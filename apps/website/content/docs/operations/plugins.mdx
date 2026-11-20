@@ -1,0 +1,61 @@
+---
+title: Plugins on an instance
+description: How an instance gets its plugins — from the catalog at the first connection, uploaded and activated by an administrator, or pinned by the operator — and what to do when one does not load.
+---
+
+A plugin teaches an instance one service; an instance gets it in one of three ways: from the public catalog when a person first connects the service, from an archive an administrator uploads and activates, or from a directory the operator pins in the image or a volume.
+
+## From the catalog, at the first connection
+
+The image ships no service plugin but `ssh` and the management plugin. The first person who connects a service installs the catalog's latest version of its plugin, signed by Vaubaan and verified offline, and it loads at once. The catalog is the repository `vaubaan/gateway-plugins` on GitHub and its releases.
+
+At start and daily, the instance reads the published versions feed (a request that carries nothing about it; `VAUBAAN_UPDATES_CHECK=false` turns it off), and Settings → Administration → Plugins says which plugin is behind, which version an advisory names, and which pin is older than what the image bundles.
+
+Nothing changes for a mission when a plugin version changes: a newer version only narrows what a call may do, and a call it now classifies under a permission the mission does not hold is refused with a permission request.
+
+## Install a plugin from Administration
+
+An administrator can install a plugin without touching the image: Settings → Administration → Plugins → **Install a plugin** uploads the archive `vaubaan-plugin build` writes. It stays inert until an administrator activates it, typing its id; it then starts **on trial** at the next start: if it does not load, the previous version stays and the page says why. Archives are kept on the data volume, beside the store (`/data/plugins/`), the active version and two previous ones.
+
+- **Restart now** ends the process with exit code 75 for its supervisor to start it again: Compose's `restart: unless-stopped` and Railway's on-failure policy do. Elsewhere, restart the instance yourself.
+- **Who signed decides.** An archive of the catalog is signed by Vaubaan and may replace a plugin of the image. A private plugin signed with your company key (`vaubaan-plugin keygen`, then `vaubaan-plugin sign`) installs once an administrator added the public key under **Trusted signers**; every administrator is notified. An unsigned archive installs only for an id `plugins.allow_unsigned` names (`VAUBAAN_PLUGINS_ALLOW_UNSIGNED=crm`), and never for an id of the image. A signer removed turns away, at the next start, every version it signed.
+- **`VAUBAAN_PLUGINS_SAFE_MODE=true`** starts with the image's and the pinned versions only, ignoring every installed one: the way back when the interface cannot be reached. Remove it once the instance answers again.
+
+## Pin a plugin
+
+An instance that cannot reach the catalog, or an operator who wants a version fixed by the deployment, pins it: a pinned plugin replaces an installed one of the same id, and the gateway downloads nothing for it.
+
+A pin is a catalog archive unpacked. Each release `<id>-v<version>` of `vaubaan/gateway-plugins` carries the archive `<id>-v<version>.tgz`, one directory per plugin once unpacked:
+
+```sh
+mkdir -p plugins/notion
+tar -xzf notion-v0.2.0.tgz -C plugins/notion
+```
+
+Then compose an image (`COPY plugins/notion /plugins/notion`) or, with Compose, mount the directory read-only, one sub-directory per plugin:
+
+```yaml
+services:
+  gateway:
+    volumes:
+      - ./plugins/notion:/plugins/notion:ro
+```
+
+The image reads `/plugins` (`VAUBAAN_PLUGINS_DIR`; `plugins.dir` elsewhere). At start, one log line per pin says what it replaces (`plugin notion 0.3.0 pinned from /plugins/notion (replaces bundled 0.2.0)`); Settings → Administration → Plugins shows it too.
+
+`plugins.enabled` (`VAUBAAN_PLUGINS_ENABLED=github,notion`) lists the plugins the instance registers; unset, every bundled, pinned and installed plugin is. A plugin left out has no picker entry, no tools and no Reference page.
+
+## When the start stops
+
+The start stops with exit code 78, like an invalid configuration key, and a message naming the directory, when:
+
+| Message says                                | Meaning and what to do                                                                                                                             |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `was built for @vaubaan/plugin-sdk <range>` | the pin was built for another gateway: pin the build for this one (a newer catalog version)                                                        |
+| `refused:` / `the plugin failed to load`    | the plugin is not one this gateway accepts, or it throws at import: check the archive you copied                                                   |
+| `pins plugin '<id>' again`                  | two directories hold the same plugin: keep one                                                                                                     |
+| `no package.json` / `no risk-catalog.yaml`  | the directory is not an unpacked catalog archive                                                                                                   |
+| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled, pinned, installed nor in the catalog                                                                |
+| `the store holds <n> accounts of '<id>'`    | accounts exist for a plugin you disabled, or one the start could not install from the catalog: enable it, give the instance the catalog, or pin it |
+
+How the gateway loads plugins: [plugin loading handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/plugin-loading.md).

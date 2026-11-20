@@ -5,14 +5,14 @@ description: What an instance needs — a host with Docker or a Railway service,
 
 Installing Vaubaan Gateway means running one Docker image, built from the repository, behind a TLS proxy, with one volume for its database and a configuration that names its public URL, its master key and who administers it.
 
-**Pre-release images.** Releases are published at `ghcr.io/vaubaan/gateway` with a signed provenance attestation; both ways below pull a released image, or build it from the sources. How to pull and verify a released image: [deploy README](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#released-images).
+**Pre-release images.** Releases are published at `ghcr.io/vaubaan/gateway` with a signed provenance attestation; both ways below pull a released image, or build it from the sources. How to pull and verify a released image: [verify an image](/docs/install/verify-an-image).
 
 ## Two ways
 
 - [Docker Compose](/docs/install/docker-compose) on a host you run, with the bundled Caddy proxy that obtains the TLS certificate.
 - [Railway](/docs/install/railway): one service built from the repository's Dockerfile, one volume, GitHub sign-in.
 
-Running the image with your own reverse proxy is described in the [deploy README](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#running-the-image-without-compose).
+Running the image with your own reverse proxy: [run behind your own proxy](/docs/install/own-proxy).
 
 ## Requirements
 
