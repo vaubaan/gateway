@@ -12,7 +12,9 @@
 import { join } from 'node:path';
 
 import type { SiteData } from '../site/data';
+import { drawingAssets } from '../site/drawings';
 import { LANDING_LEDE, landingMarkdown } from '../site/landing';
+import { PRODUCT_PAGES, productPageMarkdown } from '../site/product-pages';
 import { configKeysMarkdown, CONFIG_HANDBOOK, parseConfigKeys } from './config-keys';
 import { loadHandwrittenDocs, orderDocs, withSectionLists, type DocPage } from './docs';
 import { unreadSnapshot, type HealthSnapshot } from './health';
@@ -35,6 +37,8 @@ import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL, trustMarkdown } from
 
 export const DOCS_DIR_FROM_REPO = 'apps/website/content/docs';
 export const KNOWN_LIMITATIONS = 'docs/handbook/known-limitations.md';
+export const CONSULTANTS_TITLE = 'Vaubaan for consultants';
+const DRAWINGS_FACTS = 'apps/website/drawings/facts.json';
 
 export interface GeneratedDoc {
   readonly page: DocPage;
@@ -158,9 +162,11 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   );
 
   const threatModel = readRepoFile(THREAT_MODEL);
-  const serviceNames = plugins.map((p) => p.name);
+  const services = plugins.map((p) => ({ id: p.id, name: p.name }));
   const markdown: Record<string, string> = {
-    '/': landingMarkdown(serviceNames),
+    '/': landingMarkdown(services),
+    '/consultants': landingMarkdown(services, CONSULTANTS_TITLE),
+    ...Object.fromEntries(PRODUCT_PAGES.map((page) => [page.path, productPageMarkdown(page)])),
     '/trust': trustMarkdown({
       acceptedRisks: parseAcceptedRisks(threatModel),
       outOfScope: parseOutOfScope(threatModel),
@@ -180,6 +186,23 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
       markdown: md('/'),
       lastModified: lastModified(['apps/website/src/site/landing.ts', 'plugins']),
     },
+    {
+      path: '/consultants',
+      group: 'product',
+      title: CONSULTANTS_TITLE,
+      description:
+        'Let your assistant handle your mail, notes and calendar alone: it stops where you said, and a mail to a client waits for your yes. Vaubaan for a consultant on Gmail, Notion and Google Calendar.',
+      markdown: md('/consultants'),
+      lastModified: lastModified(['apps/website/src/site/landing.ts', 'plugins']),
+    },
+    ...PRODUCT_PAGES.map((page) => ({
+      path: page.path,
+      group: 'product' as const,
+      title: page.title,
+      description: page.description,
+      markdown: md(page.path),
+      lastModified: lastModified(['apps/website/src/site/product-pages.ts', DRAWINGS_FACTS]),
+    })),
     ...docs.map((doc) => ({
       path: doc.path,
       group: 'docs' as const,
@@ -254,7 +277,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
     pages: pages.map(({ markdown: _markdown, ...meta }) => meta),
   };
 
-  const assets = new Map(plugins.flatMap(connectFigureFiles));
+  const assets = new Map([...plugins.flatMap(connectFigureFiles), ...drawingAssets()]);
 
   return { pages, generatedDocs, plugins: withStatus, files, assets, data };
 }

@@ -200,6 +200,24 @@
 }
 
 /*
+ * The project switch (website spec §2.1; components/site/Project.tsx): a block
+ * marked for one project shows only while its radio is checked, without script.
+ * The developer is the default; a browser without :has() shows the developer's.
+ * Never put a display utility on a [data-project] element: these rules override it.
+ */
+[data-project='consultant'] {
+  display: none;
+}
+
+:root:has(#project-consultant:checked) [data-project='consultant'] {
+  display: revert;
+}
+
+:root:has(#project-consultant:checked) [data-project='dev'] {
+  display: none;
+}
+
+/*
  * A service's mark beside its name on the plugin list, outside the plugin page
  * (`PluginListLink`): the shared sheet's mark, which is scoped to the page.
  */

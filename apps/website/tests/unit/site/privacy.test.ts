@@ -35,8 +35,9 @@ describe('the privacy page', () => {
   it('is linked from the footer of every page, with a Markdown twin', () => {
     // The footer of every page (src/components/Shell.tsx, SiteFooter).
     const shell = readFileSync(join(SITE, 'src/components/Shell.tsx'), 'utf8');
-    const footer = shell.slice(shell.indexOf('export function SiteFooter'));
-    expect(footer).toContain('href="/privacy"');
+    const footer = shell.slice(shell.indexOf('export const FOOTER'));
+    expect(footer).toContain("href: '/privacy'");
+    expect(footer).toContain('export function SiteFooter');
     expect(twinRouteOf('/privacy.md')).toBe(twinRouteOf('/privacy'));
     expect(twinRouteOf('/privacy')).not.toBeNull();
   });

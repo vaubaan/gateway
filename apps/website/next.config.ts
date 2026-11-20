@@ -41,7 +41,8 @@ const nextConfig: NextConfig = {
       },
       {
         // The same address answers HTML or Markdown depending on Accept (src/proxy.ts).
-        source: '/:section(docs|plugins|trust|privacy)/:rest*',
+        source:
+          '/:section(docs|plugins|trust|privacy|how-it-works|teams|consultants|try|write-a-plugin)/:rest*',
         headers: [{ key: 'Vary', value: 'Accept' }],
       },
     ];

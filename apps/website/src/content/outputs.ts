@@ -38,7 +38,7 @@ export const LIVE_FILES = ['plugins.json', 'llms-full.txt'] as const;
 /** The files served by a route rendered once at build (`app/versions.json`). */
 export const BUILT_ROUTE_FILES = ['versions.json'] as const;
 
-export type PageGroup = 'home' | 'docs' | 'plugins' | 'trust';
+export type PageGroup = 'home' | 'product' | 'docs' | 'plugins' | 'trust';
 
 export interface SitePage {
   readonly path: string;
@@ -60,6 +60,7 @@ export function absolute(path: string): string {
 }
 
 const GROUP_TITLES: Readonly<Record<Exclude<PageGroup, 'home'>, string>> = {
+  product: 'Vaubaan',
   docs: 'Docs',
   plugins: 'Plugins',
   trust: 'Trust center',
@@ -75,7 +76,7 @@ export function llmsTxt(pages: readonly SitePage[]): string {
     `Every page below is Markdown at the address given; the HTML page is the same address without \`.md\`. The whole of it in one file: ${absolute('/llms-full.txt')}. Every plugin as JSON: ${absolute('/plugins.json')}. Source: ${GITHUB_REPO}.`,
     '',
   ];
-  for (const group of ['docs', 'plugins', 'trust'] as const) {
+  for (const group of ['product', 'docs', 'plugins', 'trust'] as const) {
     lines.push(`## ${GROUP_TITLES[group]}`, '');
     for (const page of pages.filter((p) => p.group === group)) {
       lines.push(`- [${page.title}](${absolute(twinPathOf(page.path))}): ${page.description}`);

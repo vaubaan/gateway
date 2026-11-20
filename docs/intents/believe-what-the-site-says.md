@@ -48,14 +48,10 @@ acceptance:
 
 ### Read the site as a developer or as a consultant
 
-status: proposed
+status: implemented
 requires: site
+anchors: apps/website/src/components/site/Project.tsx, apps/website/src/components/site/Landing.tsx, apps/website/src/components/site/ProductPageView.tsx, apps/website/src/site/landing.ts, apps/website/src/site/product-pages.ts, apps/website/src/site/drawings.ts, apps/website/drawings/gen.py, apps/website/src/app/consultants/page.tsx, apps/website/tests/unit/site/product-pages.test.ts, apps/website/tests/unit/site/drawings.test.ts
 spec: ../spec/website.md#21-landing--
-acceptance:
-
-- A switch on every page shows the examples and drawings of a developer on GitHub and Supabase, or of a consultant on Gmail, Notion and Google Calendar
-- The switch works without JavaScript and is remembered on this browser only
-- The consultants' page opens on the consultant's examples
 
 ### Read each service's page from the catalog
 
@@ -121,9 +117,7 @@ acceptance:
 
 ### Keep the README's pitch in step with the site
 
-status: proposed
+status: implemented
 requires: site
+anchors: README.md, apps/website/src/site/landing.ts, apps/website/tests/unit/site/product-pages.test.ts
 spec: ../spec/website.md#21-landing--
-acceptance:
-
-- A check fails when the README's first lines differ from the landing's defining sentence and promise

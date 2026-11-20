@@ -107,7 +107,19 @@ describe('the pages of the site', () => {
       // The connect guide is section 9 of the plugin page: no page of its own.
       expect(paths).not.toContain(`/docs/providers/${plugin.id}`);
     }
-    for (const path of ['/', '/docs', '/plugins', '/plugins/health', '/trust', '/privacy']) {
+    for (const path of [
+      '/',
+      '/consultants',
+      '/how-it-works',
+      '/teams',
+      '/try',
+      '/write-a-plugin',
+      '/docs',
+      '/plugins',
+      '/plugins/health',
+      '/trust',
+      '/privacy',
+    ]) {
       expect(paths).toContain(path);
     }
     expect(new Set(paths).size).toBe(paths.length);
