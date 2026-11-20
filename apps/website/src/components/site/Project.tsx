@@ -119,7 +119,8 @@ export function VariantText({ text }: { readonly text: Text }) {
 /**
  * A drawing in both projects, light or dark after the system: a `<picture>`
  * per project, the hidden one never loaded (lazy). At phone width it keeps a
- * readable size and scrolls sideways in its own box, never the page.
+ * readable size and scrolls sideways in its own box, never the page; a tap
+ * opens the drawing alone, where the browser zooms it.
  */
 export function Drawing({
   name,
@@ -134,7 +135,11 @@ export function Drawing({
         const info = drawingInfo(name, p);
         return (
           <ForProject key={p} project={p}>
-            <div className="overflow-x-auto rounded-xl">
+            <a
+              href={drawingSrc(name, p, 'light')}
+              className="block overflow-x-auto rounded-xl"
+              title="Open the drawing alone"
+            >
               <picture>
                 <source media="(prefers-color-scheme: dark)" srcSet={drawingSrc(name, p, 'dark')} />
                 <img
@@ -147,7 +152,7 @@ export function Drawing({
                   className="h-auto w-full min-w-[640px]"
                 />
               </picture>
-            </div>
+            </a>
           </ForProject>
         );
       })}
