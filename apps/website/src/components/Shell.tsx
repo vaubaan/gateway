@@ -55,6 +55,10 @@ export function SiteFooter() {
           <Link href="/trust" prefetch={false}>
             Trust center
           </Link>{' '}
+          ·{' '}
+          <Link href="/privacy" prefetch={false}>
+            Privacy
+          </Link>{' '}
           · <a href="/llms.txt">llms.txt</a> · <a href="/plugins.json">plugins.json</a> ·{' '}
           <a href={`${GITHUB_REPO}/blob/main/SECURITY.md`}>Report a vulnerability</a>
         </p>

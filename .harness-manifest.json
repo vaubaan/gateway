@@ -6,7 +6,7 @@
     "codex-cli",
     "opencode"
   ],
-  "renderedAt": "2026-11-20T14:16:36.437Z",
+  "renderedAt": "2026-11-20T14:59:20.217Z",
   "files": [
     ".agents/skills/decision-record-writer/SKILL.md",
     ".agents/skills/doc-audit/SKILL.md",
@@ -87,6 +87,6 @@
     ".opencode/commands/workflow.md": "769b18667fdc004de7293cdf2ea0ddd0491bd3df5a109f943ebe779090a023df",
     "AGENTS.md": "3f52d9c172326f40b609989492d094e48b01e5638ada4f6cbb01e860eee9b77c",
     "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
-    "docs/intents/README.md": "f5a765fa0cf430af2e570ebee35dcb52e47dd553586c4f2e91e883dd03c277d9"
+    "docs/intents/README.md": "39f9f30afb30908e4ca323d40253c12b5ef9758a96a98e506566595468fd1cd1"
   }
 }

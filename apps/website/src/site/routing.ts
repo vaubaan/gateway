@@ -38,7 +38,7 @@ export function hostDecision(
   return 'not-found';
 }
 
-const TWINNED = /^\/(docs|plugins|trust)(\/[a-z0-9][a-z0-9/-]*)?$/;
+const TWINNED = /^\/(docs|plugins|trust|privacy)(\/[a-z0-9][a-z0-9/-]*)?$/;
 
 /** True when the client prefers Markdown: `text/markdown` is named and `text/html` is not ranked above it. */
 export function wantsMarkdown(accept: string | null): boolean {

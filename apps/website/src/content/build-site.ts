@@ -29,6 +29,7 @@ import {
 import { connectFigureFiles, type PluginInfo } from './plugins';
 import { readRepoFile } from './repo';
 import { THRESHOLDS_SOURCE, type ValidationThresholds } from './thresholds';
+import { privacyMarkdown } from './privacy';
 import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL, trustMarkdown } from './trust';
 
 export const DOCS_DIR_FROM_REPO = 'apps/website/content/docs';
@@ -158,6 +159,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
       outOfScope: parseOutOfScope(threatModel),
       thresholds,
     }),
+    '/privacy': privacyMarkdown(),
     ...pluginGroupMarkdown(withStatus, thresholds, UNREAD),
   };
   const md = (path: string): string => markdown[path] ?? '';
@@ -217,6 +219,15 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
         'SECURITY.md',
         'deploy/collector/README.md',
       ]),
+    },
+    {
+      path: '/privacy',
+      group: 'trust',
+      title: 'Privacy',
+      description:
+        "What the project's own services do with personal data: this site, the telemetry collector, and Vaubaan's OAuth broker with your Google data.",
+      markdown: md('/privacy'),
+      lastModified: lastModified(['apps/website/src/content/privacy.ts']),
     },
   ];
 
