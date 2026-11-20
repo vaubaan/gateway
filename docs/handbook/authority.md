@@ -10,7 +10,7 @@ tracks:
   - apps/gateway/src/server/execution/admission.ts
   - apps/gateway/src/server/auth/login.ts
   - apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-20
 ---
 
 # Authority — handbook
@@ -58,7 +58,8 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
   state. Classify the act in `tests/integration/audit/admin-mutations.test.ts`.
 - Two settlers may see the same change: `settle` writes through `appendUnlessLatest`, so the
   first one is named and the other writes nothing. Only the settler whose entry was written
-  tells the creator's devices that the mission is orphaned ([notifications](notifications.md)).
+  tells the creator that the mission is orphaned or lost an account
+  ([notifications](notifications.md)).
 - Known gap (`// single-process only` above `watch()`): an act undone by another before it settles
   leaves a `mission-restored` with no `mission-orphaned` before it. A change no service watched (a
   database repair) has no entry.
@@ -67,8 +68,9 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
   without asking.
 - `reactivate` reruns the deactivation's closings before restoring the status, so a user never
   returns holding what a half-failed deactivation left open.
-- The admin rule counts IdP-claimed groups only; an IdP claim whose name a local group holds is
-  skipped (log `IdP group claim collides with a local group`).
+- The admin rule counts only a membership claimed by the designated group's own sign-in provider;
+  a claim whose name a local group or a group of another sign-in provider holds is skipped (log
+  `group claim collides with a local group or a group of another sign-in provider`).
 
 ## Debug
 
