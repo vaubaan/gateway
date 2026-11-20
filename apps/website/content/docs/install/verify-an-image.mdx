@@ -35,7 +35,7 @@ gh attestation verify oci://ghcr.io/vaubaan/gateway:2.1.3 \
 
 A zero exit code means the image is the one that tag built; anything else, do not run it. The release pipeline runs this same verification right after it signs, and publishes no release when it fails.
 
-The identity to expect, whatever the tool: a certificate issued by GitHub Actions' OIDC provider to **the `release.yml` workflow of `vaubaan/gateway`, running on a `v2.*` tag**. Sigstore's `cosign` (2.4 or later) checks the same thing:
+The identity to expect, whatever the tool: a certificate issued by GitHub Actions' OIDC issuer to **the `release.yml` workflow of `vaubaan/gateway`, running on a `v2.*` tag**. Sigstore's `cosign` (2.4 or later) checks the same thing:
 
 ```bash
 cosign verify-attestation \

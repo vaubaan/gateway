@@ -1,11 +1,11 @@
 ---
 title: Plugins on an instance
-description: How an instance gets its plugins — from the catalog at the first connection, uploaded and activated by an administrator, or pinned by the operator — and what to do when one does not load.
+description: How an instance gets its plugins — from the catalog when its service's first account is connected, uploaded and activated by an administrator, or pinned by the operator — and what to do when one does not load.
 ---
 
 A plugin teaches an instance one service; an instance gets it in one of three ways: from the public catalog when a person first connects the service, from an archive an administrator uploads and activates, or from a directory the operator pins in the image or a volume.
 
-## From the catalog, at the first connection
+## From the catalog, when a service's first account is connected
 
 The image ships no service plugin but `ssh` and the management plugin. The first person who connects a service installs the catalog's latest version of its plugin, signed by Vaubaan and verified offline, and it loads at once. The catalog is the repository `vaubaan/gateway-plugins` on GitHub and its releases.
 
