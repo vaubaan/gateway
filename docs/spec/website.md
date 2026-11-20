@@ -20,16 +20,23 @@ status: draft
   instance.
 - **User docs** — for people who install, run and use an instance; distinct from the contributor
   handbooks.
+- **Author guide** — for people who write a plugin with the published kit; public, on the site,
+  distinct from the contributors' handbooks.
 
 ## 1. Vision
 
 A visitor, without signing up, can answer: what does it do and is it for me; how do I install it;
 can I trust it with my cloud credentials; does the plugin for my service work.
 
-- Readers, by priority: the **evaluator** (pitch, a five-minute demo), the **operator** (commands
-  that work as written), the **security reviewer** (threat model, what is not covered, exact
-  telemetry, no marketing), the **plugin contributor**, and an **assistant or agent** reading for
-  one of them (§2.6).
+- Readers, by priority: the **evaluator**, first one person giving missions to their own agents,
+  then the team they bring (pitch, a five-minute demo); the **operator** (commands that work as
+  written); the **security reviewer** (threat model, what is not covered, exact telemetry, no
+  marketing); the **plugin author**; and an **assistant or agent** reading for one of them (§2.6).
+- Examples come in two projects that speak to everyone: a developer on their code host and
+  database, a consultant on their mail, notes and calendar.
+- **One home per audience**: user docs and the author guide live on the site; the repository keeps
+  what contributors need and links to the site for procedures
+  ([ADR](../decisions/user-and-author-docs-live-on-the-site.md)).
 - The site is honest: pre-release, no third-party audit, no certification.
 
 ### 1.1 Explicitly out of scope
@@ -56,7 +63,20 @@ In English; every command works on the released image. Concepts in the interface
 ways; each service's guide is on its plugin page, §2.3 item 9, and the former per-service pages
 redirect there), missions and agents (clients, platform management, git remote), operations (backup, key rotation,
 upgrade, retention, telemetry), accounts, administration, known limitations. Every page of the
-gateway's interface links to one of these pages.
+gateway's interface links to one of these pages, and a page it links to keeps its path and its
+heading anchors (a moved page leaves a redirect, §2.6).
+
+- **Tutorials**, one per worked project (the developer, the consultant) and one for bringing a
+  team; each is run end to end on a real instance before it is published.
+- **Generated references**, never written by hand: the configuration keys, the known limitations,
+  the refusal codes and what to do about each, and the rows by trust level.
+- **No page for what is not built**: a planned feature (the desktop app) appears only as its
+  proposed intent in the roadmap.
+
+### 2.2 bis Author guide — `/docs/plugins-guide`
+
+How to write, test, sign and publish a plugin with the published kit, never with paths of this
+repository. The kit's skills and scaffold link to it rather than restate it.
 
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
 
