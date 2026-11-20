@@ -60,3 +60,15 @@ acceptance:
 
 - The tool list a mission's agent receives leaves out the tools no permission of the mission allows
 - A tool hidden this way still answers with its refusal code if called by name
+
+## Let my agent find the resources of its mission
+
+status: proposed
+requires: mission
+spec: ../spec/vaubaan-gateway.md#41-execution-surface
+acceptance:
+
+- A service's list tool answers the mission's resources of that account, at least id and name, and says the others are left out
+- A resource named by its id or by the name the service shows is accepted alike
+- Every argument a plugin requires to route a call is declared in that tool's input schema
+- A tool the service no longer exposes fails with a message that names the plugin as behind the service

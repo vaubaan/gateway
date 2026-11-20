@@ -7,10 +7,12 @@
  *        https://mcp.vercel.com/, custom tools on https://api.vercel.com).
  *
  * Two upstream surfaces, one bearer :
- *   - the 18 rewrapped tools are one `tools/call` to the official Vercel MCP
+ *   - the rewrapped tools are one `tools/call` to the official Vercel MCP
  *     server through the SDK's client (`callUpstreamTool`) ; Vercel's tool
  *     result is passed through, its own `isError` included ;
- *   - the 14 custom tools hit the REST API directly (`httpJson`).
+ *   - the 14 custom tools, and the rewrapped reads of `REST_READ_TOOLS`
+ *     (`rest-reads.ts`), hit the REST API directly (`httpJson`) ;
+ *     `list_projects` answers the mission's projects without a request.
  *
  * Rules :
  *   - `fetch` and the signal come from the context, never from the global ;
@@ -31,9 +33,9 @@
  *     one-place-to-authorize-services-token-first, amendment 2026-11-11)
  *     refuses every `teamId` argument and names no team to the REST API
  *     (Vercel infers it from the token) ; Vercel's MCP server rejects such a
- *     token (401 `invalid_token`), so the essential reads of the rewrapped
- *     tools go to the REST API (`PROJECT_REST_TOOLS`, `project-mode.ts`) and
- *     every other rewrapped tool is refused before any request ; a call
+ *     token (401 `invalid_token`) : only the reads the REST API serves run
+ *     (`REST_READ_TOOLS`), every other rewrapped tool is refused before any
+ *     request ; a call
  *     naming another project is refused, and discovery returns that project
  *     alone ;
  *   - the project is the one the classifier resolved (`resolveProject`, the
@@ -86,10 +88,11 @@ import { SERVICE_ID, TOOL, VERCEL_API_BASE, VERCEL_MCP_SERVER } from './identity
 import {
   buildLogsQuery,
   listDeploymentsQuery,
+  missionProjects,
   projectModeRefusal,
-  PROJECT_REST_TOOLS,
+  REST_READ_TOOLS,
   shapeBuildLogs,
-} from './project-mode.ts';
+} from './rest-reads.ts';
 import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
 import { isCustomTool, toUpstreamName, toolAcceptsArgument, vercelToolByName } from './tools.ts';
@@ -156,8 +159,8 @@ export async function executeVercel(
     const bound = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
     const result = isCustomTool(tool)
       ? jsonResult(await executeCustom(call, tool, bound.args))
-      : auth.mode === 'project'
-        ? jsonResult(await executeProjectRest(call, tool, bound))
+      : REST_READ_TOOLS.has(tool)
+        ? jsonResult(await executeRestRead(call, tool, bound, ctx.resources))
         : await callUpstreamTool(ctx, VERCEL_MCP_SERVER, token, toUpstreamName(tool), bound.args);
     // A project object carries env values and deploy-hook URLs (`project-redact.ts`).
     return PROJECT_TOOLS.has(tool) ? redactProjectResult(result) : result;
@@ -329,8 +332,8 @@ function pinArgs(
     throw new ExecutorRefusal(`unknown vercel tool '${tool}'.`);
   }
   // Vercel's MCP server answers 401 to a project token : only the reads the
-  // REST API serves run (`project-mode.ts`).
-  if (auth.mode === 'project' && !isCustomTool(tool) && !PROJECT_REST_TOOLS.has(tool)) {
+  // REST API serves run (`rest-reads.ts`).
+  if (auth.mode === 'project' && !isCustomTool(tool) && !REST_READ_TOOLS.has(tool)) {
     throw new ExecutorRefusal(projectModeRefusal(tool, auth.projectId));
   }
   if (auth.mode === 'project' && args.teamId !== undefined) {
@@ -470,21 +473,23 @@ async function bindDeployments(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Project mode : the rewrapped reads served by the REST API
+// The rewrapped reads served by the REST API, in both modes
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A rewrapped read of a project-mode account, through the REST API without
- * `teamId` (`project-mode.ts`). `pinArgs` refused every other rewrapped tool
- * and wrote the project ; `bindDeployments` verified the deployment, whose
- * lookup is `get_deployment`'s answer.
+ * A rewrapped read served without Vercel's MCP server (`rest-reads.ts`),
+ * under the account's team (`teamQuery`, none for a project token).
+ * `pinArgs` wrote the project ; `bindDeployments` verified the deployment,
+ * whose lookup is `get_deployment`'s answer.
  */
-async function executeProjectRest(
+async function executeRestRead(
   call: VercelCall,
   tool: string,
   bound: BoundArgs,
+  resources: readonly Resource[],
 ): Promise<unknown> {
   const { args, deployments } = bound;
+  if (tool === TOOL.listProjects) return missionProjects(resources);
   if (tool === TOOL.getDeployment || tool === TOOL.getDeploymentBuildLogs) {
     const deployment = deployments[0];
     if (deployment === undefined) throw new ExecutorRefusal(`${tool}: idOrUrl is required.`);
@@ -495,7 +500,7 @@ async function executeProjectRest(
       call,
       'GET',
       `/v3/deployments/${id}/events`,
-      buildLogsQuery(args),
+      { ...buildLogsQuery(args), ...teamQuery(call) },
       anyJson,
     );
     return shapeBuildLogs(id, events);
@@ -503,12 +508,13 @@ async function executeProjectRest(
   const project = pathIdent(args.projectId);
   if (project === null) throw new ExecutorRefusal(`${tool}: projectId is required.`);
   if (tool === TOOL.getProject) {
-    return rest(call, 'GET', `/v9/projects/${project}`, {}, anyJson);
+    return rest(call, 'GET', `/v9/projects/${project}`, teamQuery(call), anyJson);
   }
   if (tool === TOOL.listDeployments) {
-    return rest(call, 'GET', '/v6/deployments', listDeploymentsQuery(project, args), anyJson);
+    const query = { ...listDeploymentsQuery(project, args), ...teamQuery(call) };
+    return rest(call, 'GET', '/v6/deployments', query, anyJson);
   }
-  throw new ExecutorRefusal(`${tool}: not served for an account scoped to one project.`);
+  throw new ExecutorRefusal(`${tool}: not served through the REST API.`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

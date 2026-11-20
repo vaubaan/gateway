@@ -55,13 +55,19 @@ describe('demo: simulated Vercel', () => {
     expect(envs.isError ?? false).toBe(false);
     expect(textOf(envs)).toContain('API_BASE_URL');
 
+    // Served by the REST API (the plugin's `rest-reads.ts`), the project named by its name.
     const deployments = await vercelPlugin.execute(ctx, 'vercel__list_deployments', {
-      projectId: project.id,
-      teamId: 'team_demo',
+      projectId: project.name,
     });
     expect(deployments.isError ?? false).toBe(false);
     expect(textOf(deployments)).toContain('production');
     expect(textOf(deployments)).toContain('preview');
+
+    const logs = await vercelPlugin.execute(ctx, 'vercel__get_runtime_logs', {
+      projectId: project.id,
+    });
+    expect(logs.isError ?? false).toBe(false);
+    expect(textOf(logs)).toContain('Build completed');
   });
 
   it('never dials the service: discovery was answered by simulated routes', async () => {

@@ -3,24 +3,27 @@ title: Vercel plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
-last_reviewed: 2026-11-19
+last_reviewed: 2026-11-20
 ---
 
 # Vercel plugin — handbook
 
 `@vaubaan/plugin-vercel` rewraps Vercel's MCP server (`mcp.vercel.com`, tools frozen in
-`src/upstream-tools.json`) and adds REST tools ([ADR](../../decisions/rewrap-official-mcps.md)).
-Resource: the project; the environment is a slice segment, not a resource label.
+`src/upstream-tools.json`) and adds REST tools ([ADR](../../decisions/rewrap-official-mcps.md),
+amendment 2026-11-20: the first reads never reach the MCP server). Resource: the project; the
+environment is a slice segment, not a resource label.
 
 ## Start here
 
-- [`src/classify.ts`](../../../plugins/vercel/src/classify.ts) — `resolveProject`, the id grammars,
-  `readDeploymentTargets`, `vercelEnvOf`, `UNBOUND_TOOLS`.
+- [`src/classify.ts`](../../../plugins/vercel/src/classify.ts) — `resolveProject` (id or name),
+  the id grammars, `readDeploymentTargets`, `vercelEnvOf`, `UNBOUND_TOOLS`.
+- [`src/tools.ts`](../../../plugins/vercel/src/tools.ts) — the declared schema an agent reads
+  (`projectId` added, `teamId` never required) and the forward schema (`toolAcceptsArgument`).
 - [`src/credential.ts`](../../../plugins/vercel/src/credential.ts) — `vercelAuth` (the mode from
   the field there), `verifyVercelToken`, the two alternatives.
 - [`src/execute.ts`](../../../plugins/vercel/src/execute.ts) — `pinArgs`, `bindDeployments`,
-  `executeProjectRest`, `discoverOneProject`; [`src/project-mode.ts`](../../../plugins/vercel/src/project-mode.ts)
-  — what a project-mode account runs instead of the MCP server.
+  `executeRestRead`, `discoverOneProject`; [`src/rest-reads.ts`](../../../plugins/vercel/src/rest-reads.ts)
+  — the reads served without the MCP server, in both modes.
 - [`src/redact.ts`](../../../plugins/vercel/src/redact.ts) and
   [`src/project-redact.ts`](../../../plugins/vercel/src/project-redact.ts) — redaction of metadata
   reads.
@@ -47,16 +50,27 @@ Resource: the project; the environment is a slice segment, not a resource label.
   every `teamId` argument is refused, the right one included; REST requests carry no `teamId`
   (Vercel infers team and project from the token); a resolved project other than `project_id` is
   refused, so a mission holding two projects cannot reach the second through this account.
-  Nothing of this account reaches Vercel's MCP server (see Traps): `get_project`
+  Nothing of this account reaches Vercel's MCP server (see Traps): only the REST reads below run;
+  every other rewrapped tool is refused before any request, naming the team account as the way. A
+  deployment lookup skips the `ownerId` check (no team to compare) and keeps the `projectId` one.
+  Discovery still keeps the project's `accountId` as `team_id`, for display only.
+- **Reads served without the MCP server, both modes** (`REST_READ_TOOLS`,
+  [`src/rest-reads.ts`](../../../plugins/vercel/src/rest-reads.ts)): `get_project`
   (`GET /v9/projects/{id}`), `list_deployments` (`GET /v6/deployments?projectId=…`, 20 per page,
   `pagination.next` as the next `until`), `get_deployment` (the binding lookup's own answer) and
   `get_deployment_build_logs` (`GET /v3/deployments/{id}/events?follow=0&direction=backward`, at
-  most 1 000 lines, reduced to `created`/`type`/`text`, oldest first) go to the REST API
-  (`PROJECT_REST_TOOLS`, [`src/project-mode.ts`](../../../plugins/vercel/src/project-mode.ts)),
-  same names, schemas, classification and redaction; every other rewrapped tool is refused before
-  any request, naming the team account as the way. A deployment lookup skips the `ownerId` check
-  (no team to compare) and keeps the `projectId` one. Discovery still keeps the project's
-  `accountId` as `team_id`, for display only.
+  most 1 000 lines, reduced to `created`/`type`/`text`, oldest first), under `teamId` in team mode;
+  same names, declared schemas, classification and redaction. `list_projects` makes no request: it
+  answers the mission's projects of the account from the resources (`id`, `name`, `framework`,
+  team), so the names it lists are the names `projectId` accepts.
+- **A project is named by its id or its name** (`resolveProject`): the resource's `ref` (`prj_…`)
+  or its `displayName` (Vercel's project slug, as discovered); a name two mission projects share is
+  refused, asking for the id. The slice and every request carry the id. Refusals name the mission's
+  projects (`name (id)`, ten at most).
+- **Declared schema ≠ forward schema** (`tools.ts`): every project-rooted rewrapped tool declares
+  `projectId` to the agent even when Vercel's schema lacks it (`get_deployment`, the URL tools),
+  and no tool lists `teamId` as required. What is sent follows the frozen upstream schema
+  (`toolAcceptsArgument`): a `projectId` Vercel's closed schema lacks only selects the project.
 - **Teamless rewrapped tools** (team mode): those that cannot carry `teamId`
   (`TEAMLESS_UPSTREAM_TOOLS`) are forwarded only when they read no team data or after their
   deployment is resolved under the pinned team; any other teamless tool is refused
@@ -84,11 +98,17 @@ Resource: the project; the environment is a slice segment, not a resource label.
 
 ## Traps
 
+- Vercel's MCP server changes its tools without notice (2026-11-20: `get_deployment_build_logs`
+  "Tool not found", `get_project` wanting `idOrName`, every answer wrapped in `{ "result": … }`,
+  which the project redaction replaced whole). The frozen list is not refreshed by CI: refreshing
+  needs a team token (`tools/list` on `mcp.vercel.com`). A forwarded tool the server dropped fails
+  with `UpstreamToolMissing` ("no longer exposes the tool"); a read an agent cannot work without
+  goes to `rest-reads.ts`, never stays a forward.
 - Vercel's MCP server rejects a token scoped to one project: every `tools/call` answers
   `401 {"error":"invalid_token"}` (plain curl reproduces it; a team-scoped token works), while the
   REST API accepts the same token. Before 4.2.2 every rewrapped tool of a "One project" account
   failed with that 401, and the host marked the account `expired`. A rewrapped tool added to
-  project mode needs a REST equivalent in `project-mode.ts`, never a forward.
+  project mode needs a REST equivalent in `rest-reads.ts`, never a forward.
 - `GET /v1/security/firewall/config/active` answers `404 {"error":{"code":"not_found","message":
 "Config not found"}}` for a project whose firewall was never configured: `get_firewall_config`
   answers `active: null` (both modes); any other 404 is still an upstream failure.
@@ -121,6 +141,11 @@ Resource: the project; the environment is a slice segment, not a resource label.
   ID".
 
 ## Debug
+
+- `list_projects` answers `[redacted by Vaubaan]`, or `projectId` named by its name is refused, or
+  `get_deployment_build_logs` fails "Tool … not found" → plugin older than 4.3.0: update it.
+- `no longer exposes the tool '…'` → Vercel's MCP server dropped a rewrapped tool: refresh
+  `upstream-tools.json` (team token, `tools/list`), or serve the read from the REST API.
 
 - `deployment '…' does not belong to vercel project '…'` → pass the right `projectId`;
   `could not be verified` → another team, deleted, or a custom domain: use the deployment id or its

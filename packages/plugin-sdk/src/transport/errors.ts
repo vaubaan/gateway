@@ -46,3 +46,24 @@ export class UpstreamAnswerTooLarge extends UpstreamProtocolError {
     this.name = 'UpstreamAnswerTooLarge';
   }
 }
+
+/**
+ * The upstream MCP server does not know the tool the plugin called : its
+ * `tools/call` answered "tool not found" (JSON-RPC `-32602`, or `-32601`).
+ * The plugin's frozen tool list is behind the service, and the message says
+ * so, for the agent and for the person who updates the plugin. Still an
+ * `UpstreamProtocolError` : the host records the service's failure.
+ */
+export class UpstreamToolMissing extends UpstreamProtocolError {
+  constructor(
+    server: string,
+    readonly tool: string,
+    serviceText: string,
+  ) {
+    super(
+      `${server} no longer exposes the tool '${tool}' (${serviceText}) : this plugin's tool list ` +
+        `is behind the service. Update the plugin ; until then, another tool of the plugin may serve.`,
+    );
+    this.name = 'UpstreamToolMissing';
+  }
+}

@@ -75,22 +75,32 @@ describe('executeVercel — a deployment-addressed tool runs only on a deploymen
   );
 
   test.each(DEPLOYMENT_ADDRESSED)(
-    '$tool : a deployment of the mission project is forwarded',
+    '$tool : a deployment of the mission project is served',
     async ({ tool, args, key }) => {
-      const fetch = mockFetch([deploymentRoute(key, OWN), mcpRoute]);
+      const events = { method: 'GET', url: /\/v3\/deployments\/dpl_own\/events\?/, body: [] };
+      const fetch = mockFetch([deploymentRoute(key, OWN), events, mcpRoute]);
       const result = await vercelPlugin.execute(ctx(fetch), tool, args);
       expect(result.isError).toBeUndefined();
-      expect(fetch.calls).toHaveLength(2);
-      expect(isMcpCall(fetch.calls[1]!)).toBe(true);
+      // `get_deployment` answers the lookup itself ; the build logs read the events (`rest-reads.ts`).
+      if (tool === 'vercel__get_deployment') expect(fetch.calls).toHaveLength(1);
+      else if (tool === 'vercel__get_deployment_build_logs') {
+        expect(fetch.calls.map(isMcpCall)).toEqual([false, false]);
+      } else {
+        expect(fetch.calls).toHaveLength(2);
+        expect(isMcpCall(fetch.calls[1]!)).toBe(true);
+      }
     },
   );
 
   test('the id-addressed tools forward the verified deployment id, not the caller spelling', async () => {
-    const fetch = mockFetch([deploymentRoute('app-git-main.vercel.app', OWN), mcpRoute]);
-    await vercelPlugin.execute(ctx(fetch), 'vercel__get_deployment', {
+    const fetch = mockFetch([
+      deploymentRoute('app-git-main.vercel.app', OWN),
+      { method: 'GET', url: /\/v3\/deployments\/dpl_own\/events\?/, body: [] },
+    ]);
+    await vercelPlugin.execute(ctx(fetch), 'vercel__get_deployment_build_logs', {
       idOrUrl: 'https://app-git-main.vercel.app/some/path',
     });
-    expect(forwardedArgs(fetch.calls[1]!)).toEqual({ idOrUrl: 'dpl_own', teamId: TEAM });
+    expect(new URL(fetch.calls[1]!.url).pathname).toBe('/v3/deployments/dpl_own/events');
 
     const logs = mockFetch([deploymentRoute('dpl_x', OWN), mcpRoute]);
     await vercelPlugin.execute(ctx(logs), 'vercel__get_runtime_logs', { deploymentId: 'dpl_x' });
@@ -186,27 +196,32 @@ describe('executeVercel — a deployment-addressed tool runs only on a deploymen
 
   test('with several mission projects the named one is the one the deployment must belong to', async () => {
     const wrong = mockFetch([deploymentRoute('dpl_x', OWN), mcpRoute]);
-    const refused = await vercelPlugin.execute(ctx(wrong, [app, site]), 'vercel__get_deployment', {
-      projectId: 'prj_site',
-      idOrUrl: 'dpl_x',
-    });
+    const refused = await vercelPlugin.execute(
+      ctx(wrong, [app, site]),
+      'vercel__get_runtime_logs',
+      {
+        projectId: 'site',
+        deploymentId: 'dpl_x',
+      },
+    );
     expect(refused.isError).toBe(true);
     expect(text(refused)).toMatch(/does not belong to vercel project 'prj_site'/);
     expect(wrong.calls.filter(isMcpCall)).toHaveLength(0);
 
     const right = mockFetch([deploymentRoute('dpl_x', OWN), mcpRoute]);
-    await vercelPlugin.execute(ctx(right, [app, site]), 'vercel__get_deployment', {
-      projectId: 'prj_abc',
-      idOrUrl: 'dpl_x',
+    await vercelPlugin.execute(ctx(right, [app, site]), 'vercel__get_access_to_vercel_url', {
+      projectId: 'app',
+      url: 'https://dpl_x/',
     });
-    // `projectId` selected the project ; the upstream schema has no such argument.
-    expect(forwardedArgs(right.calls[1]!)).toEqual({ idOrUrl: 'dpl_own', teamId: TEAM });
+    // `projectId` selected the project by its name ; the upstream schema has no such argument.
+    expect(forwardedArgs(right.calls[1]!)).toEqual({ url: 'https://dpl_x/' });
 
     const none = mockFetch([]);
     const ambiguous = await vercelPlugin.execute(ctx(none, [app, site]), 'vercel__get_deployment', {
       idOrUrl: 'dpl_x',
     });
     expect(ambiguous.isError).toBe(true);
+    expect(text(ambiguous)).toContain('Projects of this mission: app (prj_abc), site (prj_site)');
     expect(none.calls).toHaveLength(0);
   });
 

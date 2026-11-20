@@ -1,6 +1,7 @@
 /**
- * Redaction of the project object returned by `vercel__get_project`,
- * `vercel__list_projects` and `vercel__update_project_settings`.
+ * Redaction of the project object returned by `vercel__get_project` and
+ * `vercel__update_project_settings` (`list_projects` answers the mission's
+ * projects from the gateway's resources, id, name and framework only).
  *
  * Handbook : docs/handbook/services/vercel.md (projects).
  *
@@ -27,7 +28,6 @@ import { isEmpty, REDACTED_VALUE, redactEntry } from './redact.ts';
  */
 export const PROJECT_TOOLS: ReadonlySet<string> = new Set([
   TOOL.getProject,
-  TOOL.listProjects,
   TOOL.updateProjectSettings,
 ]);
 

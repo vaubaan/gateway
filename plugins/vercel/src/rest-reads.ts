@@ -1,18 +1,27 @@
 /**
- * The rewrapped tools of an account scoped to one project (`project_id`).
+ * The rewrapped reads the plugin serves through the REST API, in both modes.
  *
- * Handbook : docs/handbook/services/vercel.md (project mode).
+ * Handbook : docs/handbook/services/vercel.md (reads served by the REST API).
+ * ADR      : docs/decisions/rewrap-official-mcps.md (amendment 2026-11-20).
  *
- * Vercel's MCP server rejects a token scoped to one project : every
- * `tools/call` answers `401 {"error":"invalid_token"}`, while the REST API
- * accepts the same token without `teamId` (checked live 2026-11-19). In
- * project mode the essential reads are therefore served through the REST API
- * — same tool names, same input schemas, same classification — and every
- * other rewrapped tool is refused before any request (`projectModeRefusal`).
+ * Why not Vercel's MCP server :
+ *   - it rejects a token scoped to one project : every `tools/call` answers
+ *     `401 {"error":"invalid_token"}`, while the REST API accepts the same
+ *     token without `teamId` (checked live 2026-11-19) ;
+ *   - it changes its tools under the plugin : on 2026-11-20
+ *     `get_deployment_build_logs` answered "Tool not found" and `get_project`
+ *     wanted `idOrName` instead of the frozen `projectId`, and every answer
+ *     came wrapped in `{ "result": … }`, which the project redaction then
+ *     replaced whole. These reads are what an agent needs first to find its
+ *     way : they no longer depend on the server's tool list.
+ *
+ * Same tool names, same declared schemas, same classification and
+ * redaction ; every other rewrapped tool of a project-mode account is refused
+ * before any request (`projectModeRefusal`).
  *
  * Read on Vercel's REST reference and live on 2026-11-19 :
  *   - `GET /v9/projects/{id}` : the project object (redacted by
- *     `project-redact.ts`, like the MCP answer) ;
+ *     `project-redact.ts`) ;
  *   - `GET /v6/deployments?projectId=…&limit=…&since=…&until=…` :
  *     `{ deployments, pagination: { count, next, prev } }`, `next` being the
  *     `until` of the following page ;
@@ -21,14 +30,19 @@
  *   - `GET /v3/deployments/{id}/events?follow=0&direction=backward&limit=N` :
  *     a JSON list of `{ created, type, text, … }`, the newest first ; `limit`
  *     -1 would return every event, so the plugin bounds it itself.
+ *
+ * `list_projects` reads no API : it answers the mission's projects of this
+ * account, as the gateway holds them (`missionProjects`), so the names it
+ * lists are the names `projectId` accepts.
  */
 
-import { ExecutorRefusal, isList, isRecord } from '@vaubaan/plugin-sdk';
+import { ExecutorRefusal, isList, isRecord, type Resource } from '@vaubaan/plugin-sdk';
 
-import { TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 
-/** The rewrapped tools a project-mode account runs through the REST API. */
-export const PROJECT_REST_TOOLS: ReadonlySet<string> = new Set([
+/** The rewrapped tools served through the REST API (or, `list_projects`, by the gateway), in both modes. */
+export const REST_READ_TOOLS: ReadonlySet<string> = new Set([
+  TOOL.listProjects,
   TOOL.getProject,
   TOOL.listDeployments,
   TOOL.getDeployment,
@@ -111,4 +125,43 @@ export function shapeBuildLogs(
     };
   });
   return { deploymentId, lines: lines.reverse() };
+}
+
+/** One project of the mission, as `list_projects` answers it. */
+export interface MissionProject {
+  readonly id: string;
+  readonly name: string;
+  readonly framework: unknown;
+  readonly teamId?: unknown;
+  readonly teamSlug?: unknown;
+}
+
+/** The note `list_projects` answers with : what it lists, and how to name a project. */
+export const LIST_PROJECTS_NOTE =
+  'The Vercel projects of this mission on this account; other projects of the team are left out. ' +
+  'Name one in `projectId` by its id or its name.';
+
+/**
+ * `list_projects` : the mission's projects of this account, id and name
+ * first. Read from the resources the gateway passes, never from Vercel : a
+ * project outside the mission is not named, and the names listed are the
+ * names `resolveProject` accepts.
+ */
+export function missionProjects(resources: readonly Resource[]): {
+  projects: MissionProject[];
+  note: string;
+} {
+  const projects = resources
+    .filter((r) => r.service === SERVICE_ID)
+    .map((r) => {
+      const meta = r.metadata ?? {};
+      return {
+        id: r.ref,
+        name: r.displayName,
+        framework: meta.framework ?? null,
+        ...(meta.team_id !== undefined ? { teamId: meta.team_id } : {}),
+        ...(meta.team_slug !== undefined ? { teamSlug: meta.team_slug } : {}),
+      };
+    });
+  return { projects, note: LIST_PROJECTS_NOTE };
 }

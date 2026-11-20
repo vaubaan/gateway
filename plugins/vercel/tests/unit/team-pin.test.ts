@@ -20,7 +20,7 @@ import { mockFetch, type MockFetch, type RecordedCall } from '@vaubaan/plugin-sd
 import { UNBOUND_TOOLS } from '../../src/classify.ts';
 import { TEAMLESS_UPSTREAM_TOOLS } from '../../src/execute.ts';
 import { vercelPlugin, VERCEL_API_BASE } from '../../src/index.ts';
-import { PROJECT_REST_TOOLS } from '../../src/project-mode.ts';
+import { REST_READ_TOOLS } from '../../src/rest-reads.ts';
 import { isCustomTool } from '../../src/tools.ts';
 import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 
@@ -90,9 +90,12 @@ function teamOf(call: RecordedCall): unknown {
   return inPath ? decodeURIComponent(inPath[1]!) : url.searchParams.get('teamId');
 }
 
+/** Answered from the mission's resources : no request, so no team to carry. */
+const NO_REQUEST_TOOLS: ReadonlySet<string> = new Set(['vercel__list_projects']);
+
 function expectPinned(tool: string, calls: readonly RecordedCall[]): void {
-  if (UNBOUND_TOOLS.has(tool)) {
-    expect(calls, `${tool} is refused : no call at all`).toHaveLength(0);
+  if (UNBOUND_TOOLS.has(tool) || NO_REQUEST_TOOLS.has(tool)) {
+    expect(calls, `${tool} makes no call at all`).toHaveLength(0);
     return;
   }
   expect(calls.length, `${tool} made no call`).toBeGreaterThan(0);
@@ -248,12 +251,17 @@ describe('project pin — an account scoped to one project', () => {
         expect(fetch.calls).toHaveLength(0);
         return;
       }
-      if (!isCustomTool(tool) && !PROJECT_REST_TOOLS.has(tool)) {
+      if (!isCustomTool(tool) && !REST_READ_TOOLS.has(tool)) {
         expect(result.isError, tool).toBe(true);
         expect(JSON.stringify(result.content)).toContain(
           "Vercel's MCP server does not accept a token scoped to one project",
         );
         expect(fetch.calls, `${tool} is refused before any request`).toHaveLength(0);
+        return;
+      }
+      if (NO_REQUEST_TOOLS.has(tool)) {
+        expect(result.isError, tool).toBeUndefined();
+        expect(fetch.calls, tool).toHaveLength(0);
         return;
       }
       expect(fetch.calls.length, `${tool} made no call`).toBeGreaterThan(0);

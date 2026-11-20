@@ -15,6 +15,7 @@ import {
   MCP_PROTOCOL_VERSION,
   upstreamToolResult,
   UpstreamProtocolError,
+  UpstreamToolMissing,
   type UpstreamMcpServer,
 } from '../../src/transport/index.ts';
 
@@ -190,10 +191,54 @@ describe('mcpRequest', () => {
     expect((failure as Error).message).toBe(
       'Example MCP server, tools/call: JSON-RPC error -32602: Invalid params: svg',
     );
+    // Not a "tool not found" : the plain protocol failure, not `UpstreamToolMissing`.
+    expect(failure).not.toBeInstanceOf(UpstreamToolMissing);
     const silent = mockFetch([{ url: SERVER.url, body: { jsonrpc: '2.0', id: -1, result: 'x' } }]);
     await expect(mcpRequest({ fetch: silent }, SERVER, 't', 'm', {})).rejects.toThrow(
       'Example MCP server, m: no JSON-RPC frame answered the request',
     );
+  });
+});
+
+describe('a tool the server no longer exposes', () => {
+  const unknownTool = (code: number, message: string): MockRoute => ({
+    url: SERVER.url,
+    respond: (call) => ({ jsonrpc: '2.0', id: rpcOf(call).id, error: { code, message } }),
+  });
+
+  test.each([
+    [-32602, 'Tool get_deployment_build_logs not found'],
+    [-32601, 'Unknown tool: get_deployment_build_logs'],
+  ])(
+    '%i %s : UpstreamToolMissing, which names the tool and the stale plugin',
+    async (code, text) => {
+      const fetch = mockFetch([unknownTool(code, text)]);
+      const failure = await callUpstreamTool(
+        { fetch },
+        SERVER,
+        't',
+        'get_deployment_build_logs',
+        {},
+      ).catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(UpstreamToolMissing);
+      // Still a protocol failure for the host : the service's, status 502.
+      expect(failure).toBeInstanceOf(UpstreamProtocolError);
+      expect((failure as UpstreamHttpError).status).toBe(502);
+      expect((failure as UpstreamToolMissing).tool).toBe('get_deployment_build_logs');
+      expect((failure as Error).message).toBe(
+        `Example MCP server no longer exposes the tool 'get_deployment_build_logs' (${text}) : ` +
+          "this plugin's tool list is behind the service. Update the plugin ; until then, another tool of the plugin may serve.",
+      );
+    },
+  );
+
+  test('the same error on another method is the plain protocol failure', async () => {
+    const fetch = mockFetch([unknownTool(-32601, 'Unknown tool: x')]);
+    const failure = await mcpRequest({ fetch }, SERVER, 't', 'resources/read', {}).catch(
+      (e: unknown) => e,
+    );
+    expect(failure).toBeInstanceOf(UpstreamProtocolError);
+    expect(failure).not.toBeInstanceOf(UpstreamToolMissing);
   });
 });
 

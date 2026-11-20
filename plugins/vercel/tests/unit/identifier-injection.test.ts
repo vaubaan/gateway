@@ -250,11 +250,11 @@ describe('vercel identifiers — legitimate shapes keep working, and the request
         deploymentRoute(key, { id: 'dpl_own', projectId: 'prj_abc', ownerId: TEAM }),
         mcpRoute,
       ]);
-      const result = await vercelPlugin.execute(ctx(fetch), 'vercel__get_deployment', {
-        idOrUrl: key,
+      const result = await vercelPlugin.execute(ctx(fetch), 'vercel__get_runtime_logs', {
+        deploymentId: key,
       });
       expect(result.isError).toBeUndefined();
-      expect(forwardedArgs(fetch.calls.find(isMcpCall)!).idOrUrl).toBe('dpl_own');
+      expect(forwardedArgs(fetch.calls.find(isMcpCall)!).deploymentId).toBe('dpl_own');
     }
     expect(slicesOf('vercel__get_deployment', { idOrUrl: 'dpl_abc' })).toEqual([
       'vercel.project[prj_abc].env[*].deployment[dpl_abc].R',

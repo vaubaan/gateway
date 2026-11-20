@@ -73,6 +73,19 @@ What an operator or a plugin author reads first; every point is detailed below.
 
 ### Fixed
 
+- **Vercel (plugin 4.3.0): an agent finds the projects of its mission.** Found in dogfood: with
+  three Vercel projects in a mission, an agent spent twenty minutes looking for one.
+  `list_projects` answered `[redacted by Vaubaan]` (Vercel's MCP server now wraps every answer in
+  `{ "result": … }`); it now lists the mission's projects of the account, id and name, and says the
+  others are left out. `projectId` takes a project's id or its name, and a refusal names the
+  mission's projects. Every tool that needs a project declares `projectId` (`get_deployment` and
+  `get_deployment_build_logs` did not), and no tool asks for `teamId` any more: the account's team
+  is the one sent. `get_project`, `list_deployments`, `get_deployment` and
+  `get_deployment_build_logs` read Vercel's REST API in both modes: the MCP server had dropped the
+  build logs ("Tool not found") and renamed `get_project`'s argument.
+- **Plugin SDK: a tool the upstream server no longer has says so.** `callUpstreamTool` turns a
+  "tool not found" JSON-RPC error into `UpstreamToolMissing` (still an `UpstreamProtocolError`),
+  whose message names the plugin as behind the service.
 - **A rate window counts an action recorded late in its place.** Two calls timed before either
   reached the budget could record their actions out of order: the earlier one then stayed in the
   window past its time and the announced wait was wrong.

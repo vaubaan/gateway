@@ -12,10 +12,11 @@
  * a narrower slice.
  *
  * Conventions :
- *   - the project ref comes from `projectId` and must be a resource of the
- *     mission ; absent, it falls back to the mission's single Vercel project,
- *     and is refused when the mission holds several. `execute` resolves the
- *     project with the same function (`resolveProject`) ;
+ *   - the project ref comes from `projectId`, the id or the name of a
+ *     resource of the mission, and the slice names its id ; absent, it falls
+ *     back to the mission's single Vercel project, and is refused when the
+ *     mission holds several. `execute` resolves the project with the same
+ *     function (`resolveProject`) ;
  *   - account-level tools (docs search, teams, projects list, registrar
  *     lookup) need no project ;
  *   - the environment is the closed Vercel triad, emitted as the
@@ -64,7 +65,13 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { SERVICE_ID, TOOL } from './identity.ts';
-import { isCustomTool, toolDeclaresProperty, toolRequiresProperty, vercelTools } from './tools.ts';
+import {
+  ACCOUNT_TOOLS,
+  isCustomTool,
+  toolDeclaresProperty,
+  toolRequiresProperty,
+  vercelTools,
+} from './tools.ts';
 
 /** The SDK's path identifier grammar, re-exported for this plugin's modules. */
 export { PATH_IDENT, pathIdent };
@@ -283,14 +290,6 @@ function ident(value: string): SliceSegment {
   return { kind: 'ident', value };
 }
 
-/** Tools that need no project : account-rooted reads. */
-const ACCOUNT_TOOLS: ReadonlySet<string> = new Set([
-  TOOL.searchVercelDocumentation,
-  TOOL.listTeams,
-  TOOL.listProjects,
-  TOOL.checkDomainAvailabilityAndPrice,
-]);
-
 /** Every tool the classifier knows, project-rooted ones included. */
 const PROJECT_TOOLS: ReadonlySet<string> = new Set([
   TOOL.getProject,
@@ -352,9 +351,12 @@ export function isClassifiedTool(tool: string): boolean {
 }
 
 /**
- * Resolve the project a call touches. The explicit argument wins and must be
- * a `pathIdent` and one of the mission's Vercel resources ; absent, the
- * mission's single Vercel project applies ; anything else is a refusal.
+ * Resolve the project a call touches. The explicit argument wins and must
+ * name one of the mission's Vercel resources, by its id (`prj_…`) or by its
+ * name (the resource's display name, Vercel's project slug) : the answer is
+ * always the resource's id, a `pathIdent`. Absent, the mission's single
+ * Vercel project applies ; anything else is a refusal that names the
+ * mission's projects, so the agent can pick one.
  */
 export function resolveProject(
   args: Readonly<Record<string, unknown>>,
@@ -363,27 +365,49 @@ export function resolveProject(
 ): { ref: string | null } | { denied: string } {
   const own = resources.filter((r) => r.service === SERVICE_ID);
   if (args.projectId !== undefined) {
-    const explicit = pathIdent(args.projectId);
-    if (explicit === null) return { denied: 'projectId: malformed project ref' };
-    if (!own.some((r) => r.ref === explicit)) {
-      return { denied: `vercel project '${explicit}' is not a resource of this mission.` };
+    const given = args.projectId;
+    const byRef = own.find((r) => r.ref === given);
+    if (byRef !== undefined) return refOf(byRef);
+    const byName = own.filter((r) => r.displayName === given);
+    if (byName.length === 1) return refOf(byName[0]!);
+    if (byName.length > 1) {
+      return {
+        denied: `projectId: ${byName.length} Vercel projects of this mission are named '${String(given)}' — name one by its id. ${missionProjectsHint(own)}`,
+      };
     }
-    return { ref: explicit };
+    const explicit = pathIdent(given);
+    if (explicit === null) return { denied: 'projectId: malformed project ref' };
+    return {
+      denied: `vercel project '${explicit}' is not a resource of this mission. ${missionProjectsHint(own)}`,
+    };
   }
   if (!required) return { ref: null };
-  if (own.length === 1) {
-    // The ref of the resource reaches the request path like an argument does.
-    const only = pathIdent(own[0]!.ref);
-    return only === null
-      ? { denied: 'projectId: the project ref of this mission is not a path-safe identifier' }
-      : { ref: only };
-  }
+  if (own.length === 1) return refOf(own[0]!);
   return {
     denied:
       own.length === 0
         ? 'projectId: argument missing and the mission touches no Vercel project'
-        : `projectId: argument missing and the mission touches ${own.length} Vercel projects — name one`,
+        : `projectId: argument missing and the mission touches ${own.length} Vercel projects — name one by its id or its name. ${missionProjectsHint(own)}`,
   };
+}
+
+/** The resource's id as the call sends it : it reaches the request path like an argument does. */
+function refOf(resource: Resource): { ref: string } | { denied: string } {
+  const ref = pathIdent(resource.ref);
+  return ref === null
+    ? { denied: 'projectId: the project ref of this mission is not a path-safe identifier' }
+    : { ref };
+}
+
+/** Most projects a refusal names ; `list_projects` lists them all. */
+const HINT_MAX_PROJECTS = 10;
+
+/** The mission's projects, as a refusal names them : `name (id)`. */
+function missionProjectsHint(own: readonly Resource[]): string {
+  if (own.length === 0) return 'The mission holds no Vercel project of this account.';
+  const shown = own.slice(0, HINT_MAX_PROJECTS).map((r) => `${r.displayName} (${r.ref})`);
+  const more = own.length > HINT_MAX_PROJECTS ? `, and ${own.length - HINT_MAX_PROJECTS} more` : '';
+  return `Projects of this mission: ${shown.join(', ')}${more} — ${TOOL.listProjects} lists them.`;
 }
 
 const DECLARED_ARGUMENTS = declaredArgumentsOf(vercelTools);

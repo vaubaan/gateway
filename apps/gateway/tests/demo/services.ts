@@ -714,20 +714,11 @@ function vercelEnvVars(project: DemoVercelProject): Record<string, unknown>[] {
 
 /** What the remote MCP server answers to one rewrapped tool, as text content. */
 function vercelToolAnswer(name: string, args: Record<string, unknown>): unknown {
-  const project =
-    DEMO_VERCEL_PROJECTS.find((p) => p.id === args.projectId) ?? DEMO_VERCEL_PROJECTS[0];
   switch (name) {
     case 'list_teams':
       return { teams: [{ id: args.teamId ?? 'team_demo', ...DEMO_VERCEL_TEAM }] };
-    case 'list_projects':
-      return { projects: DEMO_VERCEL_PROJECTS };
-    case 'get_project':
-      return { ...project, latestDeployments: vercelDeployments(project) };
-    case 'list_deployments':
-      return { deployments: vercelDeployments(project) };
-    case 'get_deployment':
-      return vercelDeployments(project)[0];
-    case 'get_deployment_build_logs':
+    // `list_projects`, `get_project`, `list_deployments`, `get_deployment` and the build logs
+    // never reach the MCP server (the plugin's `rest-reads.ts`): see the REST routes.
     case 'get_runtime_logs':
       return { logs: ['Build completed in 41s', 'Ready'] };
     default:
@@ -761,6 +752,31 @@ function vercelRoutes(): MockRoute[] {
       method: 'GET',
       url: new RegExp(`^${api}/v10/projects\\?`),
       body: { projects: DEMO_VERCEL_PROJECTS, pagination: { next: null } },
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v9/projects/[^/?]+(\\?|$)`),
+      respond: (call) => {
+        const project = projectOf(call.url);
+        return { ...project, latestDeployments: vercelDeployments(project) };
+      },
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v6/deployments\\?`),
+      respond: (call) => {
+        const id = new URL(call.url).searchParams.get('projectId');
+        const project = DEMO_VERCEL_PROJECTS.find((p) => p.id === id) ?? DEMO_VERCEL_PROJECTS[0];
+        return { deployments: vercelDeployments(project), pagination: { next: null } };
+      },
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v3/deployments/[^/?]+/events\\?`),
+      body: [
+        { created: 2, type: 'stdout', text: 'Ready' },
+        { created: 1, type: 'stdout', text: 'Build completed in 41s' },
+      ],
     },
     {
       method: 'GET',

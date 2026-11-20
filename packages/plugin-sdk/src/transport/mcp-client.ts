@@ -12,13 +12,14 @@
  * Failures, all typed (`http.ts` for the table) : 401 / 403
  * `UpstreamAuthError`, another failed status `UpstreamHttpError`, a JSON-RPC
  * error frame or an answer with no frame for the request
- * `UpstreamProtocolError`. The server's text goes to the agent only (ADR
+ * `UpstreamProtocolError` — `UpstreamToolMissing` when `tools/call` names a
+ * tool the server no longer has. The server's text goes to the agent only (ADR
  * provider-error-text-stays-with-the-agent).
  */
 
 import type { McpToolResult } from '@vaubaan/shared';
 
-import { UpstreamProtocolError } from './errors.ts';
+import { UpstreamProtocolError, UpstreamToolMissing } from './errors.ts';
 import { upstreamFailure, type UpstreamIo } from './http.ts';
 import { firstJsonRpcFrame } from './json-rpc-frame.ts';
 import { DEFAULT_MAX_ANSWER_BYTES, readBoundedText } from './read-bounded.ts';
@@ -66,7 +67,11 @@ export async function mcpRequest(
       session = await initialize(io, server, token);
       continue;
     }
-    return resultOf(await answerOf(res, server, method), id, server, method);
+    try {
+      return resultOf(await answerOf(res, server, method), id, server, method);
+    } catch (e) {
+      throw toolMissing(e, server, method, params) ?? e;
+    }
   }
 }
 
@@ -145,6 +150,34 @@ async function answerOf(res: Response, server: UpstreamMcpServer, method: string
   return readBoundedText(res, server.maxBytes ?? DEFAULT_MAX_ANSWER_BYTES, what);
 }
 
+/** JSON-RPC codes a server answers a `tools/call` of an unknown tool with ("Invalid params", "Method not found"). */
+const UNKNOWN_TOOL_CODES: ReadonlySet<number> = new Set([-32602, -32601]);
+const UNKNOWN_TOOL_TEXT = /\btool\b.*\bnot found\b|\bunknown tool\b/i;
+
+/** The `UpstreamToolMissing` a JSON-RPC error of a `tools/call` means, or `null`. */
+function toolMissing(
+  e: unknown,
+  server: UpstreamMcpServer,
+  method: string,
+  params: Readonly<Record<string, unknown>>,
+): UpstreamToolMissing | null {
+  if (method !== 'tools/call' || !(e instanceof JsonRpcFrameError)) return null;
+  if (!UNKNOWN_TOOL_CODES.has(e.code) || !UNKNOWN_TOOL_TEXT.test(e.serviceText)) return null;
+  const tool = typeof params.name === 'string' ? params.name : '?';
+  return new UpstreamToolMissing(server.name, tool, e.serviceText);
+}
+
+/** A JSON-RPC error frame, its code and text kept for `toolMissing`. */
+class JsonRpcFrameError extends UpstreamProtocolError {
+  constructor(
+    message: string,
+    readonly code: number,
+    readonly serviceText: string,
+  ) {
+    super(message);
+  }
+}
+
 function resultOf(body: string, id: number, server: UpstreamMcpServer, method: string): unknown {
   const frame = firstJsonRpcFrame(body, id);
   if (frame === null) {
@@ -153,8 +186,10 @@ function resultOf(body: string, id: number, server: UpstreamMcpServer, method: s
     );
   }
   if ('error' in frame) {
-    throw new UpstreamProtocolError(
+    throw new JsonRpcFrameError(
       `${server.name}, ${method}: JSON-RPC error ${frame.error.code}: ${frame.error.message}`,
+      frame.error.code,
+      frame.error.message,
     );
   }
   return frame.result;

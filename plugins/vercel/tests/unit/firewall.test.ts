@@ -77,7 +77,9 @@ describe('classifyVercel — firewall tools', () => {
 
   test('a firewall tool on a project outside the mission is denied', () => {
     expect(classifyVercel('vercel__toggle_firewall', { projectId: 'prj_other' }, [app])).toEqual({
-      denied: "vercel project 'prj_other' is not a resource of this mission.",
+      denied: expect.stringContaining(
+        "vercel project 'prj_other' is not a resource of this mission.",
+      ) as string,
     });
   });
 });

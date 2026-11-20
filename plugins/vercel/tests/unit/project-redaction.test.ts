@@ -1,16 +1,17 @@
 /**
- * SEC 2026-10-15 re-check H-1 : `vercel__get_project` and `vercel__list_projects`
- * (`vercel.read-account`, `data: metadata`) return the project without env
- * values and without deploy-hook URLs; unknown fields are redacted by default.
+ * SEC 2026-10-15 re-check H-1 : `vercel__get_project` (`data: metadata`)
+ * returns the project without env values and without deploy-hook URLs;
+ * unknown fields are redacted by default. `vercel__list_projects` answers the
+ * mission's projects from the gateway's resources : id, name, framework, team.
  */
 import { describe, expect, test } from 'vitest';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { VERCEL_API_BASE } from '../../src/identity.ts';
-import { VERCEL_MCP_URL, vercelPlugin } from '../../src/index.ts';
+import { vercelPlugin } from '../../src/index.ts';
 import { redactProjectPayload, redactProjectResult } from '../../src/project-redact.ts';
 import { REDACTED_VALUE } from '../../src/redact.ts';
-import { ctx, sseFrame, text } from './fixtures.ts';
+import { ctx, text } from './fixtures.ts';
 
 const HOOK_URL = 'https://api.vercel.com/v1/integrations/deploy/prj_abc/hook-secret';
 
@@ -95,22 +96,25 @@ describe('redactProjectPayload', () => {
 });
 
 describe('executeVercel — project reads', () => {
-  test.each(['vercel__get_project', 'vercel__list_projects'])('%s', async (tool) => {
+  test('vercel__get_project', async () => {
     const fetch = mockFetch([
       {
-        method: 'POST',
-        url: VERCEL_MCP_URL,
-        respond: (c) =>
-          sseFrame(c, {
-            content: [{ type: 'text', text: JSON.stringify(PROJECT) }],
-            structuredContent: { project: PROJECT },
-          }),
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc?teamId=team_abc`,
+        body: PROJECT,
       },
     ]);
-    const result = await vercelPlugin.execute(ctx(fetch), tool, {});
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__get_project', {});
     const serialized = JSON.stringify(result);
     expect(serialized).toContain('prj_abc');
     expectNoLeak(serialized);
+  });
+
+  test('vercel__list_projects reads no project object : nothing to leak', async () => {
+    const fetch = mockFetch([]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', {});
+    expect(fetch.calls).toHaveLength(0);
+    expect(JSON.parse(text(result))).toMatchObject({ projects: [{ id: 'prj_abc', name: 'app' }] });
   });
 });
 

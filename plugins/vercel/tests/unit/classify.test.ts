@@ -311,7 +311,9 @@ describe('classifyVercel — one spelling per argument, the one of the schema', 
         { service: 'vercel', ref: 'prj_site', displayName: 'site' },
       ]),
     ).toEqual({
-      denied: 'projectId: argument missing and the mission touches 2 Vercel projects — name one',
+      denied: expect.stringContaining(
+        'projectId: argument missing and the mission touches 2 Vercel projects — name one',
+      ) as string,
     });
   });
 
@@ -338,7 +340,9 @@ describe('classifyVercel — denials', () => {
   test('projectId outside the mission resources → denied', () => {
     const result = classifyVercel('vercel__get_project', { projectId: 'prj_unbound' }, [resource]);
     expect(result).toEqual({
-      denied: "vercel project 'prj_unbound' is not a resource of this mission.",
+      denied: expect.stringContaining(
+        "vercel project 'prj_unbound' is not a resource of this mission.",
+      ) as string,
     });
   });
 });

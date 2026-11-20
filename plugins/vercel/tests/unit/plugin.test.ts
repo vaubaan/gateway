@@ -244,10 +244,14 @@ describe('classifyVercel — project resolution against mission resources', () =
 
   test('refuses a project the mission does not hold, an ambiguous or missing one, a malformed ref', () => {
     expect(classifyVercel('vercel__get_project', { projectId: 'prj_other' }, [app])).toEqual({
-      denied: "vercel project 'prj_other' is not a resource of this mission.",
+      denied: expect.stringContaining(
+        "vercel project 'prj_other' is not a resource of this mission.",
+      ) as string,
     });
     expect(classifyVercel('vercel__list_env_vars', {}, [app, site])).toEqual({
-      denied: 'projectId: argument missing and the mission touches 2 Vercel projects — name one',
+      denied: expect.stringContaining(
+        'projectId: argument missing and the mission touches 2 Vercel projects — name one',
+      ) as string,
     });
     expect(classifyVercel('vercel__list_env_vars', {}, [foreign])).toEqual({
       denied: 'projectId: argument missing and the mission touches no Vercel project',
@@ -260,13 +264,40 @@ describe('classifyVercel — project resolution against mission resources', () =
     });
   });
 
+  test('a mission project is named by its id or by its name ; the slice names its id', () => {
+    expect(slices('vercel__get_project', { projectId: 'site' }, [app, site])).toEqual([
+      'vercel.project[prj_site].project-settings.R',
+    ]);
+    expect(slices('vercel__get_project', { projectId: 'prj_site' }, [app, site])).toEqual([
+      'vercel.project[prj_site].project-settings.R',
+    ]);
+    // A name with a dot is not a path identifier : it is matched, then the id is sent.
+    const dotted: Resource = { service: 'vercel', ref: 'prj_dot', displayName: 'my.site' };
+    expect(slices('vercel__list_env_vars', { projectId: 'my.site' }, [app, dotted])).toEqual([
+      'vercel.project[prj_dot].env[*].env-var[*].R',
+    ]);
+    // Two mission projects of that name (two teams) : the id is asked for.
+    const twin: Resource = { service: 'vercel', ref: 'prj_twin', displayName: 'site' };
+    const ambiguous = classifyVercel('vercel__get_project', { projectId: 'site' }, [site, twin]);
+    expect('denied' in ambiguous ? ambiguous.denied : null).toMatch(
+      /^projectId: 2 Vercel projects of this mission are named 'site' — name one by its id/,
+    );
+    // A name outside the mission is refused like an id, and the refusal names the mission's projects.
+    const refused = classifyVercel('vercel__get_project', { projectId: 'other' }, [app, site]);
+    expect('denied' in refused ? refused.denied : null).toBe(
+      "vercel project 'other' is not a resource of this mission. Projects of this mission: app (prj_abc), site (prj_site) — vercel__list_projects lists them.",
+    );
+  });
+
   test('account-level tools need no project but still refuse a foreign projectId', () => {
     expect(slices('vercel__list_teams', {}, [])).toEqual(['vercel.account.team[*].R']);
     expect(slices('vercel__list_projects', {}, [app, site])).toEqual([
       'vercel.account.project[*].R',
     ]);
     expect(classifyVercel('vercel__list_projects', { projectId: 'prj_other' }, [app])).toEqual({
-      denied: "vercel project 'prj_other' is not a resource of this mission.",
+      denied: expect.stringContaining(
+        "vercel project 'prj_other' is not a resource of this mission.",
+      ) as string,
     });
   });
 
@@ -425,19 +456,18 @@ describe('executeVercel with mockFetch', () => {
       {
         method: 'POST',
         url: VERCEL_MCP_URL,
-        respond: (c) => sseFrame(c, { content: [{ type: 'text', text: '{"projects":[]}' }] }),
+        respond: (c) => sseFrame(c, { content: [{ type: 'text', text: '{"teams":[]}' }] }),
       },
     ]);
-    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', {});
-    // The project answer is re-serialized by the project filter (`project-redact.ts`).
-    expect(JSON.parse((result.content[0] as { text: string }).text)).toEqual({ projects: [] });
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_teams', {});
+    expect((result.content[0] as { text: string }).text).toBe('{"teams":[]}');
     const call = fetch.calls[0]!;
     expect(call.headers.authorization).toBe('Bearer vcp_secret');
     expect(call.headers.accept).toContain('text/event-stream');
     expect(call.json).toMatchObject({
       jsonrpc: '2.0',
       method: 'tools/call',
-      params: { name: 'list_projects', arguments: { teamId: 'team_abc' } },
+      params: { name: 'list_teams', arguments: { teamId: 'team_abc' } },
     });
   });
 
@@ -527,9 +557,10 @@ describe('executeVercel with mockFetch', () => {
 
   test('401 / 403 become UpstreamAuthError on both surfaces', async () => {
     const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 401, body: 'Unauthorized' }]);
-    await expect(vercelPlugin.execute(ctx(mcp), 'vercel__list_projects', {})).rejects.toMatchObject(
-      { name: 'UpstreamAuthError', upstreamStatus: 401 },
-    );
+    await expect(vercelPlugin.execute(ctx(mcp), 'vercel__list_teams', {})).rejects.toMatchObject({
+      name: 'UpstreamAuthError',
+      upstreamStatus: 401,
+    });
     const rest = mockFetch([{ url: /\/v10\/projects\/prj_abc\/env/, status: 403, body: {} }]);
     await expect(
       vercelPlugin.execute(ctx(rest), 'vercel__list_env_vars', { projectId: 'prj_abc' }),
@@ -540,7 +571,9 @@ describe('executeVercel with mockFetch', () => {
     const rpc = mockFetch([
       { url: VERCEL_MCP_URL, respond: (c) => sseError(c, -32602, 'invalid args') },
     ]);
-    const rpcCall = vercelPlugin.execute(ctx(rpc), 'vercel__get_project', { projectId: 'prj_abc' });
+    const rpcCall = vercelPlugin.execute(ctx(rpc), 'vercel__get_runtime_logs', {
+      projectId: 'prj_abc',
+    });
     await expect(rpcCall).rejects.toBeInstanceOf(UpstreamProtocolError);
     await expect(rpcCall).rejects.toThrow(/invalid args/);
 
@@ -554,20 +587,20 @@ describe('executeVercel with mockFetch', () => {
 
     const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 502, body: 'bad gateway' }]);
     await expect(
-      vercelPlugin.execute(ctx(mcp), 'vercel__get_project', { projectId: 'prj_abc' }),
+      vercelPlugin.execute(ctx(mcp), 'vercel__get_runtime_logs', { projectId: 'prj_abc' }),
     ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 502 });
   });
 
   test('an MCP answer that is not a tool result is an UpstreamProtocolError', async () => {
     const odd = mockFetch([{ url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, ['not', 'one']) }]);
     await expect(
-      vercelPlugin.execute(ctx(odd), 'vercel__list_deployments', { projectId: 'prj_abc' }),
+      vercelPlugin.execute(ctx(odd), 'vercel__get_runtime_logs', { projectId: 'prj_abc' }),
     ).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('a 404 of the MCP server is an UpstreamHttpError : no session is opened, one request is sent', async () => {
     const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 404, body: 'not found' }]);
-    const call = vercelPlugin.execute(ctx(mcp), 'vercel__list_deployments', {
+    const call = vercelPlugin.execute(ctx(mcp), 'vercel__get_runtime_logs', {
       projectId: 'prj_abc',
     });
     await expect(call).rejects.toBeInstanceOf(UpstreamHttpError);
@@ -650,7 +683,7 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
     const fetch = mockFetch([
       { method: 'POST', url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, { content: [] }) },
     ]);
-    await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', { teamId: 'team_abc' });
+    await vercelPlugin.execute(ctx(fetch), 'vercel__list_teams', { teamId: 'team_abc' });
     expect((fetch.calls[0]!.json as { params: { arguments: unknown } }).params.arguments).toEqual({
       teamId: 'team_abc',
     });
