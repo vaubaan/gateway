@@ -83,7 +83,7 @@ export default async function DocsPage({ params }: Props) {
   const lastModified = pageMeta(page.url)?.lastModified ?? null;
 
   return (
-    <div className="page docs">
+    <div className="mx-auto grid max-w-page grid-cols-1 items-start gap-4 px-4 pt-6 md:grid-cols-[var(--spacing-side)_minmax(0,1fr)] md:gap-10 md:px-6 md:pt-10 xl:grid-cols-[var(--spacing-side)_minmax(0,1fr)_var(--spacing-toc)]">
       <JsonLd
         data={{
           '@context': 'https://schema.org',
@@ -102,11 +102,14 @@ export default async function DocsPage({ params }: Props) {
         <h1>{page.data.title}</h1>
         <MDX components={MARKDOWN_COMPONENTS} />
         {folder ? <Section folder={folder} /> : null}
-        <p className="meta">
+        <p className="mt-8 text-sm text-muted-foreground">
           {lastModified ? `Last changed ${lastModified}. ` : ''}
           This page as Markdown: <a href={twinPathOf(page.url)}>{twinPathOf(page.url)}</a>
         </p>
-        <nav className="pager" aria-label="Previous and next">
+        <nav
+          className="mt-12 flex justify-between gap-4 border-t border-border pt-4 text-sm"
+          aria-label="Previous and next"
+        >
           {neighbours.previous ? (
             <Link href={neighbours.previous.url} prefetch={false}>
               ← {neighbours.previous.name}

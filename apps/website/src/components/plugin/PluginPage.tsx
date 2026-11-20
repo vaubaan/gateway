@@ -87,7 +87,7 @@ export function PluginPageView({
   const twin = links[links.length - 1]!;
 
   return (
-    <div className="page">
+    <div className="mx-auto max-w-page px-4 pt-6 md:px-6 md:pt-10">
       <ServicePage
         plugin={plugin}
         sourceHref={githubBlob}
@@ -120,7 +120,7 @@ export function PluginPageView({
           },
         ]}
         footer={
-          <p className="meta">
+          <p className="mt-8 text-sm text-muted-foreground">
             {lastModified ? `Last changed ${lastModified}. ` : ''}
             This page as Markdown: <a href={twin.href}>{twin.href}</a>
           </p>

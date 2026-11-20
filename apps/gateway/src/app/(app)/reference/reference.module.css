@@ -52,6 +52,7 @@
   --pp-accent-ink: var(--accent-ink);
   --pp-accent-soft: var(--accent-soft);
   --pp-ask-bg: var(--warn-soft);
+  --pp-ask-ink: var(--warn);
   --pp-ask-line: var(--warn-line);
   --pp-bad: var(--bad);
   --pp-bad-line: var(--bad-line);
@@ -78,12 +79,16 @@
   --pp-radius-md: var(--radius-md);
   --pp-radius-sm: var(--radius-sm);
   --pp-row1-bg: var(--ok-soft);
+  --pp-row1-line: var(--ok-soft);
   --pp-row1-ink: var(--ok);
   --pp-row2-bg: var(--accent-soft);
+  --pp-row2-line: var(--accent-soft);
   --pp-row2-ink: var(--accent-ink);
   --pp-row3-bg: var(--warn-soft);
+  --pp-row3-line: var(--warn-soft);
   --pp-row3-ink: var(--warn);
   --pp-row4-bg: var(--bad-soft);
+  --pp-row4-line: var(--bad-soft);
   --pp-row4-ink: var(--bad);
   --pp-space-1: var(--space-1);
   --pp-space-2: var(--space-2);

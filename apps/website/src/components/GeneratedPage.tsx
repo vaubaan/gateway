@@ -32,10 +32,10 @@ export function GeneratedPage({
 }) {
   const meta = pageMeta(path);
   return (
-    <div className="page">
+    <div className="mx-auto max-w-page px-4 pt-6 md:px-6 md:pt-10">
       <article className="prose">
         <MarkdownBody markdown={markdown} components={components} />
-        <p className="meta">
+        <p className="mt-8 text-sm text-muted-foreground">
           {meta?.lastModified ? `Last changed ${meta.lastModified}. ` : ''}
           This page as Markdown: <a href={twinPathOf(path)}>{twinPathOf(path)}</a>
         </p>

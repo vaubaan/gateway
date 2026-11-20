@@ -11,20 +11,27 @@
     "type-check": "npm run generate && tsc --noEmit"
   },
   "dependencies": {
+    "@vaubaan/design-tokens": "*",
     "@vaubaan/plugin-page": "*",
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
     "fumadocs-core": "16.17.9",
     "fumadocs-mdx": "15.4.10",
+    "geist": "1.8.2",
     "next": "16.4.6",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "4.3.5",
     "@types/mdx": "2.0.14",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@vaubaan/plugin-sdk": "*"
+    "@vaubaan/plugin-sdk": "*",
+    "tailwindcss": "4.3.5"
   }
 }

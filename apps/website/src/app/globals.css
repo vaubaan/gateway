@@ -1,613 +1,201 @@
 /*
- * The site's one style sheet. Tokens first (style guide §3: the values of the
- * gateway's own tokens, light and dark), then the few rules that use them.
- * No other file declares a colour; no font is downloaded: system faces only
- * (website spec §1.1, nothing from a third party).
+ * The site's one style sheet: Tailwind v4 and the shared tokens of
+ * @vaubaan/design-tokens (style guide §3; ADR
+ * design-system-on-shadcn-shared-by-the-app-and-the-site). Components style
+ * themselves with utilities; what remains here is what no class can reach:
+ * the Markdown and MDX a page renders (`.prose`) and the plugin page's
+ * `--pp-*` properties. No colour is written here, only tokens; dark follows the
+ * system preference through the tokens themselves, so no rule uses `dark:`.
+ * Geist is the site's own (the `geist` package, served from this origin).
  */
+@import 'tailwindcss';
+@import '@vaubaan/design-tokens/tokens.css';
+@import '@vaubaan/design-tokens/theme.css';
+
+@theme {
+  /* The site's measures: a page, the docs' columns, a line of prose. */
+  --container-page: 1240px;
+  --container-measure: 72ch;
+  --spacing-side: 240px;
+  --spacing-toc: 220px;
+}
 
 :root {
-  color-scheme: light dark;
-
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, 'Liberation Mono', Consolas, monospace;
-
-  /* A reading site: one step above the interface's sizes. */
-  --text-xs: 0.8125rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-title: 1.75rem;
-  --text-hero: 2.25rem;
-
-  --weight-regular: 400;
-  --weight-strong: 600;
-  --leading: 1.6;
-  --leading-tight: 1.25;
-
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-
-  --measure: 72ch;
-  --page-max: 1240px;
-  --side-width: 240px;
-  --toc-width: 220px;
-
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-
-  --paper: #ffffff;
-  --paper-side: #f6f6f4;
-  --fill: #f3f3f0;
-  --line: #e6e5e1;
-  --line-strong: #d2d1cc;
-  --ink: #1b1c1e;
-  --ink-2: #4f5156;
-  --ink-3: #6a6d74;
-  --accent: #2f55c7;
-  --accent-ink: #2448b0;
-  --accent-soft: #eef2fc;
-  --warn: #a35e00;
-  --warn-soft: #fbf2df;
-  --warn-line: #eed9ae;
-  /* The connect guide's path chips: a warm band the eye finds before it reads. */
-  --path-bg: #fbe3a0;
-  --path-ink: #3b2a05;
-  --ink-4: #9a9ca3;
-  --ok: #1d7a3e;
-  --bad: #b3261e;
-  --bad-soft: #fcefee;
-  --bad-line: #f1c9c5;
-  --code-bg: #1e1f22;
-  --code-ink: #e7e7e4;
-  /* The plugin page: the four rows of the tree, worst first, the environment, the gates, the tooltip. */
-  --row4-bg: #fcefee;
-  --row4-ink: #8f1d17;
-  --row3-bg: #fbf2df;
-  --row3-ink: #7a4600;
-  --row2-bg: #eef2fc;
-  --row2-ink: #23409e;
-  --row1-bg: #ecf5ee;
-  --row1-ink: #165c30;
-  --env-bg: #f1ecfb;
-  --env-ink: #5b2fa6;
-  --env-line: #cdbcef;
-  --yes-bg: #f3faf5;
-  --yes-line: #b9dcc4;
-  --ask-bg: #fdf6e7;
-  --ask-line: #e7c98f;
-  --path-line: #ecd98a;
-  --tip-bg: #1b1c1e;
-  --tip-ink: #ffffff;
-  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+  --site-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0f1115;
-    --paper-side: #15181d;
-    --fill: #1c2026;
-    --line: #272b32;
-    --line-strong: #363b44;
-    --ink: #e8e9ec;
-    --ink-2: #b9bcc4;
-    --ink-3: #8a8f99;
-    --accent: #7fa3ff;
-    --accent-ink: #9db8ff;
-    --accent-soft: #1e2433;
-    --warn: #e9b04a;
-    --warn-soft: #30291d;
-    --warn-line: #66512a;
-    --path-bg: #5a4415;
-    --path-ink: #fbe9bf;
-    --ink-4: #5b606a;
-    --ok: #5cc98a;
-    --bad: #f2867d;
-    --bad-soft: #341c1c;
-    --bad-line: #6e2f2b;
-    --code-bg: #0b0c0f;
-    --code-ink: #e2e3e6;
-    --row4-bg: #331b1b;
-    --row4-ink: #f4a39b;
-    --row3-bg: #2f281b;
-    --row3-ink: #ecb85a;
-    --row2-bg: #1c2232;
-    --row2-ink: #a9c0ff;
-    --row1-bg: #16261c;
-    --row1-ink: #7fd3a0;
-    --env-bg: #261f3a;
-    --env-ink: #c3a9ff;
-    --env-line: #4c3d72;
-    --yes-bg: #13251a;
-    --yes-line: #2c5a3d;
-    --ask-bg: #2f281b;
-    --ask-line: #66512a;
-    --path-line: #7a5d1d;
-    --tip-bg: #e8e9ec;
-    --tip-ink: #15181d;
+@layer base {
+  html {
+    scroll-padding-top: 1.5rem;
+  }
+
+  body {
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  a {
+    color: var(--primary);
+    text-underline-offset: 3px;
+  }
+
+  a:hover {
+    color: var(--primary-ink);
+  }
+
+  :focus-visible {
+    border-radius: var(--radius-sm);
+  }
+
+  /*
+   * The plugin page's shared sheet was written over the browser's defaults:
+   * its lists get their markers and indent back from Tailwind's preflight.
+   * A list the sheet styles sets its own, and wins (it is not in a layer).
+   */
+  .plugin-page :where(ul, ol) {
+    list-style: revert;
+    padding-left: revert;
   }
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  line-height: var(--leading);
-}
-
-a {
-  color: var(--accent-ink);
-  text-underline-offset: 2px;
-}
-
-a:focus-visible,
-summary:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
-}
-
-h1,
-h2,
-h3,
-h4 {
-  line-height: var(--leading-tight);
-  font-weight: var(--weight-strong);
-  scroll-margin-top: var(--space-6);
-}
-
-h1 {
-  font-size: var(--text-title);
-  margin: 0 0 var(--space-4);
-  letter-spacing: -0.01em;
-}
-
-h2 {
-  font-size: 1.3rem;
-  margin: var(--space-12) 0 var(--space-3);
-}
-
-h3 {
-  font-size: var(--text-lg);
-  margin: var(--space-8) 0 var(--space-2);
-}
-
-h4 {
-  font-size: var(--text-base);
-  margin: var(--space-6) 0 var(--space-2);
-}
-
-p,
-ul,
-ol {
-  margin: 0 0 var(--space-4);
-}
-
-li + li {
-  margin-top: var(--space-1);
-}
-
-code {
-  font-family: var(--font-mono);
-  font-size: 0.875em;
-  background: var(--fill);
-  border-radius: var(--radius-sm);
-  padding: 0.1em 0.3em;
-  /* An identifier wraps between its words, never inside one (style guide §5). */
-  overflow-wrap: break-word;
-}
-
-td code {
-  white-space: nowrap;
-}
-
-pre {
-  background: var(--code-bg);
-  color: var(--code-ink);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  overflow-x: auto;
-  margin: 0 0 var(--space-4);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
-pre code {
-  background: none;
-  padding: 0;
-  font-size: inherit;
-  color: inherit;
-  overflow-wrap: normal;
-}
-
-hr {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: var(--space-8) 0;
-}
-
-blockquote {
-  margin: 0 0 var(--space-4);
-  padding-left: var(--space-4);
-  border-left: 2px solid var(--line-strong);
-  color: var(--ink-2);
-}
-
-.table-wrap {
-  overflow-x: auto;
-  margin: 0 0 var(--space-4);
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: var(--text-sm);
-}
-
-th,
-td {
-  text-align: left;
-  vertical-align: top;
-  padding: var(--space-2) var(--space-3) var(--space-2) 0;
-  border-bottom: 1px solid var(--line);
-}
-
-th {
-  font-weight: var(--weight-strong);
-  color: var(--ink-2);
-  font-size: var(--text-xs);
-}
-
-.skip-link {
-  position: absolute;
-  left: -9999px;
-}
-
-.skip-link:focus {
-  left: var(--space-4);
-  top: var(--space-4);
-  background: var(--paper);
-  padding: var(--space-2) var(--space-3);
-}
-
-/* The shell */
-
-.site-header {
-  border-bottom: 1px solid var(--line);
-}
-
-.site-header-inner,
-.site-footer-inner,
-.page {
-  max-width: var(--page-max);
-  margin: 0 auto;
-  padding-left: var(--space-6);
-  padding-right: var(--space-6);
-}
-
-.site-header-inner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-6);
-  padding-top: var(--space-3);
-  padding-bottom: var(--space-3);
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--ink);
-  font-weight: var(--weight-strong);
-  text-decoration: none;
-}
-
-.brand svg {
-  width: 24px;
-  height: 24px;
-}
-
-.site-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-  margin-left: auto;
-  font-size: var(--text-sm);
-}
-
-.site-nav a {
-  color: var(--ink-2);
-  text-decoration: none;
-  padding: var(--space-1) 0;
-}
-
-.site-nav a:hover {
-  color: var(--ink);
-}
-
-.site-footer {
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-16);
-  color: var(--ink-3);
-  font-size: var(--text-sm);
-}
-
-.site-footer-inner {
-  padding-top: var(--space-8);
-  padding-bottom: var(--space-10);
-}
-
-.site-footer p {
-  margin: 0 0 var(--space-2);
-}
-
-.page {
-  padding-top: var(--space-10);
-}
-
-.prose {
-  max-width: var(--measure);
-  min-width: 0;
-}
-
-.lede {
-  font-size: var(--text-lg);
-  color: var(--ink-2);
-}
-
-.notice {
-  background: var(--warn-soft);
-  border: 1px solid var(--warn-line);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4);
-  margin: 0 0 var(--space-6);
-  font-size: var(--text-sm);
-}
-
-.meta {
-  color: var(--ink-3);
-  font-size: var(--text-sm);
-}
-
-/* The landing */
-
-.hero {
-  padding: var(--space-8) 0 var(--space-6);
-  max-width: var(--measure);
-}
-
-.hero h1 {
-  font-size: var(--text-hero);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: var(--space-6) 0 var(--space-4);
-}
-
-.button {
-  display: inline-block;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line-strong);
-  color: var(--ink);
-  text-decoration: none;
-  font-weight: var(--weight-strong);
-  font-size: var(--text-sm);
-}
-
-.button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--paper);
-}
-
-.points {
-  list-style: none;
-  padding: 0;
-  max-width: var(--measure);
-}
-
-.points li {
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--line);
-  margin: 0;
-}
-
-.faq dt {
-  font-weight: var(--weight-strong);
-  margin-top: var(--space-6);
-}
-
-.faq dd {
-  margin: var(--space-1) 0 0;
-  color: var(--ink-2);
-}
-
-/* The docs */
-
-.docs {
-  display: grid;
-  grid-template-columns: var(--side-width) minmax(0, 1fr) var(--toc-width);
-  gap: var(--space-10);
-  align-items: start;
-}
-
-.docs-nav {
-  font-size: var(--text-sm);
-  position: sticky;
-  top: var(--space-6);
-  max-height: calc(100vh - var(--space-12));
-  overflow-y: auto;
-}
-
-/* On a phone the navigation is a disclosure above the page (.docs-menu); beside it otherwise. */
-.docs-menu {
-  display: none;
-  font-size: var(--text-sm);
-  border-bottom: 1px solid var(--line);
-  padding-bottom: var(--space-2);
-}
-
-.docs-menu summary {
-  cursor: pointer;
-  color: var(--ink-2);
-  padding: var(--space-2) 0;
-}
-
-.docs-nav ul,
-.docs-menu ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.docs-nav ul ul,
-.docs-menu ul ul {
-  padding-left: var(--space-3);
-  border-left: 1px solid var(--line);
-  margin: var(--space-1) 0 var(--space-2);
-}
-
-.docs-nav li + li,
-.docs-menu li + li {
-  margin-top: 0;
-}
-
-.docs-nav a,
-.docs-menu a {
-  display: block;
-  color: var(--ink-2);
-  text-decoration: none;
-  padding: 3px var(--space-2);
-  border-radius: var(--radius-md);
-}
-
-.docs-nav a[aria-current='page'],
-.docs-menu a[aria-current='page'] {
-  background: var(--fill);
-  color: var(--ink);
-  font-weight: var(--weight-strong);
-}
-
-.docs-nav .folder-name,
-.docs-menu .folder-name {
-  display: block;
-  padding: var(--space-2) var(--space-2) 2px;
-  color: var(--ink-3);
-  font-size: var(--text-xs);
-}
-
-.toc {
-  font-size: var(--text-xs);
-  position: sticky;
-  top: var(--space-6);
-}
-
-.toc p {
-  color: var(--ink-3);
-  margin-bottom: var(--space-2);
-}
-
-.toc ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.toc a {
-  color: var(--ink-2);
-  text-decoration: none;
-  display: block;
-  padding: 2px 0;
-}
-
-.toc .depth-3 {
-  padding-left: var(--space-3);
-}
-
-.pager {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-12);
-  padding-top: var(--space-4);
-  font-size: var(--text-sm);
-}
-
-@media (max-width: 1100px) {
-  .docs {
-    grid-template-columns: var(--side-width) minmax(0, 1fr);
+/*
+ * The Markdown of a page (hand-written MDX and generated pages alike): plain
+ * elements without classes, so the rules sit on the element under `.prose`.
+ * Tailwind's preflight removed the browser's defaults; these give them back.
+ */
+@layer components {
+  .prose {
+    max-width: var(--container-measure);
+    min-width: 0;
   }
 
-  .toc {
-    display: none;
-  }
-}
-
-@media (max-width: 760px) {
-  .site-header-inner,
-  .site-footer-inner,
-  .page {
-    padding-left: var(--space-4);
-    padding-right: var(--space-4);
+  .prose :where(h1, h2, h3, h4) {
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 1.5rem;
   }
 
-  .page {
-    padding-top: var(--space-6);
+  .prose :where(h1) {
+    font-size: 2rem;
+    margin: 0 0 1rem;
+    letter-spacing: -0.02em;
   }
 
-  .docs {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
+  .prose :where(h2) {
+    font-size: 1.375rem;
+    margin: 3rem 0 0.75rem;
   }
 
-  .docs-nav {
-    display: none;
+  .prose :where(h3) {
+    font-size: 1.125rem;
+    margin: 2rem 0 0.5rem;
   }
 
-  .docs-menu {
-    display: block;
+  .prose :where(h4) {
+    font-size: 1rem;
+    margin: 1.5rem 0 0.5rem;
   }
 
-  .hero h1 {
-    font-size: var(--text-title);
+  .prose :where(p, ul, ol, dl, blockquote, pre, .table-wrap) {
+    margin: 0 0 1rem;
   }
 
-  .site-nav {
-    margin-left: 0;
+  .prose :where(ul) {
+    list-style: disc;
+    padding-left: 1.5rem;
+  }
+
+  .prose :where(ol) {
+    list-style: decimal;
+    padding-left: 1.5rem;
+  }
+
+  .prose :where(li + li) {
+    margin-top: 0.25rem;
+  }
+
+  .prose :where(li > ul, li > ol) {
+    margin: 0.25rem 0 0;
+  }
+
+  .prose :where(li)::marker {
+    color: var(--muted-foreground);
+  }
+
+  .prose :where(strong) {
+    font-weight: 600;
+  }
+
+  .prose :where(code) {
+    font-family: var(--site-mono);
+    font-size: 0.875em;
+    background: var(--muted);
+    border-radius: var(--radius-sm);
+    padding: 0.1em 0.3em;
+    /* An identifier wraps between its words, never inside one (style guide §5). */
+    overflow-wrap: break-word;
+  }
+
+  .prose :where(td code) {
+    white-space: nowrap;
+  }
+
+  .prose :where(pre) {
+    background: var(--code);
+    color: var(--code-fg);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  .prose :where(pre code) {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+    overflow-wrap: normal;
+  }
+
+  .prose :where(hr) {
+    border-top: 1px solid var(--border);
+    margin: 2rem 0;
+  }
+
+  .prose :where(blockquote) {
+    padding-left: 1rem;
+    border-left: 2px solid var(--border-strong);
+    color: var(--muted-foreground);
+  }
+
+  .prose :where(.table-wrap) {
+    overflow-x: auto;
+  }
+
+  .prose :where(table) {
+    border-collapse: collapse;
     width: 100%;
+    font-size: 0.875rem;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
-    animation: none !important;
+  .prose :where(th, td) {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.5rem 0.75rem 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .prose :where(th) {
+    font-weight: 600;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+  }
+
+  .prose :where(img) {
+    max-width: 100%;
+    height: auto;
   }
 }
 
@@ -620,8 +208,8 @@ th {
   align-items: center;
   justify-content: center;
   flex: none;
-  background: var(--fill);
-  color: var(--mark-color, var(--ink));
+  background: var(--muted);
+  color: var(--mark-color, var(--foreground));
 }
 
 .pp-svc-sm {
@@ -635,75 +223,82 @@ th {
 @media (prefers-color-scheme: dark) {
   /* A near-black brand would vanish on the dark paper: the ink instead (serviceMarkColors). */
   .pp-svc {
-    color: var(--mark-color-dark, var(--ink));
+    color: var(--mark-color-dark, var(--foreground));
   }
 }
 
 /*
  * The plugin page (website spec §2.3): its style sheet is the shared one of
  * `@vaubaan/plugin-page` (imported by app/layout.tsx), which reads `--pp-*`
- * only. The site hands it its own tokens, light and dark alike.
+ * only. The site hands it the shared tokens, light and dark alike: the four
+ * rows as light pills in their own hue, "ask me" in the accent family (your
+ * move), "no" in the one red.
  */
 .plugin-page {
-  --pp-accent: var(--accent);
-  --pp-accent-ink: var(--accent-ink);
-  --pp-accent-soft: var(--accent-soft);
-  --pp-ask-bg: var(--ask-bg);
-  --pp-ask-line: var(--ask-line);
-  --pp-bad: var(--bad);
-  --pp-bad-line: var(--bad-line);
-  --pp-env-bg: var(--env-bg);
-  --pp-env-ink: var(--env-ink);
-  --pp-env-line: var(--env-line);
-  --pp-fill: var(--fill);
-  --pp-focus-ring: var(--focus-ring);
-  --pp-font-mono: var(--font-mono);
-  --pp-ink: var(--ink);
-  --pp-ink-2: var(--ink-2);
-  --pp-ink-3: var(--ink-3);
-  --pp-leading-tight: var(--leading-tight);
-  --pp-line: var(--line);
-  --pp-line-strong: var(--line-strong);
-  --pp-measure: var(--measure);
-  --pp-ok: var(--ok);
-  --pp-paper: var(--paper);
-  --pp-paper-side: var(--paper-side);
-  --pp-path-bg: var(--path-bg);
-  --pp-path-ink: var(--path-ink);
-  --pp-path-line: var(--path-line);
-  --pp-radius-lg: var(--radius-lg);
+  --pp-accent: var(--primary);
+  --pp-accent-ink: var(--primary-ink);
+  --pp-accent-soft: var(--primary-soft);
+  --pp-ask-bg: var(--approval-bg);
+  --pp-ask-ink: var(--approval-fg);
+  --pp-ask-line: var(--approval-border);
+  --pp-bad: var(--refused-fg);
+  --pp-bad-line: var(--refused-border);
+  --pp-env-bg: var(--muted);
+  --pp-env-ink: var(--muted-foreground);
+  --pp-env-line: var(--border-strong);
+  --pp-fill: var(--muted);
+  --pp-focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  --pp-font-mono: var(--site-mono);
+  --pp-ink: var(--foreground);
+  --pp-ink-2: var(--muted-foreground);
+  --pp-ink-3: var(--muted-foreground);
+  --pp-leading-tight: 1.25;
+  --pp-line: var(--border);
+  --pp-line-strong: var(--border-strong);
+  --pp-measure: var(--container-measure);
+  --pp-ok: var(--allowed-fg);
+  --pp-paper: var(--background);
+  --pp-paper-side: var(--sidebar);
+  --pp-path-bg: var(--primary-soft);
+  --pp-path-ink: var(--primary-ink);
+  --pp-path-line: var(--approval-border);
+  --pp-radius-lg: var(--radius-xl);
   --pp-radius-md: var(--radius-md);
   --pp-radius-sm: var(--radius-sm);
-  --pp-row1-bg: var(--row1-bg);
-  --pp-row1-ink: var(--row1-ink);
-  --pp-row2-bg: var(--row2-bg);
-  --pp-row2-ink: var(--row2-ink);
-  --pp-row3-bg: var(--row3-bg);
-  --pp-row3-ink: var(--row3-ink);
-  --pp-row4-bg: var(--row4-bg);
-  --pp-row4-ink: var(--row4-ink);
-  --pp-space-1: var(--space-1);
-  --pp-space-10: var(--space-10);
-  --pp-space-12: var(--space-12);
-  --pp-space-2: var(--space-2);
-  --pp-space-3: var(--space-3);
-  --pp-space-4: var(--space-4);
-  --pp-space-6: var(--space-6);
-  --pp-space-8: var(--space-8);
-  --pp-text-base: var(--text-base);
-  --pp-text-hero: var(--text-hero);
-  --pp-text-lg: var(--text-lg);
-  --pp-text-sm: var(--text-sm);
-  --pp-text-title: var(--text-title);
-  --pp-text-xs: var(--text-xs);
-  --pp-tip-bg: var(--tip-bg);
-  --pp-tip-ink: var(--tip-ink);
-  --pp-warn-line: var(--warn-line);
-  --pp-warn-soft: var(--warn-soft);
-  --pp-weight-regular: var(--weight-regular);
-  --pp-weight-strong: var(--weight-strong);
-  --pp-yes-bg: var(--yes-bg);
-  --pp-yes-line: var(--yes-line);
+  --pp-row1-bg: var(--row-1-bg);
+  --pp-row1-ink: var(--row-1-fg);
+  --pp-row1-line: var(--row-1-border);
+  --pp-row2-bg: var(--row-2-bg);
+  --pp-row2-ink: var(--row-2-fg);
+  --pp-row2-line: var(--row-2-border);
+  --pp-row3-bg: var(--row-3-bg);
+  --pp-row3-ink: var(--row-3-fg);
+  --pp-row3-line: var(--row-3-border);
+  --pp-row4-bg: var(--row-4-bg);
+  --pp-row4-ink: var(--row-4-fg);
+  --pp-row4-line: var(--row-4-border);
+  --pp-space-1: 4px;
+  --pp-space-2: 8px;
+  --pp-space-3: 12px;
+  --pp-space-4: 16px;
+  --pp-space-6: 24px;
+  --pp-space-8: 32px;
+  --pp-space-10: 40px;
+  --pp-space-12: 48px;
+  --pp-text-xs: 0.8125rem;
+  --pp-text-sm: 0.875rem;
+  --pp-text-base: 1rem;
+  --pp-text-lg: 1.125rem;
+  --pp-text-title: 1.75rem;
+  --pp-text-hero: 2.25rem;
+  --pp-tip-bg: var(--foreground);
+  --pp-tip-ink: var(--background);
+  --pp-warn-line: var(--border-strong);
+  --pp-warn-soft: var(--primary-soft);
+  --pp-weight-regular: 400;
+  --pp-weight-strong: 600;
+  --pp-yes-bg: var(--allowed-bg);
+  --pp-yes-line: var(--allowed-border);
   /* The page's own steps above the site's type scale: a section, a macro-action card, a column of the map. */
   --pp-text-section: 1.75rem;
   --pp-text-card: 1.375rem;

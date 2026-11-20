@@ -37,7 +37,7 @@ import {
 } from '@vaubaan/policy-engine';
 
 import type { ConnectStepInfo, CredentialInfo, LevelBudgets, PluginInfo } from './info';
-import { Gate, Info, Mono, RowGlyph, ServiceMark } from './marks';
+import { Gate, Info, Mono, ServiceMark } from './marks';
 import {
   ALTERNATIVES_LEGEND,
   anythingElseSentence,
@@ -615,10 +615,7 @@ function MapSection({ plugin, n, ctx }: { plugin: PluginInfo; n: number; ctx: Ct
             {map.rows.map((row) => (
               <tr key={row.row} className={`r-${row.row}`} data-row={row.row}>
                 <th scope="row">
-                  <span className="pp-rw">
-                    <RowGlyph row={row.row} />
-                    {row.word}
-                  </span>
+                  <span className="pp-rw">{row.word}</span>
                   <p>{row.gates}</p>
                 </th>
                 {row.cells.map((cell, i) => (
@@ -757,7 +754,6 @@ function LevelCells({ levels }: { levels: LevelBudgets }) {
 function RowTag({ row }: { row: Row }) {
   return (
     <span className={`pp-rowtag r-${row}`} data-row={row}>
-      <RowGlyph row={row} />
       {ROW_WORDS[row]}
     </span>
   );

@@ -965,18 +965,7 @@
   vertical-align: top;
 }
 
-.plugin-page .pp-gl {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* The rows of the tree, tinted; worst first. */
+/* The rows of the tree, tinted, worst first; a row's tag is a light pill and its word carries the order. */
 .plugin-page .r-4 th,
 .plugin-page .r-4 td,
 .plugin-page .pp-rowtag.r-4 {
@@ -1024,12 +1013,28 @@
 .plugin-page .pp-rowtag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px var(--pp-space-2);
-  border-radius: var(--pp-radius-md);
+  padding: 1px var(--pp-space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-size: var(--pp-text-xs);
   font-weight: var(--pp-weight-strong);
   white-space: nowrap;
+}
+
+.plugin-page .pp-rowtag.r-4 {
+  border-color: var(--pp-row4-line);
+}
+
+.plugin-page .pp-rowtag.r-3 {
+  border-color: var(--pp-row3-line);
+}
+
+.plugin-page .pp-rowtag.r-2 {
+  border-color: var(--pp-row2-line);
+}
+
+.plugin-page .pp-rowtag.r-1 {
+  border-color: var(--pp-row1-line);
 }
 
 .plugin-page .pp-chips {
@@ -1104,7 +1109,7 @@
 .plugin-page .pp-g.g-ask {
   border-color: var(--pp-ask-line);
   background: var(--pp-ask-bg);
-  color: var(--pp-row3-ink);
+  color: var(--pp-ask-ink);
 }
 
 .plugin-page .pp-g.g-off {
