@@ -32,6 +32,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **A service's error text no longer hands the agent the account's secret.** A service that echoed
+  the token, password or key it was sent in its error message had that message relayed to the
+  agent as is; every secret value of the credentials the call used is now replaced by
+  `[credential]` first.
 - **Plugins reach the public internet only, unless the operator lists a host.** A service whose
   address the person types (CalDAV) could be pointed at the instance's loopback or network, and
   the connect page told the outcomes apart. The `fetch` plugins receive now refuses every address

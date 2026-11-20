@@ -89,6 +89,7 @@ import {
 } from '../accounts';
 import type { Logger } from '../logging';
 import type { AccountCredentialCache } from './credential-cache';
+import { scrubSecrets, secretValuesOf } from './scrub-secrets';
 import { NOOP_TELEMETRY_SINK, type PluginOutcome, type TelemetrySink } from './telemetry-sink';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -250,12 +251,25 @@ function partsPhrase(count: number): string {
   return `${count} ${count === 1 ? 'part' : 'parts'}`;
 }
 
-/** A service failure, split into what the audit stores and what the agent reads. */
-function asUpstreamFailure(err: unknown, service: string, parts: number): UpstreamFailureError {
-  if (isUpstreamFailureError(err)) return err;
+/**
+ * A service failure, split into what the audit stores and what the agent reads;
+ * `secrets`, the values of the credentials the call used, never reach the agent.
+ */
+function asUpstreamFailure(
+  err: unknown,
+  service: string,
+  parts: number,
+  secrets: ReadonlySet<string>,
+): UpstreamFailureError {
+  if (isUpstreamFailureError(err)) {
+    const detail = scrubSecrets(err.detail, secrets);
+    return detail === err.detail
+      ? err
+      : new UpstreamFailureError({ summary: err.summary, detail, status: err.status, cause: err });
+  }
   const status = httpStatusOf(err);
   const className = upstreamErrorClassName(err);
-  const detail = err instanceof Error ? err.message : String(err);
+  const detail = scrubSecrets(err instanceof Error ? err.message : String(err), secrets);
   if (err instanceof CallTimeoutError) {
     const after = parts > 0 ? ` after ${partsPhrase(parts)}` : '';
     return new UpstreamFailureError({
@@ -385,6 +399,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     target: CallTarget,
     relay: PartRelay,
     limits: CallLimits,
+    secrets: Set<string>,
   ): Promise<unknown> {
     const accountId = target.account.id;
     let resolved: ResolvedCredential;
@@ -392,6 +407,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
       resolved = await deps.credentials.resolve(accountId);
     } catch (err) {
       throw await asUnavailable(err, target);
+    }
+    for (const value of secretValuesOf(resolved.plugin.credential, resolved.credential)) {
+      secrets.add(value);
     }
     // Once a part has left for the caller the call is never replayed: a retry
     // would deliver the beginning of the result twice.
@@ -424,6 +442,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     } catch (err) {
       throw await asUnavailable(err, target);
     }
+    for (const value of secretValuesOf(refreshed.plugin.credential, refreshed.credential)) {
+      secrets.add(value);
+    }
     // A second rejection right after a successful refresh is final for this call;
     // the next call starts over and the broker decides the account's fate.
     return forward(refreshed, ctx, call, target, relay, limits);
@@ -433,8 +454,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     async execute(ctx, call, target): Promise<unknown> {
       const limits = limitsOf(call, deps.callTimeoutSeconds);
       const relay = partRelayOf(call, limits);
+      const secrets = new Set<string>();
       try {
-        const result = await attempt(ctx, call, target, relay, limits);
+        const result = await attempt(ctx, call, target, relay, limits, secrets);
         report(call, { ok: true, result });
         return result;
       } catch (thrown) {
@@ -447,7 +469,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         const err = limits.signal.aborted ? stopReason(limits) : thrown;
         // The caller left: not an outcome of the plugin, nothing to report (spec §9).
         if (!(err instanceof CallerGoneError)) report(call, { ok: false, error: err });
-        throw asUpstreamFailure(err, target.account.service, relay.count);
+        throw asUpstreamFailure(err, target.account.service, relay.count, secrets);
       }
     },
   };
