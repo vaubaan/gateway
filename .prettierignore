@@ -25,3 +25,7 @@ CLAUDE.md
 
 # Real signatures, kept byte for byte (tests of plugins/trust.ts).
 apps/gateway/tests/fixtures/sigstore/
+
+# Rendered by packages/design-tokens (npm run generate --workspace @vaubaan/design-tokens).
+packages/design-tokens/tokens.css
+packages/design-tokens/theme.css

@@ -1,0 +1,16 @@
+{
+  "name": "@vaubaan/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The one token sheet of the app and the site (style guide §3): shadcn's variable names and Vaubaan's, light and dark, generated with the contrast pairs it is checked against",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./tokens.css",
+    "./theme.css": "./theme.css"
+  },
+  "scripts": {
+    "generate": "tsx scripts/generate.ts",
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  }
+}

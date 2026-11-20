@@ -38,6 +38,7 @@ minutes.
 - [requests](requests.md) — claims and approvals: the URL, who decides, expiry.
 - [audit](audit.md) — activity, retention, administrative entries.
 - [web-app](web-app.md) — the frame of the interface: layouts, shell, words, design system.
+- [design-tokens](design-tokens.md) — the one token sheet of the app and the site, generated with its contrast pairs.
 - [notifications](notifications.md) — devices, web push, the events that notify and to whom.
 
 ## Agents

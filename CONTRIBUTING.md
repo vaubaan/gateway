@@ -138,6 +138,7 @@ packages/gateway-core/    the call pipeline, refusals, the audit entry          
 packages/plugin-sdk/      the plugin contract, catalog loader, registry, test kit   @vaubaan/plugin-sdk
 packages/plugin-cli/      the plugin kit: init, try, build, submit                  @vaubaan/plugin-cli
 packages/plugin-page/     a service's page, drawn by the site and the gateway's Reference   @vaubaan/plugin-page
+packages/design-tokens/   the token sheet of the app and the site, its contrast pairs   @vaubaan/design-tokens
 packages/telemetry/       opt-in, anonymous plugin reports (off by default)         @vaubaan/telemetry
 packages/oauth-providers/ the OAuth provider table the gateway and the broker share  @vaubaan/oauth-providers
 plugins/<service>/        one plugin per service                                    @vaubaan/plugin-<service>
