@@ -135,7 +135,7 @@ export const PERSON_NEXT: Readonly<Record<RefusalCode, string>> = {
   'account-unavailable':
     "The account's owner opens it under **Accounts** and reconnects it. Its missions work again with the keys they have.",
   'account-revoked':
-    'Removed for good (`final: true`): create a mission for the account that replaces it. Your access withdrawn (`final: false`): ask the account\'s owner to give it back, and the same key works on it again.',
+    "Removed for good (`final: true`): create a mission for the account that replaces it. Your access withdrawn (`final: false`): ask the account's owner to give it back, and the same key works on it again.",
   'mission-inactive':
     'Expired: only its creator can extend it. Stopped (`revoked`): it never runs again; duplicate it into a new mission. Without an owner (`orphaned`): give back the access it was built on, and it serves calls again with the same keys.',
   'wrong-credential-kind':
@@ -149,62 +149,53 @@ const EXAMPLE_ACCOUNT = { id: 'acc_01', name: 'acme-supabase' };
  * projects' permissions. `risk-not-accepted` takes its hint from the policy
  * engine (`evaluateCall`), so its example hint is left out.
  */
-const EXAMPLES: Readonly<Record<RefusalCode, () => Refusal>> = {
-  'risk-not-accepted': () =>
-    refuse.riskNotAccepted({
-      missing_risks: ['github.merge-protected'],
-      executed_slices: [],
-      hint: '',
-    }),
-  'budget-exhausted': () =>
-    refuse.budgetExhausted({
-      risk_id: 'gmail.draft-write',
-      quota: 20,
-      consumed: 20,
-      period_end: '2026-11-21T00:00:00Z',
-      claim_url: 'https://your-domain/requests/req_01',
-    }),
-  'approval-required': () =>
-    refuse.approvalRequired({
-      risk_id: 'supabase[prod].migration-write',
-      fingerprint: 'sha256:3f9a…',
-      approval_url: 'https://your-domain/requests/req_02',
-      expires_at: '2026-11-20T18:00:00Z',
-      approval_valid_seconds: 600,
-    }),
-  'resource-not-in-mission': () =>
-    refuse.resourceNotInMission({
-      cited_ref: 'acme/billing',
-      account: { id: 'acc_02', name: 'acme' },
-      allowed_resources: [{ ref: 'acme/web', env: null, display_name: null }],
-    }),
-  'rate-limited': () =>
-    refuse.rateLimited({
-      risk_id: 'notion.content-append',
-      limit: { max: 10, window_seconds: 60 },
-      retry_after_seconds: 12,
-    }),
-  'account-unavailable': () =>
-    refuse.accountUnavailable({
-      account: { id: 'acc_03', name: 'me@example.com' },
-      status: 'expired',
-      owner: { kind: 'user', display: 'me@example.com' },
-    }),
-  'account-revoked': () =>
-    refuse.accountRevoked({ account: EXAMPLE_ACCOUNT, cause: 'access-withdrawn' }),
-  'mission-inactive': () =>
-    refuse.missionInactive({ status: 'expired', reason: 'its end date passed' }),
-  'wrong-credential-kind': () =>
-    refuse.wrongCredentialKind({
-      door: 'execution',
-      presented: 'human-session',
-      expected: 'mission-token',
-    }),
+const EXAMPLES: Readonly<Record<RefusalCode, Refusal>> = {
+  'risk-not-accepted': refuse.riskNotAccepted({
+    missing_risks: ['github.merge-protected'],
+    executed_slices: [],
+    hint: '',
+  }),
+  'budget-exhausted': refuse.budgetExhausted({
+    risk_id: 'gmail.draft-write',
+    quota: 20,
+    consumed: 20,
+    period_end: '2026-11-21T00:00:00Z',
+    claim_url: 'https://your-domain/requests/req_01',
+  }),
+  'approval-required': refuse.approvalRequired({
+    risk_id: 'supabase[prod].migration-write',
+    fingerprint: 'sha256:3f9a…',
+    approval_url: 'https://your-domain/requests/req_02',
+    expires_at: '2026-11-20T18:00:00Z',
+    approval_valid_seconds: 600,
+  }),
+  'resource-not-in-mission': refuse.resourceNotInMission({
+    cited_ref: 'acme/billing',
+    account: { id: 'acc_02', name: 'acme' },
+    allowed_resources: [{ ref: 'acme/web', env: null, display_name: null }],
+  }),
+  'rate-limited': refuse.rateLimited({
+    risk_id: 'notion.content-append',
+    limit: { max: 10, window_seconds: 60 },
+    retry_after_seconds: 12,
+  }),
+  'account-unavailable': refuse.accountUnavailable({
+    account: { id: 'acc_03', name: 'me@example.com' },
+    status: 'expired',
+    owner: { kind: 'user', display: 'me@example.com' },
+  }),
+  'account-revoked': refuse.accountRevoked({ account: EXAMPLE_ACCOUNT, cause: 'access-withdrawn' }),
+  'mission-inactive': refuse.missionInactive({ status: 'expired', reason: 'its end date passed' }),
+  'wrong-credential-kind': refuse.wrongCredentialKind({
+    door: 'execution',
+    presented: 'human-session',
+    expected: 'mission-token',
+  }),
 };
 
 /** The example refusal of a code, as the gateway builds it. */
 export function exampleRefusal(code: RefusalCode): Refusal {
-  return EXAMPLES[code]();
+  return EXAMPLES[code];
 }
 
 /** The fields a refusal of `code` carries besides `code` and `hint`. */
@@ -235,7 +226,7 @@ export function refusalsMarkdown(bootstrap: string): string {
   const out: string[] = [
     `A refusal is how Vaubaan Gateway answers a call it will not run: a JSON-RPC error with code \`${REFUSAL_RPC_CODE}\` whose \`data\` carries the refusal's \`code\`, the fields of that code and a \`hint\` telling the agent what to do. Nothing was executed and nothing is held: the gateway never keeps a call waiting.`,
     '',
-    'This page lists every code with what the agent does and what you, the person behind the mission, do next. It is generated from the gateway: the codes and fields from its builders, the agent\'s side from the [reference for agents](/docs/reference/for-agents) every instance serves.',
+    "This page lists every code with what the agent does and what you, the person behind the mission, do next. It is generated from the gateway: the codes and fields from its builders, the agent's side from the [reference for agents](/docs/reference/for-agents) every instance serves.",
     '',
     markdownTable(
       ['Code', 'What happened'],
@@ -248,7 +239,7 @@ export function refusalsMarkdown(bootstrap: string): string {
     JSON.stringify(rpc, null, 2),
     '```',
     '',
-    '**The agent never works around a refusal**: no other tool, no other key, no direct access to the service, no splitting an action to slip under a limit. A link in a refusal (`claim_url`, `approval_url`) is for you: only the mission\'s creator, signed in, can answer it, and the same request is under **Waiting for you**.',
+    "**The agent never works around a refusal**: no other tool, no other key, no direct access to the service, no splitting an action to slip under a limit. A link in a refusal (`claim_url`, `approval_url`) is for you: only the mission's creator, signed in, can answer it, and the same request is under **Waiting for you**.",
   ];
   for (const code of REFUSAL_CODES) {
     const row = refusal(code);
@@ -302,7 +293,7 @@ function gateCell(row: Row, level: (typeof TRUST_LEVELS)[number]): string {
 export function trustLevelsMarkdown(): string {
   const levels = TRUST_LEVELS.map((level) => TRUST_LEVEL_LABELS[level]);
   return [
-    'A trust level is what a person sets a ticked macro-action to when creating a mission; from the row of each permission, it decides whether that permission runs freely, asks first or is left out, and it multiplies the limits. This page is generated from the gateway\'s policy engine; why the model works this way is explained in [how a permission is decided](/docs/concepts/permissions).',
+    "A trust level is what a person sets a ticked macro-action to when creating a mission; from the row of each permission, it decides whether that permission runs freely, asks first or is left out, and it multiplies the limits. This page is generated from the gateway's policy engine; why the model works this way is explained in [how a permission is decided](/docs/concepts/permissions).",
     '',
     '## The matrix',
     '',

@@ -27,12 +27,12 @@ Each permission of a catalog carries five facts, chosen by the plugin's author a
 
 The facts are never added up or scored. They sort the permission into one of four rows, by how hard a mistake would be to repair, and the first fact that answers is the reason printed beside it:
 
-| Row                        | Developer: GitHub, Supabase                                                                         | Consultant: Gmail, Notion, Google Calendar                                                               |
-| -------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 4. Cannot be repaired      | `github.delete-release`, `supabase.storage.bulk-object-write` (irreversible)                        | `gmail.send-to-zone-external`, `google-calendar.invite-external` (irreversible)                          |
-| 3. Repairable, at a price  | `github.merge-protected`, `github.force-push`, `supabase.migration-write` (costly to undo)          | `gmail.send-to-zone-internal`, `notion.block-delete`, `google-calendar.event-change` (costly to undo)    |
-| 2. Worth a look            | `github.search-global` (whole account), `supabase.auth.read-users` (personal data)                  | `notion.query-databases`, `google-calendar.event-read` (personal data), `gmail.bulk-read` (in bulk)      |
-| 1. Harmless                | `github.read-code`, `github.create-pr`, `supabase.read-data`                                        | `gmail.draft-write`, `notion.content-append`, `google-calendar.free-busy-read`                           |
+| Row                       | Developer: GitHub, Supabase                                                                | Consultant: Gmail, Notion, Google Calendar                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 4. Cannot be repaired     | `github.delete-release`, `supabase.storage.bulk-object-write` (irreversible)               | `gmail.send-to-zone-external`, `google-calendar.invite-external` (irreversible)                       |
+| 3. Repairable, at a price | `github.merge-protected`, `github.force-push`, `supabase.migration-write` (costly to undo) | `gmail.send-to-zone-internal`, `notion.block-delete`, `google-calendar.event-change` (costly to undo) |
+| 2. Worth a look           | `github.search-global` (whole account), `supabase.auth.read-users` (personal data)         | `notion.query-databases`, `google-calendar.event-read` (personal data), `gmail.bulk-read` (in bulk)   |
+| 1. Harmless               | `github.read-code`, `github.create-pr`, `supabase.read-data`                               | `gmail.draft-write`, `notion.content-append`, `google-calendar.free-busy-read`                        |
 
 A sent mail cannot be unsent: sending outside the company is row 4, while writing the draft is row 1. A merge into `main` can be reverted, at the price of a revert and whatever ran on it in between: row 3. Reading the events of a calendar shows who meets whom: row 2, worth a look, not because it breaks anything but because of what it reveals.
 

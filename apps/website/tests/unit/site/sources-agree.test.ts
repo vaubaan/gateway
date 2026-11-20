@@ -168,7 +168,10 @@ describe('the rows by trust level', () => {
   it('print, for each row and trust level, the gate the policy engine gives', () => {
     expect(rows).toHaveLength(4);
     for (const line of rows) {
-      const [label = '', ...cells] = line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const [label = '', ...cells] = line
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map((c) => c.trim());
       const row = Number(label[0]) as 1 | 2 | 3 | 4;
       expect(label).toBe(`${row}. ${policyEngine.ROW_WORDS[row]}`);
       policyEngine.TRUST_LEVELS.forEach((level, i) => {
@@ -227,7 +230,7 @@ describe('the explanation of permissions', () => {
     for (const line of lines) {
       const row = Number(line.slice(2, 3));
       expect(line, `row ${row}`).toContain(policyEngine.ROW_WORDS[row as 1 | 2 | 3 | 4]);
-      for (const match of line.matchAll(/`([a-z0-9.\-]+)`/g)) {
+      for (const match of line.matchAll(/`([a-z0-9.-]+)`/g)) {
         expect(rowOf.get(match[1] ?? ''), match[1]).toBe(row);
       }
     }
