@@ -39,9 +39,10 @@ Binding on every default view, at 1440×900.
 5. **Nothing decorative**: no zebra, double separator, decorative icon, uppercase tracked label,
    repeated unit, or bar restating its number.
 6. **Four text sizes, two weights.** Sentence case. Prose under ~75 characters a line.
-7. **One accent colour**, for the primary action and links. **Status colour only where a status
-   differs from normal**: amber "needs you", red "stopped, refused, limit reached". Never "active"
-   or "allowed" in colour. One exception: a service mark in its brand colour, which carries no
+7. **One accent colour**, for the primary action, links and what waits for the person's answer
+   (with its own shape, which links never have). **Status colour only where a status differs from
+   normal**: red only for "stopped, refused, limit reached"; no orange or yellow anywhere. Never
+   "active" or "allowed" in colour. One exception: a service mark in its brand colour, which carries no
    meaning and is never read as a state.
 8. **A number only where someone would act on it**: a meter near a limit, otherwise a dash.
 9. **At most seven navigation entries.**
@@ -91,18 +92,21 @@ One word per thing; a person never learns the protocol's word. The word list is
 
 ### 3.1 Colour
 
-- Families: paper, hairlines, ink (four levels), accent, exceptions (warn, bad, ok — done, on
-  checklists only), code (dark in both themes), overlay, marks (a person's mark, never a status),
-  focus. A service's brand colour is the one colour that is neither a token nor a status.
+- Families: paper, hairlines, ink (four levels), accent, the four risk rows (green, cool grey,
+  mauve, deep plum: a light tint each, its word darker), exceptions (refused — the one red; done,
+  on checklists only), code (dark in both themes), overlay, marks (a person's mark, never a
+  status), focus. The trust levels are ink, not colour. A service's brand colour is the one colour that is neither a token nor a status.
 - The lowest ink level is below AA on purpose and carries no information (placeholder, disabled
   mark).
 - A skin changes values only; names and readers stay.
+- The sheet is shared by the interface and the site
+  ([ADR](../decisions/design-system-on-shadcn-shared-by-the-app-and-the-site.md)).
 
 ### 3.2 Type
 
 Four sizes (title; body, rows, controls and section headings; secondary lines; captions and
 identifiers), weights 400 and 600, a sans-serif and a monospace for identifiers and code, both
-bundled.
+bundled, the same on the site.
 
 ### 3.3 Space, radius, motion
 
@@ -148,8 +152,9 @@ guide and the design system are extended, then the screen is built. Rules a comp
   on a hue without an icon.
 - **Identifier** — mono, as the protocol spells it; wraps between words, never inside one.
 - **Permission row** — what it allows in words, its id, the name of its row with the reason in quiet
-  type, limits, gate, and "why?". Harmless is plain; rows 2 and above take a status colour, row 4
-  in the strong weight. Lists of permissions are ordered by row, the hardest to repair first.
+  type, limits, gate, and "why?". Every row is a light pill in its own hue, row 4 in the strong
+  weight; no gauge or icon beside it: the word carries the order, so it is never abbreviated or
+  hidden. Lists of permissions are ordered by row, the hardest to repair first.
 - **Can / Asks first / Cannot** — a mission's summary; says how many permissions it sums up; never
   replaces the explicit list.
 - **Dialog** — one question, **the consequence stated before anything happens**, a button named
@@ -189,7 +194,9 @@ guide and the design system are extended, then the screen is built. Rules a comp
 
 ### 8.1 Settled
 
-- Components written for this interface, no component library.
+- Primitives from shadcn/ui, copied into the code and owned; domain components written for this
+  interface on them
+  ([ADR](../decisions/design-system-on-shadcn-shared-by-the-app-and-the-site.md)).
 
 ### 8.2 Open
 
@@ -198,6 +205,10 @@ guide and the design system are extended, then the screen is built. Rules a comp
 - **The phone**: pages hold at 390 px, none designed phone-first.
 
 ## 9. Known gaps between this guide and the interface
+
+- Until the migration of [recognise Vaubaan at a glance](../intents/recognise-vaubaan-at-a-glance.md)
+  lands, the interface keeps its former palette (amber, a sky-blue accent, rows 2 to 4 in amber and
+  red) and its hand-written components.
 
 - Raw lengths remain in page style sheets and for mark dimensions.
 - The consent pages and the refusals of a forwarded request URL load nothing and repeat the tokens
