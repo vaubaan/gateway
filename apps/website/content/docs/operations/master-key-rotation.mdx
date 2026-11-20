@@ -37,4 +37,10 @@ A non-zero `current unreadable` column in the dry run means `VAUBAAN_MASTER_KEY`
 
 **5. Replace your offline copy of the key** with the key as the host holds it, and keep the old key with the backups taken before step 3, or destroy those backups.
 
-More: [configuration handbook, Rotating the master key](https://github.com/vaubaan/gateway/blob/main/docs/handbook/configuration.md#rotating-the-master-key), [Railway guide §8](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#8-rotating-the-master-key), ADR [master-key-rotation-reseals-every-blob](https://github.com/vaubaan/gateway/blob/main/docs/decisions/master-key-rotation-reseals-every-blob.md).
+## On Railway
+
+- **Run every command in a `railway ssh` session on the service that serves the store**, never from another image or from your machine: a newer image would migrate the file. The session is root: prefix each command with `vaubaan-entrypoint` and use `/app/apps/gateway/backup.mjs` and `/app/apps/gateway/reseal.mjs`. A command that answers "this instance is not configured" (exit 78) runs in a session without the service's variables: open it again on the right service and environment.
+- **Step 1 edits three variables of the service**: stage the three changes in Railway and deploy **once**, with all three applied together.
+- **Step 5: copy the key from the service's variables**, as Railway holds it, not from the terminal where you generated it, so a paste error at step 1 cannot leave your offline copy useless. Railway's own volume backups taken before step 3 open only with the old key: keep it with them, or delete them.
+
+More: [configuration handbook, Rotating the master key](https://github.com/vaubaan/gateway/blob/main/docs/handbook/configuration.md#rotating-the-master-key), ADR [master-key-rotation-reseals-every-blob](https://github.com/vaubaan/gateway/blob/main/docs/decisions/master-key-rotation-reseals-every-blob.md).

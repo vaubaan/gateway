@@ -98,7 +98,8 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   `store.backupTo` uses `VACUUM INTO`; an atomic snapshot of both files is fine.
 - `vaubaan-entrypoint node /app/apps/gateway/backup.mjs [<name>]`: **not encrypted**, carries the
   sign-in configuration ([authentication](authentication.md)), opens only with the master-key
-  versions it prints (keep them with it). Off Railway: `deploy/railway.md` §6.
+  versions it prints (keep them with it). Copying it off a Railway volume: the site's
+  [backup and restore](https://vaubaan.com/docs/operations/backup-and-restore#make-a-copy).
 - Scheduled (`backup.s3.*`, [configuration](configuration.md#configuration-keys)): each run
   encrypts, dry-runs a restore of the result and uploads nothing if it fails.
 
@@ -108,7 +109,8 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   `restore.sha256` on an absent or empty store. The source is never printed.
 - Verified before replacing: hash, integrity, every recorded migration ships here (older passes,
   newer is refused), every sealed blob opens. What is in the way becomes `<name>.replaced-<time>`.
-- It never re-seals (`deploy/railway.md`, "Moving an instance"); with no key file, setup mode
+- It never re-seals (the site's
+  [move an instance](https://vaubaan.com/docs/operations/move-an-instance)); with no key file, setup mode
   receives the copy's key first ([configuration](configuration.md)).
 
 ## Debug

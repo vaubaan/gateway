@@ -50,6 +50,6 @@ A copy, made by hand or by the schedule, restores on an image at least as recent
 - **A new instance starts from the copy.** Set `VAUBAAN_RESTORE_FROM` (an absolute path or an https URL, kept as a secret) and `VAUBAAN_RESTORE_SHA256`, and start it on an empty volume. Before it opens the store, it checks the hash, SQLite's integrity, that the schema is not newer than the image and that its keys open every stored secret, then puts the copy in place; a refusal stops the start and writes nothing. Without the key file on the new host, the instance starts in setup mode: `/admin/bootstrap` asks for the bootstrap token and the key file the former instance handed out, then runs the same restore.
 - **The command**, gateway stopped: `node apps/gateway/restore.mjs <file or https URL> --sha256 <hex>` inside the container (with Compose, `docker compose run --rm gateway node apps/gateway/restore.mjs …`). `--dry-run` only checks; a store that exists is replaced only with `--force`, and kept aside as `<name>.replaced-<time>`.
 
-Try it on a scratch instance before you need it. Moving an instance from host to host: [Railway guide, Moving an instance](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#9-moving-an-instance).
+Try it on a scratch instance before you need it. Moving an instance from host to host: [move an instance](/docs/operations/move-an-instance).
 
 More: the [store handbook, Backup](https://github.com/vaubaan/gateway/blob/main/docs/handbook/store.md#backup).

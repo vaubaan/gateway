@@ -1,0 +1,42 @@
+---
+title: Move an instance
+description: Start a new instance from an old one's store — to another Railway service, a Fly machine or a server of your own — with a new master key, a checked restore and a reseal.
+---
+
+Moving an instance means starting a new one from a backup of the old one's store, on any host, with a master key of its own; nobody drops a file on the new volume by hand, and the new instance checks the copy before it opens it.
+
+The commands below are written for Railway (`railway ssh`, `vaubaan-entrypoint`, paths under `/app`); with Docker Compose, run them with `docker compose exec gateway node apps/gateway/...` ([backup and restore](/docs/operations/backup-and-restore)).
+
+## Steps
+
+**1. Back up the source**, and note the copy's hash in the same session:
+
+```bash
+vaubaan-entrypoint node /app/apps/gateway/backup.mjs move.sqlite
+sha256sum /data/move.sqlite
+```
+
+Copy the file off the volume ([make a copy](/docs/operations/backup-and-restore#make-a-copy)) and check the hash on your machine (`sha256sum move.sqlite`). Note the master-key versions the backup named: the new instance needs those keys.
+
+**2. Stop the source from changing.** What it writes after the backup — activity entries, and above all a service token it refreshes (a service that rotates refresh tokens invalidates the one in the copy) — is not in the copy. Take the backup as late as you can, and stop the source (remove its domain, or its deployment) as soon as the file is off the volume.
+
+**3. Put the copy where the new host can fetch it**: an object storage bucket and a presigned GET URL that expires within the hour (S3: `aws s3 presign s3://bucket/move.sqlite --expires-in 3600`). The URL is a credential to the whole store, whose secrets the master key still protects: give it only as a secret of the new service. A self-hosted target can use a file path instead, on a volume mounted read-only beside `/data`.
+
+**4. Configure the new instance** with the source's variables (the same `VAUBAAN_PUBLIC_URL` if the domain moves with it, the same sign-in providers and OAuth brokers) and:
+
+- a **new master key** (`npm run gen-master-key`) in `VAUBAAN_MASTER_KEY`, `VAUBAAN_MASTER_KEY_VERSION` = the source's version plus one, and `VAUBAAN_MASTER_KEY_PREVIOUS` = `<source version>=<source key>` for every version the backup named;
+- `VAUBAAN_RESTORE_FROM` = the presigned URL (or the path), as a secret (Fly: `fly secrets set`), and `VAUBAAN_RESTORE_SHA256` = the hash.
+
+**5. Deploy it, with an empty volume.** Before it opens the store, the server downloads the copy and checks the hash, SQLite's integrity, that its schema is not newer than the image and that its keys open every stored secret, then puts it in place and migrates it. The start log says `store restored` (bytes, hash, schema version, key versions; never the URL). A refusal stops the start with the reason and writes nothing: fix the variable and deploy again. A restart after a successful restore only logs a warning. The first start lasts as long as the download: the health check may fail meanwhile.
+
+Without a key on the new host (`VAUBAAN_MASTER_KEY_FILE` named, file absent), the instance starts in setup mode instead: `/admin/bootstrap` asks for the bootstrap token and the key file the former instance handed out, then runs the same restore.
+
+**6. Reseal on the new instance** ([master key rotation](/docs/operations/master-key-rotation), step 3): dry run, `--apply`, confirming run. Once it says `VAUBAAN_MASTER_KEY_PREVIOUS can now be removed`, remove it **and** `VAUBAAN_RESTORE_FROM` and `VAUBAAN_RESTORE_SHA256`, and deploy. Delete the copy from the bucket.
+
+**7. Point the domain at the new instance.** If the public URL changes, update the callback of every app registered for it (`/connections/callback/service`, the sign-in callbacks) and the addresses the agents use (MCP, the remote of their repositories). Keep the source's volume until the new instance has run for a while, then delete it; the source's key opens only the backups taken before the move: keep it with them, or delete them.
+
+## The same restore, as a command
+
+With the gateway stopped, since it replaces the store: `node apps/gateway/restore.mjs <file or https URL> --sha256 <hex>` inside the container. `--dry-run` checks a copy first; `--force` replaces a store that exists, and keeps the old one as `<name>.replaced-<time>`.
+
+More: the [store handbook, Restore](https://github.com/vaubaan/gateway/blob/main/docs/handbook/store.md#restore).

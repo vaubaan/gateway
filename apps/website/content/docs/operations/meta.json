@@ -4,6 +4,7 @@
     "backup-and-restore",
     "master-key-rotation",
     "upgrade",
+    "move-an-instance",
     "plugins",
     "telemetry",
     "oauth-broker"

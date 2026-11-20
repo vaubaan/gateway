@@ -1,9 +1,19 @@
 ---
 title: Install on Railway
-description: One Railway service built from the repository's Dockerfile, one volume at /data, the configuration in Railway variables, sign-in through GitHub.
+description: One Railway service built from the repository's Dockerfile, one volume at /data, the configuration in Railway variables, sign-in through GitHub; deploying a verified build, backups and the git remote's limits.
 ---
 
 On Railway, an instance is one service built from the repository's Dockerfile, with one volume mounted at `/data`, its configuration in Railway variables and sign-in through a GitHub OAuth App.
+
+## What Railway does
+
+What Railway's documentation says, as read for this guide (2026-10-14); check it again before relying on it:
+
+- Volumes are mounted owned by root, and an image that runs as another user should set `RAILWAY_RUN_UID=0`. One volume per service; a service with a volume is redeployed with a short downtime.
+- `RAILWAY_DOCKERFILE_PATH` names a Dockerfile that is not at the root.
+- The edge terminates TLS and forwards `X-Real-IP` (the client's address), `X-Forwarded-Proto` (always `https`) and `X-Forwarded-Host`. `X-Forwarded-For` is not in that list, and no address range of the edge is published.
+- A service binds `0.0.0.0` and the port in `PORT`.
+- `railway up` uploads the current directory and builds it; automatic deployments from a connected branch can be disabled.
 
 ## 1. The service
 
@@ -25,22 +35,38 @@ On Railway, an instance is one service built from the repository's Dockerfile, w
 | `VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID`       | from step 3                                                             |
 | `VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET`   | from step 3                                                             |
 | `VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY` | `true` (or `VAUBAAN_SIGN_IN_GITHUB_ALLOWED_EMAIL_DOMAINS`)              |
+| `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS`  | `1`, until you verified `VAUBAAN_CLIENT_IP_HEADER` (below)              |
 
-Railway sets `PORT`; do not set it. With a sign-in provider in the configuration no bootstrap token is needed.
+Railway sets `PORT`; do not set it. With a sign-in provider in the configuration no bootstrap token is needed; set `VAUBAAN_BOOTSTRAP_TOKEN` (32 characters or more) only if you prefer to add sign-in providers from the interface.
 
-- **Leave `VAUBAAN_TRUSTED_PROXIES` unset.** Railway publishes no address range for its edge, so there is nothing safe to declare; the per-address limits are then one shared window and the activity records no address (accepted risk A2 of the threat model). Never set `0.0.0.0/0`.
-- **`VAUBAAN_CLIENT_IP_HEADER=x-real-ip` only after you verified it** on your instance: the procedure is in the [Railway guide](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#2-variables).
-- **The instance's own project is never a mission resource.** The gateway reads `RAILWAY_PROJECT_ID` and refuses that project to every mission; on an account that can see it, Railway's agent tool is unavailable. Still prefer a separate Railway workspace for the gateway, and never connect that workspace's token to the gateway itself.
+**The master key goes in a variable, not on the volume.** A Railway service has one volume, so a key file there sits beside the store: a volume snapshot would open every credential, and the start warns. To have the instance generate it on the volume anyway (`VAUBAAN_MASTER_KEY_FILE=/data/master.key`, `VAUBAAN_MASTER_KEY_GENERATE=1`, then download it at the setup's first step), also set `VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1`.
+
+### The client address
+
+- **Leave `VAUBAAN_TRUSTED_PROXIES` unset.** The gateway believes `X-Forwarded-For` only from a declared proxy, and Railway publishes no address range for its edge: there is nothing safe to declare. Never set `0.0.0.0/0`: any client could then choose the address it is limited and audited under.
+- **Until the client-address header is verified**, `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` lets the instance start (in production it refuses to start without a source of client addresses): the per-address limits are then one window shared by everybody and the activity records no address, and the start says so in one warning (accepted risk A2 of the [threat model](/trust)).
+- **`VAUBAAN_CLIENT_IP_HEADER=x-real-ip` only after you verified it.** The gateway then reads the client address from `X-Real-IP` alone. It is safe only if Railway's edge overwrites that header on every request; if the edge passed a client's value through, any client would pick its own address. Verify it once, on your instance:
+  1. Set `VAUBAAN_CLIENT_IP_HEADER=x-real-ip`, remove `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS`, deploy, and sign in.
+  2. Make one tool call through `/mcp` with a mission key **and** the header `X-Real-IP: 192.0.2.1` added by hand (with `curl`, a `tools/call` of any read tool of the mission).
+  3. Open the activity on that entry: its client address must be your real public address. If it reads `192.0.2.1`, the edge passes the header through: unset the variable at once and redeploy.
+
+### The instance's own project
+
+The instance's own Railway project is never a mission resource. Railway sets `RAILWAY_PROJECT_ID` in the container; the gateway reads it and refuses that project to every mission: not offered when a mission is created, refused at call time even if an older mission selected it, and tagged "this instance's own project: never reachable by a mission" on the account page. Without it, a mission with `railway.read-variables` on that project would read `VAUBAAN_MASTER_KEY`.
+
+The refusal covers the project as a mission resource, not what the Railway credential reaches by other means: on an account that can see the gateway's own project, Railway's agent tool is unavailable (refused at call time, left out of the tool list, said on the account page), and every other tool stays bound to the mission's projects. Still prefer **a separate Railway workspace** for the gateway, and never connect that workspace's token to the gateway itself. To protect another resource of the hosting (a backup bucket, a second service), list it in `VAUBAAN_SELF_RESOURCES` (`service:ref`, comma-separated).
 
 ## 3. The GitHub OAuth App
 
 At GitHub, in the settings of your organisation or account: Developer settings → OAuth Apps → New OAuth App.
 
 - Homepage URL: your public URL.
-- Authorization callback URL: `https://your-domain/auth/callback/github`.
+- Authorization callback URL: `https://your-domain/auth/callback/github` (the id of the sign-in provider, `github`, ends the address).
 - Leave device flow off. Generate a client secret; copy the client id and the secret into the variables of step 2.
 
-This app only signs people in. Missions reach your repositories through a GitHub token connected later from Accounts ([Connect GitHub](/plugins/github#connect)).
+The gateway asks for `read:user user:email`, and `read:org` only when `VAUBAAN_ADMIN_GROUP` names a team (`github:org/team`). If your organisation restricts OAuth App access, approve the App there before you use a team rule.
+
+This app only signs people in. Missions reach your repositories through a GitHub token connected later from Accounts ([Connect GitHub](/plugins/github#connect)); nothing about it goes in the variables.
 
 ## 4. Who may sign in
 
@@ -48,7 +74,7 @@ GitHub is open to anyone: the gateway refuses to start with a GitHub sign-in pro
 
 ## 5. Deploy a verified build
 
-Deploy the commit that passed the checks, from a clean archive of it — never `railway up` from your working copy, which uploads the directory you are in:
+Deploy the commit that passed the checks, from a clean archive of it:
 
 ```bash
 git checkout <the verified commit>
@@ -58,10 +84,22 @@ git archive --format=tar HEAD | (rm -rf /tmp/vaubaan-release && mkdir /tmp/vauba
 cd /tmp/vaubaan-release && railway link && railway up --ci
 ```
 
-Then open `https://your-domain/healthz` (it answers the version and the commit) and sign in.
+`railway up` uploads the clean tree of that commit (no `node_modules`, no local `.env`) and Railway builds it with the Dockerfile. Then open `https://your-domain/healthz` (it answers the version and the commit) and sign in.
+
+- **The commit `/healthz` answers is the archived one.** `git archive` writes the id of the commit into `apps/gateway/build-commit.txt`, and the build reads it from there: before uploading, `cat /tmp/vaubaan-release/apps/gateway/build-commit.txt` must equal `git rev-parse HEAD`. A service variable `GIT_COMMIT_SHA` is ignored: delete it if an older guide made you set it.
+- **Never run `railway up` from your working copy**: it uploads the directory you are in. The repository's `.railwayignore` keeps `.env*`, keys, `.mcp.json`, `deploy/config/gateway.yaml` and agent directories out of that upload as a safety net, but a file it does not name would still leave your machine; the clean archive is the procedure.
 
 ## 6. Backups
 
-Use Railway's volume backups, or make a consistent copy while the gateway runs ([backup and restore](/docs/operations/backup-and-restore)). Keep the master key separately, outside Railway: a copy of the volume opens no credential without it.
+- **The volume**: use Railway's volume backups, or make a consistent copy while the gateway runs, in `railway ssh` with `vaubaan-entrypoint node /app/apps/gateway/backup.mjs`, then copy it off the volume and delete it there ([backup and restore](/docs/operations/backup-and-restore#make-a-copy)). The copy also carries the sign-in providers and the admin rule the variables set, their secrets sealed like the rest: restored elsewhere, people sign in as before once the new host's callback address is registered at the sign-in provider.
+- **The master key**, separately and outside Railway: a copy of the volume opens no credential without it, and the key alone is nothing. A copy opens only with the keys of the versions it names, as they were when it was made: after a [rotation](/docs/operations/master-key-rotation), the copies taken before need the old key.
 
-The whole guide, with the git remote's limits behind Railway's edge and the master key rotation on Railway: [deploy/railway.md](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md).
+## 7. The git remote behind Railway's edge
+
+Agents clone and push through `https://your-domain/git/service/owner/repo.git`. Railway's edge (read on 2026-10-14) lets a request last up to 15 minutes while data flows, closes it after 5 minutes without any, requires **a request body to finish uploading within 5 minutes**, and caps headers at 32 KB; no body size limit is stated. The defaults fit: `VAUBAAN_GIT_MAX_PACK_MB=200` (about 5.5 Mbit/s of upload to send 200 MiB in 5 minutes) and `VAUBAAN_GIT_REQUEST_TIMEOUT=10m`. A push larger than the agent's link can send in 5 minutes fails at the edge: push fewer commits at a time.
+
+## Then
+
+- [First sign-in](/docs/install#first-sign-in), then [connect accounts](/docs/services).
+- Rotate the key in Railway's variables: [master key rotation](/docs/operations/master-key-rotation#on-railway).
+- Move the instance to another service or host: [move an instance](/docs/operations/move-an-instance).
