@@ -27,7 +27,7 @@ tracks:
   - apps/gateway/public/sw.js
   - apps/gateway/src/components/notifications/
   - apps/gateway/tests/unit/app/
-last_reviewed: 2026-11-15
+last_reviewed: 2026-11-20
 ---
 
 # Web app — handbook
