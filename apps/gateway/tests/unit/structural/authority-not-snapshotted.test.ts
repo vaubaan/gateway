@@ -255,6 +255,8 @@ describe('authority is recomputed, never snapshotted', () => {
       'authority/mission-grounds.ts': 'is the derivation: lists the missions it checks',
       'missions/mission-service.ts':
         'derives: `access`, `ownInspected` and `list` go through `grounds.inspect`; `verifyToken` hands the record to the door, which derives',
+      'missions/mission-edits.ts':
+        "reads the name only, of the mission that authored a version (the history's words); the mission edited comes from the service's `ownMission`, which derives; never the status",
       'missions/token-issuer.ts':
         'reads a token row by prefix only to know whether a drawn prefix is free; the mission that comes with it is never looked at',
       'requests/request-service.ts':
@@ -308,6 +310,7 @@ describe('authority is recomputed, never snapshotted', () => {
         'budget/budget-stage.ts',
         'budget/retention.ts',
         'missions/token-issuer.ts',
+        'missions/mission-edits.ts',
         'accounts/service.ts',
       ]) {
         // `record.status`, `mission.status`, `m.status`: none on a loaded record (the
