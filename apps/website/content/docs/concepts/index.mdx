@@ -1,13 +1,13 @@
 ---
 title: Concepts
-description: The words of Vaubaan Gateway — instance, account, resource, mission, key, permission, macro-action, trust level, limit, ask me first, activity — and the names the protocol keeps for them.
+description: The words of Vaubaan Gateway — instance, account, resource, mission, key, permission, macro-action, trust level, limit, ask me first, activity — and where to read how they work together.
 ---
 
 A mission is what a person allows an agent to do through Vaubaan Gateway: which accounts and resources it may touch, which permissions it holds, the limits of each, and which actions ask first. The other words of the interface follow from it.
 
 ## Instance
 
-One running Vaubaan Gateway: one process, one embedded database, on your network, for one company. It signs people in through your identity provider (OpenID Connect) or GitHub, and holds the credentials of the accounts connected to it, encrypted under a master key you keep. There is no hosted service and no tenant.
+One running Vaubaan Gateway: one process, one embedded database, on your machine or your network, for you and then your team. It signs people in through your identity provider (OpenID Connect), GitHub, Google or Microsoft, or with sign-in accounts it keeps itself, and holds the credentials of the accounts connected to it, encrypted under a master key you keep. There is no hosted service and no tenant.
 
 ## Account
 
@@ -27,7 +27,7 @@ The secret an agent presents to the gateway, one per mission and per holder. It 
 
 ## Permission
 
-A named risk from a service's catalog, such as `github.merge-protected` or `supabase[prod].row-write`, with the reason it exists and its row: Harmless, Worth a look, Repairable, at a price, or Cannot be repaired, read from five facts (undo, blast radius, data, cost, visible to); the first fact that answers is the reason shown beside it. A mission stores an explicit list of permissions; nothing is ever "all". Every service's permissions are on its [plugin page](/plugins).
+A named risk from a service's catalog, such as `github.merge-protected` or `supabase[prod].row-write`, with the reason it exists and its row: Harmless, Worth a look, Repairable, at a price, or Cannot be repaired, read from five facts (undo, blast radius, data, cost, visible to); the first fact that answers is the reason shown beside it. A mission stores an explicit list of permissions; nothing is ever "all". Every service's permissions are on its [plugin page](/plugins); how the rows and the trust levels decide is explained in [how a permission is decided](/docs/concepts/permissions).
 
 ## Macro-action
 
@@ -35,7 +35,7 @@ One thing to do with a service, in its own words — "Read", "Propose", "Ship" �
 
 ## Trust level
 
-What a ticked macro-action is set to: Careful, Trusting or Autonomous. From how hard each permission is to undo, the level decides whether it runs freely, asks first or is left out, and it raises the limits. It only pre-fills: every line stays editable before the mission is created.
+What a ticked macro-action is set to: Careful, Trusting or Autonomous. From how hard each permission is to undo, the level decides whether it runs freely, asks first or is left out, and it raises the limits. It only pre-fills: every line stays editable before the mission is created. What each level does with each row: [rows by trust level](/docs/reference/trust-levels).
 
 ## Limit
 
@@ -43,7 +43,7 @@ How many times a permission may be used per period and how fast (per minute). A 
 
 ## Ask me first
 
-A permission marked "ask me first" makes each use wait for the mission's creator, who answers under "Waiting for you" in the interface. The gateway never holds a call: it refuses it with `approval-required` and the link of the request; the agent replays the same call once approved. The other permissions "run freely", within their limits.
+A permission marked "ask me first" makes each use wait for the mission's creator, who answers under "Waiting for you" in the interface. The gateway never holds a call: it refuses it with `approval-required` and the link of the request; the agent replays the same call once approved. Every refusal and what to do about it: [refusals](/docs/reference/refusals). The other permissions "run freely", within their limits.
 
 ## Activity
 
@@ -58,19 +58,4 @@ The record of every call, allowed or refused, with the permissions it needed, wh
 
 ## The same things, in the protocol
 
-The interface, the code and the protocol say account, service and plugin alike; for the other words, tool names, refusal codes, ids, the API and the configuration keep the protocol's names.
-
-| In the interface             | In the protocol, the code and the spec                |
-| ---------------------------- | ----------------------------------------------------- |
-| access (Give access)         | share                                                 |
-| permission                   | risk, by its `RiskId`                                 |
-| limits (per day, per minute) | budget: quota and rate limit                          |
-| runs freely / ask me first   | gate: `auto` / `approval`                             |
-| key, machine key             | mission token: member token, named token              |
-| Replace key                  | rotate                                                |
-| Waiting for you              | request: a claim (limit reached), an approval request |
-| Vaubaan account              | the account of the `vaubaan` plugin (host account)    |
-| Activity                     | audit, session                                        |
-| teammate, team               | mission member, group                                 |
-| administrator                | operator                                              |
-| OAuth client                 | the client the instance registers at a service        |
+The interface, the code and the protocol say account, service and plugin alike; for the other words, tool names, refusal codes, permission ids, the API and the configuration keep the protocol's names: a permission is a risk, a key a mission token, "ask me first" the gate `approval`. The whole table, generated from the specification: [words](/docs/reference/words).

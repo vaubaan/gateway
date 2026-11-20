@@ -1,0 +1,46 @@
+---
+title: How a call flows
+description: The path of one agent's call through Vaubaan Gateway, from its key to the record in Activity, the check at each step and the refusal it can end with.
+---
+
+A call is one tool an agent runs through Vaubaan Gateway, such as `github__create_pull_request` or `gmail__send_message`; this page follows one from the agent's key to its record in Activity, and names where it can stop.
+
+## Three credentials, three doors
+
+- **The agent holds a mission key.** It opens the execution door of one mission, `/mcp` (and the git remote), and nothing else.
+- **The instance holds the account's credential** at each service, encrypted under its master key. No agent ever sees it.
+- **You hold a browser session.** It opens the interface, where missions are made and requests answered, never `/mcp`.
+
+None of them opens another's door. An agent cannot read a credential, change its own mission or answer its own request.
+
+## The path, step by step
+
+The agent first asks for the list of tools (`tools/list`), then sends each call (`tools/call`) to `/mcp` with its key as a bearer. Every call then goes through the same checks, in this order; the first that fails ends the call with a refusal, and nothing runs.
+
+1. **The key.** An unknown or malformed key is answered with HTTP 401. A key that stopped working (replaced, revoked, its holder removed) gets a 401 that says why. A browser session presented here is refused with `wrong-credential-kind`.
+2. **The mission.** An expired, stopped or ownerless mission refuses every call with `mission-inactive`.
+3. **The resources.** The plugin reads which repository, project, page or calendar the arguments cite. One outside the mission is refused with `resource-not-in-mission`, before any permission is looked at.
+4. **The account.** An account that needs reconnecting refuses with `account-unavailable`; one removed, or no longer shared with the mission's creator, with `account-revoked`.
+5. **The permissions.** The plugin says what the call touches, the gateway finds the permissions of the service's catalog this touches, and the mission must hold every one, or the call is refused with `risk-not-accepted`. How permissions, rows and trust levels work: [how a permission is decided](/docs/concepts/permissions).
+6. **The limits and "ask me first".** A limit reached for the period refuses with `budget-exhausted`, a rate reached with `rate-limited`. A permission set to "ask me first" refuses with `approval-required` and the link of a request; once you approve, the agent sends the same call again, with exactly the same arguments, and that approval is used once.
+7. **The service.** The gateway hands the plugin the account's credential, for this call only and in memory; the plugin calls the service and the answer goes back to the agent. A call that fails at the service was still allowed and counted; the agent gets the service's error.
+8. **The record.** Every call, allowed or refused, writes one entry in **Activity**: whose key made it, the permissions it needed, the decision. The arguments are kept as a fingerprint only.
+
+What each refusal means and what you do: [refusals](/docs/reference/refusals).
+
+## Two calls, end to end
+
+**The developer's agent opens a pull request.** It calls `github__create_pull_request` on `acme/web`, a repository of the mission. The key is valid, the mission active, the repository selected, the account connected. The call touches `github.create-pr`, which "Propose" at Careful gave the mission, running freely, within its daily limit. GitHub opens the pull request with the account's credential, the agent gets its number, and Activity records the call under the developer's key.
+
+Later the agent tries to merge it into `main`. That touches `github.merge-protected`, which "Ship" at Careful set to ask first: the call is refused with `approval-required` and a link. The developer opens it, or **Waiting for you**, reads the exact call, approves; the agent sends the same call again, and it runs once.
+
+**The consultant's assistant answers a client.** It calls `gmail__send_message` to an address outside the company. The call touches `gmail.send-to-zone-external`, which cannot be repaired. With "Send" at Careful, the mission does not hold it: `risk-not-accepted`, and the assistant can only tell the consultant, or ask for the permission. With "Send" at Trusting, it asks first: the consultant reads the recipient and the message in the request before anything leaves.
+
+## What the gateway never does
+
+- **Hold a call open.** A call is answered at once: run, or refused with what to do. Waiting for your answer happens in the agent, which replays the call.
+- **Run part of a call.** It is all or nothing.
+- **Hand the agent a credential**, or let it change its mission. It may ask for a missing permission, or propose a mission you create yourself.
+- **Decide from the plugin alone.** The plugin says what a call touches; the mission decides.
+
+A push with git goes through the instance's git remote with the same key and the same checks, decided ref by ref: [git remote](/docs/missions/git-remote). For contributors, the same path in the code: [architecture](https://github.com/vaubaan/gateway/blob/main/docs/architecture.md).

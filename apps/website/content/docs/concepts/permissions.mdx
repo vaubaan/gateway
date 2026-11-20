@@ -1,0 +1,87 @@
+---
+title: How a permission is decided
+description: How Vaubaan Gateway turns an agent's call into named permissions, sorts each by how hard it is to repair, and lets a trust level decide which run freely, ask you first or are left out — worked on a developer's and a consultant's missions.
+---
+
+A permission is one named thing an agent may do at one service, such as `github.create-pr` or `gmail.send-to-zone-external`; Vaubaan Gateway decides every call by the permissions it needs, and you decide which of them a mission holds, which run freely and which ask you first.
+
+This page explains how that works, on two projects used across these docs:
+
+- **A developer** working alone with a coding agent on GitHub and Supabase, then with a teammate.
+- **A consultant** with an assistant on Gmail, Notion and Google Calendar.
+
+Every permission named here is a real one; each service's full list is on its [plugin page](/plugins).
+
+## A call becomes permissions
+
+The agent never names a permission. It calls a tool, say `supabase__apply_migration` on the staging project, or `gmail__send_message` to a client. The service's plugin reads the call and says what it touches (this migration writes the schema of that project; this message goes to an address outside the company). The gateway then looks up which permissions of the service's catalog that touches, and checks them against the mission:
+
+- the mission holds **every one**: the call goes on to its limits and to "ask me first";
+- it lacks **any one**: the call is refused with `risk-not-accepted`, nothing runs, and the agent learns which permissions were missing.
+
+A plugin classifies; it never decides. A call is all or nothing: never run in part, never changed to fit. What happens to a call from start to end: [how a call flows](/docs/concepts/how-a-call-flows).
+
+## Five facts, four rows
+
+Each permission of a catalog carries five facts, chosen by the plugin's author and reviewed with the catalog: **undo** (easy, costly or impossible), **blast radius** (one thing, one environment, the whole account, many at once), **data** (metadata, contents, secrets, personal data), **cost** (free, moderate, unbounded) and **visible to** (internal, the team, public).
+
+The facts are never added up or scored. They sort the permission into one of four rows, by how hard a mistake would be to repair, and the first fact that answers is the reason printed beside it:
+
+| Row                        | Developer: GitHub, Supabase                                                                         | Consultant: Gmail, Notion, Google Calendar                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 4. Cannot be repaired      | `github.delete-release`, `supabase.storage.bulk-object-write` (irreversible)                        | `gmail.send-to-zone-external`, `google-calendar.invite-external` (irreversible)                          |
+| 3. Repairable, at a price  | `github.merge-protected`, `github.force-push`, `supabase.migration-write` (costly to undo)          | `gmail.send-to-zone-internal`, `notion.block-delete`, `google-calendar.event-change` (costly to undo)    |
+| 2. Worth a look            | `github.search-global` (whole account), `supabase.auth.read-users` (personal data)                  | `notion.query-databases`, `google-calendar.event-read` (personal data), `gmail.bulk-read` (in bulk)      |
+| 1. Harmless                | `github.read-code`, `github.create-pr`, `supabase.read-data`                                        | `gmail.draft-write`, `notion.content-append`, `google-calendar.free-busy-read`                           |
+
+A sent mail cannot be unsent: sending outside the company is row 4, while writing the draft is row 1. A merge into `main` can be reverted, at the price of a revert and whatever ran on it in between: row 3. Reading the events of a calendar shows who meets whom: row 2, worth a look, not because it breaks anything but because of what it reveals.
+
+The full rule, every reason and its row: [rows by trust level](/docs/reference/trust-levels#how-a-permission-gets-its-row).
+
+## Macro-actions are the service's verbs
+
+Nobody ticks forty permissions one by one. Each catalog groups its permissions into three to six **macro-actions**, named the way people who use the service talk about it, each permission in exactly one, each with base limits:
+
+- GitHub: Read, Search everywhere, Propose, Ship, Administer.
+- Supabase: Query, Change data, Change the schema, Ship functions, Administer.
+- Gmail: Search the mail, Draft, Send, Tidy.
+- Notion: Read, Comment, Write, Reorganize.
+- Google Calendar: Read the agenda, Schedule, Invite.
+
+The gateway adds **Anything else** to a service whose catalog has a fallback: the writes no named permission covers (`github.uncategorized-write`), which nobody reviewed. A mission holding it is a sign a permission is missing from the catalog.
+
+When you create a mission, you tick macro-actions per account. The mission stores the permissions they expand to, written out one by one, never the macro-action: a catalog that later adds a permission does not grow your mission.
+
+## A trust level decides, row by row
+
+Each ticked macro-action gets a trust level. It reads the row of each of its permissions and pre-fills the mission's line: runs freely, ask me first, or not included.
+
+- **Careful** (the default): Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.
+- **Trusting**: Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.
+- **Autonomous**: Everything but irreversible actions runs freely; those ask first. Limits ×10.
+
+No level lets a permission that cannot be repaired run freely. The matrix, generated from the gateway: [rows by trust level](/docs/reference/trust-levels).
+
+**The developer** ticks GitHub "Propose" at Careful. Creating a branch, pushing to it, opening a pull request and commenting are row 1: they run freely. `github.force-push` and `github.branch-delete` are row 3: each asks first. Ticking "Ship" at Careful as well, the merge into `main` and the release ask first, and `github.delete-release` is left out. On Supabase, "Change the schema" at Trusting makes every migration ask first; at Autonomous, migrations on staging run freely within their limits.
+
+**The consultant** ticks Gmail "Draft" at Careful: every draft runs freely, since a draft reaches nobody. "Send" at Careful lets the assistant mail the consultant's own address, asks first for a colleague, and leaves sending to clients out entirely; at Trusting, sending to a client asks first, each time. Notion "Read" at Careful reads pages freely but asks before querying a database of contacts; at Trusting it runs freely. Google Calendar "Read the agenda" at Careful asks before reading events, since they are personal data; free/busy runs freely.
+
+The trust level only pre-fills. Under **Advanced**, every permission of the mission stays editable before you create it: its limit, its rate, runs freely or ask me first. The mission keeps the lines you saw, not the level.
+
+## Environments: one permission per environment
+
+Some permissions depend on where they act. On Supabase, the database and storage permissions are **env-scoped**: once the account's owner labels each project with an environment (`staging`, `prod`), `supabase.migration-write` is offered once per environment, as `supabase[staging].migration-write` and `supabase[prod].migration-write`. They are two permissions. The developer's mission holds the staging one; the same migration on the production project is refused with `risk-not-accepted`, unless the mission holds the prod one too, typically asking first.
+
+An env-scoped permission is refused on a resource without a label: an unlabelled resource is never a safe default. GitHub's permissions are account-scoped and have no environment; neither do Gmail's, Notion's or Google Calendar's. On some services a permission sits in a higher row in production than in staging; the plugin page shows its row per environment. Labelling resources: [environment labels](/docs/accounts#environment-labels).
+
+## Everything I hold
+
+For your own agent, or a break-glass mission, each account also offers **Everything I hold on this account**: every permission you may allow there, written out one by one, each running freely at the service's rate ceiling with a generous daily limit. Before you choose it, the form says how many permissions that is and which of them, impossible to repair, would run freely. Because the list is explicit, being given more access later does not grow the mission.
+
+## Limits
+
+Every line has a limit per period (a day, or the whole mission when it runs once) and a rate per minute: the macro-action's base limits, multiplied by its trust level. One mission has one set of limits, however many teammates and keys work on it. A reached limit refuses the call with `budget-exhausted` and a link where you give more; a rate reached refuses it with `rate-limited`, and the agent waits. Every refusal and what to do: [refusals](/docs/reference/refusals).
+
+## Where the model is written
+
+The normative text, for contributors and plugin authors: the [risk model](https://github.com/vaubaan/gateway/blob/main/docs/spec/gateway-risk-model.md), §4 for the catalog, the rows and the trust levels, §8 for the decision.

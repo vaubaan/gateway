@@ -69,7 +69,13 @@ heading anchors (a moved page leaves a redirect, §2.6).
 - **Tutorials**, one per worked project (the developer, the consultant) and one for bringing a
   team; each is run end to end on a real instance before it is published.
 - **Generated references**, never written by hand: the configuration keys, the known limitations,
-  the refusal codes and what to do about each, and the rows by trust level.
+  the refusal codes and what to do about each (one anchor per code), the rows by trust level, the
+  words of the interface and of the protocol, and the reference agents read (the bootstrap every
+  instance serves).
+- **Explanations** of what the interface does not show at once: how a permission is decided and how
+  a call flows, on the two worked projects.
+- **The docs home routes each reader** (one person, developer or consultant; a team's administrator;
+  a security reviewer; a plugin author; an agent) to the pages that exist.
 - **No page for what is not built**: a planned feature (the desktop app) appears only as its
   proposed intent in the roadmap.
 

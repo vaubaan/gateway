@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@vaubaan/design-tokens": "*",
+    "@vaubaan/gateway-core": "*",
     "@vaubaan/plugin-page": "*",
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",

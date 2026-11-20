@@ -2,7 +2,8 @@
  * What the site reads from a file of the gateway is compared with the
  * gateway, here, since the site may not import it at build time (ADR
  * website-nextjs-on-vercel D1): the configuration keys, the published
- * thresholds. The words of the risk model (the five facts and their values,
+ * thresholds; the explanation of permissions, whose examples name real
+ * permissions in their real rows. The words of the risk model (the five facts and their values,
  * the gate words, Can / Asks first / Cannot), the row words and reasons,
  * the gates and the budgets are not copied: the site and the gateway import
  * them from `@vaubaan/policy-engine`, which this file holds.
@@ -22,6 +23,7 @@ import {
 import { CARDINALITY_WORDS, ENVIRONMENT_RULES } from '@vaubaan/plugin-page/page-data';
 import { factsOf, loadPlugins } from '../../../src/content/plugins';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
+import { trustLevelsMarkdown } from '../../../src/content/references';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
 
 const FAMILIES = ['sign_in.<id>.<field>', 'oauth_brokers.<name>.<field>'];
@@ -125,6 +127,7 @@ describe('the words of the risk model', () => {
       'apps/website/src/content/plugins.ts',
       'apps/website/src/content/plugin-pages.ts',
       'apps/website/src/content/outputs.ts',
+      'apps/website/src/content/references.ts',
       'apps/website/src/components/plugin/PluginPage.tsx',
       'packages/plugin-page/src/info.ts',
       'packages/plugin-page/src/examples.ts',
@@ -155,4 +158,78 @@ describe('the data model words of the plugin page', () => {
       expect(reference, source).toContain(rule);
     }
   });
+});
+
+describe('the rows by trust level', () => {
+  const page = trustLevelsMarkdown();
+  const matrix = page.split('## The matrix')[1]?.split('\n## ')[0] ?? '';
+  const rows = matrix.split('\n').filter((line) => /^\| \d\. /.test(line));
+
+  it('print, for each row and trust level, the gate the policy engine gives', () => {
+    expect(rows).toHaveLength(4);
+    for (const line of rows) {
+      const [label = '', ...cells] = line.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const row = Number(label[0]) as 1 | 2 | 3 | 4;
+      expect(label).toBe(`${row}. ${policyEngine.ROW_WORDS[row]}`);
+      policyEngine.TRUST_LEVELS.forEach((level, i) => {
+        const gate = policyEngine.TRUST_LEVEL_GATES[level][row];
+        const word =
+          gate === null
+            ? policyEngine.GATE_WORDS.off
+            : policyEngine.GATE_WORDS[policyEngine.gateWordOf(gate)];
+        expect(cells[i], `${level}, row ${row}`).toContain(word);
+        if (gate !== null) expect(cells[i]).toContain(`\`${gate}\``);
+      });
+    }
+  });
+
+  it('carry the levels’ own words, their budget factors and every reason with its row', () => {
+    for (const level of policyEngine.TRUST_LEVELS) {
+      expect(page).toContain(
+        `| ${policyEngine.TRUST_LEVEL_LABELS[level]} | ${policyEngine.TRUST_LEVEL_HINTS[level]} | ×${policyEngine.TRUST_LEVEL_BUDGET_FACTOR[level]} |`,
+      );
+    }
+    for (const reason of policyEngine.REASONS) {
+      const row = policyEngine.ROW_OF_REASON[reason];
+      expect(page).toContain(
+        `| ${policyEngine.REASON_WORDS[reason]} | ${row}. ${policyEngine.ROW_WORDS[row]} |`,
+      );
+    }
+    expect(page).toContain(policyEngine.TREE_LEGEND);
+  });
+});
+
+describe('the explanation of permissions', () => {
+  const PAGE = 'apps/website/content/docs/concepts/permissions.mdx';
+  const text = readRepoFile(PAGE);
+
+  it('quotes each trust level as the interface says it', () => {
+    for (const level of policyEngine.TRUST_LEVELS) {
+      expect(text, level).toContain(
+        `**${policyEngine.TRUST_LEVEL_LABELS[level]}**${level === 'careful' ? ' (the default)' : ''}: ${policyEngine.TRUST_LEVEL_HINTS[level]}`,
+      );
+    }
+  });
+
+  it('names real permissions, and puts each example in its real row', async () => {
+    const plugins = await loadPlugins(REPO_ROOT);
+    const rowOf = new Map(plugins.flatMap((p) => p.risks.map((r) => [r.id, r.row] as const)));
+    const services = new Set(plugins.map((p) => p.id));
+    // Every code span shaped like a permission id names one (the environment qualifier aside).
+    const ids = [...text.matchAll(/`([a-z][a-z0-9-]*)(?:\[[a-z0-9-]+\])?(\.[a-z0-9.-]+)`/g)]
+      .filter((m) => services.has(m[1] ?? ''))
+      .map((m) => `${m[1]}${m[2]}`);
+    expect(ids.length).toBeGreaterThan(20);
+    for (const id of ids) expect(rowOf.has(id), id).toBe(true);
+    // The table of examples: each permission sits in the row its line names.
+    const lines = text.split('\n').filter((line) => /^\| [1-4]\. /.test(line));
+    expect(lines).toHaveLength(4);
+    for (const line of lines) {
+      const row = Number(line.slice(2, 3));
+      expect(line, `row ${row}`).toContain(policyEngine.ROW_WORDS[row as 1 | 2 | 3 | 4]);
+      for (const match of line.matchAll(/`([a-z0-9.\-]+)`/g)) {
+        expect(rowOf.get(match[1] ?? ''), match[1]).toBe(row);
+      }
+    }
+  }, 60_000);
 });

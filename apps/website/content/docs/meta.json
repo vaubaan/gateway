@@ -2,8 +2,8 @@
   "title": "Docs",
   "pages": [
     "index",
-    "concepts",
     "quick-look",
+    "concepts",
     "install",
     "configuration",
     "services",
@@ -13,6 +13,7 @@
     "administration",
     "operations",
     "plugins-guide",
+    "reference",
     "known-limitations",
     "compare"
   ]

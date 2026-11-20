@@ -30,6 +30,7 @@ import { connectFigureFiles, type PluginInfo } from './plugins';
 import { readRepoFile } from './repo';
 import { THRESHOLDS_SOURCE, type ValidationThresholds } from './thresholds';
 import { privacyMarkdown } from './privacy';
+import { referenceDocs } from './references';
 import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL, trustMarkdown } from './trust';
 
 export const DOCS_DIR_FROM_REPO = 'apps/website/content/docs';
@@ -141,7 +142,13 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   const docsDir = join(repoRoot, DOCS_DIR_FROM_REPO);
   const withStatus = withHealth(plugins, UNREAD);
 
-  const generatedDocs = [configurationKeysDoc(), knownLimitationsDoc()];
+  const generatedDocs = [
+    configurationKeysDoc(),
+    knownLimitationsDoc(),
+    ...referenceDocs().map((r) =>
+      generatedDoc(r.file, r.path, r.title, r.description, r.body, r.sources),
+    ),
+  ];
   const docs = withSectionLists(
     orderDocs(
       [...loadHandwrittenDocs(docsDir, DOCS_DIR_FROM_REPO), ...generatedDocs.map((g) => g.page)],

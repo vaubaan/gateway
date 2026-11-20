@@ -71,25 +71,17 @@ acceptance:
 
 ### Read how a permission is decided
 
-status: proposed
+status: implemented
 requires: site
+anchors: apps/website/content/docs/concepts/permissions.mdx, apps/website/content/docs/concepts/how-a-call-flows.mdx, apps/website/tests/unit/site/sources-agree.test.ts
 spec: ../spec/website.md#22-user-docs--docs
-acceptance:
-
-- One page explains how a call becomes permissions, the five facts, the four rows, macro-actions and trust levels, and environments, on a developer's and a consultant's missions
-- Every permission it names exists in its service's catalog and sits in the row the page says, checked by a test
-- A second page follows one call from the agent's key to its record, with the refusal each check can end with
 
 ### Look up a refusal, a trust level or a word
 
-status: proposed
+status: implemented
 requires: site
+anchors: apps/website/src/content/references.ts, apps/website/content/docs/reference/index.mdx, apps/website/tests/unit/site/references.test.ts, apps/website/tests/unit/site/sources-agree.test.ts
 spec: ../spec/website.md#22-user-docs--docs
-acceptance:
-
-- `/docs/reference/refusals` lists every refusal code the gateway emits, one anchor per code, with what the agent and the person do next
-- The rows by trust level, the interface's words beside the protocol's, and the agents' reference are pages generated from the gateway's code and spec
-- A source that loses a code, a row or a word fails the site's build
 
 ### Find my path in the docs
 

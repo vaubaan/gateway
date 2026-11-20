@@ -49,16 +49,9 @@ The creator can add teammates; each generates their own key, shown to them alone
 
 ## When a call is refused
 
-The gateway answers with a code and what to do; it never holds a call waiting.
+The gateway answers with a code, the fields of that code and a hint for the agent; it never holds a call waiting. Most refusals need nothing from you. Two carry a link for you, also listed under **Waiting for you**: `approval-required` (the permission asks first: approve, and the agent replays exactly the same call) and `budget-exhausted` (a limit is reached: give more or reset it). After `risk-not-accepted`, the agent may ask for the missing permission; after `resource-not-in-mission`, you may add the resource by editing the mission.
 
-| Code                      | Meaning                                                                 | What happens next                                                                                        |
-| ------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `risk-not-accepted`       | the call needs a permission the mission does not hold (`missing_risks`) | the creator may change the mission; the agent does not work around it                                    |
-| `budget-exhausted`        | a limit is reached for this period                                      | the answer carries a `claim_url`; the creator gives more or resets it under "Waiting for you"            |
-| `approval-required`       | the permission asks first                                               | the answer carries an `approval_url`; once the creator approves, the agent replays exactly the same call |
-| `resource-not-in-mission` | the resource is not selected in the mission                             | the creator may add it                                                                                   |
-
-The kit's instructions list every code the instance can return. Stopping a mission or removing an access stops every call at once.
+Every code, what the agent does and what you do: [refusals](/docs/reference/refusals). The kit's instructions give the agent the same list. Stopping a mission or removing an access stops every call at once.
 
 ## The mission page
 
