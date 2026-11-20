@@ -90,7 +90,7 @@ It is the fastest way to understand the vocabulary used everywhere else
 (account, resource, share, mission, risk, budget, gate, request).
 
 To run a real instance with your own identity provider, follow
-[`deploy/README.md`](deploy/README.md) (Docker Compose). You do not need one
+[Install with Docker Compose](https://vaubaan.com/docs/install/docker-compose) on the site. You do not need one
 to contribute.
 
 ## Run the tests

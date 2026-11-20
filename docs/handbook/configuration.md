@@ -104,7 +104,8 @@ How the process starts from configuration alone and wires its modules. Spec:
   a key file on the store's mount is one boot `warn`
   (`compose/key-placement.ts`, `/proc/self/mountinfo`), silenced by
   `encryption.accept_key_beside_store`. Moving an older instance's
-  `/data/master.key`: `deploy/README.md`.
+  `/data/master.key`: the site's
+  [Docker Compose page](https://vaubaan.com/docs/install/docker-compose#a-key-on-the-data-volume).
 
 ### Setup mode: the setup receives the key for a restore
 
