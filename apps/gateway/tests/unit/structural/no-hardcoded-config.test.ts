@@ -35,6 +35,9 @@ const ALLOWED: Record<string, string> = {
   'apps/gateway/src/server/config/docs-default.ts':
     'the default of docs.url, the user docs the interface links to',
   'deploy/collector/README.md': 'the collector documents its own public host (the default URL)',
+  'deploy/README.md': 'points its readers to the procedures published on the documentation site',
+  'deploy/railway.md':
+    'points its readers to the Railway procedure published on the documentation site',
   'apps/gateway/src/server/config/sign-in.ts':
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (docs/handbook/authentication.md)',
   'apps/gateway/src/server/accounts/attestation-gcp.ts':
