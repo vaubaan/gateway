@@ -1,14 +1,19 @@
 /**
  * The docs section of the services moved from `/docs/providers` to `/docs/services` (ADR
- * one-word-per-thing-account-service-plugin, rename R2): every former address answers,
- * permanently, at the page that took its place, and the new section is a real page.
+ * one-word-per-thing-account-service-plugin, rename R2), and "Install with your coding agent"
+ * under Install: every former address answers, permanently, at the page that took its place,
+ * and the new place is a real page.
  */
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { SERVICES_DOCS_PATH, SITE_REDIRECTS } from '../../../src/site/redirects';
+import {
+  CODING_AGENT_INSTALL_PATH,
+  SERVICES_DOCS_PATH,
+  SITE_REDIRECTS,
+} from '../../../src/site/redirects';
 
 const CONTENT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../content');
 
@@ -26,6 +31,21 @@ describe('the former addresses of the services docs', () => {
     expect(SERVICES_DOCS_PATH).toBe('/docs/services');
     expect(existsSync(resolve(CONTENT, 'docs/services/index.mdx'))).toBe(true);
     expect(existsSync(resolve(CONTENT, 'docs/providers'))).toBe(false);
+  });
+
+  it('install with your coding agent answers under Install, its twin too', () => {
+    expect(CODING_AGENT_INSTALL_PATH).toBe('/docs/install/with-your-coding-agent');
+    expect(SITE_REDIRECTS).toContainEqual({
+      source: '/docs/install-with-your-coding-agent',
+      destination: CODING_AGENT_INSTALL_PATH,
+      permanent: true,
+    });
+    expect(SITE_REDIRECTS).toContainEqual({
+      source: '/docs/install-with-your-coding-agent.md',
+      destination: `${CODING_AGENT_INSTALL_PATH}.md`,
+      permanent: true,
+    });
+    expect(existsSync(resolve(CONTENT, 'docs/install/with-your-coding-agent.mdx'))).toBe(true);
   });
 
   it('no redirect leaves from a page that exists', () => {

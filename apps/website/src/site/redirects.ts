@@ -8,6 +8,8 @@
  *   one-word-per-thing-account-service-plugin, rename R2): the old index and its twin
  *   answer at the new one. The old paths keep their word on purpose: they are the
  *   addresses already linked from elsewhere.
+ * - "Install with your coding agent" moved from the root of the docs under Install
+ *   (`/docs/install/with-your-coding-agent`); its former address and twin answer there.
  */
 export interface SiteRedirect {
   readonly source: string;
@@ -18,6 +20,10 @@ export interface SiteRedirect {
 /** The docs section of the services, and the path it had before the rename. */
 export const SERVICES_DOCS_PATH = '/docs/services';
 const FORMER_SERVICES_DOCS_PATH = '/docs/providers';
+
+/** The page that hands a coding agent the install, under Install, and its former path. */
+export const CODING_AGENT_INSTALL_PATH = '/docs/install/with-your-coding-agent';
+const FORMER_CODING_AGENT_INSTALL_PATH = '/docs/install-with-your-coding-agent';
 
 export const SITE_REDIRECTS: readonly SiteRedirect[] = [
   {
@@ -44,6 +50,17 @@ export const SITE_REDIRECTS: readonly SiteRedirect[] = [
   {
     source: '/docs/missions/management-door',
     destination: '/docs/missions/platform-management',
+    permanent: true,
+  },
+  // Installing with a coding agent is a way to install: it moved under Install (2026-11-20).
+  {
+    source: `${FORMER_CODING_AGENT_INSTALL_PATH}.md`,
+    destination: `${CODING_AGENT_INSTALL_PATH}.md`,
+    permanent: true,
+  },
+  {
+    source: FORMER_CODING_AGENT_INSTALL_PATH,
+    destination: CODING_AGENT_INSTALL_PATH,
     permanent: true,
   },
 ];
