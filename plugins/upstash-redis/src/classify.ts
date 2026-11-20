@@ -54,28 +54,15 @@ import {
   type Resource,
   type Slice,
   type SliceSegment,
+  PATH_IDENT,
+  pathIdent,
 } from '@vaubaan/plugin-sdk';
 
 import { SERVICE_ID, TOOL } from './identity.ts';
 import { ACCOUNT_TOOL_NAMES, DATA_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
-/**
- * A database ref (Upstash database ids are UUIDs) : one path segment, no dot,
- * no separator, no escape. It lands in a slice **and** in the Management API
- * path (`/redis/database/{id}`), so one grammar serves both. A wider class is
- * not safe for a URL : `encodeURIComponent` leaves `.` and `..` untouched and
- * every URL parser then removes them, so `/redis/database/..` would be sent
- * as `/redis/`. Anything outside the grammar is refused, never escaped.
- */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
-
-/**
- * The value as a path-safe identifier, or `null`. The one check `classify`
- * and `execute` share : what is classified is what is sent.
- */
-export function pathIdent(value: unknown): string | null {
-  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
-}
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT, pathIdent };
 
 /**
  * A Redis key that may be embedded in a slice : slice DSL ident characters

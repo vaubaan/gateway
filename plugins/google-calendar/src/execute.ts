@@ -26,22 +26,23 @@
  */
 
 import {
-  CredentialRefusal,
-  ExecutorRefusal,
-  UpstreamAuthError,
-  UpstreamHttpError,
+  type AccountContext,
   anyJson,
+  CredentialRefusal,
   declining,
+  type ExecuteContext,
+  ExecutorRefusal,
   expectCredentialKind,
+  type Guard,
   httpJson,
   isList,
   isRecord,
   jsonResult,
-  type AccountContext,
-  type ExecuteContext,
-  type Guard,
   type McpToolResult,
+  queryString,
   type Resource,
+  UpstreamAuthError,
+  UpstreamHttpError,
 } from '@vaubaan/plugin-sdk';
 
 import { instantOf, readCalendarCall, type CalendarCall } from './call.ts';
@@ -108,15 +109,6 @@ export function googleErrorReason(failure: Error): string | null {
 // ─────────────────────────────────────────────────────────────────────────────
 // Requests
 // ─────────────────────────────────────────────────────────────────────────────
-
-function queryString(query: Query): string {
-  const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query)) {
-    if (value !== undefined) params.set(name, String(value));
-  }
-  const text = params.toString();
-  return text === '' ? '' : `?${text}`;
-}
 
 /** One request to the Calendar API; an answer without content (a deletion) is `null`. */
 async function request<T = unknown>(

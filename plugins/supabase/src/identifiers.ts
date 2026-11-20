@@ -20,6 +20,11 @@
  * Pure : no IO.
  */
 
+import { PATH_IDENT, pathIdent } from '@vaubaan/plugin-sdk';
+
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT, pathIdent };
+
 type Args = Readonly<Record<string, unknown>>;
 
 /**
@@ -34,23 +39,6 @@ const PROJECT_REF = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 /** The value as a project ref, or `null`. */
 export function projectRefIdent(value: unknown): string | null {
   return typeof value === 'string' && PROJECT_REF.test(value) ? value : null;
-}
-
-/**
- * An opaque identifier the service issues or constrains (a user, SSO
- * provider or third-party-auth id — UUIDs —, an edge function slug, a closed
- * keyword such as a link type) : one path segment, no dot, no separator, no
- * escape, bounded. It lands in a slice **and** in a request path, so one
- * grammar serves both. A wider class is not safe for a URL :
- * `encodeURIComponent` leaves `.` and `..` untouched and every URL parser
- * then removes them, so `…/functions/..` would be sent as the project
- * endpoint while the slice named a function.
- */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
-
-/** The value as a path-safe identifier, or `null`. */
-export function pathIdent(value: unknown): string | null {
-  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
 }
 
 /** Characters of a name that is legitimately dotted (a bucket id, a segment of an object path). */

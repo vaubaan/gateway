@@ -18,6 +18,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `ClassifyConnection`, `ProviderPlugin`, `ProviderLabel`, `providerForTool`, the kit's
   `connection` (write `account`), the reading of a catalog's `provider:` and of a pin built before
   0.9.4 (both refused: rebuild the plugin). `@vaubaan/plugin-cli` 0.2.0 writes that range.
+- **1.0.0 — helpers the plugins wrote alike**: `pathIdent` and `PATH_IDENT` (an identifier placed
+  in a URL path), `queryString` (`undefined` and `null` skipped, a space is `%20`) and
+  `argumentTypeIssue` (a tool's argument against its schema property: type, `nullable`, `enum`,
+  bounds, item type). Cloudflare DNS 4.0.1, Fly 0.4.1, Google Calendar 0.4.1, Miro 0.5.2, Outlook
+  0.1.1, Resend 0.6.1, Stripe 0.5.1, Supabase 6.1.1, Upstash Redis 4.0.1 and Vercel 4.2.3 use
+  them: Miro now also refuses an argument outside its schema's `enum` or bounds, and Google
+  Calendar and Outlook encode a space in a query as `%20`.
 
 ### Added
 

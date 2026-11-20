@@ -64,3 +64,63 @@ const ARGUMENT_NAME = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 function argumentLabel(key: string): string {
   return ARGUMENT_NAME.test(key) ? key : 'an argument with a malformed name';
 }
+
+/** What {@link argumentTypeIssue} reads of a property of a tool's input schema. */
+export interface ArgumentSchema {
+  readonly type?: unknown;
+  readonly nullable?: unknown;
+  readonly enum?: unknown;
+  readonly minimum?: unknown;
+  readonly maximum?: unknown;
+  readonly items?: { readonly type?: unknown };
+}
+
+function hasJsonType(type: unknown, value: unknown): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return typeof value === 'number' && Number.isInteger(value);
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+/**
+ * Why the value of the argument `name` does not fit the property `schema` of its tool's
+ * input schema: its JSON type, `enum`, `minimum` and `maximum`, the type of an array's
+ * items; `null` when it fits, or when `schema` says nothing the check reads. A `null`
+ * value fits a property marked `nullable: true`. Messages end with a full stop and name
+ * the argument (`limit: at most 50.`).
+ */
+export function argumentTypeIssue(name: string, schema: unknown, value: unknown): string | null {
+  const declared: ArgumentSchema =
+    typeof schema === 'object' && schema !== null ? (schema) : {};
+  if (value === null && declared.nullable === true) return null;
+  if (!hasJsonType(declared.type, value)) return `${name}: expected ${String(declared.type)}.`;
+  if (Array.isArray(declared.enum) && !declared.enum.includes(value)) {
+    return `${name}: expected one of ${declared.enum.join(', ')}.`;
+  }
+  if (typeof value === 'number') {
+    if (typeof declared.minimum === 'number' && value < declared.minimum) {
+      return `${name}: at least ${declared.minimum}.`;
+    }
+    if (typeof declared.maximum === 'number' && value > declared.maximum) {
+      return `${name}: at most ${declared.maximum}.`;
+    }
+  }
+  const itemType = declared.items?.type;
+  if (Array.isArray(value) && itemType !== undefined) {
+    const bad = value.findIndex((item) => !hasJsonType(itemType, item));
+    if (bad >= 0) return `${name}[${bad}]: expected ${String(itemType)}.`;
+  }
+  return null;
+}

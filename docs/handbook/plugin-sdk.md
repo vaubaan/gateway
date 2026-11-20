@@ -35,7 +35,11 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
   the structure is `catalog-document.ts` / `catalog-risk-entry.ts`, the rules a TypeScript catalog
   also meets are `catalog-rules.ts`.
 - [`transport/`](../../packages/plugin-sdk/src/transport/index.ts) — the one way to call a service:
-  `httpJson`, `readBounded`, `readShape`, the upstream MCP client.
+  `httpJson`, `readBounded`, `readShape`, the upstream MCP client; `pathIdent` (`PATH_IDENT`) for an
+  identifier placed in a path and `queryString` (`url.ts`). A tool's argument checked against its
+  schema property: `argumentTypeIssue` (`arguments.ts`). A helper two plugins write alike belongs
+  here, unless it changes what a classifier decides (the plugins' own `ident` stays: the SDK's
+  `identSegment` turns a value outside the grammar into `[*]`).
 - [`data-model-paths.ts`](../../packages/plugin-sdk/src/data-model-paths.ts) — a slice or a
   pattern walked on the data model.
 - [`testing/`](../../packages/plugin-sdk/src/testing/index.ts) (`@vaubaan/plugin-sdk/testing`) — the

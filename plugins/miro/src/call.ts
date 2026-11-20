@@ -15,7 +15,12 @@
  * what is sent. Pure : no network, no credential, no clock.
  */
 
-import { declaredArgumentsOf, undeclaredArgumentDenial, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  argumentTypeIssue,
+  declaredArgumentsOf,
+  type Resource,
+  undeclaredArgumentDenial,
+} from '@vaubaan/plugin-sdk';
 
 import { boardOf, boardUrlOf, commentId, itemId } from './identifiers.ts';
 import {
@@ -96,35 +101,6 @@ export function resolveBoard(
 }
 
 /**
- * The JSON type an argument's schema names, checked loosely (the value itself
- * is Miro's to read). `null` passes where Miro's schema says `nullable`.
- */
-function typeIssue(name: string, schema: unknown, value: unknown): string | null {
-  const declared = schema as { readonly type?: unknown; readonly nullable?: unknown } | null;
-  const type = declared?.type;
-  if (value === null && declared?.nullable === true) return null;
-  const ok = (() => {
-    switch (type) {
-      case 'string':
-        return typeof value === 'string';
-      case 'integer':
-        return typeof value === 'number' && Number.isInteger(value);
-      case 'number':
-        return typeof value === 'number' && Number.isFinite(value);
-      case 'boolean':
-        return typeof value === 'boolean';
-      case 'array':
-        return Array.isArray(value);
-      case 'object':
-        return typeof value === 'object' && value !== null && !Array.isArray(value);
-      default:
-        return true;
-    }
-  })();
-  return ok ? null : `${name}: expected ${String(type)}.`;
-}
-
-/**
  * The one reader of a call : the tool, the closed surface, the locator, the
  * identifiers, then each forwarded argument's type. Every refusal is a
  * sentence the agent can act on.
@@ -185,7 +161,7 @@ export function readMiroCall(
       comment = commentId(value);
       if (comment === null) return { denied: 'comment_id: expected a Miro comment id.' };
     }
-    const issue = typeIssue(name, schema, value);
+    const issue = argumentTypeIssue(name, schema, value);
     if (issue !== null) return { denied: issue };
     forwarded[name] = value;
   }

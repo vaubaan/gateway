@@ -16,7 +16,12 @@
  * the call. Pure: no network, no credential, no clock.
  */
 
-import { declaredArgumentsOf, undeclaredArgumentDenial, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  argumentTypeIssue,
+  declaredArgumentsOf,
+  type Resource,
+  undeclaredArgumentDenial,
+} from '@vaubaan/plugin-sdk';
 
 import { calendarIdOf, calendarRefFromArgument, eventId, parseAddress } from './identifiers.ts';
 import {
@@ -191,52 +196,6 @@ function readAddresses(name: string, value: unknown): string[] | { readonly deni
   return out;
 }
 
-interface ArgumentSchema {
-  readonly type?: unknown;
-  readonly enum?: unknown;
-  readonly minimum?: unknown;
-  readonly maximum?: unknown;
-  readonly items?: { readonly type?: unknown };
-}
-
-function hasType(type: unknown, value: unknown): boolean {
-  switch (type) {
-    case 'string':
-      return typeof value === 'string';
-    case 'integer':
-      return typeof value === 'number' && Number.isInteger(value);
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'array':
-      return Array.isArray(value);
-    case 'object':
-      return typeof value === 'object' && value !== null && !Array.isArray(value);
-    default:
-      return true;
-  }
-}
-
-/** The JSON type, enum, integer bounds and item type a schema names, checked. */
-function typeIssue(name: string, schema: ArgumentSchema, value: unknown): string | null {
-  if (!hasType(schema.type, value)) return `${name}: expected ${String(schema.type)}.`;
-  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
-    return `${name}: expected one of ${schema.enum.join(', ')}.`;
-  }
-  if (typeof value === 'number') {
-    if (typeof schema.minimum === 'number' && value < schema.minimum) {
-      return `${name}: at least ${schema.minimum}.`;
-    }
-    if (typeof schema.maximum === 'number' && value > schema.maximum) {
-      return `${name}: at most ${schema.maximum}.`;
-    }
-  }
-  if (Array.isArray(value) && schema.items?.type !== undefined) {
-    const bad = value.findIndex((v) => !hasType(schema.items?.type, v));
-    if (bad >= 0) return `${name}[${bad}]: expected ${String(schema.items.type)}.`;
-  }
-  return null;
-}
-
 /** An instant of RFC3339 with an offset, as milliseconds, or `null`. */
 export function instantOf(value: unknown): number | null {
   if (typeof value !== 'string') return null;
@@ -349,7 +308,7 @@ export function readCalendarCall(
       forwarded[name] = read;
       continue;
     }
-    const issue = typeIssue(name, schema as ArgumentSchema, value);
+    const issue = argumentTypeIssue(name, schema, value);
     if (issue !== null) return { denied: issue };
     forwarded[name] = value;
   }

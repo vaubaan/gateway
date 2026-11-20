@@ -29,23 +29,24 @@
  */
 
 import {
-  ExecutorRefusal,
-  UpstreamAuthError,
-  UpstreamHttpError,
-  UpstreamProtocolError,
+  type AccountContext,
   anyJson,
   declining,
+  type ExecuteContext,
+  ExecutorRefusal,
   expectCredentialKind,
+  type Guard,
   httpJson,
   isList,
   isRecord,
   jsonResult,
-  readShape,
-  type AccountContext,
-  type Guard,
-  type ExecuteContext,
   type McpToolResult,
+  queryString,
+  readShape,
   type Resource,
+  UpstreamAuthError,
+  UpstreamHttpError,
+  UpstreamProtocolError,
 } from '@vaubaan/plugin-sdk';
 
 import { MALFORMED_CONTACT, MALFORMED_ID, classifyResend } from './classify.ts';
@@ -455,15 +456,6 @@ async function listAll<T extends { readonly id: string }>(
   return out;
 }
 
-function toQueryString(query: Args): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(query)) {
-    if (value === null || value === undefined) continue;
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-  }
-  return parts.length > 0 ? `?${parts.join('&')}` : '';
-}
-
 /** The `authorization` header of a Resend account. */
 export function authorizationOf(ctx: AccountContext): Readonly<Record<string, string>> {
   const key = expectCredentialKind(SERVICE_ID, ctx.credential, 'api-key').fields.api_key;
@@ -494,7 +486,7 @@ async function request(
   body?: unknown,
   query?: Args,
 ): Promise<unknown> {
-  const url = `${RESEND_API_BASE}${path}${query ? toQueryString(query) : ''}`;
+  const url = `${RESEND_API_BASE}${path}${query ? queryString(query) : ''}`;
   try {
     const answer = await httpJson(
       ctx,

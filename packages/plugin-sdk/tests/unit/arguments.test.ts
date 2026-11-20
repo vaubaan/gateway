@@ -1,8 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 
 import type { McpToolDeclaration } from '@vaubaan/shared';
 
-import { declaredArgumentsOf, undeclaredArgumentDenial } from '../../src/arguments.ts';
+import {
+  argumentTypeIssue,
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+} from '../../src/arguments.ts';
 import { declaredOnly } from '../../src/testing/index.ts';
 
 const tools: readonly McpToolDeclaration[] = [
@@ -94,5 +98,29 @@ describe('declaredOnly — the test-table helper', () => {
     });
     expect(declaredOnly({ tools }, 'acme__whoami', { id: 'w1' })).toEqual({});
     expect(() => declaredOnly({ tools }, 'acme__nope', {})).toThrow(/not a tool of this plugin/);
+  });
+});
+
+describe('argumentTypeIssue', () => {
+  it('reads the JSON type, enum, bounds, item type and nullable of a property', () => {
+    expect(argumentTypeIssue('q', { type: 'string' }, 'x')).toBeNull();
+    expect(argumentTypeIssue('q', { type: 'string' }, 3)).toBe('q: expected string.');
+    expect(argumentTypeIssue('n', { type: 'integer' }, 1.5)).toBe('n: expected integer.');
+    expect(argumentTypeIssue('n', { type: 'number' }, Number.NaN)).toBe('n: expected number.');
+    expect(argumentTypeIssue('n', { type: 'integer', minimum: 1 }, 0)).toBe('n: at least 1.');
+    expect(argumentTypeIssue('n', { type: 'integer', maximum: 50 }, 51)).toBe('n: at most 50.');
+    expect(argumentTypeIssue('o', { type: 'string', enum: ['a', 'b'] }, 'c')).toBe(
+      'o: expected one of a, b.',
+    );
+    expect(argumentTypeIssue('l', { type: 'array', items: { type: 'string' } }, ['a', 1])).toBe(
+      'l[1]: expected string.',
+    );
+    expect(argumentTypeIssue('x', { type: 'string', nullable: true }, null)).toBeNull();
+    expect(argumentTypeIssue('x', { type: 'string' }, null)).toBe('x: expected string.');
+  });
+
+  it('says nothing about a property whose schema it cannot read', () => {
+    expect(argumentTypeIssue('x', undefined, 1)).toBeNull();
+    expect(argumentTypeIssue('x', {}, { a: 1 })).toBeNull();
   });
 });

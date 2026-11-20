@@ -16,29 +16,13 @@
  * the owner may label zones later, but no catalog risk is env-scoped.
  */
 
+import { PATH_IDENT, pathIdent } from '@vaubaan/plugin-sdk';
 import type { Resource } from '@vaubaan/plugin-sdk';
 
 import { SERVICE_ID } from './identity.ts';
 
-/**
- * An identifier of the service : exactly one path segment, no dot, no
- * separator, no escape. Cloudflare zone, record and account ids are 32 hex
- * characters. It is the grammar of every identifier of this plugin, whether
- * it is interpolated into a URL path (zone id, record id) or only embedded
- * in a slice (account id). `encodeURIComponent` leaves `.` and `..`
- * untouched and every URL parser then removes them, so `/dns_records/..`
- * would be sent as the zone endpoint itself.
- */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
-
-/**
- * The value as a path-safe identifier, or `null`. The one check `classify`
- * and `execute` share for every identifier that reaches the request path
- * (zone id, record id) : what is classified is what is sent.
- */
-export function pathIdent(value: unknown): string | null {
-  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
-}
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT, pathIdent };
 
 /** One label of a DNS name : letters, digits, `_` and inner hyphens, 63 characters at most. */
 const DNS_LABEL = '[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?';

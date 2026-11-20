@@ -14,10 +14,11 @@
  */
 
 import {
+  argumentTypeIssue,
   declaredArgumentsOf,
-  undeclaredArgumentDenial,
   type McpToolDeclaration,
   type Resource,
+  undeclaredArgumentDenial,
 } from '@vaubaan/plugin-sdk';
 
 import { addressList, parseAddress, type EmailAddress } from './address.ts';
@@ -169,50 +170,6 @@ export function resolveMailbox(
 
 // ─── Schema checks ───────────────────────────────────────────────────────────
 
-interface ArgumentSchema {
-  readonly type?: unknown;
-  readonly enum?: unknown;
-  readonly minimum?: unknown;
-  readonly maximum?: unknown;
-  readonly items?: { readonly type?: unknown };
-}
-
-function hasType(type: unknown, value: unknown): boolean {
-  switch (type) {
-    case 'string':
-      return typeof value === 'string';
-    case 'integer':
-      return typeof value === 'number' && Number.isInteger(value);
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'array':
-      return Array.isArray(value);
-    default:
-      return false;
-  }
-}
-
-/** The JSON type, enum, integer bounds and item type a schema names, checked. */
-function typeIssue(name: string, schema: ArgumentSchema, value: unknown): string | null {
-  if (!hasType(schema.type, value)) return `${name}: expected ${String(schema.type)}.`;
-  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
-    return `${name}: expected one of ${schema.enum.join(', ')}.`;
-  }
-  if (typeof value === 'number') {
-    if (typeof schema.minimum === 'number' && value < schema.minimum) {
-      return `${name}: at least ${schema.minimum}.`;
-    }
-    if (typeof schema.maximum === 'number' && value > schema.maximum) {
-      return `${name}: at most ${schema.maximum}.`;
-    }
-  }
-  if (Array.isArray(value) && schema.items?.type !== undefined) {
-    const bad = value.findIndex((v) => !hasType(schema.items?.type, v));
-    if (bad >= 0) return `${name}[${bad}]: expected ${String(schema.items.type)}.`;
-  }
-  return null;
-}
-
 /** Every argument given has its schema's type; every required one is given. */
 function schemaIssue(declaration: McpToolDeclaration, args: Args): string | null {
   const properties = declaration.inputSchema.properties ?? {};
@@ -222,7 +179,7 @@ function schemaIssue(declaration: McpToolDeclaration, args: Args): string | null
   for (const [name, schema] of Object.entries(properties)) {
     const value = args[name];
     if (value === undefined) continue;
-    const issue = typeIssue(name, schema as ArgumentSchema, value);
+    const issue = argumentTypeIssue(name, schema, value);
     if (issue !== null) return issue;
   }
   return null;

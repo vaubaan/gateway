@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-resend",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Resend — outbound email with recipient zoning, one resource per sending domain and per segment",

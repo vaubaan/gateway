@@ -12,12 +12,13 @@
  */
 
 import {
-  ExecutorRefusal,
-  anyJson,
-  expectCredentialKind,
-  httpJson,
   type AccountContext,
+  anyJson,
+  ExecutorRefusal,
+  expectCredentialKind,
   type Guard,
+  httpJson,
+  queryString,
 } from '@vaubaan/plugin-sdk';
 
 import { pathSegment } from './identifiers.ts';
@@ -37,15 +38,6 @@ export interface GraphRequest<T> {
 
 function tokenOf(ctx: AccountContext): string {
   return expectCredentialKind(SERVICE_ID, ctx.credential, 'oauth2').accessToken;
-}
-
-function queryString(query: Query): string {
-  const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query)) {
-    if (value !== undefined) params.set(name, String(value));
-  }
-  const text = params.toString();
-  return text === '' ? '' : `?${text}`;
 }
 
 /** One Graph request; an answer without content (202, 204) is `null`. */

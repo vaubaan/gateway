@@ -15,15 +15,15 @@
 
 import { isIP } from 'node:net';
 
-import { isRecord } from '@vaubaan/plugin-sdk';
+import { isRecord, PATH_IDENT } from '@vaubaan/plugin-sdk';
 
 import { DEFAULT_IMAGE_PREFIXES } from './identity.ts';
 
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT };
+
 /** A Fly app name : lower-case letters, digits and inner hyphens, at most 63 characters. */
 export const APP_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-
-/** A machine, volume or snapshot id : one path segment, no dot, no separator, no escape. */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** A secret name : an environment variable name. */
 export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;

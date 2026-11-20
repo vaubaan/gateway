@@ -35,7 +35,7 @@ export const googleCalendarPlugin = definePlugin({
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
   resourceNoun: { one: 'calendar', other: 'calendars' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.4.0',
+  version: '0.4.1',
   description:
     "Google Calendar through Google's Calendar API: read the agenda, suggest a time, create, change and delete events, answer invitations — one resource per calendar.",
   summary:

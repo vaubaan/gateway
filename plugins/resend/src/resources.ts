@@ -24,28 +24,13 @@
  * more segments) and are not resources ; sent emails are not resources either.
  */
 
+import { PATH_IDENT, pathIdent } from '@vaubaan/plugin-sdk';
 import type { Resource } from '@vaubaan/plugin-sdk';
 
 import { SERVICE_ID } from './identity.ts';
 
-/**
- * An identifier of the service (the id of an email, a contact, a broadcast,
- * a segment or a domain — UUIDs upstream) : one path segment, no dot, no
- * separator, no escape. Every one of them lands in a slice **and** in the
- * request path, so one grammar serves both. A wider class is not safe for a
- * URL : `encodeURIComponent` leaves `.` and `..` untouched and every URL
- * parser then removes them, so `/emails/..` would be sent as `/`. Anything
- * outside the grammar is refused, never escaped.
- */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
-
-/**
- * The value as a path-safe identifier, or `null`. The one check `classify`
- * and `execute` share : what is classified is what is sent.
- */
-export function pathIdent(value: unknown): string | null {
-  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
-}
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT, pathIdent };
 
 /** One label of a host name : letters, digits and inner hyphens, 63 characters at most. */
 const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';

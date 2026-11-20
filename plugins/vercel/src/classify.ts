@@ -59,10 +59,15 @@ import {
   type Resource,
   type Slice,
   type SliceSegment,
+  PATH_IDENT,
+  pathIdent,
 } from '@vaubaan/plugin-sdk';
 
 import { SERVICE_ID, TOOL } from './identity.ts';
 import { isCustomTool, toolDeclaresProperty, toolRequiresProperty, vercelTools } from './tools.ts';
+
+/** The SDK's path identifier grammar, re-exported for this plugin's modules. */
+export { PATH_IDENT, pathIdent };
 
 /** Vaubaan env labels of a Vercel project. The closed Vercel triad. */
 export const VERCEL_ENVS = ['prod', 'preview', 'development'] as const;
@@ -74,21 +79,6 @@ export type VercelEnv = (typeof VERCEL_ENVS)[number];
 
 interface Denial {
   readonly denied: string;
-}
-
-/**
- * An opaque identifier of the service (`prj_…`, an env var id, `dpl_…`) :
- * one path segment, no dot, no separator, no escape, bounded. It lands in a
- * slice **and** in a request path, so one grammar serves both. A wider class
- * is not safe for a URL : `encodeURIComponent` leaves `.` and `..` untouched
- * and every URL parser then removes them, so `…/env/..` would be sent as the
- * parent endpoint while the slice named an env var.
- */
-export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
-
-/** The value as a path-safe identifier, or `null`. */
-export function pathIdent(value: unknown): string | null {
-  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
 }
 
 /** Longest domain name the DNS carries. */

@@ -10,15 +10,16 @@
  */
 
 import {
+  type AccountContext,
   DEFAULT_MAX_ANSWER_BYTES,
   expectCredentialKind,
+  type Guard,
   httpJson,
   isRecord,
+  queryString,
+  type RawRequestBody,
   readBoundedText,
   upstreamFailure,
-  type AccountContext,
-  type Guard,
-  type RawRequestBody,
   type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
@@ -77,7 +78,7 @@ export function callCloudflareApi<T>(
     case 'query':
       return httpJson(
         io,
-        { url: `${CLOUDFLARE_API_BASE}${path}${toQueryString(args)}`, method, headers },
+        { url: `${CLOUDFLARE_API_BASE}${path}${queryString(args)}`, method, headers },
         guard,
       );
     case 'json':
@@ -128,13 +129,4 @@ function bindFileForm(args: Args): RawRequestBody {
     'records.txt',
   );
   return form;
-}
-
-function toQueryString(args: Args): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(args)) {
-    if (value === null || value === undefined) continue;
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-  }
-  return parts.length > 0 ? `?${parts.join('&')}` : '';
 }

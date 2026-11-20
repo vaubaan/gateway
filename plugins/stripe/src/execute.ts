@@ -27,21 +27,22 @@
  */
 
 import {
-  CredentialRefusal,
-  ExecutorRefusal,
-  UpstreamAuthError,
+  type AccountContext,
   anyJson,
+  CredentialRefusal,
   declining,
+  type ExecuteContext,
+  ExecutorRefusal,
   expectCredentialKind,
+  type Guard,
   httpJson,
   isRecord,
   jsonResult,
-  refusalResult,
-  type AccountContext,
-  type ExecuteContext,
-  type Guard,
   type McpToolResult,
+  queryString,
+  refusalResult,
   type Resource,
+  UpstreamAuthError,
   type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
@@ -326,15 +327,6 @@ function toFormBody(obj: Args): string {
   return parts.join('&');
 }
 
-function toQueryString(args: Args): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(args)) {
-    if (value === null || value === undefined) continue;
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-  }
-  return parts.length > 0 ? `?${parts.join('&')}` : '';
-}
-
 /**
  * One call to the Stripe API with `key`. A GET carries its arguments in the
  * query string ; any other method carries them as a form body in Stripe's
@@ -354,7 +346,7 @@ function callStripeApi<T>(
     return httpJson(
       io,
       {
-        url: `${STRIPE_API_BASE}${path}${toQueryString(args)}`,
+        url: `${STRIPE_API_BASE}${path}${queryString(args)}`,
         headers: { authorization },
         ...options,
       },

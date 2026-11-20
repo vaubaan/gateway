@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-outlook",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Outlook mail and calendar, through Microsoft Graph and an OAuth broker",
