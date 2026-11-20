@@ -53,8 +53,8 @@
     },
     "miro": {
       "name": "Miro",
-      "version": "0.5.0",
-      "sha256": "4e6db94890eee9ef3a7b3a0809c07961dac2811476c91bbc93feb2c8f78c29a4"
+      "version": "0.5.1",
+      "sha256": "690fd2eeb9897179f4639e56691fffd8d01f305a276b88f7939b4e13c7207769"
     },
     "notion": {
       "name": "Notion",
