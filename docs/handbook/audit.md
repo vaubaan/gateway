@@ -57,6 +57,7 @@ How the record is read (Activity's Overview, Record and Timeline, the activity o
 - **A migration writes entries too**: actor `migration` (`MIGRATION_ACTOR_ID`, labelled "A gateway upgrade"), a pseudo-actor like `discovery`, written by SQL at boot. Migration 0040 writes one `account-revoked` per duplicate Vaubaan account it revokes (`after.cause` `duplicate-host-account`, `kept_account_id`, `mission_ids`; [services/vaubaan](services/vaubaan.md)). Its id is a UUIDv7 built in SQL.
 - **`countersAgreeWithAudit` on a one-off mission older than the retention** reports a mismatch that is the retention, not a fault.
 - **The retention timer is single-process**: one sweep awaited at boot before serving, then hourly; a hosted deployment runs `sweep()` from one job. The two purges fail apart and are retried next interval.
+- **The audit purge goes by batches** (`AUDIT_PURGE_BATCH`, 5 000 entries per transaction, the event loop let go between two): every allowed call appends its entry under the same write lock, so a first purge of months of entries does not hold the calls back. The unused accepted-risk sets go with the last batch, the one below the size (an empty one after an exact multiple).
 
 ## Debug
 

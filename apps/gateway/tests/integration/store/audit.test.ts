@@ -200,6 +200,23 @@ describe('audit repository', () => {
     ).toBe(1);
   });
 
+  it('purges in batches, the last one taking the unused risk sets', async () => {
+    for (const day of ['01', '02', '03', '04', '05']) {
+      await store.audit.append(callEntry(`2026-07-${day}T00:00:00.000Z`));
+    }
+    const kept = await store.audit.append(callEntry('2026-10-01T00:00:00.000Z'));
+    const count = (table: string): number =>
+      store.db.prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ?? -1;
+    // Two per transaction: 2, 2, 1, the last one below the batch.
+    expect(await store.audit.purgeOlderThan('2026-09-01T00:00:00.000Z', 2)).toBe(5);
+    expect((await store.audit.list()).map((e) => e.id)).toEqual([kept.id]);
+    expect(count('audit_risks')).toBe(1);
+    expect(count('audit_risk_sets')).toBe(1);
+    // An exact multiple of the batch ends on an empty batch, which takes the sets too.
+    expect(await store.audit.purgeOlderThan('2026-11-01T00:00:00.000Z', 1)).toBe(1);
+    expect(count('audit_risk_sets')).toBe(0);
+  });
+
   it('computes the retention cutoff from the clock, default 90 days', async () => {
     t.clock.set('2026-10-13T00:00:00.000Z');
     await store.audit.append(callEntry('2026-07-14T00:00:00.000Z')); // 91 days old

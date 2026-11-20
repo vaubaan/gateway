@@ -58,6 +58,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **A large audit purge no longer holds the calls back.** The retention purge deleted every
+  expired entry in one transaction, under the write lock every allowed call needs to append its
+  own: it now goes by batches of 5 000, letting the calls in between.
 - **A service's error text no longer hands the agent the account's secret.** A service that echoed
   the token, password or key it was sent in its error message had that message relayed to the
   agent as is; every secret value of the credentials the call used is now replaced by

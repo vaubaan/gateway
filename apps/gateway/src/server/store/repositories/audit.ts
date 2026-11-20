@@ -49,6 +49,14 @@ import { ADMIN_ACTS, ADMIN_OBJECT_TYPES, AUDIT_DECISIONS, AUDIT_KINDS } from './
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
 
 /**
+ * The most audit entries one purge transaction removes. A purge holds the write lock while
+ * it deletes, and every allowed call appends its entry under the same lock: the first purge
+ * of a large store (retention just lowered, months of entries) is cut into transactions of
+ * this size, the event loop let go between two, so calls keep being written.
+ */
+export const AUDIT_PURGE_BATCH = 5_000;
+
+/**
  * One `audit_risks` row: a risk the call touched — or, on an entry written before
  * migration 0022, any risk of its accepted snapshot.
  */
@@ -297,8 +305,11 @@ export interface AuditRepo {
    * statement for every mission of the Overview.
    */
   callTotals(query: CallTotalsQuery): Promise<CallTotalsRow[]>;
-  /** Retention purge: deletes entries strictly older than `cutoff`. The only delete path. */
-  purgeOlderThan(cutoff: Iso): Promise<number>;
+  /**
+   * Retention purge: deletes entries strictly older than `cutoff`, `batch` per transaction
+   * (`AUDIT_PURGE_BATCH` by default). The only delete path.
+   */
+  purgeOlderThan(cutoff: Iso, batch?: number): Promise<number>;
   /** `purgeOlderThan(now - retentionDays)`; default 90 days (spec §8). */
   purgeByRetention(retentionDays?: number): Promise<number>;
 }
@@ -758,13 +769,16 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     'INSERT INTO audit_purge_guard (id, cutoff) VALUES (1, ?)',
   );
   const closeWindow = db.prepare<[]>('DELETE FROM audit_purge_guard WHERE id = 1');
-  const purgeRisks = db.prepare<[string]>(
-    'DELETE FROM audit_risks WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
+  // One batch: the oldest entries before the cutoff, the same rows for the three statements
+  // of one transaction (`audit_ts` serves the order).
+  const BATCH = 'SELECT id FROM audit WHERE ts < ? ORDER BY ts, id LIMIT ?';
+  const purgeRisks = db.prepare<[string, number]>(
+    `DELETE FROM audit_risks WHERE audit_id IN (${BATCH})`,
   );
-  const purgeResourceSets = db.prepare<[string]>(
-    'DELETE FROM audit_resource_sets WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
+  const purgeResourceSets = db.prepare<[string, number]>(
+    `DELETE FROM audit_resource_sets WHERE audit_id IN (${BATCH})`,
   );
-  const purge = db.prepare<[string]>('DELETE FROM audit WHERE ts < ?');
+  const purge = db.prepare<[string, number]>(`DELETE FROM audit WHERE id IN (${BATCH})`);
   // The sets no remaining entry references, once the old entries are gone (same window).
   const UNREFERENCED =
     'NOT IN (SELECT accepted_set_id FROM audit WHERE accepted_set_id IS NOT NULL)';
@@ -943,20 +957,34 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     return toRecord(requireRow(byId.get(id), 'audit', id));
   }
 
-  async function purgeOlderThan(cutoff: Iso): Promise<number> {
+  /** One transaction: at most `batch` entries before `cutoff`, then, last, the unused sets. */
+  function purgeBatch(cutoff: Iso, batch: number): number {
     return withImmediateTransaction(db, () => {
       openWindow.run(cutoff);
       try {
-        purgeRisks.run(cutoff);
-        purgeResourceSets.run(cutoff);
-        const purged = purge.run(cutoff).changes;
-        purgeSetMembers.run();
-        purgeSets.run();
+        purgeRisks.run(cutoff, batch);
+        purgeResourceSets.run(cutoff, batch);
+        const purged = purge.run(cutoff, batch).changes;
+        if (purged < batch) {
+          purgeSetMembers.run();
+          purgeSets.run();
+        }
         return purged;
       } finally {
         closeWindow.run();
       }
     });
+  }
+
+  async function purgeOlderThan(cutoff: Iso, batch: number = AUDIT_PURGE_BATCH): Promise<number> {
+    let total = 0;
+    for (;;) {
+      const purged = purgeBatch(cutoff, batch);
+      total += purged;
+      if (purged < batch) return total;
+      // Let the calls waiting to append their entry take the lock between two batches.
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
 
   return {
