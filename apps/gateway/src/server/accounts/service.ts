@@ -23,10 +23,9 @@
  * plugin at connect time and merged by `syncDiscoveredResources`, which
  * never overwrites an owner edit and never deletes a row.
  */
-import { isUpstreamAuthError, UpstreamAuthError } from '@vaubaan/shared';
+import { isUpstreamAuthError } from '@vaubaan/shared';
 import {
   type ApiKeyCredentialSpec,
-  type AccountContext,
   type CredentialCheck,
   type CredentialSecret,
   type GuideStep,
@@ -40,26 +39,22 @@ import {
   type TokenGuide,
   serviceIconOf,
 } from '@vaubaan/plugin-sdk';
-import { DISCOVERY_ACTOR_ID } from '@vaubaan/gateway-core';
 
 import { findActiveUserByEmail } from '../authority';
 import { connectFileUrl } from '../plugins/connect-files';
 import { catalogEnvsOf } from '../../lib/missions/catalog-view';
 import { resourceNounOf } from '../../lib/services/resource-noun';
-import type { ResourceMove } from '../store';
 import { HostAccountTakenError } from '../store/errors';
 import { ownResourceEnv } from '../store/resource-env';
 import { toIso } from '../store/clock';
 import type { AccountRecord, AccountResourceRecord, GroupRecord, Principal } from '../store/types';
 import { serializeSecret } from './credential-codec';
-import type { ResolvedCredential } from './credentials';
 import { canWithdraw } from './credentials';
 import { ConnectError } from './errors';
 import { serviceFailureReason } from './failure-reason';
 import { grantedNames, tokenLacks } from './token-permissions';
 import {
   cleanName,
-  usableResourcesOf,
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
@@ -88,11 +83,15 @@ import {
   accountOwnerOf,
   accountPublicFields,
   isRetiredWay,
-  retiredWayReason,
 } from './mapping';
 import type { PendingConnect, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair } from './ssh-keypair';
 
+import { AccountDiscovery, DISCOVERY_TIMEOUT_MS, isTransportFailure } from './discovery';
+import { isHostAccount } from './host-account';
+
+export { CHECK_NOW_RATE_LIMIT, CHECK_NOW_RATE_WINDOW_MS, DISCOVERY_TIMEOUT_MS } from './discovery';
+export { isHostAccount } from './host-account';
 export type {
   Actor,
   TokenPermissionView,
@@ -142,7 +141,6 @@ import type {
   NewOwner,
   AccountServiceDeps,
   MissionResourceCheck,
-  MissionResourceMoves,
 } from './account-views';
 
 /** An OAuth `error` code is a token of the protocol (RFC 6749 §4.1.2.1), never free text. */
@@ -151,11 +149,6 @@ const PROTOCOL_ERROR_CODE = /^[a-z_]{1,40}$/;
 /** Connect attempts (starts, callbacks, form posts) one user may make per window. */
 export const CONNECT_RATE_LIMIT = 10;
 export const CONNECT_RATE_WINDOW_MS = 60_000;
-/** A discovery that does not finish within this delay is reported as failed. */
-export const DISCOVERY_TIMEOUT_MS = 30_000;
-/** "Check now" on mission cards: this many discoveries per user per window. */
-export const CHECK_NOW_RATE_LIMIT = 10;
-export const CHECK_NOW_RATE_WINDOW_MS = 60_000;
 /** The pages of the accounts a person can use ("accounts" in the spec and the store). */
 export const ACCOUNTS_PATH = '/accounts';
 /**
@@ -196,13 +189,8 @@ function handBack(flow: Pick<FlowStart, 'returnTo'>, account: AccountRecord): St
   };
 }
 
-/** A `host` account: the kind its connect stored (`metadata.credential_kind`). */
-export function isHostAccount(account: Pick<AccountRecord, 'metadata'>): boolean {
-  return account.metadata?.credential_kind === 'host';
-}
-
 /** How a failed first discovery is treated when a credential has just been obtained. */
-type DiscoveryPolicy =
+export type DiscoveryPolicy =
   /** Any failure refuses the account: the user can simply retry (api-key form). */
   | 'required'
   /** The credential is kept whatever happens: the authorization code is spent. */
@@ -233,16 +221,57 @@ interface FinalizeOptions {
   readonly brokerGrant?: BrokerGrant | null;
 }
 
-/** The outcome of the discovery attempted before the account is written. */
-interface FirstDiscovery {
-  /** `null` when the discovery was deferred or failed. */
-  readonly resources: readonly Resource[] | null;
-  /** The failure a `best-effort` policy tolerated, recorded on the account. */
-  readonly error: string | null;
-}
-
 export class AccountService {
-  constructor(private readonly deps: AccountServiceDeps) {}
+  /** The discovery of resources (`discovery.ts`). */
+  readonly #discovery: AccountDiscovery;
+
+  constructor(private readonly deps: AccountServiceDeps) {
+    this.#discovery = new AccountDiscovery(deps, this);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Discovery: discovery.ts
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** A person's "Refresh": the account's resources read again at its service. */
+  discover(actor: Actor, accountId: string): Promise<DiscoveryRecord> {
+    return this.#discovery.discover(actor, accountId);
+  }
+
+  /** "Check now" from a mission: its creator asks the account's service what is there. */
+  checkForMission(
+    actor: Actor,
+    missionId: string,
+    accountId: string,
+  ): Promise<MissionResourceCheck> {
+    return this.#discovery.checkForMission(actor, missionId, accountId);
+  }
+
+  /** The automatic refresh of an account, scheduled or when its page opens. */
+  refreshOnItsOwn(
+    accountId: string,
+    cause: AutomaticRefreshCause,
+  ): Promise<AutomaticRefresh | null> {
+    return this.#discovery.refreshOnItsOwn(accountId, cause);
+  }
+
+  /** The discovery after a call that created a resource at the service. */
+  discoverAfterCall(
+    accountId: string,
+    cause: DiscoveryAfterCallCause,
+    createdRefs: readonly string[] = [],
+  ): Promise<AfterCallDiscovery | null> {
+    return this.#discovery.discoverAfterCall(accountId, cause, createdRefs);
+  }
+
+  /** The audit entry of a discovery after a call, once its attempts are over. */
+  auditDiscoveryAfterCall(
+    accountId: string,
+    cause: DiscoveryAfterCallCause & { readonly userId: string },
+    outcome: AfterCallDiscovery & { readonly attempts: number },
+  ): Promise<void> {
+    return this.#discovery.auditDiscoveryAfterCall(accountId, cause, outcome);
+  }
 
   /** The URL the service sends the browser back to — always on `public_url`. */
   callbackUrl(serviceId: string): URL {
@@ -829,16 +858,16 @@ export class AccountService {
     secret: CredentialSecret,
     options: FinalizeOptions,
   ): Promise<Connected> {
-    const first = await this.firstDiscovery(plugin, secret, options.discovery);
+    const first = await this.#discovery.firstDiscovery(plugin, secret, options.discovery);
     const account = await this.persist(actor, plugin, secret, options);
 
     let discovery: DiscoveryRecord | null = null;
     if (first.resources) {
-      discovery = await this.storeDiscovery(account, plugin, first.resources, {
+      discovery = await this.#discovery.storeDiscovery(account, plugin, first.resources, {
         actorId: actor.user.id,
       });
     } else if (first.error) {
-      discovery = await this.recordDiscovery(account.id, 0, first.error);
+      discovery = await this.#discovery.recordDiscovery(account.id, 0, first.error);
     }
 
     this.deps.logger.info(options.reconnectId ? 'account reconnected' : 'account created', {
@@ -854,35 +883,6 @@ export class AccountService {
       reconnected: options.reconnectId !== null,
       returnTo: options.returnTo,
     };
-  }
-
-  /**
-   * Tries the credential that was just obtained, before anything is stored.
-   * Throws the `ConnectError` of a failure the policy does not tolerate.
-   */
-  private async firstDiscovery(
-    plugin: ServicePlugin,
-    secret: CredentialSecret,
-    policy: DiscoveryPolicy,
-  ): Promise<FirstDiscovery> {
-    if (policy === 'deferred') return { resources: null, error: null };
-    try {
-      const resources = await this.discoverWith(plugin, {
-        credential: secret,
-        fetch: this.deps.fetch,
-      });
-      return { resources, error: null };
-    } catch (err) {
-      const rejected = isUpstreamAuthError(err);
-      if (policy === 'required') {
-        throw new ConnectError(
-          rejected || !isTransportFailure(err) ? 'credential-rejected' : 'service-unreachable',
-          `${plugin.displayName}: ${serviceFailureReason(err, secret)}`,
-        );
-      }
-      // Recorded on the account, which other owners read: the status only.
-      return { resources: null, error: serviceFailureReason(err) };
-    }
   }
 
   /** Throws the `ConnectError` of the ceiling of accounts when one more does not fit. */
@@ -944,284 +944,6 @@ export class AccountService {
   }
 
   // ── Resources ─────────────────────────────────────────────────────────────
-
-  /**
-   * The owner's "refresh discovery". On a rejected credential the broker
-   * refreshes once; a second rejection leaves the account `expired`. The
-   * outcome is recorded on the account and returned, never thrown: a
-   * failed discovery leaves the known resources as they were.
-   */
-  async discover(actor: Actor, accountId: string): Promise<DiscoveryRecord> {
-    const account = await this.requireOwned(actor, accountId);
-    if (account.status === 'revoked') throw new ConnectError('account-revoked');
-    const record = await this.rediscover(account, null, { actorId: actor.user.id });
-    // After a key's scope changed at the service: what it may do now.
-    if (record.ok) await this.reverify(account.id);
-    await this.auditDiscovery(actor.user.id, account, record, null);
-    return record;
-  }
-
-  /**
-   * "Check now" on a mission card (ADR
-   * resource-set-is-one-environment-with-optional-future-resources): runs the discovery
-   * of one account of the mission and says what joined or left that mission. The
-   * mission's creator, or an owner of the account, may ask; anyone else, a mission
-   * without that account, or a missing one reads `not-found`. Rate-limited per user
-   * (`CHECK_NOW_RATE_LIMIT`); audited as a `resources-discovered` entry, cause `check-now`.
-   */
-  async checkForMission(
-    actor: Actor,
-    missionId: string,
-    accountId: string,
-  ): Promise<MissionResourceCheck> {
-    const mission = await this.deps.store.missions.getById(missionId);
-    const account = await this.deps.store.accounts.getById(accountId);
-    if (
-      !mission ||
-      !account ||
-      !mission.accounts.some((c) => c.accountId === accountId) ||
-      (mission.creatorUserId !== actor.user.id && !this.owns(actor, account))
-    ) {
-      throw new ConnectError('not-found');
-    }
-    if (account.status === 'revoked') throw new ConnectError('account-revoked');
-    const decision = await this.deps.rateLimiter.take(
-      `check-resources:${actor.user.id}`,
-      CHECK_NOW_RATE_LIMIT,
-      CHECK_NOW_RATE_WINDOW_MS,
-    );
-    if (!decision.allowed) throw new ConnectError('rate-limited', null, decision.retryAfterMs);
-    const moves: ResourceMove[] = [];
-    const record = await this.rediscover(account, null, { actorId: actor.user.id, moves });
-    await this.auditDiscovery(actor.user.id, account, record, null, {
-      cause: 'check-now',
-      mission_id: missionId,
-    });
-    const own = moves.filter((m) => m.missionId === missionId);
-    return {
-      account_id: accountId,
-      discovery: record,
-      last_checked_at: record.at,
-      joined: movesBySet(own.filter((m) => m.change === 'joined')),
-      left: movesBySet(own.filter((m) => m.change === 'left')),
-    };
-  }
-
-  /**
-   * A refresh the gateway runs on its own (`AccountRefresher`): hourly, or because a page
-   * showed the account stale. The same discovery as "Refresh" — a rejected key turns the
-   * account `expired` and tells its owners, new resources follow the plugin's hidden
-   * marks and join the future sets, missing ones go stale — then the key's check again.
-   * Audited (`resources-discovered`, actor `DISCOVERY_ACTOR_ID`, `cause` scheduled or
-   * on-open) only when something changed: a no-op refresh leaves no entry. `null` when
-   * the account does not serve (gone, revoked, expired) or is a host account.
-   */
-  async refreshOnItsOwn(
-    accountId: string,
-    cause: AutomaticRefreshCause,
-  ): Promise<AutomaticRefresh | null> {
-    const account = await this.deps.store.accounts.getById(accountId);
-    if (
-      !account ||
-      account.status === 'revoked' ||
-      account.status === 'expired' ||
-      isHostAccount(account)
-    ) {
-      return null;
-    }
-    const before = await this.liveRefsOf(account.id);
-    const record = await this.rediscover(account, null, { actorId: DISCOVERY_ACTOR_ID });
-    const rightsChanged = record.ok ? await this.reverify(account.id) : false;
-    const after = await this.liveRefsOf(account.id);
-    const added = [...after].filter((ref) => !before.has(ref)).length;
-    const removed = [...before].filter((ref) => !after.has(ref)).length;
-    const expired = (await this.deps.store.accounts.getById(account.id))?.status === 'expired';
-    const changed = added > 0 || removed > 0 || rightsChanged || expired;
-    if (changed) {
-      await this.deps.audit.write({
-        kind: 'admin',
-        ts: this.nowIso(),
-        user_id: DISCOVERY_ACTOR_ID,
-        act: 'resources-discovered',
-        object: { type: 'account', id: account.id },
-        before: null,
-        after: {
-          ok: record.ok,
-          count: record.count,
-          error: record.error,
-          cause,
-          added,
-          removed,
-          rights_changed: rightsChanged,
-          ...(expired ? { expired: true } : {}),
-        },
-      });
-    }
-    return { record, added, removed, rightsChanged, expired, changed };
-  }
-
-  /** The refs of the account's resources that are not stale. */
-  private async liveRefsOf(accountId: string): Promise<Set<string>> {
-    return new Set(
-      (await this.deps.store.accounts.listResources(accountId))
-        .filter((r) => r.staleSince === null)
-        .map((r) => r.ref),
-    );
-  }
-
-  /**
-   * A pasted key's check (`verify`) asked again, after a discovery that worked: who it
-   * acts as, until when, what it holds. Written when the service says something else
-   * than what is stored; true then. A check that fails changes nothing (the discovery
-   * just proved the key works) and is logged by account only.
-   */
-  private async reverify(accountId: string): Promise<boolean> {
-    const account = await this.deps.store.accounts.getById(accountId);
-    const plugin = account ? this.deps.registry.get(account.service)?.plugin : undefined;
-    if (!account || !plugin) return false;
-    const spec = plugin.credential;
-    if (spec.kind !== 'api-key' || !spec.verify) return false;
-    if (accountCredentialKind(account, spec.kind) !== 'api-key') return false;
-    let check: CredentialCheck;
-    try {
-      const resolved = await this.deps.broker.resolve(accountId);
-      if (resolved.credential.kind !== 'api-key') return false;
-      check = await spec.verify({
-        credential: resolved.credential,
-        fetch: this.deps.fetch,
-        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-      });
-    } catch (err) {
-      this.deps.logger.warn('key check failed on refresh', {
-        account_id: accountId,
-        service: account.service,
-        failure: serviceFailureReason(err),
-      });
-      return false;
-    }
-    const said = keyFactsOf(check);
-    const metadata = account.metadata ?? {};
-    const factsDiffer =
-      (metadata.account ?? null) !== said.account ||
-      (metadata.expires_at ?? null) !== said.expires_at ||
-      (said.granted !== undefined &&
-        JSON.stringify(metadata.granted ?? null) !== JSON.stringify(said.granted));
-    const expiryDiffers = account.credentialExpiresAt !== said.expires_at;
-    if (!factsDiffer && !expiryDiffers) return false;
-    if (factsDiffer) {
-      await this.deps.store.accounts.setMetadata(accountId, {
-        ...metadata,
-        account: said.account,
-        expires_at: said.expires_at,
-        ...(said.granted === undefined ? {} : { granted: said.granted }),
-      });
-    }
-    if (expiryDiffers) {
-      await this.deps.store.accounts.setCredentialExpiresAt(accountId, said.expires_at);
-    }
-    return true;
-  }
-
-  /**
-   * The gateway's own discovery after a call that created a resource of the
-   * account (ADR created-resources-join-the-mission): the same merge as
-   * the owner's "Refresh", run by `DiscoveryAfterCall` off the request path.
-   * Nothing is audited here: the scheduler may look again (a service that
-   * lists a new resource a moment late) and audits the outcome once, through
-   * `auditDiscoveryAfterCall`. `null` when the account no longer serves
-   * (gone, revoked, expired): there is nothing to look for with it.
-   * `createdRefs`: the refs the call created, read from its answer and already
-   * recorded (ADR created-resources-join-the-mission); the outcome says how many
-   * of them this discovery did not return yet.
-   */
-  async discoverAfterCall(
-    accountId: string,
-    cause: DiscoveryAfterCallCause,
-    createdRefs: readonly string[] = [],
-  ): Promise<AfterCallDiscovery | null> {
-    const account = await this.deps.store.accounts.getById(accountId);
-    if (!account || account.status === 'revoked' || account.status === 'expired') {
-      return null;
-    }
-    const liveRefs = async (): Promise<Set<string>> =>
-      new Set(
-        (await this.deps.store.accounts.listResources(account.id))
-          .filter((r) => r.staleSince === null)
-          .map((r) => r.ref),
-      );
-    const before = await liveRefs();
-    const returned = new Set<string>();
-    const record = await this.rediscover(account, cause, {
-      actorId: DISCOVERY_ACTOR_ID,
-      returned,
-    });
-    if (!record.ok) return { record, added: 0, missing: createdRefs.length };
-    let added = 0;
-    for (const ref of await liveRefs()) if (!before.has(ref)) added += 1;
-    const missing = createdRefs.filter((ref) => !returned.has(ref)).length;
-    return { record, added, missing };
-  }
-
-  /** The `resources-discovered` entry of a discovery the gateway ran after a call. */
-  async auditDiscoveryAfterCall(
-    accountId: string,
-    cause: DiscoveryAfterCallCause & { readonly userId: string },
-    outcome: AfterCallDiscovery & { readonly attempts: number },
-  ): Promise<void> {
-    const account = await this.deps.store.accounts.getById(accountId);
-    if (!account) return;
-    await this.auditDiscovery(cause.userId, account, outcome.record, {
-      mission_id: cause.missionId,
-      tool: cause.tool,
-      added: outcome.added,
-      attempts: outcome.attempts,
-    });
-  }
-
-  /**
-   * One discovery of an account that is not revoked, merged into its
-   * resources, its outcome recorded on the account and returned — never
-   * thrown. On a rejected credential the broker refreshes once.
-   */
-  private async rediscover(
-    account: AccountRecord,
-    afterCall: DiscoveryAfterCallCause | null,
-    sinks: DiscoverySinks,
-  ): Promise<DiscoveryRecord> {
-    // An account made a way the plugin no longer declares: its stored secret is not
-    // what the plugin reads, so the plugin is not called; the owner reconnects it.
-    const retired = this.retiredWayOf(account);
-    if (retired !== null) return this.recordDiscovery(account.id, 0, retired, afterCall);
-    try {
-      let resolved = await this.deps.broker.resolve(account.id);
-      let resources: readonly Resource[];
-      try {
-        resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
-      } catch (err) {
-        if (!isUpstreamAuthError(err)) throw err;
-        try {
-          resolved = await this.deps.broker.refresh(account.id);
-        } catch (refreshErr) {
-          if (!isUpstreamAuthError(refreshErr)) throw refreshErr;
-          // Keep the service's own words: they say what is wrong with the credential.
-          throw new UpstreamAuthError(
-            `${err.message} — the credential could not be refreshed, the account is now expired; reconnect it`,
-            err.upstreamStatus,
-          );
-        }
-        resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
-      }
-      return await this.storeDiscovery(account, resolved.plugin, resources, sinks, afterCall);
-    } catch (err) {
-      this.deps.logger.warn('resource discovery failed', {
-        account_id: account.id,
-        service: account.service,
-        failure: serviceFailureReason(err),
-        ...(afterCall ? { after_call_of: afterCall.tool, mission_id: afterCall.missionId } : {}),
-      });
-      return this.recordDiscovery(account.id, 0, serviceFailureReason(err), afterCall);
-    }
-  }
 
   async updateResource(
     actor: Actor,
@@ -1563,14 +1285,14 @@ export class AccountService {
     return path;
   }
 
-  private owns(actor: Actor, account: AccountRecord): boolean {
+  owns(actor: Actor, account: AccountRecord): boolean {
     return account.owner.kind === 'user'
       ? account.owner.id === actor.user.id
       : actor.groups.some((g) => g.id === account.owner.id);
   }
 
   /** An account of another owner is reported exactly like a missing one. */
-  private async requireOwned(actor: Actor, accountId: string): Promise<AccountRecord> {
+  async requireOwned(actor: Actor, accountId: string): Promise<AccountRecord> {
     const account = await this.deps.store.accounts.getById(accountId);
     if (!account || !this.owns(actor, account)) throw new ConnectError('not-found');
     return account;
@@ -1617,67 +1339,6 @@ export class AccountService {
     }
   }
 
-  /** A discovery's context: the stored credential, under the discovery's deadline. */
-  private discoveryContextOf(resolved: ResolvedCredential): AccountContext {
-    return this.deps.broker.contextOf(resolved, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS));
-  }
-
-  private async discoverWith(
-    plugin: ServicePlugin,
-    ctx: AccountContext,
-  ): Promise<readonly Resource[]> {
-    return plugin.discoverResources(ctx);
-  }
-
-  private async storeDiscovery(
-    account: AccountRecord,
-    plugin: ServicePlugin,
-    resources: readonly Resource[],
-    sinks: DiscoverySinks,
-    afterCall: DiscoveryAfterCallCause | null = null,
-  ): Promise<DiscoveryRecord> {
-    const { usable, unusable } = usableResourcesOf(plugin.id, resources);
-    for (const r of usable) sinks.returned?.add(r.ref);
-    for (let i = 0; i < unusable; i += 1) {
-      this.deps.logger.warn('plugin returned an unusable resource; ignored', {
-        service: plugin.id,
-        account_id: account.id,
-      });
-    }
-    const before = await this.deps.futureResources?.snapshot(account.id);
-    await this.deps.store.accounts.syncDiscoveredResources(account.id, usable);
-    const record = await this.recordDiscovery(account.id, usable.length, null, afterCall);
-    // Recorded first: a mission page reads "last checked" with what joined.
-    if (before) {
-      const moves = await this.deps.futureResources?.settle(account.id, before, sinks.actorId);
-      sinks.moves?.push(...(moves ?? []));
-    }
-    return record;
-  }
-
-  private async recordDiscovery(
-    accountId: string,
-    count: number,
-    error: string | null,
-    afterCall: DiscoveryAfterCallCause | null = null,
-  ): Promise<DiscoveryRecord> {
-    const record: DiscoveryRecord = {
-      at: this.nowIso(),
-      ok: error === null,
-      count,
-      error,
-      afterCall,
-    };
-    const current = await this.deps.store.accounts.getById(accountId);
-    if (current) {
-      await this.deps.store.accounts.setMetadata(accountId, {
-        ...(current.metadata ?? {}),
-        discovery: record,
-      });
-    }
-    return record;
-  }
-
   /**
    * What the plugin of an account says about withdrawing its grant, with the
    * service's label. Read from the registry alone: it answers for a revoked
@@ -1705,17 +1366,6 @@ export class AccountService {
         byHand: plugin.manualRevocation ?? null,
       },
     };
-  }
-
-  /** The refusal sentence of an account made a way its plugin no longer declares, or `null`. */
-  private retiredWayOf(account: AccountRecord): string | null {
-    const registered = this.deps.registry.get(account.service);
-    if (!registered) return null;
-    const { plugin } = registered;
-    const kind = accountCredentialKind(account, plugin.credential.kind);
-    return kind !== null && isRetiredWay(kind, plugin.credential.kind)
-      ? retiredWayReason(plugin.displayName, kind)
-      : null;
   }
 
   private async view(account: AccountRecord): Promise<AccountView> {
@@ -1787,43 +1437,6 @@ export class AccountService {
     });
   }
 
-  /**
-   * A discovery after the first: the outcome, never the resource list. `cause`
-   * says who ran it — the owner's "Refresh" (`by-owner`, the actor is the
-   * owner), or the gateway after a creating call (`after-a-call`, the actor is
-   * the human behind the call's key).
-   */
-  private async auditDiscovery(
-    userId: string,
-    account: AccountRecord,
-    record: DiscoveryRecord,
-    afterCall: {
-      readonly mission_id: string;
-      readonly tool: string;
-      readonly added: number;
-      readonly attempts: number;
-    } | null,
-    /** A discovery asked from a mission card ("check now"). */
-    checkNow?: { readonly cause: 'check-now'; readonly mission_id: string },
-  ): Promise<void> {
-    await this.deps.audit.write({
-      kind: 'admin',
-      ts: this.nowIso(),
-      user_id: userId,
-      act: 'resources-discovered',
-      object: { type: 'account', id: account.id },
-      before: null,
-      after: {
-        ok: record.ok,
-        count: record.count,
-        error: record.error,
-        ...(afterCall
-          ? { cause: 'after-a-call', ...afterCall }
-          : (checkNow ?? { cause: 'by-owner' })),
-      },
-    });
-  }
-
   /** One entry per save that changed something; a save that changed nothing writes none. */
   private async auditResourceEdit(
     actor: Actor,
@@ -1843,7 +1456,7 @@ export class AccountService {
     });
   }
 
-  private nowIso(): string {
+  nowIso(): string {
     return toIso(this.deps.clock.now());
   }
 }
@@ -1871,45 +1484,6 @@ function resourceAuditView(resource: AccountResourceRecord): ResourceAuditView {
 }
 
 /** The plugin-facing `Resource` of a stored row (what `classify` and `execute` receive). */
-/** Where a discovery reports beyond its record. */
-interface DiscoverySinks {
-  /** The audit's actor of the joins and leaves it causes. */
-  readonly actorId: string;
-  /** Filled with the refs the discovery returned. */
-  readonly returned?: Set<string>;
-  /** Filled with the joins and leaves it caused. */
-  readonly moves?: ResourceMove[];
-}
-
-/** What a key's check says, as the account's metadata keeps it; an unreadable expiry is none. */
-function keyFactsOf(check: CredentialCheck): {
-  readonly account: string | null;
-  readonly expires_at: string | null;
-  readonly granted?: string[];
-} {
-  const expiresMs = check.expiresAt === null ? null : Date.parse(check.expiresAt);
-  return {
-    account: cleanName(check.account),
-    expires_at:
-      expiresMs === null || !Number.isFinite(expiresMs) ? null : new Date(expiresMs).toISOString(),
-    ...(check.granted === undefined ? {} : { granted: grantedNames(check.granted) }),
-  };
-}
-
-/** Moves grouped by set and reason, refs in the order they were written. */
-function movesBySet(moves: readonly ResourceMove[]): MissionResourceMoves[] {
-  const groups = new Map<string, MissionResourceMoves>();
-  for (const move of moves) {
-    const key = `${move.resourceSetId}\n${move.reason}`;
-    const group = groups.get(key);
-    groups.set(key, {
-      resource_set_id: move.resourceSetId,
-      reason: move.reason,
-      refs: [...(group?.refs ?? []), move.ref],
-    });
-  }
-  return [...groups.values()];
-}
 
 export function toPluginResource(service: string, record: AccountResourceRecord): Resource {
   return {
@@ -1939,13 +1513,6 @@ function stepView(
           }
         : null,
   };
-}
-
-function isTransportFailure(err: unknown): boolean {
-  return (
-    err instanceof TypeError ||
-    (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError'))
-  );
 }
 
 function sameList(list: readonly string[], current: unknown): boolean {

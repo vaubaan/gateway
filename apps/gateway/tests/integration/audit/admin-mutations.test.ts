@@ -483,6 +483,32 @@ const RULES: Readonly<Record<string, Rule>> = {
       ),
     writes: { act: 'account-created', object: 'account', actor: 'alice' },
   },
+  'AccountService.requireOwned': READ,
+  'AccountService.owns': READ,
+  'AccountService.nowIso': exempt('reads the clock, writes nothing'),
+  // The bodies of AccountService's discovery acts (discovery.ts), each classified on the service.
+  'AccountDiscovery.discover': exempt('the body of AccountService.discover, classified there'),
+  'AccountDiscovery.checkForMission': exempt(
+    'the body of AccountService.checkForMission, classified there',
+  ),
+  'AccountDiscovery.refreshOnItsOwn': exempt(
+    'the body of AccountService.refreshOnItsOwn, classified there',
+  ),
+  'AccountDiscovery.discoverAfterCall': exempt(
+    'the body of AccountService.discoverAfterCall, classified there',
+  ),
+  'AccountDiscovery.auditDiscoveryAfterCall': exempt(
+    'the body of AccountService.auditDiscoveryAfterCall, classified there',
+  ),
+  'AccountDiscovery.firstDiscovery': exempt(
+    'the first discovery of a connect, part of AccountService.start / complete / import, classified there',
+  ),
+  'AccountDiscovery.storeDiscovery': exempt(
+    'stores what a discovery found, part of the acts of AccountService that run one, classified there',
+  ),
+  'AccountDiscovery.recordDiscovery': exempt(
+    'records a discovery on the account, part of the acts of AccountService that run one, classified there',
+  ),
   'AccountService.discover': {
     kind: 'mutation',
     target: accounts,
