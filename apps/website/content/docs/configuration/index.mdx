@@ -25,6 +25,7 @@ People sign in through one or more sign-in providers, offered side by side on th
 
 - **OpenID Connect**, your company's directory. One sign-in provider under `idp.*` (callback `https://your-domain/auth/callback`), or any number under `sign_in.<id>.*` with `kind: oidc` (callback `https://your-domain/auth/callback/<id>`).
 - **GitHub**, through a GitHub OAuth App, under `sign_in.<id>.*` with `kind: github` (callback `https://your-domain/auth/callback/<id>`).
+- **Sign-in accounts** kept by the instance, under `sign_in.<id>.*` with `kind: local` (at most one): invitation only, a password and a required second factor; invitation and reset links go through the instance's own mail (`mail.*`), or an administrator copies them from People.
 
 Sign-in providers can also be added from the interface, Settings → Administration → Sign-in, by an administrator; one set in the configuration is read-only there. Until a sign-in provider exists, the bootstrap token (`bootstrap_token`) lets the first administrator in; the first sign-in of a person matching the admin rule revokes it.
 

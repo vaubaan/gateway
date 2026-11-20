@@ -1,9 +1,13 @@
 ---
 title: Backup and restore
-description: Make a consistent copy of the database while the instance runs, keep the master key apart, and what restoring a copy involves.
+description: The scheduled encrypted backup, a copy made by hand while the instance runs, keeping the master key apart, and restoring a copy.
 ---
 
 A backup of an instance is two things kept apart: a consistent copy of its SQLite database, and the master key versions that copy is sealed under; the copy alone opens no credential, and the key alone is nothing.
+
+## Scheduled backup
+
+With the `backup.s3.*` keys set (`VAUBAAN_BACKUP_S3_*`, examples in `deploy/config/.env.example`), the instance uploads a backup to an S3-compatible bucket on its own schedule (`VAUBAAN_BACKUP_EVERY`, `VAUBAAN_BACKUP_AT`, `VAUBAAN_BACKUP_KEEP`). Each one is encrypted under a key derived from the master key and restored into a temporary file before it leaves: a copy that fails that check is never uploaded. Settings → Administration → Encryption and `GET /healthz` report the latest one, the activity each run.
 
 ## Make a copy
 
@@ -41,6 +45,11 @@ Keep the master key outside the host and outside the backups. **A copy opens onl
 
 ## Restore
 
-**The repository documents no restore command yet, and no restore has been rehearsed by the project.** A copy is a complete SQLite database at a schema version, so restoring it means, in principle: stop the instance; put the copy in place of the file named by `store.path`, with no `-wal` or `-shm` file of the old database left beside it; make sure the configuration holds every master key version the copy names; start an image at least as recent as the one that made the copy — an older image refuses a newer database, and migrations run forward at start. Try it on a scratch instance before you need it.
+A copy, made by hand or by the schedule, restores on an image at least as recent as the one that made it, with the master key of every version it names. Two ways:
+
+- **A new instance starts from the copy.** Set `VAUBAAN_RESTORE_FROM` (an absolute path or an https URL, kept as a secret) and `VAUBAAN_RESTORE_SHA256`, and start it on an empty volume. Before it opens the store, it checks the hash, SQLite's integrity, that the schema is not newer than the image and that its keys open every stored secret, then puts the copy in place; a refusal stops the start and writes nothing. Without the key file on the new host, the instance starts in setup mode: `/admin/bootstrap` asks for the bootstrap token and the key file the former instance handed out, then runs the same restore.
+- **The command**, gateway stopped: `node apps/gateway/restore.mjs <file or https URL> --sha256 <hex>` inside the container (with Compose, `docker compose run --rm gateway node apps/gateway/restore.mjs …`). `--dry-run` only checks; a store that exists is replaced only with `--force`, and kept aside as `<name>.replaced-<time>`.
+
+Try it on a scratch instance before you need it. Moving an instance from host to host: [Railway guide, Moving an instance](https://github.com/vaubaan/gateway/blob/main/deploy/railway.md#9-moving-an-instance).
 
 More: the [store handbook, Backup](https://github.com/vaubaan/gateway/blob/main/docs/handbook/store.md#backup).

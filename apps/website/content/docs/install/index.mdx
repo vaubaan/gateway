@@ -19,7 +19,7 @@ Running the image with your own reverse proxy is described in the [deploy README
 - **A host** with Docker and Compose v2, or a Railway project. One process and one SQLite file: no database server, no high availability.
 - **A DNS name** pointing at the host; its `https://` origin is the instance's public URL. With Compose, ports 80 and 443 must be reachable so the bundled proxy can obtain the certificate.
 - **Nothing to generate for the encryption key** with Compose: the instance writes it at its first start and the setup hands it to you. On Railway you generate it yourself (`npm run gen-master-key`, needs Node.js).
-- **A sign-in provider**: an OpenID Connect client at your identity provider, or a GitHub OAuth App. The test suites sign in through a simulated identity provider; no real one has been tried yet ([known limitations](/docs/known-limitations)). You can add it from the interface after the first sign-in, or put it in the configuration.
+- **A sign-in provider**: an OpenID Connect client at your identity provider, a GitHub OAuth App, or none at all with **sign-in accounts** kept by the instance (email, password and a second factor). Live instances sign in through GitHub, Google and Entra ID; Keycloak has never been run ([known limitations](/docs/known-limitations)). You can add it from the interface after the first sign-in, or put it in the configuration.
 - **An admin rule**: the email addresses (`VAUBAAN_ADMIN_EMAILS`) or the identity provider group (`VAUBAAN_ADMIN_GROUP`) of the administrators.
 
 ## Minimum configuration
@@ -44,7 +44,7 @@ Every key: [configuration keys](/docs/configuration/keys).
 ## First sign-in
 
 1. Open `https://your-domain/login` and follow the bootstrap link; paste the bootstrap token. When the instance generated its encryption key, the setup's first step is **Your encryption key**: download it and keep it outside the host before anything else.
-2. On Settings → Administration → Sign-in, add a sign-in provider — your company's OpenID Connect directory (redirect URI `https://your-domain/auth/callback/your-sign-in-id`) or GitHub — then "Test".
+2. On Settings → Administration → Sign-in, add a sign-in provider — your company's OpenID Connect directory (redirect URI `https://your-domain/auth/callback/your-sign-in-id`), GitHub, or **Add sign-in accounts** for accounts the instance keeps itself — then "Test".
 3. Sign in through it as a person matching the admin rule. That first sign-in revokes the bootstrap token for good.
 
 With a sign-in provider in the configuration (`idp.*` or `sign_in.<id>.*`), no bootstrap token is needed: sign in directly. A sign-in provider where anyone can open an account (GitHub, personal Google or Microsoft) needs allowed email domains or "invitation only".
