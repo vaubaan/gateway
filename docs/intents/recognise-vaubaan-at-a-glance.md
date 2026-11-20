@@ -13,14 +13,10 @@ everywhere, so that I recognise Vaubaan and read a risk or a refusal the same wa
 
 ## Read the site in the Trace identity
 
-status: proposed
+status: implemented
 requires: token, component
+anchors: apps/website/src/app/globals.css, apps/website/src/app/layout.tsx, apps/website/src/components/Lockup.tsx, apps/website/src/components/ui/button.tsx, apps/website/src/app/icon.svg, apps/website/src/app/opengraph-image.png, packages/design-tokens/src/palette.ts, apps/website/tests/unit/site/trace-identity.test.tsx, packages/design-tokens/tests/unit/contrast.test.ts
 spec: ../spec/style-guide.md#3-tokens
-acceptance:
-
-- The site shows the Trace mark, its favicon and social card, and uses the accent `#2F55C7` alone
-- Its pages are built from the shared token sheet and components, in light and dark
-- The site's contrast pairs are checked by the same test as the interface's
 
 ## See the interface in the new palette
 
