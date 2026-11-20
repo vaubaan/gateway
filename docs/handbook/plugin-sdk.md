@@ -107,6 +107,13 @@ so a gateway still on 0.9.4 loads it, and a 1.x host also runs a `^0.9.4` build
 **A change the host relies on to read what a plugin returns or throws (a brand, a field) is
 therefore a 2.0**, even when it only adds exports: it ends the 0.9.4 half of every range.
 
+**The catalog builds with its own toolchain**, not with this commit: `toolchain.json` of
+`vaubaan/gateway-plugins` names the gateway commit whose `vaubaan-plugin` builds and packs every
+catalog plugin. A change of what the CLI writes into an archive (the range, the manifest) reaches
+the catalog only once that file is moved, by a reviewed pull request, before the declarations that
+need it. SDK 1.0's first catalog release was built by the former toolchain and declared `^1.0.0`;
+it was rebuilt a patch later.
+
 **A rename is a patch when the old name keeps working** (ADR
 one-word-per-thing-account-service-plugin): 0.9.3 (connection → account) and 0.9.4 (provider →
 service) kept every old export as a `@deprecated` alias and read a pin of an earlier SDK in the
