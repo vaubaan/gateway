@@ -92,7 +92,7 @@ export const FOOTER: readonly { readonly title: string; readonly links: readonly
     links: [
       { label: 'Concepts', href: '/docs/concepts' },
       { label: 'Install', href: '/docs/install' },
-      { label: 'Install with your agent', href: '/docs/install-with-your-coding-agent' },
+      { label: 'Install with your agent', href: '/docs/install/with-your-coding-agent' },
       { label: 'Known limitations', href: '/docs/known-limitations' },
       { label: 'Roadmap', href: githubBlob('ROADMAP.md') },
       { label: 'Changelog', href: githubBlob('CHANGELOG.md') },

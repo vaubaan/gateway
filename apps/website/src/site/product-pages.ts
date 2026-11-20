@@ -97,7 +97,7 @@ export function productPageMarkdown(page: ProductPage): string {
   ].join('\n\n')}\n`;
 }
 
-const INSTALL_WITH_AGENT = '/docs/install-with-your-coding-agent';
+const INSTALL_WITH_AGENT = '/docs/install/with-your-coding-agent';
 const TRY: Link = { label: 'Try it', href: '/try' };
 
 export const HOW_IT_WORKS: ProductPage = {
@@ -217,7 +217,7 @@ export const TEAMS: ProductPage = {
       id: 'install-it',
       heading: 'Install it',
       status: 'built',
-      body: 'Two ways: [Docker Compose](/docs/install/docker-compose) on a host with a DNS name and ports 80 and 443, or [Railway](/docs/install/railway). Or paste [one block into your coding agent](/docs/install-with-your-coding-agent): it installs with Compose, asks you what only you know, and checks the result. The first sign-in and every yes stay with you.',
+      body: 'Two ways: [Docker Compose](/docs/install/docker-compose) on a host with a DNS name and ports 80 and 443, or [Railway](/docs/install/railway). Or paste [one block into your coding agent](/docs/install/with-your-coding-agent): it installs with Compose, asks you what only you know, and checks the result. The first sign-in and every yes stay with you.',
     },
   ],
 };
@@ -274,10 +274,7 @@ export const WRITE_A_PLUGIN: ProductPage = {
     label: 'Start a plugin project',
     href: 'https://www.npmjs.com/package/@vaubaan/plugin-cli',
   },
-  secondary: {
-    label: 'Read a real catalog',
-    href: githubBlob('plugins/github/src/risk-catalog.yaml'),
-  },
+  secondary: { label: 'The author guide', href: '/docs/plugins-guide' },
   sections: [
     {
       id: 'five-questions',
@@ -303,7 +300,7 @@ export const WRITE_A_PLUGIN: ProductPage = {
     {
       id: 'read-a-real-one',
       heading: 'Read a real one',
-      body: `GitHub’s [risk catalog](${githubBlob('plugins/github/src/risk-catalog.yaml')}) and [its page on this site](/plugins/github), generated from it. The repository’s own plugins and how they are reviewed: [plugins/README.md](${githubBlob('plugins/README.md')}).`,
+      body: `How to write, test and deploy a plugin, step by step: the [author guide](/docs/plugins-guide). GitHub’s [risk catalog](${githubBlob('plugins/github/src/risk-catalog.yaml')}) and [its page on this site](/plugins/github), generated from it. The repository’s own plugins and how they are reviewed: [plugins/README.md](${githubBlob('plugins/README.md')}).`,
     },
   ],
 };
