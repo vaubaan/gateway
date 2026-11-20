@@ -197,7 +197,7 @@ jobs:
           docker run --rm --network none -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
             scripts/sast.sh /src/.semgrep-rules
 
-  # Browser tests against an ephemeral instance (apps/gateway/tests/e2e/v5):
+  # Browser tests against an ephemeral instance (apps/gateway/tests/e2e):
   # the built app on the real composition root with the `:memory:` store, a
   # simulated identity provider and a mocked service. No credential, no
   # network beyond the browser download. Includes the cutover smoke
@@ -206,7 +206,7 @@ jobs:
   # Weekly, on a manual run and in the release gates (a release cannot pass
   # without them); on a pull request only when it carries the label `e2e`
   # (put it on a change to the pages, the components, the styles, the mission
-  # form or a plugin's catalog). Locally, `npm run test:e2e:v5`.
+  # form or a plugin's catalog). Locally, `npm run test:e2e`.
   #
   # The browser is cached by Playwright version. Its system libraries are not
   # installed: the runner image ships Google Chrome, and with it everything
@@ -237,7 +237,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
       - run: npx playwright install chromium
-      - run: npm run test:e2e:v5
+      - run: npm run test:e2e
         env:
           VAUBAAN_BUILD_TYPECHECKED: '1'
       # The Vitest suites that need the build (`.next/standalone`, the demo
@@ -250,7 +250,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-v5-results
-          path: test-results/v5
+          path: test-results/e2e
           retention-days: 7
           if-no-files-found: ignore
 

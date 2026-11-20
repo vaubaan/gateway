@@ -104,7 +104,7 @@ to contribute.
 | `npm run build`         | The production build of the application.                                                 |
 | `npm run test`          | Vitest: unit and integration tests of every workspace.                                   |
 | `npx vitest run <path>` | One folder or one file, for example `npx vitest run plugins/github`.                     |
-| `npm run test:e2e:v5`   | Builds, then the browser tests (Playwright) against an instance started for the run.     |
+| `npm run test:e2e`      | Builds, then the browser tests (Playwright) against an instance started for the run.     |
 | `npm run docker:build`  | Builds the image as `vaubaan-gateway:local` (needs Docker).                              |
 | `npm run docker:smoke`  | Starts that image and checks that it boots and refuses an incomplete configuration.      |
 
@@ -112,7 +112,7 @@ The browser tests need Chromium once:
 
 ```bash
 npx playwright install chromium   # add --with-deps on a fresh Linux machine
-npm run test:e2e:v5
+npm run test:e2e
 ```
 
 They start their own instance on port 3105 and the one after it;

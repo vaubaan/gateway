@@ -10,7 +10,7 @@
  *   force-push asks first, with the URL → the creator approves in the browser,
  *   reading GitHub's comparison link → the same push again passes.
  *
- * The session is written to `test-results/v5/git-session.txt`: what an agent
+ * The session is written to `test-results/e2e/git-session.txt`: what an agent
  * sees, command by command.
  */
 import { execFile } from 'node:child_process';
@@ -25,7 +25,7 @@ import { routeToInstance, signInAs } from './browser';
 import { controlUrl, E2E_APPROVER_USER, E2E_GIT, localOrigin, PUBLIC_URL } from './instance';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TRANSCRIPT = resolve(HERE, '../../../../../test-results/v5/git-session.txt');
+const TRANSCRIPT = resolve(HERE, '../../../../test-results/e2e/git-session.txt');
 const MISSION = 'Develop acme-git/app with git';
 const REMOTE = `${PUBLIC_URL}/git/github/${E2E_GIT.repository}.git`;
 /** The kit's credential helper, verbatim: the key is read from the variable. */

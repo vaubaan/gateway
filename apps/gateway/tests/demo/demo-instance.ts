@@ -4,7 +4,7 @@
  * normal browser (handbook demo-mode).
  *
  * One process, built like the browser tests' ephemeral instance
- * (`tests/e2e/v5/ephemeral-instance.ts`):
+ * (`tests/e2e/ephemeral-instance.ts`):
  *
  *   - the real composition root, published on `globalThis` as production does,
  *     so the built Next application served below runs on it;

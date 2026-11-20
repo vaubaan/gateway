@@ -6,10 +6,10 @@ import { defineConfig, devices } from '@playwright/test';
 import { instancePort, localOrigin, PUBLIC_URL } from './instance';
 
 /**
- * Browser tests of the v5 human surface against an ephemeral instance:
+ * Browser tests of the human surface against an ephemeral instance:
  * `ephemeral-instance.ts` starts the standalone server of the build (the
  * `server.js` the image runs) on a root with the `:memory:` store and the
- * simulated IdP. No credential, no network: run with `npm run test:e2e:v5`
+ * simulated IdP. No credential, no network: run with `npm run test:e2e`
  * (which builds first). The launcher takes two ports: `E2E_V5_PORT` for the
  * app and the next one for its control endpoints.
  *
@@ -17,7 +17,7 @@ import { instancePort, localOrigin, PUBLIC_URL } from './instance';
  * deleted with the v4 application.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, '../../../../..');
+const REPO_ROOT = resolve(HERE, '../../../..');
 
 export default defineConfig({
   testDir: HERE,
@@ -28,7 +28,7 @@ export default defineConfig({
   retries: 0,
   timeout: 120_000,
   reporter: 'list',
-  outputDir: resolve(REPO_ROOT, 'test-results/v5'),
+  outputDir: resolve(REPO_ROOT, 'test-results/e2e'),
   use: {
     ...devices['Desktop Chrome'],
     baseURL: PUBLIC_URL,
@@ -38,7 +38,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npx tsx apps/gateway/tests/e2e/v5/ephemeral-instance.ts',
+    command: 'npx tsx apps/gateway/tests/e2e/ephemeral-instance.ts',
     cwd: REPO_ROOT,
     url: `${localOrigin()}/healthz`,
     env: { E2E_V5_PORT: String(instancePort()), NODE_ENV: 'production' },

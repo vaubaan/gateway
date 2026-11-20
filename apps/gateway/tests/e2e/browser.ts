@@ -12,7 +12,7 @@
  * are answered by the launcher's control endpoints: the "user" consents and
  * the browser is sent back with what the real page would hand over.
  */
-import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
+import { base32Decode, totpCode, totpStepOf } from '../../src/server/crypto/totp';
 import type { APIRequestContext, BrowserContext, Page, Route } from '@playwright/test';
 
 import { controlUrl, GITHUB_SIGN_IN_BASE, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';

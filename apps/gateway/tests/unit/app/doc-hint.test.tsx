@@ -2,7 +2,7 @@
  * The doc hint (docs/handbook/web-app.md, "doc hints"): what keeps it open,
  * where it is placed, and what it draws without a browser. Hover, focus and
  * the click that opens no page are checked in a browser by
- * `tests/e2e/v5/shell.spec.ts`.
+ * `tests/e2e/shell.spec.ts`.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';

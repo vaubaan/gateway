@@ -7,7 +7,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
-import { DOC_PAGES } from '../../../src/lib/vocabulary';
+import { DOC_PAGES } from '../../src/lib/vocabulary';
 import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { E2E_OPERATOR, E2E_USER, localOrigin, PUBLIC_URL } from './instance';
 

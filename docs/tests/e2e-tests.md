@@ -1,12 +1,12 @@
 ---
 title: E2E test plan
 tracks:
-  - apps/gateway/tests/e2e/v5/playwright.config.ts
-  - apps/gateway/tests/e2e/v5/ephemeral-instance.ts
-  - apps/gateway/tests/e2e/v5/instance.ts
-  - apps/gateway/tests/e2e/v5/browser.ts
-  - apps/gateway/tests/e2e/v5/agent.ts
-  - apps/gateway/tests/e2e/v5/mission-pages.ts
+  - apps/gateway/tests/e2e/playwright.config.ts
+  - apps/gateway/tests/e2e/ephemeral-instance.ts
+  - apps/gateway/tests/e2e/instance.ts
+  - apps/gateway/tests/e2e/browser.ts
+  - apps/gateway/tests/e2e/agent.ts
+  - apps/gateway/tests/e2e/mission-pages.ts
   - apps/gateway/tests/manual/
   - deploy/docker/smoke.sh
   - .github/workflows/ci.yml
@@ -19,13 +19,13 @@ last_reviewed: 2026-11-15
 ## Scope
 
 - The acceptance criterion is manual: the instance owner, on their own instance behind TLS with their own IdP, services and Claude Code, connects every service, issues one mission per code project and works a day with **no unexpected refusal** (spec [§10](../spec/vaubaan-gateway.md#10-tests) "End to end"; checklist in handbook [first-install](../handbook/first-install.md)). Everything automated exists to make that run boring.
-- Automated, and never touching a real IdP, service or coding agent: the browser specs (`npm run test:e2e:v5`), among them `cutover-smoke.spec.ts` walking the acceptance path in-process; and the container smoke (`deploy/docker/smoke.sh <image>`, `npm run docker:smoke`), which proves the image boots from configuration, runs as non-root and ships no test file.
+- Automated, and never touching a real IdP, service or coding agent: the browser specs (`npm run test:e2e`), among them `cutover-smoke.spec.ts` walking the acceptance path in-process; and the container smoke (`deploy/docker/smoke.sh <image>`, `npm run docker:smoke`), which proves the image boots from configuration, runs as non-root and ships no test file.
 - Nothing automated runs the application path inside the image: the browser suite runs the shipped standalone `server.js`, the container smoke stops at boot, configuration and operator commands.
 - Cross-module behaviour without a browser is in [integration-tests.md](./integration-tests.md).
 
 ## Stack
 
-- Playwright, one config (`apps/gateway/tests/e2e/v5/playwright.config.ts`); not part of `npm run ci`. In CI the `e2e` job runs weekly, on a manual run, in the release gates, and on a pull request only when it carries the label `e2e` (put it on a change to pages, components, styles, the mission form or a plugin's catalog).
+- Playwright, one config (`apps/gateway/tests/e2e/playwright.config.ts`); not part of `npm run ci`. In CI the `e2e` job runs weekly, on a manual run, in the release gates, and on a pull request only when it carries the label `e2e` (put it on a change to pages, components, styles, the mission form or a plugin's catalog).
 - `webServer` is `ephemeral-instance.ts`: the real composition root (`testRootDeps`, `:memory:` store, shipped plugins) served by the shipped standalone `server.js` as the Dockerfile runs it, so a file the build fails to trace fails the suite.
 - Fakes enter through `RootDeps` only: `FakeIdp` as the relying party's `fetch`, a mocked GitHub (`mockFetch`) as `serviceFetch`, `FakeGithubHost` for the git remote spec's repository. Any other outbound request rejects.
 - `public_url` is `https://gateway.e2e.test`, routed by `browser.ts` to the local listener so cookies stay `Secure` and the origin check sees the public origin; redirects are answered as navigating pages (Playwright does not route redirect hops).
@@ -34,7 +34,7 @@ last_reviewed: 2026-11-15
 
 ## Conventions
 
-- Specs are `apps/gateway/tests/e2e/v5/*.spec.ts`; the helpers beside them (`agent.ts`, `browser.ts`, `instance.ts`, `mission-pages.ts`) are shared by every spec.
+- Specs are `apps/gateway/tests/e2e/*.spec.ts`; the helpers beside them (`agent.ts`, `browser.ts`, `instance.ts`, `mission-pages.ts`) are shared by every spec.
 - The mission screen is driven through `mission-pages.ts`: `addAccount` / `includeWithTrustLevels` ("+ Add an account", then step 2), `pickTrustLevel`, `openCustom` / `allowOnly` (the Custom modal). A card is named as its controls name it — `GitHub · acme-org`, with its environment in brackets when it shows one (`Supabase · Acme Supabase (prod)`), and found with `cardOf`.
 - The app listens on `E2E_V5_PORT` (default 3105) and the control endpoints on the next port only (`controlUrl()`, under `/__e2e`; the app port answers 404 as the image does). Pick another pair when several checkouts run at once.
 - The IdP has no default user: each spec names its user with `signInAs` in `beforeEach`, never relies on nor restores another spec's user. Seeded users (`E2E_USER`, `E2E_AUDIT_USER`, `E2E_SHARE_OWNER`, …) are declared in `instance.ts`.

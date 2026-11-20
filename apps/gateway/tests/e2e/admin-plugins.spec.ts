@@ -7,7 +7,7 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
+import { REPOSITORY_PLUGINS } from '../support/plugins/repository';
 import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { E2E_OPERATOR } from './instance';
 

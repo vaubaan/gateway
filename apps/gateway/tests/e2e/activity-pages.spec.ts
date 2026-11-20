@@ -11,7 +11,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
-import { encodeCursor } from '../../../src/server/audit/filters';
+import { encodeCursor } from '../../src/server/audit/filters';
 import { routeToInstance, seedDay, signInAs } from './browser';
 import { E2E_AUDIT_USER } from './instance';
 

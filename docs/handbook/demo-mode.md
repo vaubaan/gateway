@@ -43,7 +43,7 @@ deployed.
 ## Procedures
 
 - **Add a simulated endpoint**: one route in `services.ts`, the URL read off the plugin that calls it.
-- The browser tests' ephemeral instance ([`ephemeral-instance.ts`](../../apps/gateway/tests/e2e/v5/ephemeral-instance.ts)) is the same construction on the standalone `server.js`; keep the two in step.
+- The browser tests' ephemeral instance ([`ephemeral-instance.ts`](../../apps/gateway/tests/e2e/ephemeral-instance.ts)) is the same construction on the standalone `server.js`; keep the two in step.
 
 ## Debug
 

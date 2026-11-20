@@ -41,7 +41,7 @@
  * the test files out of it (`outputFileTracingExcludes`, `next.config.ts`).
  * Never part of the image.
  */
-import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
+import { base32Decode, totpCode, totpStepOf } from '../../src/server/crypto/totp';
 import { cpSync, existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
@@ -53,15 +53,15 @@ import { VERCEL_API_BASE } from '@vaubaan/plugin-vercel';
 import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
-import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { serializeSecret } from '../../../src/server/accounts';
-import { seedAccount } from '../../support/missions/testing';
-import type { UserRecord } from '../../../src/server/store/types';
-import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
-import { FakeGithub, routeFetch } from '../../integration/auth/fake-github';
-import { FakeGithubHost } from '../../integration/git/fake-github-host';
-import { FakeIdp } from '../../integration/auth/fake-idp';
-import { seedInstance, testRootDeps } from '../../integration/missions/support';
+import { getRoot, type GatewayRoot } from '../../src/server/compose/root';
+import { serializeSecret } from '../../src/server/accounts';
+import { seedAccount } from '../support/missions/testing';
+import type { UserRecord } from '../../src/server/store/types';
+import { seedDayOfWork, type AuditRig } from '../integration/audit/support';
+import { FakeGithub, routeFetch } from '../integration/auth/fake-github';
+import { FakeGithubHost } from '../integration/git/fake-github-host';
+import { FakeIdp } from '../integration/auth/fake-idp';
+import { seedInstance, testRootDeps } from '../integration/missions/support';
 import {
   CONTROL_PREFIX,
   controlPort,
@@ -81,10 +81,10 @@ import {
   MOCK_VERCEL_PROJECT,
   PUBLIC_URL,
 } from './instance';
-import { saveTestOidcSignInProvider } from '../../support/auth/testing';
+import { saveTestOidcSignInProvider } from '../support/auth/testing';
 
 const CLIENT = { clientId: 'vaubaan-gateway-e2e', clientSecret: 'e2e-client-secret' };
-const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 /** Where the build writes the app in the standalone tree (the tracing root is the repository). */
 const STANDALONE_APP = resolve(APP_DIR, '.next/standalone/apps/gateway');
 /** What the image runs: `CMD ["node", "apps/gateway/server.js"]`. */
@@ -433,7 +433,7 @@ async function issueGitMission(
 async function main(): Promise<void> {
   if (!existsSync(STANDALONE_SERVER)) {
     throw new Error(
-      `${STANDALONE_SERVER} is missing — run "npm run build" first (npm run test:e2e:v5 does)`,
+      `${STANDALONE_SERVER} is missing — run "npm run build" first (npm run test:e2e does)`,
     );
   }
   const port = instancePort();

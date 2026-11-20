@@ -27,7 +27,7 @@ body:
         - Docker image (Compose or other)
         - From source (`npm run build` / `npm run dev`)
         - The demo (`npm run demo`)
-        - Tests only (`npm run ci`, `npm run test:e2e:v5`)
+        - Tests only (`npm run ci`, `npm run test:e2e`)
     validations:
       required: true
   - type: dropdown

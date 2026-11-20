@@ -33,7 +33,7 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
   to `main` directly, checked locally by `npm run check:changed`, and read the run's verdict after
   the push. Nothing runs on a draft pull request.
 - **Label `e2e`** a change to pages, components, styles, e2e tests or any plugin (the mission form
-  is drawn from catalogs), or run `npm run test:e2e:v5` locally.
+  is drawn from catalogs), or run `npm run test:e2e` locally.
 - Service facts in handbooks, catalogs and plugins come from Context7 through the gateway's
   `context7` plugin, citing the pages it returned; a missing topic names the URLs fetched instead
   and is marked `_fallback: Context7 missing — check by hand at the next refresh_`.

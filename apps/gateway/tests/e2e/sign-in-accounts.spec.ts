@@ -15,7 +15,7 @@
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
+import { base32Decode, totpCode, totpStepOf } from '../../src/server/crypto/totp';
 import { passSecondFactor, routeToInstance, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, PUBLIC_URL } from './instance';
 

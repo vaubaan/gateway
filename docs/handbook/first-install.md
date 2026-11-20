@@ -4,7 +4,7 @@ tracks:
   - deploy/compose.yaml
   - deploy/config/
   - apps/gateway/src/server/missions/bootstrap-kit.ts
-  - apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts
+  - apps/gateway/tests/e2e/cutover-smoke.spec.ts
 last_reviewed: 2026-11-05
 ---
 
@@ -20,7 +20,7 @@ Coming from v4, the earlier hosted product: import an organization with
 
 ## Start here
 
-- [`cutover-smoke.spec.ts`](../../apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts) — the automated smoke that precedes the run.
+- [`cutover-smoke.spec.ts`](../../apps/gateway/tests/e2e/cutover-smoke.spec.ts) — the automated smoke that precedes the run.
 - [`bootstrap-kit.ts`](../../apps/gateway/src/server/missions/bootstrap-kit.ts) — what the agent's project receives.
 
 ## Procedures — acceptance run
