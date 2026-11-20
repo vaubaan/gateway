@@ -67,6 +67,40 @@ acceptance:
 - Every page under `/plugins` is built from the signed catalog, including a plugin published after the site's last release
 - A plugin that leaves this repository keeps its page, unchanged
 
+## Understand it before I give it my accounts
+
+### Read how a permission is decided
+
+status: proposed
+requires: site
+spec: ../spec/website.md#22-user-docs--docs
+acceptance:
+
+- One page explains how a call becomes permissions, the five facts, the four rows, macro-actions and trust levels, and environments, on a developer's and a consultant's missions
+- Every permission it names exists in its service's catalog and sits in the row the page says, checked by a test
+- A second page follows one call from the agent's key to its record, with the refusal each check can end with
+
+### Look up a refusal, a trust level or a word
+
+status: proposed
+requires: site
+spec: ../spec/website.md#22-user-docs--docs
+acceptance:
+
+- `/docs/reference/refusals` lists every refusal code the gateway emits, one anchor per code, with what the agent and the person do next
+- The rows by trust level, the interface's words beside the protocol's, and the agents' reference are pages generated from the gateway's code and spec
+- A source that loses a code, a row or a word fails the site's build
+
+### Find my path in the docs
+
+status: proposed
+requires: site
+spec: ../spec/website.md#22-user-docs--docs
+acceptance:
+
+- The docs home sends a developer, a consultant, a team's administrator, a security reviewer, a plugin author and an agent each to the pages that exist for them
+- No path points to a page that is not written
+
 ## Check the project without trusting it
 
 ### Hand my security reviewer one document

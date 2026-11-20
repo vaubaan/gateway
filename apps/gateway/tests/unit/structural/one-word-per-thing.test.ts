@@ -195,7 +195,7 @@ describe('structural: one word per thing — account, service, plugin', () => {
     expect(files).toEqual(
       expect.arrayContaining([
         'apps/gateway/src/lib/vocabulary.ts',
-        'apps/website/content/docs/concepts.mdx',
+        'apps/website/content/docs/concepts/index.mdx',
         'apps/website/content/docs/services/index.mdx',
         'apps/website/src/site/landing.ts',
         'docs/handbook/accounts.md',
