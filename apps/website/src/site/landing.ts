@@ -11,7 +11,7 @@ export interface Faq {
 }
 
 export const LANDING_LEDE =
-  'Vaubaan Gateway is a server you install on your own network so that coding agents can use your cloud services through MCP without being handed your credentials.';
+  'Vaubaan Gateway is a server you run for yourself, then for your team, so that your coding agents can use your cloud services through MCP without being handed your credentials.';
 
 export const LANDING_PROBLEM =
   'An agent that deploys, migrates a database or opens a pull request needs credentials, and the usual way is to paste a token into its configuration: the agent can then do anything the token allows, for as long as it lives, and nobody can say afterwards what it did.';

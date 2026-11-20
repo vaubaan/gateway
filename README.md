@@ -6,8 +6,8 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/vaubaan/gateway/badge)](https://scorecard.dev/viewer/?uri=github.com/vaubaan/gateway)
 [![Node.js 26+](https://img.shields.io/badge/node-%3E%3D26-339933)](package.json)
 
-An MCP gateway you run on your own network, for teams whose coding agents act on GitHub,
-Supabase, Vercel, Stripe and other cloud services. Agents never hold your credentials: each one
+An MCP gateway you run for yourself, then for your team, so that your coding agents can act on
+GitHub, Supabase, Vercel, Stripe and other cloud services. Agents never hold your credentials: each one
 gets a key to a **mission** that names what it may touch, what it may do, how often, and what it
 must ask you first.
 
