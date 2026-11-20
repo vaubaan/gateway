@@ -5,15 +5,18 @@ tracks:
   - deploy/config/
   - apps/gateway/src/server/missions/bootstrap-kit.ts
   - apps/gateway/tests/e2e/cutover-smoke.spec.ts
-last_reviewed: 2026-11-05
+  - apps/website/content/docs/install/check-your-instance.mdx
+last_reviewed: 2026-11-20
 ---
 
 # First installation — handbook
 
-How to validate a new instance with a real identity provider, real services
-and Claude Code, after installing it with
-[`deploy/README.md`](../../deploy/README.md). Scenario conventions:
-[e2e-tests](../tests/e2e-tests.md).
+The maintainers' acceptance run of a release on a real instance, with a real
+identity provider, real services and Claude Code. An operator's own checks
+after an install, and how to read a refusal, are on the site:
+[check your instance](https://vaubaan.com/docs/install/check-your-instance)
+(installing: [Install](https://vaubaan.com/docs/install)). Scenario
+conventions: [e2e-tests](../tests/e2e-tests.md).
 
 Coming from v4, the earlier hosted product: import an organization with
 [import-from-v4](import-from-v4.md), then run this checklist.
@@ -25,28 +28,17 @@ Coming from v4, the earlier hosted product: import an organization with
 
 ## Procedures — acceptance run
 
-1. `curl -s <public_url>/healthz` answers `"status":"ok"` with the expected version and commit (image from a tagged commit with a green `e2e` job).
-2. Sign in at `/admin/bootstrap`, configure the sign-in provider, sign in through it as an administrator, then "Finish setup" on `/admin` (it revokes the bootstrap token; see [authentication](authentication.md)).
-3. Connect each account; each ends "Connected" with its resources.
-4. Label environments (`staging`, `prod`) and hide what no mission should see **before** issuing missions: an env-qualified permission is only issued when a selected resource carries that label.
-5. One mission per code project, from the GitHub macro-actions Read and Propose at Trusting; copy the kit (the key is shown once), export `VAUBAAN_MISSION_TOKEN` where Claude Code runs, add the kit's `.mcp.json` entry and instructions, run its `curl`.
-6. Work a day on every project. **Log each refusal**: code, field to copy, expected or unexpected (Debug below). Zero unexpected refusal passes the run; each unexpected one goes back to a trust level, a catalog or a fix.
+1. Deploy an image from a tagged commit whose `e2e` job is green; `curl -s <public_url>/healthz` answers `"status":"ok"` with that version and commit.
+2. Run the site's [check your instance](https://vaubaan.com/docs/install/check-your-instance) steps 2 to 5 as written: they are the run's script, and a step that does not work as written is a docs bug of the run. Sign in at `/admin/bootstrap`, then "Finish setup" on `/admin` once the sign-in provider works (it revokes the bootstrap token; see [authentication](authentication.md)).
+3. Connect every service the owner uses, and issue one mission per code project.
+4. Work a day on every project. **Log each refusal**: code, field to copy, expected or unexpected (the site page's "Reading an unexpected refusal"). Zero unexpected refusal passes the run; each unexpected one goes back to a trust level, a catalog or a fix.
 
 ## Traps
 
-- Expected during the day: a gated permission refuses with an `approval_url` until approved, then the identical call replays; a call without its resource ref is "Vaubaan rejected the call" with no code; one account per service per mission (`duplicate-service`); a service 403 is a failed call, only a 401 refreshes and may expire the account.
-- GitHub: a fine-grained token per organisation, the organisation as resource owner; Workflows write only if missions push `.github/workflows/`. Resend: a full-access key (discovery lists domains). Cloudflare: an API token, not the Global API Key.
+- Account set-up, as met in the runs so far: GitHub wants a fine-grained token per organisation, with the organisation as resource owner, and Workflows write only if missions push `.github/workflows/`; Resend a full-access key (discovery lists domains); Cloudflare an API token, not the Global API Key.
+- The refusals the site page lists as expected (an `approval_url` until approved, no code without a resource ref, `duplicate-service`, a 403 that does not refresh) are not failures of the run.
 
-## Debug — reading a refusal
+## Debug
 
-Read the agent's error (`code`, `hint`) or Activity filtered by mission and "refused".
-
-- `budget-exhausted` (`risk_id`, `claim_url`) — unexpected when an ordinary day overruns the trust level's quota.
-- `rate-limited` (`retry_after_seconds`) — unexpected when ordinary work trips it repeatedly (the trust level's rate).
-- `approval-required` (`approval_url`) — unexpected when the identical replay asks again (bug) or an ordinary action asks all day (the row's gate at that trust level).
-- `risk-not-accepted` (`missing_risks`) — unexpected for an ordinary action (a macro-action not ticked, or left out by its trust level), or `…uncategorized-write` (catalog hole).
-- `resource-not-in-mission` (`cited_ref`) — unexpected for a resource the project needs, or one gone `stale` after a discovery refresh.
-- `account-unavailable` — unexpected on a healthy account: credential refresh, read the server log.
-- `wrong-credential-kind` — always unexpected: the token went to the wrong door, or a browser cookie rode along.
-- "Vaubaan rejected the call" with no code — unexpected when the classifier cannot place a legitimate call (plugin bug); "Upstream error" — unexpected when the gateway built a wrong request.
-- Claude Code does not connect: `curl` the kit's check first. 401 with a fresh token → the `Authorization` header does not reach the instance (variable not exported, or the proxy strips it); 401 with `error.data.reason` → export the current token; 403 on every request → the client sends `Origin`, the door answers no CORS. Then [execution-door](execution-door.md).
+- "Vaubaan rejected the call" with no code on a legitimate call: the classifier cannot place it, a plugin bug ([plugin-sdk](plugin-sdk.md#debug)). "Upstream error" on a call the service should accept: the gateway built a wrong request.
+- Claude Code does not connect after the site page's checks: [execution-door](execution-door.md).

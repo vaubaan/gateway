@@ -1,0 +1,35 @@
+---
+title: Check your instance
+description: After the first sign-in, check a new instance end to end — health, sign-in, accounts, environments, a first mission, an agent connected — and read what a refusal says.
+---
+
+Checking an instance means taking it, once installed, through what a working day needs: it answers, people sign in, accounts connect, a mission's agent reaches its services, and every refusal it meets is one you expected.
+
+## The checks, in order
+
+1. **It answers.** `curl -s https://your-domain/healthz` answers `"status":"ok"` with the version and the commit you deployed; the footer of every page shows them too.
+2. **People sign in.** Do the [first sign-in](/docs/install#first-sign-in): the bootstrap link, the encryption key downloaded if the instance generated it, a sign-in provider added and tested, then a sign-in through it as an administrator. That first sign-in revokes the bootstrap token.
+3. **Accounts connect.** On Accounts → Connect an account, connect each service you need ([connect a service](/docs/services)); each ends "Connected" with its resources listed.
+4. **Environments are labelled before any mission.** Label the resources `staging` or `prod`, and hide what no mission should see. A permission that depends on the environment is only granted when a selected resource carries that label.
+5. **A first mission works.** Create one mission per project ([missions](/docs/missions)), for instance from GitHub's macro-actions Read and Propose at Trusting. Copy its kit (the key is shown once), export `VAUBAAN_MISSION_TOKEN` where the agent runs, add the kit's MCP entry and instructions ([MCP clients](/docs/missions/mcp-clients)), and run the kit's `curl` check.
+6. **Work a day with it.** Note each refusal the agent meets, with its code, and whether you expected it. None unexpected means the instance and its missions are right; an unexpected one goes back to a trust level, a macro-action, a resource label or a bug report.
+
+## Refusals you should expect
+
+- A permission that asks first refuses with an `approval_url` until a person approves; the identical call then goes through.
+- A call without its resource is refused by the plugin, with no code ("Vaubaan rejected the call").
+- A mission holds one account per service (`duplicate-service`).
+- A 403 from the service is a failed call; only a 401 makes the gateway refresh the credential, and may mark the account expired.
+
+## Reading an unexpected refusal
+
+Read the agent's error (`code`, `hint`), or the activity filtered by the mission and "refused". What each code means and what to do: [missions, when a call is refused](/docs/missions#when-a-call-is-refused).
+
+- `budget-exhausted` or `rate-limited` all day on ordinary work: the trust level's limits are too low for the project.
+- `approval-required` on an ordinary action all day: the trust level asks first for that row; or the identical replay asks again, which is a bug.
+- `risk-not-accepted` on an ordinary action: a macro-action is not ticked, or its trust level leaves the permission out. On a permission ending in `uncategorized-write`, the plugin's catalog misses an entry.
+- `resource-not-in-mission` on a resource the project needs: add it to the mission, or refresh the account if the resource went stale.
+- `account-unavailable` on a healthy account: the credential could not be refreshed; read the server log.
+- `wrong-credential-kind`: the mission key went to the web interface, or a browser cookie rode along on an agent's call.
+
+**The agent does not connect.** Run the kit's `curl` first. A 401 with a fresh key means the `Authorization` header does not reach the instance: the variable is not exported, or the proxy strips it. A 401 with `error.data.reason` means the key changed: export the current one. A 403 on every request means the client sends an `Origin` header, and the MCP door answers no cross-origin request.

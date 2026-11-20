@@ -121,9 +121,10 @@ bundled proxy obtains the TLS certificate), plus a sign-in provider (OpenID Conn
 OAuth App) or none at all with local accounts.
 
 - Every step, running the image without Compose, upgrades, verifying an image's provenance:
-  [`deploy/README.md`](deploy/README.md). On Railway: [deploy/railway.md](deploy/railway.md).
+  [vaubaan.com/docs/install](https://vaubaan.com/docs/install). On Railway:
+  [install on Railway](https://vaubaan.com/docs/install/railway).
 - Checking a new instance end to end, from the first sign-in to a day of agent work:
-  [first install](docs/handbook/first-install.md).
+  [check your instance](https://vaubaan.com/docs/install/check-your-instance).
 - Every configuration key: [configuration handbook](docs/handbook/configuration.md).
 
 ## Documentation

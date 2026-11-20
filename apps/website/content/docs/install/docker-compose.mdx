@@ -28,7 +28,7 @@ docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --buil
 curl -s https://your-domain/healthz
 ```
 
-`/healthz` answers `{"status":"ok",...}` with the version and the commit. Then the [first sign-in](/docs/install#first-sign-in).
+`/healthz` answers `{"status":"ok",...}` with the version and the commit. Then the [first sign-in](/docs/install#first-sign-in), and [check your instance](/docs/install/check-your-instance).
 
 A missing or invalid key stops the container with exit code 78 and a message naming every key (`docker compose --env-file deploy/config/.env -f deploy/compose.yaml logs gateway`); the minimum is in [Install, minimum configuration](/docs/install#minimum-configuration).
 

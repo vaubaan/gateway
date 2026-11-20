@@ -1,4 +1,11 @@
 {
   "title": "Install",
-  "pages": ["docker-compose", "railway", "own-proxy", "verify-an-image", "with-your-coding-agent"]
+  "pages": [
+    "docker-compose",
+    "railway",
+    "own-proxy",
+    "verify-an-image",
+    "with-your-coding-agent",
+    "check-your-instance"
+  ]
 }
