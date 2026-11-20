@@ -13,6 +13,7 @@ tracks:
   - apps/website/drawings/prims.py
   - apps/website/postcss.config.mjs
   - apps/website/vercel.json
+  - apps/website/scripts/vercel-ignore.sh
   - packages/design-tokens/
   - packages/shared/src/service-mark.ts
   - apps/website/src/proxy.ts
@@ -89,7 +90,7 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 - **A `[data-project]` element takes no display utility**: the switch's rules are unlayered, so `display: none` and `display: revert` override it; wrap the flex or grid inside.
 - **A new product page** is four places: its entry in `PRODUCT_PAGES` (or `build-site.ts` for a page of its own), its route under `app/`, its path in `TWINNED` (`site/routing.ts`) and in the `Vary` source of `next.config.ts`; `site.test.ts` lists the pages it expects.
 - **A drawing's text that names a permission comes from `SHORT`**: a permission added to one of the five catalogs stops `gen.py` (`no short name for …`) until it has one.
-- **Vercel builds only when the site's inputs change** (`vercel.json` `ignoreCommand`): a change of `packages/design-tokens`, `packages/plugin-page`, `packages/gateway-core` or the agent bootstrap rebuilds it; another package the site reads (`policy-engine`) does not until the next site change.
+- **Vercel builds only when the site's inputs change** since the last deployed commit: `vercel.json` `ignoreCommand` runs [`scripts/vercel-ignore.sh`](../../apps/website/scripts/vercel-ignore.sh), whose path list must name every input the generator reads (a new package the site imports goes there too). Vercel refuses a `vercel.json` whose `ignoreCommand` is longer than 256 characters: the whole deployment fails at schema validation, before any build.
 
 ## Outside the repo — Vercel project
 

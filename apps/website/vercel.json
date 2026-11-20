@@ -1,5 +1,5 @@
 {
   "framework": "nextjs",
   "installCommand": "cd ../.. && npm ci --include=dev --ignore-scripts --no-audit --no-fund",
-  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in main|feature/website) git diff --quiet HEAD^ HEAD -- . ../../packages/telemetry ../../packages/shared ../../packages/gateway-core ../../apps/gateway/src/app/agent-bootstrap.md ../../packages/design-tokens ../../packages/plugin-page ../../plugins ../../package-lock.json ;; *) exit 0 ;; esac"
+  "ignoreCommand": "sh scripts/vercel-ignore.sh"
 }
