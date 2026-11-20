@@ -1,0 +1,44 @@
+---
+title: Submit to the catalog
+description: Publish a plugin for every gateway — a public repository, an exact commit, vaubaan-plugin submit opens the declaration's pull request on vaubaan/gateway-plugins, the catalog's check and review, then a release signed by Vaubaan.
+---
+
+Submitting a plugin to the catalog means declaring its public source and exact commit in `vaubaan/gateway-plugins`; once the declaration is reviewed and merged, the catalog rebuilds that commit without any secret, signs it, and every gateway installs it when a person first connects the service. Your own archive and your company key play no part.
+
+## What the catalog holds
+
+One declaration per plugin, `catalog/<id>.yaml`: its id, the public repository and the plugin's folder in it, the version, the exact commit, and its owners, the GitHub users or teams who may change the declaration later. A new version is a new pull request changing `version` and `commit`. The id becomes yours in the catalog: check that `catalog/<id>.yaml` does not exist yet.
+
+## Make the source buildable by the catalog
+
+The catalog runs `npm ci --ignore-scripts`, then `vaubaan-plugin build`, on the declared commit:
+
+- `package-lock.json` is committed and in sync (`npm ci` passes locally);
+- no dependency needs an install script or a native addon;
+- `npm run check` and `npm run build` exit 0;
+- `version` in `package.json` equals the one of `definePlugin`, and is the version you declare;
+- a `LICENSE` file at the plugin's root, and a `license` field in `package.json`;
+- no private key, token or `.env` in the repository or its history.
+
+## Open the pull request
+
+Push the commit to the public repository, then check the declaration and open the pull request, with the GitHub command line `gh` signed in:
+
+```bash
+npx vaubaan-plugin submit --dry-run --owners your-user,your-org/your-team
+npx vaubaan-plugin submit --owners your-user,your-org/your-team
+```
+
+`--dry-run` prints the declaration for `HEAD` and exits 1, saying why, on uncommitted changes, a commit not pushed, a remote outside GitHub, a missing `package-lock.json` or a field the catalog would refuse. Without it, `submit` forks the catalog, commits the declaration on a branch `submit/<id>-<version>` and opens the pull request; it prints its address.
+
+Then write in the pull request what the reviewer needs: what the service is, what one resource is, each tool and its slice, each write permission with its five facts and why, and the documentation pages the classifier was written from.
+
+## The check and the review
+
+The catalog's `check` workflow validates every declaration, rebuilds what the pull request declares, and writes in its summary what the reviewer reads: the declaration before and after, the permissions of the risk catalog, the files of the archive. A failure names its step: fix the plugin, push, update the commit. The catalog's maintainers then review the risk catalog, the classifier and the execution code of the declared commit. A write classified as a read is a refusal; expect the review to concentrate on the catalog's write entries, the classifier's refusals and its identifiers.
+
+After the merge, the release `<id>-v<version>` appears in the catalog, signed by Vaubaan, and gateways see it in their versions feed. A plugin judged dangerous or abandoned gets an advisory, then leaves the catalog; instances keep it, with a warning.
+
+## Reporting a problem in a published plugin
+
+A call classified too leniently, or a permission missing, in a plugin of the catalog: if it lets a mission do more than it accepted, report it privately first, as a [security advisory](https://github.com/vaubaan/gateway/security/advisories/new) of the gateway. Otherwise open an issue or a pull request on the plugin's own repository. A fix that makes a classification stricter is a breaking version ([versions](/docs/plugins-guide/sign-and-deploy#versions)); a permission is never renamed or deleted, only deprecated with `replaced_by`.

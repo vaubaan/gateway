@@ -1,0 +1,126 @@
+---
+title: Write the risk catalog
+description: The permissions a call can need, their five facts and the row they sort into, environments, the catch-all, and the macro-actions in the service's own verbs; written in src/risk-catalog.yaml.
+---
+
+The risk catalog is the plugin's security statement and the file reviewers read first: one entry per intent that deserves its own decision — not one per tool, not one per endpoint — each with the slice patterns it covers and five facts about what it does, grouped into the macro-actions a mission's creator ticks.
+
+## An example
+
+```yaml
+service: acme
+catalog_version: 1 # bump on every reviewed change of the content
+catalog_date: 2026-10-13
+
+risks:
+  - id: acme.read-widgets # never renamed, never deleted: deprecate instead
+    label: 'Read widgets'
+    reason: 'Why this is a risk, two sentences at most.'
+    matches: # one pattern, or a list
+      - 'acme.workspace[**].widget[**].R'
+    vector:
+      reversibility: reversible # reversible | costly | irreversible
+      blast: single #             single | env | account | bulk
+      data: data #                metadata | data | secret | pii
+      cost: free #                free | moderate | unbounded
+      visibility: internal #      internal | team | public
+
+  - id: acme.widget-write
+    label: 'Create or modify a widget'
+    reason: 'Reversible on staging; visible to customers on prod until reverted.'
+    matches: 'acme.workspace[**].widget[**].W'
+    acceptable_in_envs: [staging, prod] # makes the permission depend on the environment
+    vector: { reversibility: reversible, blast: single, data: data, cost: free, visibility: team }
+    vector_overrides: # optional: what changes in one environment
+      prod: { reversibility: costly, visibility: public }
+
+  - id: acme.widget-delete # its own decision, through the verb leaf of the model
+    label: 'Delete a widget'
+    reason: 'A deleted widget cannot be restored.'
+    matches: 'acme.workspace[**].widget[**].delete.W'
+    acceptable_in_envs: [staging, prod]
+    vector: { reversibility: irreversible, blast: single, data: data, cost: free, visibility: team }
+
+  - id: acme.uncategorized-write # the catch-all: mandatory, exactly one
+    label: 'Uncategorized write'
+    reason: 'Catch-all for writes without a dedicated entry.'
+    matches: 'acme.**.W'
+    fallback: true
+    vector: { reversibility: costly, blast: env, data: data, cost: moderate, visibility: internal }
+
+macro_actions:
+  - id: read
+    label: Read
+    description: One line shown under the macro-action in New mission.
+    narrative: >-
+      Reading the widgets of the mission's workspaces. Nothing is modified, but a
+      widget's contents come from people outside the mission.
+    entries:
+      - risk_id: acme.read-widgets # unqualified, never the catch-all
+        quota: 500 # the base budget a trust level multiplies (×1, ×3, ×10)
+        rate_limit: { max: 60, window_seconds: 60 }
+  - id: change
+    label: Change widgets
+    description: Create, modify and delete widgets.
+    narrative: >-
+      Writing widgets. Deleting one is kept apart from changing it because a
+      deleted widget is gone for good.
+    entries:
+      - risk_id: acme.widget-write
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: acme.widget-delete
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+```
+
+Every key, its type and its limits: [the risk catalog file](/docs/plugins-guide/reference/catalog).
+
+## Patterns
+
+In a pattern, `[*]` stands for one identifier and `[**]` for any identifier and anything below it; `[a,b]` is a list. There is no regular expression.
+
+- **Overlapping patterns add up.** `widget[**].W` also matches `widget[w-7].delete.W`, so a deletion touches `widget-write` **and** `widget-delete`: a mission needs both, one counter is decremented per permission, and one of them asking first is enough for the call to wait. This is how the catalogs of the [published plugins](/plugins) layer "any write" and "a dangerous write". When two permissions must not add up, give them patterns that do not overlap.
+- **Reads need an entry too.** A slice no entry matches is refused, and the catch-all only catches writes.
+- **The catch-all.** Exactly one entry named `service.uncategorized-…`, matching `service.**.W`, flagged `fallback: true`. It is touched only by a write no other entry covers: seeing it in an activity log means the catalog misses an entry. No macro-action contains it; the gateway offers it as "Anything else".
+
+## The five facts and the row
+
+Fill each fact for what the act does at the service, not for whether it writes. The gateway never adds them up: it reads them in a fixed order, and the first that answers gives the permission its **row** and its **reason**:
+
+| Row                        | When                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| 4 · Cannot be repaired     | `reversibility: irreversible`                                                                  |
+| 3 · Repairable, at a price | `reversibility: costly`, or `cost: unbounded`                                                  |
+| 2 · Worth a look           | `data: secret` or `pii`, `blast: account` or `bulk`, `cost: moderate`, or `visibility: public` |
+| 1 · Harmless               | anything else                                                                                  |
+
+The row decides the gate at each trust level: row 4 asks first or stays out, row 3 asks until Autonomous, row 2 asks at Careful. So a wrong fact is a wrong gate. A read that spends a paid quota is `cost: moderate`; a read that changes nothing is `reversible` even when the question leaves the company (say so in the `reason`). Sending an email is `irreversible` and `visibility: public`; dropping a production table is `irreversible` with `blast: env`.
+
+## Environments
+
+A permission whose row depends on the environment is **one** entry with `acceptable_in_envs`, never two ids with the environment in the name; `vector_overrides` says what changes in one environment. In a mission it appears qualified, `acme[prod].widget-write`. A call on a resource its owner has not labelled cannot touch a permission that depends on the environment: it is refused.
+
+## Macro-actions
+
+3 to 6 per catalog, named in the service's own verbs — "Read", "Propose", "Ship", "Send mail" — and independent of each other. Every entry but the catch-all and the deprecated ones belongs to **exactly one**, unqualified, with a base budget (`quota`, `rate_limit`) and no gate: the gate follows the row and the trust level, the budget is multiplied by it (Careful ×1, Trusting ×3, Autonomous ×10).
+
+Give each macro-action a `narrative`: two to four sentences in the service's words, at most 600 characters, saying what an agent does under this verb and why its permissions are cut the way they are ("two acts are kept apart because they destroy work"). The plugin's public page shows it; the gateway never reads it.
+
+## Words people read
+
+`label`, `reason` and a macro-action's `description` are shown as written in the gateway's interface. A sentence that addresses the reader about the product uses the interface's words ("a mission must hold this permission too", "production writes ask first"); a sentence that describes the service keeps the service's.
+
+## Rules the loader enforces
+
+- **Ids** are `service.name`, lowercase with dashes, and are never renamed or deleted, because missions store them: mark an entry `deprecated: true` with `replaced_by: id` instead.
+- **No presets**, **no tool that hands the agent a token** (route the work through the gateway, as git does through its remote), **no `caps`**: the one limit a catalog declares is `infra_limits.calls_per_minute_max` on a permission, the ceiling of the rate limit a mission can carry. A limit the service needs is refused by your classifier.
+- **Unknown keys are refused**, so a typo never silently disables a rule.
+
+## Check
+
+```bash
+npx vitest run -t 'well-formed'
+```
+
+A failure lists every problem with its path (`macro_actions[0].entries[2].risk_id 'acme.nope' is not an unqualified risk of the 'acme' catalog`). This checks the catalog against its own rules only; whether it covers what your tools really do is checked by the [tests](/docs/plugins-guide/test). Next: [classify calls](/docs/plugins-guide/classify).

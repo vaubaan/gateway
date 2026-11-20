@@ -1,0 +1,83 @@
+---
+title: Model the service
+description: Choose the resource a mission is limited to, where the environment comes from, the entities a call can touch and the tools agents get; written in src/data-model.ts, src/identity.ts and src/tools.ts.
+---
+
+Modelling a service means choosing what one resource is, which entities below it a call can touch, and which tools agents get; the classifier, the catalog and the credential are all written against this model. Read the service's API documentation from its source before you start, never from memory, and note the pages you used in a comment of the file that relies on them.
+
+## The resource
+
+The resource is what a mission is limited to and what an account lists: a repository at GitHub, a project at Supabase, a zone at a DNS host, a mailbox for Gmail. It is the root entity of the model and what `discoverResources` returns. Use the service's stable id for it, never a name a person can change.
+
+## Where the environment comes from
+
+- **The owner labels each resource** `staging` or `prod` (the common case: a Supabase project, a GitHub repository): mark the root entity `envScopable: true`.
+- **The environment is part of the call** (an environment argument, a live and a test mode): give it an entity in the model, and declare `envOf: envFromSliceSegment('env')` in `src/index.ts` ([execute](/docs/plugins-guide/execute#environment-in-the-call)).
+- **The service has no environment** (a DNS host): neither.
+
+## The data model (`src/data-model.ts`)
+
+List the entities a call can touch and how they contain each other. One **plane** per independent area of the service: Supabase has `db`, `storage`, `auth` and `functions`; most services have one.
+
+```ts
+export const acmeDataModel: DataModel = {
+  service: SERVICE_ID,
+  planes: [
+    {
+      slug: 'workspace',
+      description: 'A workspace of the service and the widgets it holds.',
+      entities: [
+        {
+          name: 'workspace',
+          parent: null, // a root entity of the plane: the resource
+          cardinalities: ['one'],
+          description: 'The resource an account exposes.',
+          envScopable: true, // the entity the owner labels staging / prod
+        },
+        {
+          name: 'widget',
+          parent: 'workspace',
+          cardinalities: ['one', 'unbounded'], // one widget, or all of them
+          description: 'A widget inside a workspace.',
+        },
+        { name: 'delete', parent: 'widget', cardinalities: ['one'] }, // a verb leaf
+      ],
+    },
+  ],
+};
+```
+
+- `cardinalities` says how a slice may name the entity: `one` (a single identifier, or none: a creation), `bounded` (an explicit list `[a,b]`), `unbounded` (`[*]`, all of them: a list call).
+- **Verb leaves.** A slice ends in `R` or `W` and nothing else. To give an operation its own permission among the writes — a deletion, a publication, a transfer, an invitation — declare a leaf entity under the entity it acts on, emit `…widget[w-7].delete.W` from the classifier, and match it in the catalog.
+- **Paths.** Every slice of the classifier and every pattern of the catalog is a path of these entities, rooted at a declared entity, each name a child of the one before (any descendant after `[**]`). Only the last name may be a **virtual leaf** the model does not declare, an act rather than an entity (`branch[main].merge-into`). A leaf one or two letters away from an entity is reported as its typo.
+
+A slice is written `service.entity[id].entity[id]….R` or `.W`:
+
+| Form                                        | Meaning                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `acme.workspace[ws-1].widget[w-7].W`        | A write on one widget.                                                       |
+| `acme.workspace[ws-1].widget[*].R`          | A read of every widget of the workspace (a list): the entity is `unbounded`. |
+| `acme.workspace[ws-1].widget.W`             | A write on the collection, without an id: a creation.                        |
+| `acme.workspace[ws-1].widget[w-7].delete.W` | A verb leaf: an operation with a permission of its own.                      |
+
+## The tools (`src/identity.ts`, `src/tools.ts`)
+
+Offer the operations agents need for the use case, not the whole API: one tool per operation, named `verb_noun` (`list_projects`, `delete_record`). Write each name once, in `TOOL` in `src/identity.ts`, built with the prefix `toolPrefixFor(SERVICE_ID)` gives; every other file imports `SERVICE_ID` and `TOOL` and never writes an id or a tool name as a literal.
+
+- **Every tool that acts on a resource takes the resource's ref** as an explicit argument. The one exception is an upstream tool rewrapped as is, whose schema has no resource argument: acceptable only when an account has exactly one resource, so the classifier resolves the mission's single one and refuses none or several.
+- **The input schema is the whole argument surface.** An argument is declared in `properties` before the classifier or the executor may use it.
+- **A title per tool** (`toolTitles`): a verb and its object, sentence case, no final period, 60 characters at most. When a call asks a person first, the request is headed by it and the resource — "Delete a widget · acme-staging" — so the person reads what the agent wants to do, not the name of a permission. Agents never see it; they read the description.
+- **A tool you leave out on purpose** goes in `excludedTools` in `src/index.ts`, with one sentence; the plugin's public page shows it, and your classifier refuses the name.
+
+## The plugin's identity (`src/index.ts`, `src/icon.ts`)
+
+Set `displayName`, `description`, `summary` (at most 600 characters, in the interface's words: what one account is, what one resource is, where the environment comes from), `resourceNoun` (`one: 'project'`, `other: 'projects'`) and the service's mark in `src/icon.ts`: the `d` of one SVG path on a 24×24 grid, usually from Simple Icons (CC0; name the slug in a comment), with its colour. The API base URL is a constant of the plugin, in `src/execute.ts`: a fact about the service, not a setting of the instance.
+
+## Check
+
+```bash
+npx tsc --noEmit
+grep -rniE 'widget|workspace|example\.com' src tests   # what is left of the imaginary service
+```
+
+The type check passes once the model and the tools compile; the tests pass again at the end of [execute](/docs/plugins-guide/execute). Next: the [risk catalog](/docs/plugins-guide/risk-catalog).

@@ -1,0 +1,40 @@
+---
+title: When something fails
+description: The messages a plugin author meets — from the catalog loader, definePlugin, the test kit, the build and a gateway's upload or start — what each means and what to do.
+---
+
+The kit and the gateway name every problem they refuse, with its path or its cause; this table gives, for each message you are likely to meet, its cause and the fix. A `…` stands for the part of the message that varies.
+
+## The catalog and the definition
+
+| Message                                               | Cause and fix                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Invalid risk catalog '…'` followed by bullets        | Read every bullet: each path is exact (`risks[3].vector.blast`, `macro_actions[1].entries[2].risk_id`). |
+| `exactly one fallback entry per catalog, found …`     | A second entry matches `service.**.W` or carries `fallback: true`: give it a narrower pattern.          |
+| `missing fallback risk`                               | Declare the catch-all: `service.uncategorized-write`, matching `service.**.W`, with `fallback: true`.   |
+| `… is the fallback, which belongs to no macro-action` | Remove the catch-all from the macro-action; the gateway offers it as "Anything else".                   |
+| `presets: presets were retired`                       | Move the permissions into `macro_actions` and delete the `presets` key.                                 |
+| `must start with '…'` (`PluginDefinitionError`)       | A tool name was written by hand: build it in `src/identity.ts` with `toolPrefixFor`.                    |
+
+## The tests
+
+| Message                                                              | Cause and fix                                                                                                                                                     |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no catalog risk matches it` (`assertCatalogCoverage`)               | The classifier emits a slice outside every pattern. A read needs its own entry: the catch-all only catches writes.                                                |
+| `cannot be read back`, or `carries '*' inside an identifier`         | The classifier wrote a raw value into an identifier: refuse it in its grammar, or emit `identSegment(value)` ([classify](/docs/plugins-guide/classify)).          |
+| `not an argument of '…' — nothing classifies it, so it is not sent.` | The call, or a test sample, carries an argument the tool's schema does not declare: declare and classify it, or remove it; `declaredOnly` for shared test tables. |
+| `report.fallbackHits` is not empty                                   | A realistic call is covered by the catch-all alone: add the catalog entry.                                                                                        |
+| `mockFetch: unexpected …`                                            | The plugin requested a URL no route covers: add the route, or fix the URL.                                                                                        |
+
+## The build and the gateway
+
+| Symptom or message                                                | Cause and fix                                                                                                                                                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The build cannot read `risk-catalog.yaml`                         | The catalog is loaded with `new URL(…, import.meta.url)`: use `catalogPathNextTo(import.meta.url)`.                                                                                                |
+| The activity shows an upstream error for a call that sent nothing | `execute` threw a plain `Error` to decline: throw `ExecutorRefusal` inside `declining`, or return `refusalResult` ([execute](/docs/plugins-guide/execute)).                                        |
+| `… was built for …; this gateway runs …`                          | The gateway reads another SDK version: upgrade the SDK, rebuild, sign and upload again ([upgrade the SDK](/docs/plugins-guide/sign-and-deploy#upgrade-the-sdk)).                                   |
+| `plugin-refused` at upload                                        | The `reason` says which: a signature the instance does not trust (an administrator adds the key under Trusted signers), unsigned and not allowed, or an id reserved for the catalog's own plugins. |
+| `administrator-only` at upload                                    | The mission whose key `deploy` used was not created by an administrator.                                                                                                                           |
+| `risk-not-accepted` at upload                                     | The mission does not tick "Install plugins" on the gateway's Vaubaan account.                                                                                                                      |
+
+An administrator's side of a plugin that does not load: [plugins on an instance](/docs/operations/plugins#when-the-start-stops).

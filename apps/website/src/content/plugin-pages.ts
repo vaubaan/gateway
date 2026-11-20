@@ -535,7 +535,7 @@ export function pluginListMarkdown(
     '',
     `${healthFootnote(thresholds.windowDays)} Refreshed at most hourly: [how it is measured](/plugins/health).`,
     '',
-    `Write a plugin for another service: the [plugin guide](${githubBlob('plugins/README.md')}) and the kit in [plugins/_template](${githubTree('plugins/_template')}). Every plugin as data: [/plugins.json](/plugins.json).`,
+    `Write a plugin for another service: [the plugin author's guide](/docs/plugins-guide), with the published kit (\`npx @vaubaan/plugin-cli init\`). Every plugin as data: [/plugins.json](/plugins.json).`,
     '',
     ...creditLines(plugins),
   ].join('\n');

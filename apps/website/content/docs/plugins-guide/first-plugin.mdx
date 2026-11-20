@@ -1,0 +1,76 @@
+---
+title: Your first plugin
+description: A tutorial — make a plugin project with the published kit, see its checks pass, try one call without a gateway, build the archive and sign it. No service account needed.
+---
+
+This tutorial makes a complete plugin project with the published kit, checks it, tries one call through its classifier and the gateway's policy without any gateway, and builds the signed archive a gateway installs. The project describes an imaginary service, Acme CRM, whose widgets live in workspaces: you replace it with your real service in the next pages.
+
+You need Node.js 22.14 or later and npm. Nothing else: no gateway, no account at a service, no clone of the gateway's repository.
+
+## 1. Make the project
+
+```bash
+npx @vaubaan/plugin-cli init acme-crm --id acme-crm --name "Acme CRM"
+cd acme-crm
+npm install
+```
+
+`--id` is the plugin's id for good: a lowercase slug (`acme-crm`, `cloudflare-dns`). It is the first segment of every slice and permission (`acme-crm.widget-write`) and, with `-` turned into `_`, the prefix of every tool (`acme_crm__update_widget`).
+
+The project holds the plugin's sources in `src/`, its tests in `tests/unit/`, and the instructions and skills a coding agent follows (`AGENTS.md`, `CLAUDE.md`, `.claude/skills`, `.agents/skills`).
+
+## 2. Run its checks
+
+```bash
+npm run check
+```
+
+It type-checks the project and runs its tests, which call the SDK's test kit: the definition is well formed, every tool has a realistic sample call, every sample lands on a named permission and never on the catch-all, identifiers that try to escape (`..`, `%2f`) are refused before any request. It passes before you change anything. Keep it passing: each page of this guide ends on it.
+
+## 3. Try one call
+
+```bash
+npm run try -- acme_crm__update_widget
+```
+
+`try` runs the tool's first sample call through your classifier, then through the gateway's own policy against a sample mission that ticks every macro-action at Careful, and prints:
+
+- the **slices** the call touches (`acme-crm.workspace[ws-stg].widget[w1].W`);
+- the **permissions** those slices need;
+- the **decision**: allowed, asks first, or refused, and why.
+
+Exit code 0 means allowed. Give the arguments yourself, and decide which permissions the mission holds, or at which trust level:
+
+```bash
+npm run try -- acme_crm__update_widget '{"workspace":"ws-stg","widget_id":"w1","name":"x"}'
+npm run try -- acme_crm__delete_widget '{"workspace":"ws-stg","widget_id":"w1"}' --trust trusting
+npm run try -- acme_crm__update_widget '{"workspace":"ws-other","widget_id":"w1","name":"x"}'
+```
+
+The delete, at Trusting, is allowed once a person approves it: deleting a widget cannot be repaired. The last one is refused: `ws-other` is not a resource of the sample mission, and a classifier refuses a resource the mission does not hold. That refusal, not a broader guess, is what makes a plugin safe ([classify calls](/docs/plugins-guide/classify)).
+
+## 4. Build the archive
+
+```bash
+npm run build
+```
+
+It writes `dist/plugin/` and `dist/plugin.tgz`: the bundled plugin, its risk catalog and a manifest of the digests of every file. It also loads the bundle once, as a gateway would: its default export must be the plugin.
+
+## 5. Sign it
+
+A gateway installs a private plugin only when it is signed by a key an administrator trusts. A company makes its key once, outside any project:
+
+```bash
+mkdir -p ~/.vaubaan
+npx vaubaan-plugin keygen --out ~/.vaubaan/acme-plugins
+npx vaubaan-plugin sign dist/plugin --key ~/.vaubaan/acme-plugins.key.pem
+```
+
+`keygen` writes the private key `acme-plugins.key.pem` (mode 600) and the public one `acme-plugins.pub.pem`, and prints the key id. `sign` writes the signature beside the manifest and packs `dist/plugin.tgz` again. Every build drops the signature: sign after each build. Never commit the private key: the project's `.gitignore` excludes `*.key.pem`.
+
+`dist/plugin.tgz` is now what an administrator would upload. Sending it to a gateway, and what the administrator does there: [sign and deploy](/docs/plugins-guide/sign-and-deploy).
+
+## Next
+
+Replace the imaginary service with yours, in order: [model the service](/docs/plugins-guide/model-a-service), then its [risk catalog](/docs/plugins-guide/risk-catalog). With a coding agent, open it in the project and give it the link to your service's API documentation: its skills follow the same order and stop for you at each decision.

@@ -1,0 +1,77 @@
+---
+title: The risk catalog file
+description: Every key of risk-catalog.yaml — the document, a risk, its five facts and their values, a macro-action and its entries — the rows the facts sort into, and what each trust level does with a row.
+---
+
+`risk-catalog.yaml`, beside the plugin's `src/index.ts`, is read by the SDK's catalog loader when the plugin loads, in the gateway and in the tests; an unknown key, a value outside its list or a broken rule stops the load and names every problem with its path. How to write one: [write the risk catalog](/docs/plugins-guide/risk-catalog).
+
+## The document
+
+| Key               | Type                  | Required | What                                                                                 |
+| ----------------- | --------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `service`         | string                | yes      | The plugin's id; the prefix of every risk id and pattern.                            |
+| `catalog_version` | positive integer      | yes      | Bumped on every reviewed change of the content; independent of the plugin's version. |
+| `catalog_date`    | date (YYYY-MM-DD)     | yes      | The date of that change.                                                             |
+| `risks`           | list of risks         | yes      | The permissions, below.                                                              |
+| `macro_actions`   | list of macro-actions | yes      | The service's verbs, below. At least one; aim for 3 to 6.                            |
+
+`presets` is refused: presets were retired, and macro-actions replace them.
+
+## A risk
+
+| Key                  | Type                              | What                                                                                                      |
+| -------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `id`                 | `service.name`, lowercase, dashes | Never renamed, never deleted: missions store it.                                                          |
+| `label`              | string                            | The permission's name, as people read it.                                                                 |
+| `reason`             | string                            | Why it is a risk, two sentences at most.                                                                  |
+| `matches`            | pattern, or list of patterns      | The slices it covers. `[*]` one identifier, `[**]` any identifier and anything below it, `[a,b]` a list.  |
+| `vector`             | the five facts                    | Required; below.                                                                                          |
+| `vector_overrides`   | facts by environment              | Optional: the facts that change in one environment (`prod: ...`).                                         |
+| `acceptable_in_envs` | list of environment labels        | Makes the permission depend on the environment; in a mission it is qualified, `acme[prod].widget-write`.  |
+| `infra_limits`       | `calls_per_minute_max`            | Optional: the ceiling of the rate limit a mission can carry for this permission. No other key.            |
+| `fallback`           | `true`                            | On the catch-all only: exactly one per catalog, named `service.uncategorized-…`, matching `service.**.W`. |
+| `deprecated`         | `true`                            | A retired permission: kept so missions that hold it still read, in no macro-action.                       |
+| `replaced_by`        | risk id                           | With `deprecated`: its successor.                                                                         |
+
+## The five facts
+
+| Fact            | Values                                 |
+| --------------- | -------------------------------------- |
+| `reversibility` | `reversible`, `costly`, `irreversible` |
+| `blast`         | `single`, `env`, `account`, `bulk`     |
+| `data`          | `metadata`, `data`, `secret`, `pii`    |
+| `cost`          | `free`, `moderate`, `unbounded`        |
+| `visibility`    | `internal`, `team`, `public`           |
+
+There is no sixth fact; the gateway never adds them up. It reads them in order, and the first that answers gives the permission its row:
+
+| Row                        | When                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| 4 · Cannot be repaired     | `reversibility: irreversible`                                                                  |
+| 3 · Repairable, at a price | `reversibility: costly`, or `cost: unbounded`                                                  |
+| 2 · Worth a look           | `data: secret` or `pii`, `blast: account` or `bulk`, `cost: moderate`, or `visibility: public` |
+| 1 · Harmless               | anything else                                                                                  |
+
+## What a trust level does with a row
+
+A mission's creator ticks a macro-action at a trust level; each of its permissions gets the gate its row has at that level, and its base budget multiplied by the level's factor.
+
+| Row                        | Careful      | Trusting     | Autonomous   |
+| -------------------------- | ------------ | ------------ | ------------ |
+| 4 · Cannot be repaired     | not included | ask me first | ask me first |
+| 3 · Repairable, at a price | ask me first | ask me first | runs freely  |
+| 2 · Worth a look           | ask me first | runs freely  | runs freely  |
+| 1 · Harmless               | runs freely  | runs freely  | runs freely  |
+| Budget                     | ×1           | ×3           | ×10          |
+
+## A macro-action
+
+| Key           | Type                           | What                                                                                                                                         |
+| ------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`          | lowercase, dashes              | Unique in the catalog.                                                                                                                       |
+| `label`       | string                         | The verb, in the service's words ("Read", "Ship").                                                                                           |
+| `description` | string                         | One line under the macro-action in New mission.                                                                                              |
+| `narrative`   | string, 600 characters at most | Two to four sentences: what an agent does under this verb, and why its permissions are cut this way. Shown on the plugin's public page only. |
+| `entries`     | list of entries                | Not empty.                                                                                                                                   |
+
+An entry: `risk_id` (an unqualified permission of this catalog, never the catch-all), `quota` (the base budget per period, a positive integer) and `rate_limit` (`max` calls per `window_seconds`). Every permission but the catch-all and the deprecated ones belongs to exactly one macro-action; the gateway adds "Anything else" for the catch-all.

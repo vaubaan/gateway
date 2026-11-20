@@ -1,0 +1,53 @@
+---
+title: Write a plugin
+description: The plugin author's guide — what a plugin teaches the gateway, the published kit you write it with, the words of the contract, and the path from an empty folder to a plugin running on a gateway or published in the catalog.
+---
+
+A plugin teaches Vaubaan Gateway one service: what exists there, which calls are dangerous and why, how to sort each call, how a person connects an account, and how to call the service. You write it outside the gateway's repository, with the published kit, `@vaubaan/plugin-cli` and `@vaubaan/plugin-sdk`, alone or with a coding agent.
+
+## What a plugin does
+
+1. Describes the service's **data model**: the resource a mission is limited to (a repository, a project, a mailbox) and the entities a call can touch below it.
+2. Ships a **risk catalog**, `risk-catalog.yaml`: the named permissions a call can need, each with five facts about what it does, grouped into **macro-actions**, the service's own verbs.
+3. **Classifies** each tool call into the parts of the data model it touches. The gateway decides from that alone.
+4. Declares the **credential**: how a person connects an account, with a guide the gateway shows step by step.
+5. **Discovers the resources** an account reaches.
+6. **Executes** an allowed call, with the credential the gateway hands it for that one call.
+
+A plugin never sees the mission, the permissions it accepted or its limits, and never decides: it says what a call touches, and the gateway decides.
+
+## Two ways a plugin reaches a gateway
+
+- **A private plugin**, for your company's own service or for a service before it is in the catalog: you build the archive, sign it with your company's key, and an administrator of your gateway trusts the key once, uploads the archive and activates it ([sign and deploy](/docs/plugins-guide/sign-and-deploy)). Nothing about it is published.
+- **A catalog plugin**, for everyone: you push the source to a public repository and submit it to the catalog, `vaubaan/gateway-plugins`. The catalog's maintainers review it, then the catalog rebuilds your commit, signs it, and every gateway installs it when a person first connects the service ([submit to the catalog](/docs/plugins-guide/submit)). The plugins under [Plugins](/plugins) reach gateways this way.
+
+Who reviews what: you own the model, the catalog and the classifier; the catalog's maintainers review a catalog plugin's risk catalog, classifier and execution code before it is signed; an administrator reads the permissions a plugin adds before activating it on a gateway.
+
+## The words of the contract
+
+| Word             | Meaning                                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resource**     | One thing an account reaches and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                         |
+| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Your classifier emits it; nobody else reads it.                                |
+| **Risk**         | A named reason a call may be dangerous, with an id that never changes (`acme.widget-write`) and the slice patterns it covers. The interface calls it a **permission**.                                  |
+| **Macro-action** | One thing to do with the service, in its words ("Read", "Ship"): a group of risks, each with a base budget. A mission's creator ticks it at a trust level: Careful, Trusting or Autonomous.             |
+| **Mission**      | What an agent works under: a set of resources and, for each accepted risk, a quota, a rate limit and a gate (runs freely, or asks first). A call touching a risk the mission did not accept is refused. |
+
+The interface shows people some of these under other words: a risk is a **permission**, a gate **runs freely** or **ask me first**, a quota and a rate limit are **limits**. The contract (this guide, the YAML, the SDK) keeps the names of the first column; a sentence of your catalog that a person reads uses the interface's words.
+
+## The path
+
+1. [Your first plugin](/docs/plugins-guide/first-plugin): a project in one command, its checks green, a call tried, an archive built. Fifteen minutes, no service needed.
+2. [Model the service](/docs/plugins-guide/model-a-service): the resource, the entities, the tools.
+3. [Write the risk catalog](/docs/plugins-guide/risk-catalog): the permissions, their five facts, the macro-actions.
+4. [Classify calls](/docs/plugins-guide/classify): the security-critical file.
+5. [Declare the credential](/docs/plugins-guide/credential): how a person connects an account.
+6. [Discover resources and execute calls](/docs/plugins-guide/execute).
+7. [Test the plugin](/docs/plugins-guide/test): the kit's assertions and your cases.
+8. [Sign and deploy](/docs/plugins-guide/sign-and-deploy) to your gateway, or [submit to the catalog](/docs/plugins-guide/submit).
+
+Reference: [the command line](/docs/plugins-guide/reference/cli), [the risk catalog file](/docs/plugins-guide/reference/catalog), [when something fails](/docs/plugins-guide/reference/errors).
+
+## With a coding agent
+
+Every project the kit makes carries instructions for coding agents (`AGENTS.md`, `CLAUDE.md`) and one skill per step (`.claude/skills`, `.agents/skills`): model the service, write the risk catalog, classify, the credential, execute, ship, submit, upgrade. Each skill ends on a command whose exit code says the step is done, and stops for you where a person must decide: each write risk, the credential, the signing key, publishing. Open your agent in the project and give it the link to the service's API documentation. This guide is what those skills follow; read the page of a step before you approve what the agent proposes for it.

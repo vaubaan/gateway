@@ -1,0 +1,88 @@
+---
+title: Discover resources and execute calls
+description: discoverResources lists what an account reaches; execute performs an allowed call through the SDK's transport, throws the service's failures typed and declines with ExecutorRefusal; written in src/execute.ts.
+---
+
+Discovery lists the resources an account reaches, once when the account is connected and whenever its owner refreshes it; execution performs one call the gateway already allowed and counted, with the credential it hands over for that call.
+
+## Discover resources
+
+```ts
+return workspaces.map((w) => ({ service: SERVICE_ID, ref: w.id, displayName: w.name }));
+```
+
+- `ref` is the identifier your tools take as their resource argument and your classifier compares with: the service's stable id, never a name that can change.
+- `metadata` (optional, strings) carries non-secret facts the classifier needs later, such as an account id or a zone name.
+- Do not set `env` unless the service itself tells production from test (Stripe's live and test modes): the environment is the owner's label.
+- **The service's answer is untrusted.** Read it through a type guard, never a cast: the third argument of `httpJson`, or `readShape(value, guard, what)` for a value you hold already. A payload the guard refuses is the service's failure (`UpstreamProtocolError`), never a `TypeError` deep in your code. Pass every id it carries through the grammar of its kind before it becomes a `ref`.
+- Follow the service's pagination up to a ceiling, a named constant of the plugin ("at most 500 zones").
+
+## Execute a call
+
+`execute(ctx, tool, args)` performs the call and returns an `McpToolResult`.
+
+- **Call the service through the SDK's transport**: `httpJson(ctx, request, guard)` for an API that answers JSON, the upstream MCP client (`callUpstreamTool`, `mcpRequest`) for a service's own MCP server. It takes `fetch` and the caller's `signal` from the context (tests inject `mockFetch`), bounds the answer (10 MB by default), reads it through your guard and throws every failure typed. A body you must read yourself (a stream, a binary file) goes through `readBounded`, and its failure through `upstreamFailure(res, what)`: never call `.json()` or `.text()` on a response.
+- **Redirects are refused**: a redirect to another origin would carry your custom headers (`apikey`, `x-api-key`) with it.
+- **Take the secret with `expectCredentialKind(SERVICE_ID, ctx.credential, kind)`.** Never log it, never put it in a result or an error message.
+- **Resolve the target with the classifier's functions**, never from `args` ([one reader for both sides](/docs/plugins-guide/classify#one-reader-for-both-sides)).
+- **A service failure is thrown, never returned**, and the transport throws it for you: `UpstreamAuthError` on 401 or 403, `UpstreamHttpError` on any other failed status, `UpstreamProtocolError` for an answer the protocol does not allow. A network error propagates. A 401 means the credential itself is invalid: the gateway then tries a refresh, and otherwise marks the account expired.
+- **`isError: true` is for what your executor declines itself**, before any request: an unknown tool, an argument it cannot read, an undeclared argument, a target outside the mission. Never catch a service failure into an `isError` result: the activity would say the call went through.
+- **Decline with `ExecutorRefusal`, never a plain `Error`.** A plain `Error` reads as a service failure: the activity records an upstream error although no request left, and the agent gets a transport error instead of a sentence it can act on. Return `refusalResult(message)` at the entry point; deeper, throw `new ExecutorRefusal(message)` inside `declining`:
+
+```ts
+export function executeAcme(ctx, tool, args) {
+  return declining(async () => {
+    const id = pathIdent(args.widget_id);
+    if (!id) throw new ExecutorRefusal(MALFORMED_WIDGET_ID); // declined: an isError result
+    return jsonResult(await request(ctx, 'GET', `/widgets/${id}`, anyJson)); // failures thrown, typed
+  });
+}
+```
+
+A success without content (a 204 after a `DELETE`) reads as `null` through `httpJson` with the guard `anyJson`: return a confirmation of your own. `jsonResult(payload)` and `textResult(text)` build the result of an answered call.
+
+## Streamed results
+
+For a tool whose service answers progressively (logs, a long export), hand each part to `ctx.emitPart`; `execute` still returns the complete result. Open the service's response before the first part, let `streamToolResult` await every part, and throw when the service's stream breaks:
+
+```ts
+import { streamToolResult, textParts, upstreamFailure } from '@vaubaan/plugin-sdk';
+
+const response = await ctx.fetch(url, { headers, signal: ctx.signal, redirect: 'error' });
+if (!response.ok || !response.body) throw await upstreamFailure(response, 'acme GET /logs');
+return streamToolResult(ctx, textParts(response.body));
+```
+
+## Environment in the call
+
+When the environment is part of the call rather than a label on the resource (Vercel's `env[prod]` segment), declare `envOf: envFromSliceSegment('env')` in `definePlugin`, or a pure function of your own. Its three answers are read differently:
+
+| `envOf` returns | When                                                                                    | The gateway                                                              |
+| --------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| a label         | the slice touches that one environment                                                  | qualifies the permissions touched with it                                |
+| `undefined`     | the slice says nothing about its environment                                            | falls back to the owner's label on the resource                          |
+| `NO_SINGLE_ENV` | the slice names its environment but not exactly one: a wildcard, a list, an unknown one | resolves no environment: every permission that depends on one is refused |
+
+Never answer `undefined` for the third case: the owner's label would price a call that reaches production as whatever the resource happens to be labelled. `envFromSliceSegment` already answers `NO_SINGLE_ENV` there.
+
+## Wire it (`src/index.ts`)
+
+```ts
+export const acmeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
+
+export default definePlugin({
+  id: SERVICE_ID,
+  displayName: 'Acme',
+  version: '0.1.0', // equal to the version in package.json
+  tools: acmeTools,
+  dataModel: acmeDataModel,
+  catalog: acmeCatalog.catalog,
+  credential: acmeCredential,
+  classify: classifyAcme,
+  execute: executeAcme,
+  discoverResources: discoverAcmeResources,
+  examples: acmeExamples,
+});
+```
+
+Load the catalog with `catalogPathNextTo(import.meta.url)` exactly as above, never `new URL('./risk-catalog.yaml', import.meta.url)`: a bundler rewrites that expression and the build cannot find the file. `definePlugin` validates the whole definition when the module loads and reports every problem at once. Next: [test the plugin](/docs/plugins-guide/test).

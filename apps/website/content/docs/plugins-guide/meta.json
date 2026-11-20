@@ -1,0 +1,15 @@
+{
+  "title": "Write a plugin",
+  "pages": [
+    "first-plugin",
+    "model-a-service",
+    "risk-catalog",
+    "classify",
+    "credential",
+    "execute",
+    "test",
+    "sign-and-deploy",
+    "submit",
+    "reference"
+  ]
+}

@@ -1,0 +1,65 @@
+---
+title: Classify calls
+description: The security-critical file — classify(tool, args, resources) returns the slices a call touches or a denial; pure, fail-closed, one grammar per identifier shared with execute; written in src/classify.ts.
+---
+
+The classifier turns one tool call into the slices of the data model it touches, or refuses it; the gateway decides from those slices alone, so a slice that understates a call lets the call through. A plugin classifies, it never decides.
+
+`classify(tool, args, resources)` returns `{ slices }` or `{ denied: 'a sentence' }`, where `resources` are the mission's resources on this account:
+
+```ts
+case TOOL.updateWidget: {
+  const id = pathIdent(args.widget_id);
+  if (!id) return { denied: MALFORMED_WIDGET_ID };
+  return { slices: [parseSlice(`${SERVICE_ID}.workspace[${ws}].widget[${id}].W`)] };
+}
+```
+
+## The rules
+
+- **Pure.** No network, no credential, no clock, no file. Same input, same output.
+- **Fail closed.** An unknown tool, a missing or malformed argument, an ambiguous resource: `denied`. Never a broader slice "to be safe", never a default value.
+- **A write is never classified as a read.** A call that changes anything, sends anything, or hands out a credential or a signed URL is a write.
+- **The classifier checks the resource.** An explicit resource ref must be one of `resources`, or the call is refused. Never substitute the mission's single resource for a ref the caller named; an absent ref may fall back to the single resource, and none or several is refused.
+- **Say everything the call does.** A call touching several entities returns several slices. A tool whose effect depends on an argument — a SQL statement, a shell command, a `force` flag — is classified from that argument, and refused when it cannot be read. Supabase's SQL tool is the worked case: a statement is read, and one the classifier cannot place is refused.
+
+## Identifiers: one grammar, refuse, never repair
+
+Every identifier a call carries — an argument, a resource ref, account metadata, a value the service answered — is read by the grammar function of its kind, which returns the value or `null` (`pathIdent` in the scaffold). The same function is called by `classify` and by `execute`. A value outside its grammar is denied here and refused in `execute` before any request: it is never trimmed, escaped, replaced or read as absent.
+
+- **Choose the grammar for where the value lands.** A URL path segment: `pathIdent`, letters, digits, `_` and `-`, 1 to 64 characters — no dot-only value, no separator, no `%` (`..` survives `encodeURIComponent`, and the URL parser then removes it: the request would leave what the slice named). A value that is legitimately dotted or made of segments (a domain, a file path, a git ref, a bucket) gets a grammar of its own that forbids empty and dot-only segments, backslashes and control characters, and bounds the length. A query is built with `URLSearchParams`; a GraphQL value is a variable, never part of the document; an SQL identifier has a closed grammar, no quoting; a string the service could split, such as a recipient, is one value.
+- **An identifier the slice cannot carry is written as "any".** A slice identifier holds letters, digits and `_ . / ~ -` only, and your grammar may rightly accept more (`@` in an address, `+`, `:`). Build the segment with `identSegment(value)`: it returns the identifier when the slice can carry it and `[*]` otherwise, so only a mission that accepts every instance of the entity accepts the call. Never drop or escape the identifier; the value sent to the service is unchanged.
+- **No glob inside an identifier.** A `*` inside an identifier (`feature/*`), or in a value of a list, is read by the matcher as a pattern, and the gateway refuses the call. Refuse such a value in its grammar.
+
+## One reader for both sides
+
+Export the function that reads the identifiers of a call (the target and every other one) and call it from `execute` too: `execute` builds its request from what that function returned, never from `args`, and stays safe when called alone.
+
+## Only declared arguments
+
+An argument the classifier does not read was priced by no rule. Whether you must refuse it depends on how `execute` builds its request:
+
+- **`execute` forwards the arguments it was given** — a JSON body or a query built from `args`, an upstream tool that receives them whole: an undeclared argument would reach the service unseen. Call `undeclaredArgumentDenial(declared, tool, args, routing)` in `classify` **and** in `execute`, with `declared = declaredArgumentsOf(tools)` built once, through one function of your own. In `classify` it refuses the call before the budget; in `execute` it is the second lock. `routing` is the set of arguments your plugin reads itself whatever the tool declares and writes again or drops before the call leaves, such as the project a mission pins; nothing else belongs there.
+- **`execute` builds its request field by field** from the declared arguments: it never reads another one and needs no check.
+
+## Samples (`src/examples.ts`)
+
+Give every tool at least one realistic sample call, and the refusals you mean (`expectDenied: true`). The tests run them, `npm run try` uses the first one of a tool, and the plugin's public page classifies them to show worked calls:
+
+```ts
+export const acmeExamples = samplesOn([staging], {
+  [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }],
+  [TOOL.updateWidget]: [
+    { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
+    { args: { workspace: 'ws-other', widget_id: 'w1', name: 'x' }, expectDenied: true },
+  ],
+});
+```
+
+## Check each tool
+
+```bash
+npm run try -- acme__update_widget '{"workspace":"ws-stg","widget_id":"w1","name":"x"}' --accept 'acme[staging].widget-write'
+```
+
+Without `--accept`, `try` accepts every macro-action at the trust level (`--trust`, Careful by default), never "Anything else": a call that lands on the catch-all is refused, which is how you spot a tool the catalog does not cover. Pass `--accept` to prove exactly which permissions a call needs, qualified by environment as a mission stores them, and `--resources ref:env` to try a resource labelled `prod`. Next: [the credential](/docs/plugins-guide/credential).

@@ -1,0 +1,77 @@
+---
+title: The command line
+description: Every command of vaubaan-plugin, the plugin author's command line from @vaubaan/plugin-cli — init, try, build, keygen, sign, pack, deploy, submit — with its arguments, options and exit codes.
+---
+
+`vaubaan-plugin` is the plugin author's command line, published as `@vaubaan/plugin-cli`: it makes a project, tries a call without a gateway, builds, signs and packs the archive, hands it to a gateway and submits it to the catalog. A project made by `init` has it as a development dependency (`npx vaubaan-plugin …`, or the `npm run` scripts below).
+
+Exit codes: 0 when the command did what it says; 1 when a step is refused (for `try`: the call is not allowed, or the classifier denies it); 2 on a usage error.
+
+## init
+
+```
+vaubaan-plugin init <dir> --id <id> [--name <display name>]
+```
+
+A new plugin project in `dir`, which must be absent or empty: a complete plugin for an imaginary service, its tests passing, with the agent instructions and skills. `--id` is a lowercase slug, words of letters and digits joined by single dashes. Outside a project: `npx @vaubaan/plugin-cli init …`.
+
+## try
+
+```
+vaubaan-plugin try <tool> ['<json args>'] [--resources ref[:env],…] [--accept <risk id>,…] [--trust careful|trusting|autonomous]
+```
+
+One call through the project's plugin and the gateway's policy, without a gateway (`npm run try -- …`). It prints the slices the classifier emitted, the permissions they touch, and the decision.
+
+- **Arguments**: the JSON given, else the tool's first sample's.
+- `--resources`: the sample mission's resources, each ref with an optional environment label (`proj-1:prod`); else those of the tool's first sample.
+- `--accept`: the permissions the mission holds, qualified as a mission stores them (`acme[prod].widget-write`); else every macro-action of the catalog at `--trust`, never "Anything else", so a call that lands on the catch-all is refused.
+- `--trust`: the trust level of those macro-actions, `careful` by default.
+
+## build
+
+```
+vaubaan-plugin build [<plugin dir>] [--out <dir>]
+```
+
+The archive: `dist/plugin/` and `dist/plugin.tgz` by default (`npm run build`), with the bundled plugin, its risk catalog and a manifest of file digests, unsigned. It loads the bundle once: its default export must be the plugin.
+
+## keygen
+
+```
+vaubaan-plugin keygen [--out <name>]
+```
+
+A company signing key, once per company: `name.key.pem` (private, mode 600) and `name.pub.pem`. It prints the key id. Keep the private file out of every repository.
+
+## sign
+
+```
+vaubaan-plugin sign <archive dir> --key <private key file>
+```
+
+Signs the archive's manifest (`vaubaan-manifest.json.sig.json` beside it), then packs `dir.tgz` again. Every build drops the signature: sign after each build. `npm run sign` reads the key's path from `VAUBAAN_SIGNING_KEY`.
+
+## pack
+
+```
+vaubaan-plugin pack <archive dir> [--out <file>]
+```
+
+Packs `dir.tgz` from the archive folder, signatures included, for an archive folder you changed by hand (a second signature, say).
+
+## deploy
+
+```
+vaubaan-plugin deploy [<archive .tgz>] --gateway <url>
+```
+
+Hands the archive (`dist/plugin.tgz` by default) to a gateway, pending: it uploads it through the gateway's MCP door with the key of a mission on the gateway's Vaubaan account, read from `VAUBAAN_MISSION_TOKEN` and never from an argument. The mission's creator must be an administrator and the mission must tick "Install plugins". It prints the activation address; it never activates.
+
+## submit
+
+```
+vaubaan-plugin submit [--owners <user or org/team>,…] [--dry-run]
+```
+
+The catalog's declaration of the project's `HEAD`, `catalog/<id>.yaml` (id, repository, path, version, commit, owners), opened as a pull request on `vaubaan/gateway-plugins` through the GitHub command line `gh`. `HEAD` must be committed and pushed to a public GitHub repository. `--owners` defaults to the repository's owner; `--dry-run` prints the declaration and changes nothing ([submit to the catalog](/docs/plugins-guide/submit)).

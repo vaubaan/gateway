@@ -1,0 +1,56 @@
+---
+title: Sign and deploy
+description: Build the archive, sign it with your company's key, hand it to your gateway, and what an administrator does there — trust the key once, read the permissions, activate on trial. Versions and upgrades.
+---
+
+A private plugin reaches a gateway as one file, `dist/plugin.tgz`, signed with your company's key; uploaded, it stays inert until an administrator activates it, and it then starts on trial at the next start of the instance, falling back to the previous version if it does not load.
+
+## Build and sign
+
+```bash
+npm run check
+npm run build
+npx vaubaan-plugin sign dist/plugin --key ~/.vaubaan/acme-plugins.key.pem
+```
+
+- `npm run build` writes `dist/plugin/` and `dist/plugin.tgz`, unsigned, and loads the bundle once: its default export must be the plugin.
+- **The company key** is made once per company, not per plugin: `npx vaubaan-plugin keygen --out ~/.vaubaan/acme-plugins` writes `acme-plugins.key.pem` (private, mode 600) and `acme-plugins.pub.pem`, and prints the key id. The private file belongs in your company's secret store or CI secrets, never in a repository, a chat or a log.
+- `sign` writes the signature beside the manifest and packs `dist/plugin.tgz` again. Every build drops it: sign after each build. In CI, `VAUBAAN_SIGNING_KEY=path npm run sign` does the same.
+
+## Hand it to the gateway
+
+1. **An administrator trusts the key, once.** On the gateway, Settings → Administration → Plugins → Trusted signers: a name (your company's) and the content of `acme-plugins.pub.pem`, the public part only. Every administrator is notified. An archive signed by a key the instance does not trust is refused at upload; an unsigned one is accepted only for an id the operator's configuration lists in `plugins.allow_unsigned`.
+2. **Upload the archive**, one of:
+   - an administrator uploads `dist/plugin.tgz` under Settings → Administration → Plugins → Install a plugin;
+   - from the command line, with the key of a mission an administrator issued on the gateway's Vaubaan account with the macro-action "Install plugins": `VAUBAAN_MISSION_TOKEN=... npx vaubaan-plugin deploy --gateway https://your-gateway`. It uploads `dist/plugin.tgz`, prints the activation address, and exits 1 with the gateway's refusal otherwise. Set the key in the environment, never on the command line;
+   - an agent connected to the gateway's `vaubaan` tools under such a mission calls `vaubaan__upload_plugin` with the archive in base64.
+3. **An administrator activates it**: on the activation page, or the pending version under Settings → Administration → Plugins, they read the permissions it adds and activate it by typing its id. It starts on trial at the next start. Neither the command line nor an agent ever activates, rolls back or removes a plugin.
+4. **A person connects an account** of the service and creates a mission that ticks its macro-actions.
+
+What the administrator's side looks like, and safe mode when a plugin breaks an instance: [plugins on an instance](/docs/operations/plugins).
+
+## Versions
+
+`version` in `package.json` and in `definePlugin`, always equal. A new plugin starts at `0.1.0`; every archive that differs from one already uploaded gets a new version, since telemetry and the gateway's records name a classifier by it.
+
+| Change                                                                                                                   | From `1.0.0` | Before `1.0.0`        |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------ | --------------------- |
+| A fix that changes no tool, permission or macro-action                                                                   | patch        | patch                 |
+| A new tool, permission or macro-action; a widened pattern                                                                | minor        | patch                 |
+| A removed tool; a stricter classification (calls once allowed are refused); a change of what `execute` throws or returns | major        | minor (`0.2` → `0.3`) |
+
+The third row is the one that is forgotten: closing the argument surface of a plugin, binding an identifier to its resource, or pricing a call on a more severe permission all change what an agent's call does.
+
+**Catalog version.** `catalog_version` in the YAML, an integer, independent of the plugin version. Bump it and set `catalog_date` on every reviewed change of the catalog's content: an entry, a pattern, a fact, a limit, a macro-action, a label, a reason.
+
+## Upgrade the SDK
+
+An archive declares the SDK it was built against. Before `1.0.0` a caret range holds one minor version, so a gateway on a newer SDK turns away a plugin built against an older one, and its message names the range: `was built for @vaubaan/plugin-sdk ^0.9.4`. The fix is on your side: read the "Plugin SDK" sections of the [changelog](https://github.com/vaubaan/gateway/blob/main/CHANGELOG.md) between your version and the target, then
+
+```bash
+npm install @vaubaan/plugin-sdk@latest
+npm install --save-dev @vaubaan/plugin-cli@latest
+npm run check && npm run build
+```
+
+fix what the new rules refuse (never loosen a test), bump the plugin's version, sign, and upload again. The skill `vaubaan-upgrade` of your project does the same with a coding agent.

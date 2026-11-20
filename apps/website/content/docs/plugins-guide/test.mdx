@@ -1,0 +1,84 @@
+---
+title: Test the plugin
+description: The SDK's test kit every plugin runs — coverage of the catalog, the data model, hostile identifiers — then your classifier cases and execute against a mocked fetch. No test calls a real service.
+---
+
+Testing a plugin means running the SDK's test kit on it, which holds the definition, the catalog and the samples to the contract, then writing the cases only you know: every branch of the classifier, and every request `execute` sends against a mocked `fetch`. No test ever calls a real service, and none needs a credential.
+
+## The kit (`tests/unit/plugin.test.ts`)
+
+Keep the scaffold's test file and make it yours:
+
+```ts
+import { catalogPathIssues } from '@vaubaan/plugin-sdk';
+import {
+  assertCatalogCoverage,
+  assertNoWildcard,
+  assertPluginWellFormed,
+  assertSlicesOnDataModel,
+} from '@vaubaan/plugin-sdk/testing';
+
+const SAMPLES = acmePlugin.examples;
+assertPluginWellFormed(acmePlugin); // the definition and the catalog
+assertNoWildcard(acmePlugin); //       no `*` or `?` in a permission id
+const report = assertCatalogCoverage(acmePlugin); // runs the samples
+expect(report.fallbackHits).toEqual([]); //  no realistic call lands on the catch-all
+expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave unreached
+assertSlicesOnDataModel(acmePlugin, SAMPLES, { resources: [staging] }); // the classifier's side
+expect(catalogPathIssues(acmePlugin)).toEqual([]); //                    the catalog's side
+```
+
+`assertCatalogCoverage` fails when a tool has no sample, when a sample is refused without `expectDenied` (or the reverse), when a slice matches no permission, when a slice does not read back as itself (an identifier the slice cannot carry: use `identSegment`), and when a slice carries `*` inside an identifier. `fallbackHits` lists the samples only the catch-all covered: add the missing catalog entry. Coverage looks at which permissions a slice matches, not at the environment: samples on one resource are enough.
+
+## Hostile identifiers
+
+`assertIdentifiersRefused` feeds `..`, `.`, `a/../b`, `%2e%2e`, `..%2f`, `%2f`, a line break and `r1?x=1#y` to every string argument of every sample, through your `classify` and your `execute`, and fails when a value your classifier refuses is sent anyway, when a request carries a dot segment, when a delimiter reaches a URL as it is, or when an accepted identifier is not the one the request names:
+
+```ts
+const report = await assertIdentifiersRefused(acmePlugin, SAMPLES, {
+  resources: [staging],
+  context: (fetch, resources) => ({ credential, fetch, resources }),
+});
+expect(report.pathIdentifiers).toContainEqual({ tool: TOOL.getWidget, argument: 'widget_id' });
+```
+
+It finds the identifiers by running your samples. If it finds none it fails: give it `routes` for what your executor requests first, or say `pathIdentifiers: { none: 'why' }` when your identifiers do not travel in a path. It does not replace the cases only you know: a ref, a nested field, a value that is legitimately dotted.
+
+## A mission the way a creator composes it
+
+`policyFromMacroActions` writes the lines of ticked macro-actions at their trust levels, with the gateway's own rules (gate from the row, budget scaled by the trust level); `decideCall(plugin, call)` decides one call the way the gateway does; `risksTouchedBy(slice, catalog)` says which permissions a slice touches:
+
+```ts
+const policy = policyFromMacroActions(
+  acmePlugin,
+  { read: 'careful', change: 'trusting' },
+  { envs: ['staging', 'prod'] },
+);
+// [{ risk_id: 'acme.read-widgets', gate: 'auto', … }, { risk_id: 'acme[prod].widget-write', … }, …]
+```
+
+## Your cases
+
+- **The classifier: one case per branch**, every refusal included — unknown tool, resource outside the mission, ambiguous resource, malformed identifier, undeclared argument. Build the cases from the service's public documentation or recorded answers. This is where review time goes.
+- **Hostile identifiers on both sides**, beyond the kit: an empty value, an overlong one, in every identifier position of `classify` **and** `execute`. A refused value sends no request (`fetch.calls` stays empty); an accepted one names exactly the classified resource.
+- **`execute` and `discoverResources` against `mockFetch`**: the request sent (method, URL, headers, body), the two thrown failures, the refusals with no request sent, a payload discovery must refuse. An unmatched request fails the test. `refusalText(execute(...))` awaits the call, requires an `isError` result and returns its text. In a table that feeds one argument object to several tools, `declaredOnly(plugin, tool, args)` keeps the arguments each tool declares.
+
+```ts
+const fetch = mockFetch([
+  { method: 'GET', url: `${ACME_API_BASE}/workspaces`, body: [{ id: 'ws-1', name: 'One' }] },
+  { method: 'PATCH', url: /widgets\/w1$/, respond: (call) => ({ renamed: call.json }) },
+  { method: 'DELETE', url: /widgets\/w1$/, status: 204 },
+  { url: /widgets$/, status: 503, body: { error: 'down' }, times: 1 },
+]);
+fetch.calls[0]; // method, url, headers (lower-cased names), body, json
+```
+
+Never import anything of the gateway but `@vaubaan/plugin-sdk`, `@vaubaan/plugin-sdk/testing` and `@vaubaan/plugin-sdk/git`: what a test needs of the policy is in the kit.
+
+## Check
+
+```bash
+npm run check
+```
+
+It type-checks and runs every test. Never weaken an assertion of the kit to make it pass: fix the plugin. Messages and their causes: [when something fails](/docs/plugins-guide/reference/errors). Next: [sign and deploy](/docs/plugins-guide/sign-and-deploy).
