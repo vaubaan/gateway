@@ -49,6 +49,8 @@ import {
 import type { ActivationView } from '@/server/plugins/install-service';
 import type { PluginVersionRecord } from '@/server/store/repositories/plugin-versions';
 
+import { isOlder } from '@/server/updates/compare';
+
 import { Flash, InstallNotices, VersionRow, type InstallView } from './install-view';
 
 /** One plugin of the inventory, with what the page reads beside it. */
@@ -117,16 +119,24 @@ function updatesOf(
   lines: readonly PluginLine[],
   install: InstallView,
 ): ReadonlyMap<string, string> {
-  const running = new Set(lines.filter((l) => l.entry.enabled).map((l) => l.entry.id));
+  // What each plugin runs now: the feed's report may predate an update made since, and a
+  // version downloaded earlier may be older than the one running.
+  const running = new Map(
+    lines.filter((l) => l.entry.enabled).map((l) => [l.entry.id, l.entry.version] as const),
+  );
+  const newer = (id: string, version: string) => {
+    const now = running.get(id);
+    return now !== undefined && isOlder(now, version);
+  };
   const updates = new Map<string, string>();
   if (!install.canInstall) return updates;
   for (const v of install.versions) {
-    if (v.state === 'pending' && v.trust === 'vaubaan' && running.has(v.pluginId)) {
+    if (v.state === 'pending' && v.trust === 'vaubaan' && newer(v.pluginId, v.version)) {
       updates.set(v.pluginId, v.version);
     }
   }
   for (const behind of report?.pluginsBehind ?? []) {
-    if (running.has(behind.id)) updates.set(behind.id, behind.released);
+    if (newer(behind.id, behind.released)) updates.set(behind.id, behind.released);
   }
   return updates;
 }

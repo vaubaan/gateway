@@ -256,6 +256,39 @@ describe('Administration › Plugins', () => {
     expect(greyed).not.toContain('data-testid="rollback-plugin-linear"');
   });
 
+  it('offers no Update to the version a plugin already runs, nor to an older one', () => {
+    // The feed was read before Linear went to 2.1.0; GitHub has an older download waiting.
+    const updated = LINES.map((l) =>
+      l.entry.id === 'linear' ? line({ ...l.entry, version: '2.1.0' }, l.accounts) : l,
+    );
+    const older = {
+      digest: 'g'.repeat(64),
+      pluginId: 'github',
+      version: '4.9.0',
+      packageName: '@vaubaan/plugin-github',
+      sdkRange: '^1.0.0',
+      trust: 'vaubaan' as const,
+      signer: null,
+      riskIds: [],
+      state: 'pending' as const,
+      failure: null,
+      uploadedAt: '2026-11-22T14:09:00.000Z',
+      uploadedBy: 'user-ops',
+      viaMissionId: null,
+      changedAt: '2026-11-22T14:09:00.000Z',
+      changedBy: 'user-ops',
+    };
+    const html = render(
+      view({
+        lines: updated,
+        report: { ...BEHIND, pluginsBehind: [BEHIND.pluginsBehind[1]!] },
+        install: { ...INSTALL, versions: [older] },
+      }),
+    );
+    expect(html).not.toContain('data-testid="update-plugin-linear"');
+    expect(html).not.toContain('data-testid="update-plugin-github"');
+  });
+
   it('says when and where the feed was read, and nothing more when it reports nothing', () => {
     const html = render(view());
     expect(html).not.toContain('data-testid="updates-advisories"');

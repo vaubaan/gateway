@@ -90,7 +90,8 @@ export interface CompareInput {
 
 const PRERELEASES = { includePrerelease: true } as const;
 
-function isOlder(version: string, than: string): boolean {
+/** `version` is older than `than`; a version semver cannot read is never older. */
+export function isOlder(version: string, than: string): boolean {
   return valid(version) !== null && valid(than) !== null && lt(version, than);
 }
 

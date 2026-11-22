@@ -23,6 +23,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   that version does not know; nothing to type, even for a version not signed by Vaubaan, since it
   already ran here. The "Kept versions" list is gone.
 
+### Fixed
+
+- **Administration › Plugins no longer offers "Update to" the version a plugin already runs**, as
+  it did after an update made since the last read of the versions feed, nor a downloaded version
+  older than the running one.
+
 ## [2.0.0-alpha.29] - 2026-11-22
 
 ### Highlights
