@@ -1112,7 +1112,11 @@ export const PLUGIN_WORDS = {
   catalogEmpty: 'This gateway already runs every plugin of the catalog it read.',
   install: 'Install',
   waitingTitle: 'Waiting for you',
-  keptTitle: 'Kept versions',
+  rollback: (version: string) => `Roll back to ${version}`,
+  rollbackTitle: (name: string, version: string) => `Roll back ${name} to ${version}?`,
+  rollbackConsequence: (name: string, from: string, to: string, unknown: number) =>
+    `${name} goes back from ${from} to ${to}, the version it ran before. It starts on trial: if it does not load, ${from} keeps serving.${unknown > 0 ? ` ${to} does not know ${unknown === 1 ? 'this permission' : `these ${formatNumber(unknown)} permissions`} of ${from}, kept in missions and inert until a version knows ${unknown === 1 ? 'it' : 'them'} again:` : ''}`,
+  rollbackConfirm: 'Roll back',
   bundled: 'bundled with the image',
   pinnedFrom: 'pinned from',
   replacesBundled: 'replaces bundled',

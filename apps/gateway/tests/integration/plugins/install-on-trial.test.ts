@@ -181,7 +181,7 @@ describe('installing a plugin, on trial', () => {
     expect(next.registry.get('acme')?.plugin.version).toBe('1.0.0');
   });
 
-  it('moves to a newer version, then back to the kept one, without a restart', async () => {
+  it('moves to a newer version, then rolls back to the kept one with nothing typed, without a restart', async () => {
     const root = await start();
     const toolName = root.registry.get('acme')!.plugin.tools[0]!.name;
     const newer = await upload(root, v110);
@@ -196,7 +196,8 @@ describe('installing a plugin, on trial', () => {
 
     const view = await root.pluginInstall.service.activationView(sha256Hex(v100));
     expect(view?.running).toEqual({ version: '1.1.0', origin: 'installed' });
-    expect(await root.pluginInstall.service.activate(sha256Hex(v100), 'acme', ADMIN)).toEqual({
+    // Rolling back to a version that already ran here asks for nothing typed, signed or not.
+    expect(await root.pluginInstall.service.activate(sha256Hex(v100), '', ADMIN)).toEqual({
       ok: true,
       live: true,
     });

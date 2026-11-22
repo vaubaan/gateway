@@ -18,6 +18,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   that names no resource, or resources of two accounts, is refused with the new code
   `account-ambiguous`, which lists each account and its resources: the gateway never picks one.
   `vaubaan` plugin 0.5.2 drops the former rule from `preview_policy`.
+- **Roll back a plugin from its row.** Administration › Plugins offers **Roll back to x.y.z** on a
+  plugin's row, to the version it ran before, behind one confirmation that names the permissions
+  that version does not know; nothing to type, even for a version not signed by Vaubaan, since it
+  already ran here. The "Kept versions" list is gone.
 
 ## [2.0.0-alpha.29] - 2026-11-22
 

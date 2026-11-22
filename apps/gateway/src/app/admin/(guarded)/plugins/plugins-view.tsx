@@ -1,8 +1,9 @@
 /**
  * Administration › Plugins, from a view the page assembles (`page.tsx`): only the plugins
  * this gateway runs, each on one row with the acts it allows — Update when the catalog has
- * a newer version or one signed by Vaubaan is downloaded and waiting, Stop when it runs a
- * version installed here — each behind one dialog,
+ * a newer version or one signed by Vaubaan is downloaded and waiting, Roll back when the
+ * version it ran before is kept, Stop when it runs a version installed here — each behind
+ * one dialog,
  * and Update all when several are behind (intent "Update my installed plugins in a few
  * clicks"). Above them, only what asks for attention: an advisory, the gateway behind, a
  * version waiting for activation, a restart. What the gateway does not run is on the
@@ -31,6 +32,7 @@ import { servicePath } from '@/lib/services/links';
 import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
 import {
+  DIGEST_FIELD,
   PLUGIN_ACTIONS,
   PLUGIN_FIELD,
   PLUGINS_CATALOG_PAGE,
@@ -43,6 +45,9 @@ import {
   type UpdatesFailure,
   type UpdatesReport,
 } from '@/server/updates';
+
+import type { ActivationView } from '@/server/plugins/install-service';
+import type { PluginVersionRecord } from '@/server/store/repositories/plugin-versions';
 
 import { Flash, InstallNotices, VersionRow, type InstallView } from './install-view';
 
@@ -198,11 +203,14 @@ function FeedFooter({ view }: { view: PluginsView }) {
 function PluginRow({
   line,
   released,
+  rollback,
   olderPin,
 }: {
   line: PluginLine;
   /** The catalog's newer version, when this gateway can install it. */
   released: string | null;
+  /** The version it ran before, kept to go back to, when this gateway can run it. */
+  rollback: { readonly version: PluginVersionRecord; readonly view: ActivationView } | null;
   /** The image bundles a newer version than this pin. */
   olderPin: string | null;
 }) {
@@ -236,7 +244,7 @@ function PluginRow({
           )}
         </>
       }
-      {...(released !== null || stoppable
+      {...(released !== null || rollback !== null || stoppable
         ? {
             end: (
               <span className={styles.inline}>
@@ -256,6 +264,33 @@ function PluginRow({
                     hint={PLUGIN_WORDS.recorded}
                     testId={`update-plugin-${entry.id}`}
                   />
+                )}
+                {rollback !== null && (
+                  <ConfirmSubmit
+                    action={PLUGIN_ACTIONS.activate}
+                    fields={{ [DIGEST_FIELD]: rollback.version.digest }}
+                    label={PLUGIN_WORDS.rollback(rollback.version.version)}
+                    title={PLUGIN_WORDS.rollbackTitle(entry.name, rollback.version.version)}
+                    consequence={PLUGIN_WORDS.rollbackConsequence(
+                      entry.name,
+                      entry.version,
+                      rollback.version.version,
+                      rollback.view.unknownToIt.length,
+                    )}
+                    confirmLabel={PLUGIN_WORDS.rollbackConfirm}
+                    hint={PLUGIN_WORDS.recorded}
+                    testId={`rollback-plugin-${entry.id}`}
+                  >
+                    {rollback.view.unknownToIt.length > 0 && (
+                      <ul data-testid={`rollback-unknown-${entry.id}`}>
+                        {rollback.view.unknownToIt.map((id) => (
+                          <li key={id}>
+                            <Mono>{id}</Mono>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </ConfirmSubmit>
                 )}
                 {stoppable && (
                   <ConfirmSubmit
@@ -291,7 +326,14 @@ export function PluginsPage({ view }: { view: PluginsView }) {
       (v.state === 'pending' || v.state === 'failed') &&
       !(v.state === 'pending' && behind.get(v.pluginId) === v.version && v.trust === 'vaubaan'),
   );
-  const kept = install.versions.filter((v) => v.state === 'previous');
+  // The version each plugin ran last before this one (the list is newest change first).
+  const rollbacks = new Map<string, { version: PluginVersionRecord; view: ActivationView }>();
+  for (const version of install.versions) {
+    const view = install.activations[version.digest];
+    if (version.state !== 'previous' || rollbacks.has(version.pluginId)) continue;
+    if (view === undefined || view.sdkProblem !== null) continue;
+    rollbacks.set(version.pluginId, { version, view });
+  }
   const restart =
     install.versions.some((v) => v.state === 'trial') ||
     (install.flash?.kind === 'done' && install.flash.code === 'followed-image');
@@ -382,6 +424,7 @@ export function PluginsPage({ view }: { view: PluginsView }) {
               key={line.entry.id}
               line={line}
               released={behind.get(line.entry.id) ?? null}
+              rollback={rollbacks.get(line.entry.id) ?? null}
               olderPin={olderPins.get(line.entry.id) ?? null}
             />
           ))}
@@ -402,19 +445,6 @@ export function PluginsPage({ view }: { view: PluginsView }) {
         )}
         <FeedFooter view={view} />
       </Section>
-      {kept.length > 0 && (
-        <Section title={PLUGIN_WORDS.keptTitle} count={kept.length} testId="kept-versions">
-          <Rows>
-            {kept.map((version) => (
-              <VersionRow
-                key={version.digest}
-                version={version}
-                view={install.activations[version.digest]}
-              />
-            ))}
-          </Rows>
-        </Section>
-      )}
     </>
   );
 }

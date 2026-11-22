@@ -111,31 +111,6 @@ describe('Administration › Plugins, installing', () => {
     expect(html).toContain(`action="${PLUGIN_ACTIONS.refuse}"`);
   });
 
-  it('offers to go back to a kept version, naming what it does not know', () => {
-    const kept = version('b', 'previous');
-    const page = text(
-      render({
-        versions: [version('c', 'active', { version: '1.1.0' }), kept],
-        activations: {
-          [kept.digest]: {
-            version: kept,
-            running: { version: '1.1.0', origin: 'installed' },
-            added: [],
-            deprecated: [],
-            unknownToIt: ['crm.contact-merge'],
-            accounts: 2,
-            missions: [{ id: 'm-1', name: 'Release bot' }],
-            sdkProblem: null,
-          },
-        },
-      }),
-    );
-    expect(page).toContain(INSTALL_WORDS.goBack);
-    expect(page).toContain('crm.contact-merge');
-    // The missions its permissions apply to, each a link to its page.
-    expect(page).toContain('1 active mission uses this service: Release bot.');
-  });
-
   it('confirms a version signed by Vaubaan in a dialog, with nothing to type', () => {
     const pending = version('f', 'pending', { trust: 'vaubaan' });
     const html = render({
@@ -159,8 +134,8 @@ describe('Administration › Plugins, installing', () => {
     expect(text(html)).not.toContain(INSTALL_WORDS.notVaubaan);
   });
 
-  it('greys a kept version this gateway cannot run, with the reason', () => {
-    const kept = version('d', 'previous', { sdkRange: '^0.1.0' });
+  it('greys a waiting version this gateway cannot run, with the reason', () => {
+    const kept = version('d', 'pending', { sdkRange: '^0.1.0' });
     const html = render({
       versions: [kept],
       activations: {

@@ -85,14 +85,10 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Roll back a plugin to a kept version
 
-status: proposed
+status: implemented
 requires: plugin, mission
+anchors: apps/gateway/src/app/admin/(guarded)/plugins/plugins-view.tsx, apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/compose/registry.ts, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/server/compose/kept-catalog-index.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- The page lists the kept versions; one built for another SDK range is greyed with the reason
-- Before confirming, the page names the permissions the older version does not know and the accounts it cannot run
-- After the rollback a mission holding a permission unknown to the active version can still be edited and saved
 
 ### Receive security patches automatically
 

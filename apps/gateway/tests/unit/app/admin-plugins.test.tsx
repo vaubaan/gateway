@@ -1,7 +1,7 @@
 /**
  * Administration › Plugins and its Catalog page rendered to static markup over invented
  * views (no browser, no store): one row per plugin this gateway runs with where it comes
- * from and the acts it allows (Update, Stop, each behind a dialog; Update all), what the
+ * from and the acts it allows (Update, Roll back, Stop, each behind a dialog; Update all), what the
  * feed reports only when it reports it, the catalog's other plugins on their own page, and
  * the line that says when and where the feed was read — or that the check is off. What the
  * comparison computes is `server/updates/compare.test.ts`.
@@ -186,6 +186,74 @@ describe('Administration › Plugins', () => {
     const waiting = render(view({ install: { ...INSTALL, versions: [unsigned] } }));
     expect(waiting).toContain('data-testid="install-versions"');
     expect(waiting).not.toContain('value="vercel@4.2.4"');
+  });
+
+  it('offers Roll back on the row to the version it ran before, and no list of kept versions', () => {
+    const kept = (
+      digest: string,
+      version: string,
+      changedAt: string,
+      sdkProblem: string | null,
+    ) => {
+      const record = {
+        digest: digest.repeat(64),
+        pluginId: 'linear',
+        version,
+        packageName: '@vaubaan/plugin-linear',
+        sdkRange: '^1.0.0',
+        trust: 'unsigned' as const,
+        signer: null,
+        riskIds: [],
+        state: 'previous' as const,
+        failure: null,
+        uploadedAt: changedAt,
+        uploadedBy: 'user-ops',
+        viaMissionId: null,
+        changedAt,
+        changedBy: 'user-ops',
+      };
+      const activation = {
+        version: record,
+        running: { version: '2.0.0', origin: 'installed' },
+        added: [],
+        deprecated: [],
+        unknownToIt: ['linear.issue-archive'],
+        accounts: 2,
+        missions: [],
+        sdkProblem,
+      };
+      return [record, activation] as const;
+    };
+    // Newest change first: 1.9.0 is the one it ran last.
+    const [last, lastView] = kept('d', '1.9.0', '2026-11-21T10:00:00.000Z', null);
+    const [older, olderView] = kept('e', '1.8.0', '2026-11-20T10:00:00.000Z', null);
+    const html = render(
+      view({
+        install: {
+          ...INSTALL,
+          versions: [last, older],
+          activations: { [last.digest]: lastView, [older.digest]: olderView },
+        },
+      }),
+    );
+    expect(html).toContain('data-testid="rollback-plugin-linear"');
+    expect(text(html)).toContain('Roll back to 1.9.0');
+    expect(text(html)).not.toContain('Roll back to 1.8.0');
+    expect(html).toContain(`value="${last.digest}"`);
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.activate}"`);
+    // A dialog, nothing to type, even for a version not signed by Vaubaan: it already ran here.
+    expect(html).not.toContain('name="confirm"');
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*data-testid="rollback-plugin-linear"/);
+    expect(html).not.toContain('data-testid="kept-versions"');
+    expect(html).not.toContain('data-testid="rollback-plugin-github"');
+    // A kept version this gateway cannot run offers nothing.
+    const [cannot, cannotView] = kept('f', '1.9.0', '2026-11-21T10:00:00.000Z', 'built for ^0.1.0');
+    const greyed = render(
+      view({
+        install: { ...INSTALL, versions: [cannot], activations: { [cannot.digest]: cannotView } },
+      }),
+    );
+    expect(greyed).not.toContain('data-testid="rollback-plugin-linear"');
   });
 
   it('says when and where the feed was read, and nothing more when it reports nothing', () => {

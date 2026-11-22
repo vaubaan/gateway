@@ -816,7 +816,7 @@ the (i) itself never leaves the page.
     stored and inert. Activating is confirmed by typing the plugin's id and takes effect at the
     next start, which the page can trigger. The version starts **on trial**: it becomes active
     once loaded and its own examples classified; otherwise the previous version is restored and the
-    failure shown here. An administrator also **rolls back** to a kept version, sets a plugin to
+    failure shown here. An administrator also **rolls back** a plugin to the version it ran last, from its row, sets a plugin to
     **follow the image** again, **removes** an installed plugin no account uses, opts a plugin into
     **automatic security patches** (Vaubaan-signed patch versions that fix an advisory, started on
     trial, every administrator notified), and manages the **trusted signers** (adding one is

@@ -197,7 +197,8 @@ export interface PluginInstallService {
   activationView(digest: string): Promise<ActivationView | null>;
   /**
    * Starts a version on trial, now or at the next start. `typedId` must be the plugin's id
-   * for a version not signed by Vaubaan; a Vaubaan-signed one is confirmed by a dialog.
+   * for a version not signed by Vaubaan that never ran here; a Vaubaan-signed one, or a
+   * kept one (rolling back), is confirmed by a dialog.
    */
   activate(digest: string, typedId: string, actor: PluginActor): Promise<PluginActResult>;
   /**
@@ -527,7 +528,12 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     async activate(digest, typedId, actor) {
       const version = await deps.versions.get(digest);
       if (version === null) return { ok: false, code: 'not-found', message: 'no such version' };
-      if (version.trust !== 'vaubaan' && typedId.trim() !== version.pluginId) {
+      // A kept version already ran here: an administrator typed its id when it first came.
+      const confirmed =
+        version.trust === 'vaubaan' ||
+        version.state === 'previous' ||
+        typedId.trim() === version.pluginId;
+      if (!confirmed) {
         return {
           ok: false,
           code: 'confirmation-mismatch',

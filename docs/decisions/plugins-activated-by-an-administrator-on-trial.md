@@ -101,8 +101,10 @@ Updating a plugin from the catalog is one act: a dialog names the plugin, the ve
 and the version it gets, and on confirmation the gateway downloads it, verifies the catalog's
 signature and activates it on trial, as the activation above. Several plugins are updated by one
 confirmation. Activating any version signed by Vaubaan (a pending one, or going back to a kept
-one) is confirmed in the same dialog, without typing. A version not signed by Vaubaan still asks
-for the plugin's id typed. Stopping an installed version is behind the same dialog.
+one) is confirmed in the same dialog, without typing. Rolling back is the plugin's row's own act,
+to the version it ran last, in the same dialog whoever signed it: a kept version already ran here
+after an administrator typed its id. A version not signed by Vaubaan that never ran here still
+asks for the plugin's id typed. Stopping an installed version is behind the same dialog.
 
 ### Consequences
 
@@ -110,6 +112,8 @@ for the plugin's id typed. Stopping an installed version is behind the same dial
   and a mission never gains one it was not granted.
 - The trial still guards the update: a version that does not load leaves the previous one
   serving.
+- Only the version a plugin ran last is offered to roll back to; an older kept one is reached by
+  rolling back twice.
 
 ### Rejected alternatives
 
