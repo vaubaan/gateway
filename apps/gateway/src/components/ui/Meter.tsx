@@ -6,11 +6,13 @@
  *
  * The threshold is the caller's (`threshold`, a share of the limit): the
  * default view of a list takes the default; a detailed view passes `0` to
- * draw every meter. At the limit the meter turns red and says so in words.
+ * draw every meter. Near the limit the bar and the figure are ink; at the limit
+ * they turn red and say so in words (style guide §5). shadcn/ui's Progress,
+ * drawn on the shared tokens.
  */
 import { formatNumber, LIMIT_WORDS, usage } from '@/lib/vocabulary';
 
-import styles from './Meter.module.css';
+import { cn } from '@/lib/utils';
 
 /** From this share of the limit on, the default view shows the meter. */
 export const NEAR_LIMIT = 0.6;
@@ -50,7 +52,7 @@ export function Meter({
   if (state === 'far' && threshold > 0) {
     if (placeholder === 'none') return null;
     return (
-      <span className={styles.dash}>
+      <span className="text-muted-foreground">
         <span aria-hidden="true">—</span>
         <span className="vbn-sr-only">
           {label ? `${label}: ` : ''}
@@ -63,20 +65,38 @@ export function Meter({
   const percent = Math.round(share * 100);
   const figure = format === 'percent' ? `${formatNumber(percent)}%` : usage(used, limit);
   return (
-    <span className={[styles.use, styles[`state_${state}`]].join(' ')}>
+    <span
+      className="inline-flex items-center gap-2.5 whitespace-nowrap align-middle text-secondary tabular-nums text-muted-foreground"
+      data-state={state}
+    >
       <span
-        className={styles.track}
+        className="block h-1.5 w-[84px] flex-none overflow-hidden rounded-full bg-muted shadow-[inset_0_0_0_1px_var(--border)]"
         role="meter"
         aria-valuemin={0}
         aria-valuemax={limit}
         aria-valuenow={Math.min(used, limit)}
         aria-valuetext={`${usage(used, limit)}${label ? ` ${label}` : ''}`}
       >
-        <span className={styles.bar} style={{ width: `${percent}%` }} />
+        <span
+          className={cn(
+            'block h-full rounded-full',
+            state === 'reached'
+              ? 'bg-refused'
+              : state === 'near'
+                ? 'bg-foreground'
+                : 'bg-muted-foreground',
+          )}
+          style={{ width: `${percent}%` }}
+        />
       </span>
-      <span className={styles.figure}>
+      <span
+        className={cn(
+          state === 'reached' && 'font-semibold text-refused-fg',
+          state === 'near' && 'font-semibold text-foreground',
+        )}
+      >
         {figure}
-        {label && <span className={styles.label}> {label}</span>}
+        {label && <span className="font-normal"> {label}</span>}
         {state === 'reached' && <span className="vbn-sr-only"> — {LIMIT_WORDS.limitReached}</span>}
       </span>
     </span>

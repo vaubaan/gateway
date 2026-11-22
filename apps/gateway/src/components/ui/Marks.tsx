@@ -58,7 +58,10 @@ export function RowChip({
   inline?: boolean;
 }) {
   return (
-    <span className={cn('text-caption', inline ? 'whitespace-nowrap' : 'inline-block')} data-row={row}>
+    <span
+      className={cn('text-caption', inline ? 'whitespace-nowrap' : 'inline-block')}
+      data-row={row}
+    >
       <span
         className={cn(
           'inline-flex h-[22px] items-center whitespace-nowrap rounded-md border px-2 text-caption',
@@ -70,12 +73,7 @@ export function RowChip({
       {reason ? (
         <>
           {inline ? ' · ' : ' '}
-          <span
-            className={cn(
-              'font-normal text-muted-foreground',
-              inline ? null : 'mt-0.5 block',
-            )}
-          >
+          <span className={cn('font-normal text-muted-foreground', inline ? null : 'mt-0.5 block')}>
             {REASON_WORDS[reason]}
           </span>
         </>

@@ -55,15 +55,6 @@
   --ok-soft: var(--allowed-bg);
   --ok-line: var(--allowed-border);
 
-  /* ───── Code: dark in both themes ───── */
-  --code-bg: var(--code);
-  --code-ink: var(--code-fg);
-  --code-dim: var(--code-muted);
-  --code-key: var(--code-accent);
-  --code-string: var(--code-ok);
-  --code-btn: var(--code-border);
-  --code-btn-line: var(--code-border);
-
   /* ───── Marks: the hues an avatar or a service mark takes; never a status ───── */
   --hue-1: var(--chart-1);
   --hue-2: var(--chart-2);

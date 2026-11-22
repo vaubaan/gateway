@@ -4,13 +4,13 @@
  * Copies a text to the clipboard and says so: the button reads "Copied" for
  * two seconds, and the change is announced to assistive technology. When the
  * browser refuses the clipboard (an insecure origin, a denied permission) the
- * button says "Select and copy" instead of pretending.
+ * button says "Select and copy" instead of pretending. Tailwind on the shared
+ * tokens; on a code block, the dark control.
  */
 import { useEffect, useState } from 'react';
 
+import { cn } from '@/lib/utils';
 import { ACTIONS } from '@/lib/vocabulary';
-
-import styles from './CopyButton.module.css';
 
 const FEEDBACK_MS = 2000;
 
@@ -48,7 +48,13 @@ export function CopyButton({
   return (
     <button
       type="button"
-      className={[styles.copy, onDark ? styles.onDark : '', className ?? ''].join(' ')}
+      className={cn(
+        'inline-flex items-center whitespace-nowrap rounded-md border px-2 text-caption',
+        onDark
+          ? 'h-6 border-code-border bg-code-border text-code-fg hover:bg-code-muted/30'
+          : 'h-7 border-border-strong bg-card text-foreground hover:bg-accent',
+        className,
+      )}
       onClick={() => void copy()}
     >
       <span aria-live="polite">

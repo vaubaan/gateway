@@ -1,14 +1,17 @@
 /**
  * Green is for checklist ticks only (style guide, "Colour"; owner's decision of
  * 2026-10-14): a success callout and a success toast say "done" in the accent.
- * Read from the stylesheets themselves, so a tone mapping that slides back to the
+ * Read from the components themselves, so a tone mapping that slides back to the
  * status green fails here.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+
+import { Callout } from '@/components/ui';
 
 const UI = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/components/ui');
 
@@ -22,9 +25,9 @@ function ruleOf(file: string, selector: string): string {
 
 describe('a success is drawn in the accent, never in green', () => {
   it('the ok callout is tinted with the accent', () => {
-    const rule = ruleOf('Callout.module.css', '.tone_ok');
-    expect(rule).toContain('var(--primary');
-    expect(rule).not.toMatch(/var\(--ok/);
+    const html = renderToStaticMarkup(<Callout tone="ok">Saved.</Callout>);
+    expect(html).toContain('bg-primary-soft');
+    expect(html).not.toMatch(/allowed|--ok/);
   });
 
   it('the ok toast marks its check with the accent', () => {

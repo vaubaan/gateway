@@ -6,14 +6,18 @@
  * sentence in the lede, or behind a disclosure.
  *
  * `neutral` — a fact worth setting apart; `info` — where to go next;
- * `warn` — needs you; `bad` — stopped, refused, failed; `ok` — done (rare:
- * the absence of a problem needs no box), drawn in the accent with a check:
- * green is for checklist ticks only (style guide, "Colour").
+ * `warn` — needs you (the accent family of what waits); `bad` — stopped,
+ * refused, failed (the one red); `ok` — done (rare: the absence of a problem
+ * needs no box), drawn in the accent with a check: green is for checklist
+ * ticks only (style guide, "Colour").
+ *
+ * shadcn/ui's Alert, rewritten on the shared tokens (ADR
+ * design-system-on-shadcn-shared-by-the-app-and-the-site).
  */
+import { cn } from '@/lib/utils';
 import type { Tone } from '@/lib/vocabulary';
 
 import { toneOfBadge, type BadgeTone } from './Badge.tsx';
-import styles from './Callout.module.css';
 import { Icon, type IconName } from './Icon.tsx';
 
 const TONE_ICON: Readonly<Record<Tone, IconName | null>> = {
@@ -22,6 +26,16 @@ const TONE_ICON: Readonly<Record<Tone, IconName | null>> = {
   ok: 'check',
   warn: 'alert',
   bad: 'alert',
+};
+
+/** The box, then the colour of its icon and title. */
+const TONE_STYLE: Readonly<Record<Tone, readonly [box: string, mark: string]>> = {
+  neutral: ['border-border bg-sidebar', 'text-muted-foreground'],
+  info: ['border-approval-border bg-primary-soft', 'text-primary-ink'],
+  // Done is not an exception: the accent, never green (green is for checklist ticks only).
+  ok: ['border-approval-border bg-primary-soft', 'text-primary-ink'],
+  warn: ['border-approval-border bg-approval-bg', 'text-approval-fg'],
+  bad: ['border-refused-border bg-refused-bg', 'text-refused-fg'],
 };
 
 const BADGE_TONES: readonly string[] = ['success', 'warning', 'danger'];
@@ -46,23 +60,31 @@ export function Callout({
 }) {
   const resolved = toneOf(tone);
   const toneIcon = TONE_ICON[resolved];
+  const [box, mark] = TONE_STYLE[resolved];
   return (
     <div
-      className={[styles.callout, styles[`tone_${resolved}`]].join(' ')}
+      className={cn(
+        'flex max-w-full items-start gap-3 rounded-lg border px-3.5 py-3 text-body',
+        box,
+      )}
       role="note"
       data-tone={resolved}
       data-testid={testId}
     >
       {toneIcon && (
-        <span className={styles.icon}>
+        <span className={cn('mt-0.5 inline-flex flex-none', mark)}>
           <Icon name={toneIcon} size={16} />
         </span>
       )}
-      <div className={styles.body}>
-        {title && <div className={styles.title}>{title}</div>}
-        <div className={styles.text}>{children}</div>
+      <div className="min-w-0 flex-1">
+        {title && (
+          <div className={cn('font-semibold', resolved === 'neutral' ? null : mark)}>{title}</div>
+        )}
+        <div className="text-muted-foreground [&_a]:text-primary [&_p]:m-0 [&_p+p]:mt-1">
+          {children}
+        </div>
       </div>
-      {action && <div className={styles.action}>{action}</div>}
+      {action && <div className="flex-none self-center">{action}</div>}
     </div>
   );
 }

@@ -455,7 +455,7 @@ test('Settings leads a person to their own pages and an administrator to the gat
   // No service needs an OAuth client declared by an administrator: no step for it.
   await expect(checklist.getByTestId('setup-oauth-clients')).toHaveCount(0);
   // The one thing left to do carries the page's one primary action.
-  await expect(checklist.locator('a[class*="primary"]')).toHaveCount(1);
+  await expect(checklist.locator('a[data-variant="primary"]')).toHaveCount(1);
   await ops.goto('/accounts');
   const gmail = ops.getByTestId('service-gmail');
   await expect(gmail).not.toContainText('OAuth client');

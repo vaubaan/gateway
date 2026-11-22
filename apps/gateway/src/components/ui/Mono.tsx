@@ -8,11 +8,12 @@
  * An identifier wraps between its words (`github__create_|or_|update_|file`),
  * never inside one: a break opportunity follows each separator.
  *
- * No hook: it renders in server and client components alike.
+ * No hook: it renders in server and client components alike. Tailwind on the
+ * shared tokens.
  */
 import { Fragment } from 'react';
 
-import styles from './Mono.module.css';
+import { cn } from '@/lib/utils';
 
 /** `a_b.c-d/e` → `a_`, `b.`, `c-`, `d/`, `e`: where an identifier may wrap. */
 const WORD_END = /(?<=[_.\-/:\]@])(?=[^_.\-/:\]@])/;
@@ -42,9 +43,11 @@ export function Mono({
   quiet?: boolean;
   title?: string;
 }) {
-  const classes = [styles.mono, quiet ? styles.quiet : '', href ? styles.link : '']
-    .filter(Boolean)
-    .join(' ');
+  const classes = cn(
+    'break-words font-mono text-[0.93em] text-muted-foreground',
+    quiet && 'text-caption',
+    href && 'hover:text-primary hover:underline',
+  );
   if (href) {
     return (
       <a href={href} className={classes} title={title}>

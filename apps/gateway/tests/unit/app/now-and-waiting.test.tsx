@@ -755,7 +755,7 @@ describe('the home, when something waits', () => {
       '3 refused in the last hour',
       '3 accounts, 1 needs reconnecting',
     ]);
-    expect(html.match(/v_primary/g)).toHaveLength(1);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
   });
 
   it('never gives a yes from here: an approval leads to its request, a refusal may be given at once', () => {
@@ -809,7 +809,7 @@ describe('the home, when nothing waits', () => {
     // The list is in the page, closed until asked for.
     expect(html).toMatch(/hidden=""[^>]*>[\s\S]*Running now/);
     // "New mission" is the primary action when nothing waits.
-    expect(html.match(/v_primary/g)).toHaveLength(1);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
     expect(html).toContain('href="/missions/new"');
   });
 
@@ -853,7 +853,7 @@ describe('the first run', () => {
       'Paste the kit into your agent',
     ]);
     expect(html.match(/<h1/g)).toHaveLength(1);
-    expect(html.match(/v_primary/g)).toHaveLength(1);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
     expect(html).toContain('href="/accounts/new"');
     // No mission can be created before an account exists: the step offers nothing yet.
     expect(html).not.toContain('href="/missions/new"');
@@ -891,9 +891,9 @@ describe('the first run', () => {
     expect(text(html)).toContain('Welcome');
     expect(text(html)).toContain('An account you can use');
     expect(text(html)).toContain('Bob gave you access to GitHub · acme (12 permissions)');
-    expect(html.match(/v_primary/g)).toHaveLength(1);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
     expect(html).toMatch(
-      /v_primary[^>]*href="\/missions\/new"|href="\/missions\/new"[^>]*v_primary/,
+      /data-variant="primary"[^>]*href="\/missions\/new"|href="\/missions\/new"[^>]*data-variant="primary"/,
     );
     expect(text(html)).toContain('Shared with you');
     expect(text(html)).toContain('Get my key');
@@ -913,12 +913,12 @@ describe('the first run', () => {
     ]);
     // No service asks an administrator to declare anything (ADR gmail-over-imap-with-an-app-password).
     expect(text(html)).not.toContain('OAuth client');
-    expect(html.match(/v_primary/g)).toHaveLength(1);
+    expect(html.match(/data-variant="primary"/g)).toHaveLength(1);
 
     const open = renderToStaticMarkup(
       <FirstRun view={model({ first_run: true })} name="Dan" setup={{ ...setup, sign_in: null }} />,
     );
-    expect(open.match(/v_primary/g)).toHaveLength(1);
+    expect(open.match(/data-variant="primary"/g)).toHaveLength(1);
     expect(text(open)).toContain('Set up sign-in');
   });
 });
@@ -990,6 +990,6 @@ describe('the home, with a trust-raise proposal (risk model §4.7)', () => {
   });
 
   it('keeps one primary action on the page', () => {
-    expect(html.match(/v_primary/g)?.length ?? 0).toBeLessThanOrEqual(1);
+    expect(html.match(/data-variant="primary"/g)?.length ?? 0).toBeLessThanOrEqual(1);
   });
 });
