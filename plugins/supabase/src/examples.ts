@@ -24,6 +24,7 @@ export const EXAMPLE_STAGING_PROJECT: Resource = {
 const p = { project_ref: STAGING_REF };
 
 export const supabaseExamples: ToolSamples = samplesOn([EXAMPLE_STAGING_PROJECT], {
+  [TOOL.listProjects]: [{ args: {} }, { args: p, expectDenied: true }],
   [TOOL.getProject]: [{ args: p }, { args: {} }],
   [TOOL.getAnonKey]: [{ args: p }],
   [TOOL.listTables]: [{ args: { ...p, schemas: ['public', 'app'] } }],

@@ -3,7 +3,7 @@ title: Supabase plugin
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/README.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Supabase plugin — handbook
@@ -27,8 +27,12 @@ resource per project, the owner's label as environment.
   mission resource. `project_ref` also takes a project's exact name (the resource's display name),
   answered as its ref: the name never reaches a slice or a URL. A name two mission projects share is
   refused (ask for the ref); a ref wins over a name that spells it.
-- No tool lists the mission's projects: every project refusal (ambiguous, not a mission resource,
-  shared name) names them as `name (ref)`, ten at most. That refusal text is the agent's discovery.
+- `list_projects` (6.3.0) answers the mission's projects of the account from the resources the
+  gateway passes (`missionProjects`): ref, name, environment, region, URL; no request reaches
+  Supabase, and a project outside the mission is never named. It is priced as reading the settings
+  of every project it names (`project[ref].project-settings.R`, as `get_project`) and refused when
+  the mission holds none. Every project refusal (ambiguous, not a mission resource, shared name)
+  also names them as `name (ref)`, ten at most, and points to `list_projects`.
 - Every argument landing in a path, query, host, header or plugin-written SQL is read by
   `readIdentifiers` / `tableSchemas`, refused when out of grammar, never escaped:
   `encodeURIComponent` leaves `..`, so `delete_function` with `..` would hit the project endpoint

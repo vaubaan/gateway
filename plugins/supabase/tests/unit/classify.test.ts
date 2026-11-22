@@ -47,6 +47,28 @@ function classifySerialized(
 // Plane `db`
 // ────────────────────────────────────────────────────────────────────────
 
+describe('classifySupabase — list_projects', () => {
+  test('reads the settings of every mission project, without a project_ref', () => {
+    const vercel: Resource = { service: 'vercel', ref: 'prj_x', env: 'prod', displayName: 'x' };
+    expect(classifySerialized('supabase__list_projects', {}, [staging, vercel, prod])).toEqual([
+      `supabase.project[${STAGING_REF}].project-settings.R`,
+      `supabase.project[${PROD_REF}].project-settings.R`,
+    ]);
+  });
+
+  test('a mission without a Supabase project is refused', () => {
+    expect(classifySerialized('supabase__list_projects', {}, [])).toBe(
+      'The mission holds no Supabase project.',
+    );
+  });
+
+  test('takes no argument : a project_ref is refused, not read', () => {
+    expect(classifySerialized('supabase__list_projects', { project_ref: STAGING_REF })).toMatch(
+      /^project_ref: not an argument of 'supabase__list_projects'/,
+    );
+  });
+});
+
 describe('classifySupabase — plane db', () => {
   test('get_project → project-settings.R', () => {
     expect(classifySerialized('supabase__get_project', { project_ref: STAGING_REF })).toEqual([
@@ -724,14 +746,14 @@ describe('classifySupabase — strict-fail', () => {
   test('project_ref outside the mission resources → denied', () => {
     const r = classifySupabase('supabase__get_project', { project_ref: 'rogue-ref' }, [staging]);
     expect(r).toEqual({
-      denied: `supabase project 'rogue-ref' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}).`,
+      denied: `supabase project 'rogue-ref' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them.`,
     });
   });
 
   test('several resources without explicit project_ref → denied', () => {
     const r = classifySupabase('supabase__get_project', {}, [staging, prod]);
     expect(r).toEqual({
-      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: ${STAGING_REF} (${STAGING_REF}), ${PROD_REF} (${PROD_REF}).`,
+      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: ${STAGING_REF} (${STAGING_REF}), ${PROD_REF} (${PROD_REF}) — supabase__list_projects lists them.`,
     });
   });
 
@@ -767,14 +789,16 @@ describe('classifySupabase — strict-fail', () => {
     const a = { ...staging, displayName: 'shop' };
     const b = { ...prod, displayName: 'shop' };
     expect(classifySupabase('supabase__get_project', { project_ref: 'shop' }, [a, b])).toEqual({
-      denied: `project_ref: 2 Supabase projects of this mission are named 'shop' — name one by its ref. Projects of this mission: shop (${STAGING_REF}), shop (${PROD_REF}).`,
+      denied: `project_ref: 2 Supabase projects of this mission are named 'shop' — name one by its ref. Projects of this mission: shop (${STAGING_REF}), shop (${PROD_REF}) — supabase__list_projects lists them.`,
     });
   });
 
   test('a refusal names ten mission projects at most', () => {
     const many = Array.from({ length: 12 }, (_, i) => mkResource(`proj${i}`, 'staging'));
     const r = classifySupabase('supabase__get_project', {}, many);
-    expect('denied' in r && r.denied).toMatch(/proj9 \(proj9\), and 2 more\.$/);
+    expect('denied' in r && r.denied).toMatch(
+      /proj9 \(proj9\), and 2 more — supabase__list_projects lists them\.$/,
+    );
     expect('denied' in r && r.denied).not.toContain('proj10');
   });
 
@@ -782,7 +806,7 @@ describe('classifySupabase — strict-fail', () => {
     const vercel = { service: 'vercel', ref: 'prj_x', env: 'prod', displayName: 'shop' } as const;
     const r = classifySupabase('supabase__get_project', { project_ref: 'shop' }, [staging, vercel]);
     expect(r).toEqual({
-      denied: `supabase project 'shop' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}).`,
+      denied: `supabase project 'shop' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them.`,
     });
   });
 

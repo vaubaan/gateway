@@ -99,6 +99,11 @@ commit"`) and pushes `main`. Its tip holds git's empty tree: the review counts n
   or its exact name; the request carries the id, a shared name asks for the id, and every refusal
   names the mission's resources. Railway's `accept-deploy` declares `projectId`, and its
   account-level tools refuse one instead of forwarding it unread.
+- **Supabase (plugin 6.3.0): `list_projects` lists the projects of the mission.** Found in
+  dogfood: an agent had to read a database and no tool named its project; Supabase was the one
+  plugin of the five without a list tool. `supabase__list_projects` answers the mission's projects of
+  the account (ref, name, environment, region, URL) from the gateway's resources, without a request,
+  and says the others are left out. Every project refusal now points to it.
 - **Plugin SDK: a tool the upstream server no longer has says so.** `callUpstreamTool` turns a
   "tool not found" JSON-RPC error into `UpstreamToolMissing` (still an `UpstreamProtocolError`),
   whose message names the plugin as behind the service.

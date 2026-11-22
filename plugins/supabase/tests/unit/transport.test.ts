@@ -67,7 +67,7 @@ const HTML_PAGE = { body: '<html>bad gateway</html>', headers: { 'content-type':
 describe('the tool names are declared once', () => {
   test('TOOL names every declared tool, and nothing else', () => {
     expect(Object.values(TOOL).sort()).toEqual(supabaseTools.map((t) => t.name).sort());
-    expect(Object.values(TOOL)).toHaveLength(44);
+    expect(Object.values(TOOL)).toHaveLength(45);
   });
 
   test('the plugin id is the service id', () => {

@@ -83,7 +83,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { SERVICE_ID, TOOL } from './identity.ts';
+import { SERVICE_ID, TOOL, projectUrl } from './identity.ts';
 import {
   advisorType,
   base64Text,
@@ -551,7 +551,11 @@ export const SUPABASE_TOOL_PLANES: Readonly<Record<string, SupabasePlane>> = Obj
 );
 
 /** Every tool the classifier knows ; equal to the declared tool list (asserted in tests). */
-export const SUPABASE_CLASSIFIED_TOOLS: readonly string[] = Object.keys(TOOLS);
+/** Every tool the classifier places : `list_projects` ahead of the table, which resolves a project first. */
+export const SUPABASE_CLASSIFIED_TOOLS: readonly string[] = [
+  TOOL.listProjects,
+  ...Object.keys(TOOLS),
+];
 
 /**
  * The identifier arguments of a call, each read by the grammar of its kind —
@@ -606,8 +610,8 @@ const DECLARED_ARGUMENTS = declaredArgumentsOf(supabaseTools);
  *     carrying it is denied, so no second spelling can name another project.
  *
  * Every refusal about the project names the mission's projects
- * (`missionProjectsHint`) : no tool lists them, so the refusal is how the
- * agent learns which refs it may use.
+ * (`missionProjectsHint`) and the tool that lists them all
+ * (`supabase__list_projects`, `missionProjects`).
  */
 export function resolveProjectRef(
   args: Args,
@@ -657,7 +661,63 @@ function missionProjectsHint(own: readonly Resource[]): string {
   if (own.length === 0) return 'The mission holds no Supabase project.';
   const shown = own.slice(0, HINT_MAX_PROJECTS).map((r) => `${r.displayName} (${r.ref})`);
   const more = own.length > HINT_MAX_PROJECTS ? `, and ${own.length - HINT_MAX_PROJECTS} more` : '';
-  return `Projects of this mission: ${shown.join(', ')}${more}.`;
+  return `Projects of this mission: ${shown.join(', ')}${more} — ${TOOL.listProjects} lists them.`;
+}
+
+/** One project of the mission, as `list_projects` answers it. */
+export interface MissionProject {
+  readonly ref: string;
+  readonly name: string;
+  readonly environment: string | null;
+  readonly region: unknown;
+  readonly url: string;
+}
+
+/** The note `list_projects` answers with : what it lists, and how to name a project. */
+export const LIST_PROJECTS_NOTE =
+  "The Supabase projects of this mission on this account; the account's other projects are left out. " +
+  'Name one in `project_ref` by its ref or its name.';
+
+/**
+ * `list_projects` : the mission's projects of this account. Read from the
+ * resources the gateway passes, never from Supabase : a project outside the
+ * mission is not named, and the names listed are the names
+ * `resolveProjectRef` accepts.
+ */
+export function missionProjects(resources: readonly Resource[]): {
+  projects: MissionProject[];
+  note: string;
+} {
+  const projects = resources
+    .filter((r) => r.service === SERVICE_ID)
+    .map((r) => ({
+      ref: r.ref,
+      name: r.displayName,
+      environment: r.env ?? null,
+      region: r.metadata?.region ?? null,
+      url: projectUrl(r.ref),
+    }));
+  return { projects, note: LIST_PROJECTS_NOTE };
+}
+
+/**
+ * The slices of `list_projects` : the metadata read of every project it
+ * names (`project[ref].project-settings.R`, as `get_project`), so the
+ * listing is priced like reading each project, and refused when the
+ * mission holds none.
+ */
+function listProjectsOutcome(args: Args, resources: readonly Resource[]): ClassifyOutcome {
+  const undeclared = undeclaredArgumentDenial(DECLARED_ARGUMENTS, TOOL.listProjects, args);
+  if (undeclared !== null) return { denied: undeclared };
+  const slices: Slice[] = [];
+  for (const r of resources) {
+    if (r.service !== SERVICE_ID) continue;
+    const ref = projectRefIdent(r.ref);
+    if (ref === null) return { denied: missing('project_ref') };
+    slices.push(slice([...project(ref), n('project-settings')], 'R'));
+  }
+  if (slices.length === 0) return { denied: 'The mission holds no Supabase project.' };
+  return { slices };
 }
 
 export function classifySupabase(
@@ -665,6 +725,7 @@ export function classifySupabase(
   args: Args,
   resources: readonly Resource[],
 ): ClassifyOutcome {
+  if (tool === TOOL.listProjects) return listProjectsOutcome(args, resources);
   const descriptor = descriptorOf(tool);
   if (!descriptor) return { denied: `unknown supabase tool '${tool}'.` };
   const target = resolveProjectRef(args, resources);

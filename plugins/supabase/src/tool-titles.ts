@@ -12,6 +12,7 @@
 import { TOOL } from './identity.ts';
 
 export const supabaseToolTitles: Readonly<Record<string, string>> = {
+  [TOOL.listProjects]: 'List the projects of the mission',
   [TOOL.getProject]: 'Read the project',
   [TOOL.getAnonKey]: 'Read the API URL and the anonymous key',
   [TOOL.listTables]: 'List tables',

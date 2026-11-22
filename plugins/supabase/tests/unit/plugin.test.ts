@@ -75,9 +75,9 @@ describe('supabase plugin — structural kit', () => {
     assertNoWildcard(supabasePlugin);
   });
 
-  test('declares 44 tools, the same set the classifier knows', () => {
+  test('declares 45 tools, the same set the classifier knows', () => {
     const declared = supabasePlugin.tools.map((t) => t.name).sort();
-    expect(declared).toHaveLength(44);
+    expect(declared).toHaveLength(45);
     expect(declared).toEqual([...SUPABASE_CLASSIFIED_TOOLS].sort());
   });
 
@@ -92,7 +92,7 @@ describe('supabase plugin — structural kit', () => {
       resources: [staging],
       cardinalities: false,
     });
-    expect(report.toolsChecked).toBe(44);
+    expect(report.toolsChecked).toBe(45);
     // No sample lands on the fallback : every write a tool can make has a
     // dedicated catalog entry (ADR fallback-risk-only-when-uncategorized).
     expect(report.fallbackHits).toEqual([]);
@@ -113,7 +113,7 @@ describe('supabase plugin — structural kit', () => {
       resources: [staging],
       context: (fetch, resources) => execCtx(fetch, resources),
     });
-    expect(report.toolsChecked).toBe(44);
+    expect(report.toolsChecked).toBe(45);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'function_slug',
@@ -131,10 +131,10 @@ describe('supabase plugin — structural kit', () => {
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: PROD_REF }, [staging]),
     ).toEqual({
-      denied: `supabase project '${PROD_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${STAGING_REF}).`,
+      denied: `supabase project '${PROD_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${STAGING_REF}) — supabase__list_projects lists them.`,
     });
     expect(supabasePlugin.classify('supabase__get_project', {}, [staging, prod])).toEqual({
-      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${STAGING_REF}), Acme / app (${PROD_REF}).`,
+      denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${STAGING_REF}), Acme / app (${PROD_REF}) — supabase__list_projects lists them.`,
     });
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: 'a b' }, [staging]),

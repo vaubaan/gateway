@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `supabase` service — 44 tools over the Management API
+ * MCP tools of the `supabase` service — 45 tools over the Management API
  * and the per-project data plane (GoTrue admin, Storage).
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
@@ -20,11 +20,18 @@ const projectArg = {
   project_ref: {
     type: 'string',
     description:
-      'Supabase project ref (the `xxx` in `xxx.supabase.co`) or the project name, as listed in the mission ; the request always carries the ref.',
+      'Supabase project ref (the `xxx` in `xxx.supabase.co`) or the project name, as `supabase__list_projects` lists them ; the request always carries the ref.',
   },
 };
 
 export const supabaseTools: readonly McpToolDeclaration[] = [
+  // ─── the mission ───────────────────────────────────────────────────────────
+  {
+    name: TOOL.listProjects,
+    description:
+      "List the Supabase projects of this mission on this account : ref, name, environment, region. Read from the gateway, not from Supabase ; the account's other projects are left out. Name one in `project_ref` by its ref or its name.",
+    inputSchema: { type: 'object', properties: {} },
+  },
   // ─── db plane ──────────────────────────────────────────────────────────────
   {
     name: TOOL.getProject,

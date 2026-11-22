@@ -70,6 +70,44 @@ async function runData(route: MockRoute, tool: string, args: Record<string, unkn
 // Management API — reads
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe('executeSupabase — list_projects', () => {
+  test("answers the mission's projects from the resources, without a request", async () => {
+    const fetch = mockFetch([]);
+    const other: Resource = { service: 'vercel', ref: 'prj_x', displayName: 'web' };
+    const located: Resource = {
+      service: 'supabase',
+      ref: 'abcdefghijklmnopqrst',
+      displayName: 'Acme / app',
+      metadata: { region: 'eu-west-3' },
+    };
+    const result = await supabasePlugin.execute(
+      { credential, fetch, resources: [project, other, located] },
+      'supabase__list_projects',
+      {},
+    );
+    expect(fetch.calls).toEqual([]);
+    expect(resultJson(result)).toEqual({
+      projects: [
+        {
+          ref: REF,
+          name: 'Acme / app-staging',
+          environment: 'staging',
+          region: null,
+          url: DATA,
+        },
+        {
+          ref: 'abcdefghijklmnopqrst',
+          name: 'Acme / app',
+          environment: null,
+          region: 'eu-west-3',
+          url: 'https://abcdefghijklmnopqrst.supabase.co',
+        },
+      ],
+      note: "The Supabase projects of this mission on this account; the account's other projects are left out. Name one in `project_ref` by its ref or its name.",
+    });
+  });
+});
+
 describe('executeSupabase — Management API reads', () => {
   test('list_buckets GETs /projects/:ref/storage/buckets', async () => {
     const { call, result } = await runMgmt(
@@ -389,7 +427,7 @@ describe('executeSupabase — the target project is resolved like the classifier
     const result = await supabasePlugin.execute(ctx, 'supabase__get_project', {});
     expect(result.isError).toBe(true);
     expect(resultText(result)).toBe(
-      `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${REF}), Acme / other (${OTHER_REF}).`,
+      `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${REF}), Acme / other (${OTHER_REF}) — supabase__list_projects lists them.`,
     );
     expect(fetch.calls).toHaveLength(0);
   });
@@ -422,7 +460,7 @@ describe('executeSupabase — the target project is resolved like the classifier
       project_ref: OTHER_REF,
     });
     expect(resultText(result)).toBe(
-      `supabase project '${OTHER_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${REF}).`,
+      `supabase project '${OTHER_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${REF}) — supabase__list_projects lists them.`,
     );
   });
 

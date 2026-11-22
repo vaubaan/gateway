@@ -76,7 +76,12 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
       { do: 'Copy the token and paste it here. Supabase shows it once.' },
     ],
     permissions: [
-      { name: 'Project Settings', access: 'read', tools: [TOOL.getProject] },
+      {
+        name: 'Project Settings',
+        access: 'read',
+        // `list_projects` reads the projects discovery found with this permission.
+        tools: [TOOL.listProjects, TOOL.getProject],
+      },
       {
         name: 'API Keys',
         access: 'read',

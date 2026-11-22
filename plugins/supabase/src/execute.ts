@@ -25,7 +25,8 @@
  *   - the target project is resolved **once**, by the classifier's own
  *     `resolveProjectRef(args, ctx.resources)` : every URL is built from its
  *     answer, never from `args.project_ref`, so a call reaches the project
- *     its authorised slices name or no project at all ;
+ *     its authorised slices name or no project at all ; `list_projects`
+ *     sends no request, it answers the mission's projects (`missionProjects`) ;
  *   - every other identifier that lands in a path, a query string, a header
  *     or the SQL text of `list_tables` comes from the classifier's own
  *     `readIdentifiers(tool, args)` / `tableSchemas(args)`, never from
@@ -69,6 +70,7 @@ import {
 
 import {
   classifySupabase,
+  missionProjects,
   readIdentifiers,
   resolveProjectRef,
   type ToolIdentifiers,
@@ -102,6 +104,8 @@ export async function executeSupabase(
   // project outside the mission.
   const classified = classifySupabase(tool, args, ctx.resources);
   if ('denied' in classified) return refusalResult(classified.denied);
+  // The mission's projects, from the gateway's resources : no request.
+  if (tool === TOOL.listProjects) return jsonResult(missionProjects(ctx.resources));
   // Same functions, same inputs as the classifier : the project and the
   // identifiers the slices named are the ones the request carries.
   const target = resolveProjectRef(args, ctx.resources);

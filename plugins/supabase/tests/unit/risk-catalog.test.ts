@@ -152,6 +152,7 @@ describe('risk-catalog.yaml — posture-sensitive entries', () => {
 describe('risk-catalog.yaml — coverage lint', () => {
   const p = { project_ref: STAGING_REF };
   const cannedArgs: Record<string, Record<string, unknown>> = {
+    supabase__list_projects: {},
     supabase__get_project: p,
     supabase__get_anon_key: p,
     supabase__list_tables: p,

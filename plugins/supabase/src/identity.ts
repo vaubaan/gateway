@@ -21,6 +21,7 @@ export const TOOL_PREFIX = toolPrefixFor(SERVICE_ID);
 
 /** The MCP tool names, in the order `tools.ts` declares them. */
 export const TOOL = {
+  listProjects: `${TOOL_PREFIX}list_projects`,
   getProject: `${TOOL_PREFIX}get_project`,
   getAnonKey: `${TOOL_PREFIX}get_anon_key`,
   listTables: `${TOOL_PREFIX}list_tables`,
