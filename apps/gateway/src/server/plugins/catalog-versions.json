@@ -1,5 +1,5 @@
 {
-  "$comment": "The catalog versions this release of the gateway was tested with, each with the service's name and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed). Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the versions feed names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it. tests/unit/structural/catalog-versions.test.ts holds each entry to the repository's version of the plugin.",
+  "$comment": "The catalog versions this release of the gateway was tested with, each with the service's name and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed), written by npm run release:prepare from the catalog's index. Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the catalog index names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it.",
   "plugins": {
     "asana": {
       "name": "Asana",
@@ -83,8 +83,8 @@
     },
     "supabase": {
       "name": "Supabase",
-      "version": "6.2.0",
-      "sha256": "71cdc42230ef97d6f9b8d71e126868f743e4e03af88dbc0c00f2d1b62ab6eee9"
+      "version": "6.3.0",
+      "sha256": "6557d6d49636bead10b56feb582212d03b111f48b470750301b3a2c52c561dc5"
     },
     "upstash-redis": {
       "name": "Upstash Redis",

@@ -1,12 +1,12 @@
 {
-  "gateway": "2.0.0-alpha.28",
+  "gateway": "2.0.0-alpha.29",
   "prerelease": true,
-  "date": "2026-11-19",
+  "date": "2026-11-22",
   "plugins": {
     "asana": "0.1.0",
     "axonaut": "0.1.0",
     "caldav": "0.2.0",
-    "cloudflare-dns": "4.0.2",
+    "cloudflare-dns": "4.1.0",
     "context7": "0.2.0",
     "fly": "0.4.2",
     "github": "5.4.0",
@@ -16,13 +16,13 @@
     "miro": "0.5.3",
     "notion": "0.2.0",
     "outlook": "0.1.2",
-    "railway": "6.0.0",
+    "railway": "6.1.0",
     "resend": "0.6.2",
     "ssh": "2.0.6",
     "stripe": "0.5.2",
-    "supabase": "6.1.2",
-    "upstash-redis": "4.0.2",
+    "supabase": "6.3.0",
+    "upstash-redis": "4.1.0",
     "vaubaan": "0.5.1",
-    "vercel": "4.2.4"
+    "vercel": "4.3.0"
   }
 }
