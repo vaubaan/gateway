@@ -320,7 +320,7 @@ export function ConfirmDialog({
 
 function DialogError({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-2 mb-0 text-body text-refused-fg" role="alert">
+    <p className="mt-2 mb-0 text-body font-medium text-foreground" role="alert">
       {children}
     </p>
   );

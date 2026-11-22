@@ -41,7 +41,8 @@ Binding on every default view, at 1440×900.
 6. **Four text sizes, two weights.** Sentence case. Prose under ~75 characters a line.
 7. **One accent colour**, for the primary action, links and what waits for the person's answer
    (with its own shape, which links never have). **Status colour only where a status differs from
-   normal**: red only for "stopped, refused, limit reached"; no orange or yellow anywhere. Never
+   normal**: red only for "stopped, refused, limit reached"; an input error or a failure is said in
+   ink, never red; no orange or yellow anywhere. Never
    "active" or "allowed" in colour. One exception: a service mark in its brand colour, which carries no
    meaning and is never read as a state.
 8. **A number only where someone would act on it**: a meter near a limit, otherwise a dash.
@@ -163,7 +164,8 @@ guide and the design system are extended, then the screen is built. Rules a comp
 - **Dialog** — one question, **the consequence stated before anything happens**, a button named
   after the act; a typed phrase for what cannot be undone.
 - **Form field** — the expected shape in its label and again in the error, with what to do; required
-  unless it says optional.
+  unless it says optional. The error is in ink with an alert glyph, its field outlined in ink: red
+  stays for what was refused or stopped.
 - **Code** — a block a person copies has a button copying exactly that; a secret is shown once.
 - **Toast** — confirms what the person just did; a failure stays; never the only copy of something
   that matters.

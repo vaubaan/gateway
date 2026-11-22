@@ -12,7 +12,7 @@ const styles: Readonly<Record<string, string>> = {
   headEnd: 'vb-cards-headEnd flex items-center gap-2 ml-auto',
   checked: 'vb-cards-checked text-muted-foreground text-caption',
   issues:
-    'vb-cards-issues m-0 [padding:8px_16px_8px_32px] border-b border-b-border text-refused-fg text-small',
+    'vb-cards-issues m-0 [padding:8px_16px_8px_32px] border-b border-b-border text-foreground font-medium text-small',
   table:
     'vb-cards-table w-full [border-collapse:collapse] [&_th]:[padding:8px_16px_4px] [&_th]:text-muted-foreground [&_th]:text-caption [&_th]:font-normal [&_th]:text-left max-[641px]:block max-[641px]:[&_tbody]:block max-[641px]:[&_thead]:hidden',
   row: 'vb-cards-row [&_td]:[padding:8px_16px] [&_td]:border-t [&_td]:border-t-border [&_td]:[vertical-align:middle] max-[641px]:grid max-[641px]:[grid-template-columns:auto_minmax(0,_1fr)] max-[641px]:border-t max-[641px]:border-t-border max-[641px]:[&_td]:[border-top:0]',
@@ -75,13 +75,13 @@ const styles: Readonly<Record<string, string>> = {
   groupHiddenList: 'vb-cards-groupHiddenList flex flex-col gap-1',
   bar: 'vb-cards-bar sticky [z-index:10] bottom-0 flex flex-wrap items-center gap-3 mt-6 [padding:12px_16px] border border-border-strong [border-radius:var(--radius-lg)] bg-card [box-shadow:var(--shadow-overlay)]',
   barText: 'vb-cards-barText [flex:1_1_16rem] min-w-0 text-muted-foreground text-small',
-  barIssues: 'vb-cards-barIssues [margin:4px_0_0] pl-4 text-refused-fg text-small',
+  barIssues: 'vb-cards-barIssues [margin:4px_0_0] pl-4 text-foreground font-medium text-small',
   barActions: 'vb-cards-barActions flex gap-2',
   fields:
     'vb-cards-fields grid [grid-template-columns:minmax(0,_2fr)_minmax(0,_1fr)_minmax(0,_1fr)] gap-3 mb-4 max-[721px]:[grid-template-columns:1fr]',
   checkNow:
     'vb-cards-checkNow p-0 border-0 [background:none] text-primary [font:inherit] cursor-pointer disabled:text-muted-foreground disabled:[cursor:progress]',
-  checkError: 'vb-cards-checkError text-refused-fg',
+  checkError: 'vb-cards-checkError text-foreground font-medium',
   startRow: 'vb-cards-startRow flex flex-wrap items-center gap-2 mb-4',
   headWithDoc: 'vb-cards-headWithDoc inline-flex items-center gap-1',
   lostCard:

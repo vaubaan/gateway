@@ -511,9 +511,13 @@ describe('Field', () => {
     const note = /aria-describedby="([^"]+)"/.exec(html)?.[1];
     expect(note).toBeTruthy();
     expect(html).toContain('aria-invalid="true"');
-    expect(html).toMatch(
-      new RegExp(`<div[^>]*id="${note}"[^>]*role="alert"[^>]*>This is a secret key\\.`),
+    const error = new RegExp(`<div([^>]*)id="${note}"[^>]*role="alert"[^>]*>(.*?)</div>`).exec(
+      html,
     );
+    expect(error?.[2]).toContain('This is a secret key.');
+    // An input error is said in ink, never red (style guide §2.7).
+    expect(error?.[1]).toContain('text-foreground');
+    expect(error?.[1]).not.toContain('refused');
   });
 
   it('ties the hint to the control, says "optional", and marks nothing invalid without an error', () => {

@@ -64,8 +64,9 @@ export function ToastCard({
         <span
           className={cn(
             'mt-0.5 inline-flex flex-none',
-            // A success is said in the accent: green is for checklist ticks only.
-            tone === 'ok' ? 'text-primary' : 'text-refused',
+            // A success is said in the accent: green is for checklist ticks only. A failure is
+            // said in ink: red is kept for stopped, refused, limit reached.
+            tone === 'ok' ? 'text-primary' : 'text-foreground',
           )}
         >
           <Icon name={tone === 'ok' ? 'check' : 'alert'} size={14} />

@@ -32,6 +32,8 @@ import {
 
 import { cn } from '@/lib/utils';
 
+import { Icon } from './Icon.tsx';
+
 type ControlSize = 'sm' | 'md';
 
 /** The look every text control shares: the boundary at 3:1, a red line and halo when invalid. */
@@ -41,7 +43,7 @@ function controlClasses(
   ...extra: (string | undefined | false)[]
 ): string {
   return cn(
-    'w-full rounded-md border border-input bg-card text-body leading-normal text-foreground transition-colors placeholder:text-faint hover:enabled:not-focus:border-muted-foreground focus-visible:rounded-md disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground aria-invalid:border-refused aria-invalid:shadow-[0_0_0_2px_var(--refused-bg)]',
+    'w-full rounded-md border border-input bg-card text-body leading-normal text-foreground transition-colors placeholder:text-faint hover:enabled:not-focus:border-muted-foreground focus-visible:rounded-md disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground aria-invalid:border-foreground aria-invalid:shadow-[0_0_0_1px_var(--foreground)]',
     size === 'sm' ? 'h-7 px-[7px]' : 'h-8 px-2.5',
     mono && 'font-mono',
     ...extra,
@@ -234,8 +236,15 @@ export function Field({
         </div>
       )}
       {error && (
-        <div className="text-small text-refused-fg" id={noteId} role="alert">
-          {error}
+        // An input error is said in ink, beside its field: red is kept for stopped, refused,
+        // limit reached (style guide §2.7).
+        <div
+          className="flex items-start gap-1.5 text-small font-medium text-foreground"
+          id={noteId}
+          role="alert"
+        >
+          <Icon name="alert" size={14} className="mt-0.5 flex-none" />
+          <span>{error}</span>
         </div>
       )}
     </div>
