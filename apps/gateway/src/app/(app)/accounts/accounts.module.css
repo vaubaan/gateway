@@ -17,12 +17,12 @@
 .formHint {
   margin-left: auto;
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .prose {
   max-width: var(--measure);
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .prose p {
   margin: 0;
@@ -31,7 +31,7 @@
   margin-top: var(--space-2);
 }
 .prose a {
-  color: var(--accent);
+  color: var(--primary);
 }
 .stack {
   display: flex;
@@ -98,8 +98,8 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
-  font-size: var(--text-sm);
+  color: var(--primary);
+  font-size: var(--text-secondary);
 }
 .linkButton:hover {
   text-decoration: underline;
@@ -116,7 +116,7 @@
   gap: var(--space-3);
   margin-top: var(--section-gap);
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 
 /* The public key of an SSH account. */
@@ -138,7 +138,7 @@
   gap: 6px;
   margin-top: var(--space-4);
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .startsEnd {
   display: inline-flex;
@@ -159,7 +159,7 @@
 .summary {
   margin: var(--space-3) 0 0;
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .dialogNotes {
   display: flex;
@@ -170,7 +170,7 @@
 .restores {
   margin: var(--space-2) 0 0;
   padding-left: var(--space-5);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .restores li + li {
   margin-top: var(--space-1);

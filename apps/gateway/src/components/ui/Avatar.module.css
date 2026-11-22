@@ -53,7 +53,7 @@
 .size_md {
   width: 30px;
   height: 30px;
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .size_md.machine,
 .size_md.team {
@@ -80,7 +80,7 @@
 .more {
   margin-left: var(--space-1);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 .holder {
@@ -120,7 +120,7 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 /*
  * The brand icon on the neutral fill, in the brand colour the plugin declares
@@ -155,7 +155,7 @@
   gap: 5px;
   color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   white-space: nowrap;
 }
 .keyIcon {
@@ -168,7 +168,7 @@
   align-items: center;
   gap: var(--space-1);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   white-space: nowrap;
 }
 .agent::before {

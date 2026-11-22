@@ -21,7 +21,7 @@
   align-items: start;
   padding: var(--space-3) 10px;
   border-bottom: 1px solid var(--line);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .item:hover {
   background: var(--hover);
@@ -54,13 +54,13 @@
 }
 .meta {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .footer {
   margin: 0;
   padding: var(--space-3) 10px;
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 
 @media (max-width: 1360px) {

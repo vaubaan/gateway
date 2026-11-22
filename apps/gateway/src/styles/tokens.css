@@ -1,256 +1,100 @@
 /**
- * Vaubaan design tokens — the quiet control room, in shadcn's near-default
- * slate and sky (values: docs/spec/style-guide.md).
+ * The former token names of the interface, aliased onto the shared sheet.
  *
- * Spec: docs/spec/style-guide.md. Decisions: docs/decisions/
- * interface-redesign-vocabulary-and-design-system.md (the names and what
- * reads them).
+ * Every colour, size and radius comes from `@vaubaan/design-tokens` (its
+ * `tokens.css` and `theme.css`, imported by `app/globals.css`); this sheet
+ * only lets the style sheets not yet moved to Tailwind keep their names
+ * (ADR design-system-on-shadcn-shared-by-the-app-and-the-site). It shrinks as
+ * components move: an alias nothing reads is removed
+ * (`tests/unit/app/design-tokens.test.ts`). No value is written here, only
+ * `var()` of a shared name.
  *
- * One layer of named decisions. A component reads these and nothing else: no
- * raw colour, no raw type size, no raw radius.
+ * A name the shared sheet also uses with another meaning was renamed where it
+ * was read, not aliased: `--accent` (shadcn's hover fill) became `--primary`,
+ * `--accent-ink` `--primary-ink`, `--accent-soft` `--primary-soft`,
+ * `--on-accent` `--primary-foreground`; `--text-xs`, `--text-sm` and
+ * `--text-base` (Tailwind's own scale) became `--text-caption`,
+ * `--text-secondary` and `--text-body`.
  *
- * Themes. Light is the default. Dark applies when the document (or any
- * element: the gallery shows both side by side) carries `data-theme="dark"`,
- * or when no theme is chosen and the system prefers dark. The two dark blocks
- * below hold the same values; `tests/unit/app/design-tokens.test.ts` keeps
- * them identical and checks the contrast of every documented pair.
+ * The aliases are declared on every themed element, not on `:root` alone: a
+ * custom property is resolved where it is declared, and a dark island of the
+ * gallery (`data-theme="dark"`) must resolve them against its own values.
  */
 
-:root {
-  /* ───── Type: four sizes, two weights ───── */
-  --font-sans:
-    var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial,
-    sans-serif;
-  --font-mono:
-    var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, 'Liberation Mono', Consolas, monospace;
+:root,
+.light,
+.dark,
+[data-theme] {
+  /* ───── Paper, hairlines, ink ───── */
+  --paper: var(--background);
+  --paper-side: var(--sidebar);
+  --paper-raised: var(--card);
+  --fill: var(--muted);
+  --hover: var(--accent);
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --ink: var(--foreground);
+  --ink-2: var(--muted-foreground);
+  --ink-3: var(--muted-foreground);
+  --ink-4: var(--faint);
+  --knob: var(--background);
 
-  --text-xs: 0.6875rem; /* 11 px — meta, captions, chips, table heads */
-  --text-sm: 0.75rem; /* 12 px — ledes, hints, the second line of a row */
-  --text-base: 0.8125rem; /* 13 px — body, rows, tables, controls, section headings */
-  --text-title: 1.125rem; /* 18 px — the page title, the one statement of a request */
+  /* ───── The accent's border, and the exceptions ───── */
+  --accent-line: var(--approval-border);
+  /* "Needs you" is the accent family now: no orange or yellow anywhere. */
+  --warn: var(--approval-fg);
+  --warn-soft: var(--approval-bg);
+  --warn-line: var(--approval-border);
+  --on-warn: var(--on-approval);
+  /* The one red: refused, stopped, limit reached. */
+  --bad: var(--refused-fg);
+  --bad-soft: var(--refused-bg);
+  --bad-line: var(--refused-border);
+  /* Done, on checklists only. */
+  --ok: var(--allowed-fg);
+  --ok-soft: var(--allowed-bg);
+  --ok-line: var(--allowed-border);
 
-  --weight-regular: 400;
-  --weight-strong: 600;
-
-  --leading: 1.5;
-  --leading-tight: 1.3;
-  --tracking-title: -0.01em;
-
-  /* Prose is capped so that a line stays under about 75 characters. */
-  --measure: 680px;
-
-  /* ───── Space: a 4 px base, then the rhythm of a page ───── */
-  --space-half: 2px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-
-  --page-max: 1120px;
-  --page-max-narrow: 860px;
-  --page-max-wide: 1240px;
-  --page-pad-x: 44px;
-  --page-pad-top: 28px;
-  --page-pad-bottom: 72px;
-  /* Between two sections of a page: whitespace separates before any border does. */
-  --section-gap: 36px;
-  --side-width: 220px;
-  --side-width-collapsed: 56px;
-  /* The bar above the page: the path, the theme, the person. */
-  --bar-height: 44px;
-
-  /* A quiet list row and a table cell: a row is 36 px. */
-  --row-y: 8px;
-  --cell-y: 8px;
-  --cell-x: 10px;
-
-  /* The three heights of a control. */
-  --control-sm: 28px;
-  --control-md: 32px;
-  --control-lg: 36px;
-
-  /* ───── Radius ───── */
-  --radius-sm: 4px; /* tags, checkboxes, inline code */
-  --radius-md: 6px; /* buttons, inputs, navigation entries */
-  --radius-lg: 8px; /* the one filled box of a page, callouts, dialogs, code blocks */
-  --radius-full: 999px; /* pills, avatars, dots */
-
-  /* ───── Motion ───── */
-  --duration-fast: 100ms;
-  --duration-base: 150ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* ───── Code: dark in both themes ───── */
+  --code-bg: var(--code);
+  --code-ink: var(--code-fg);
+  --code-dim: var(--code-muted);
+  --code-key: var(--code-accent);
+  --code-string: var(--code-ok);
+  --code-btn: var(--code-border);
+  --code-btn-line: var(--code-border);
 
   /* ───── Marks: the hues an avatar or a service mark takes; never a status ───── */
-  --hue-1: #5b6abf;
-  --hue-2: #3a7f60;
-  --hue-3: #a8602f;
-  --hue-4: #7a5ba8;
-  --hue-5: #a4566b;
-  --hue-0: #73767d;
-  --on-hue: #ffffff;
-}
+  --hue-1: var(--chart-1);
+  --hue-2: var(--chart-2);
+  --hue-3: var(--chart-3);
+  --hue-4: var(--chart-4);
+  --hue-5: var(--chart-5);
+  --hue-0: var(--chart-5);
+  --on-hue: var(--primary-foreground);
 
-/* ───── Light (default): slate, sky ───── */
-:root,
-[data-theme='light'] {
-  color-scheme: light;
+  /* ───── Focus ───── */
+  --focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 
-  /* Paper */
-  --paper: #ffffff; /* the page */
-  --paper-side: #f8fafc; /* the side navigation, a dialog foot, a group row */
-  --paper-raised: #ffffff; /* controls, the rail card, dialogs */
-  --fill: #f1f5f9; /* the current navigation entry, a neutral pill, inline code */
-  --hover: #f8fafc;
+  /* ───── Type: weights and leading (Tailwind's scale) ───── */
+  --weight-regular: var(--font-weight-normal);
+  --weight-strong: var(--font-weight-semibold);
+  --leading: var(--leading-normal);
+  --leading-heading: var(--leading-snug);
 
-  /* Hairlines */
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
+  /* ───── Space: Tailwind's 4 px step ───── */
+  --space-half: calc(var(--spacing) * 0.5);
+  --space-1: calc(var(--spacing) * 1);
+  --space-2: calc(var(--spacing) * 2);
+  --space-3: calc(var(--spacing) * 3);
+  --space-4: calc(var(--spacing) * 4);
+  --space-5: calc(var(--spacing) * 5);
+  --space-6: calc(var(--spacing) * 6);
+  --space-8: calc(var(--spacing) * 8);
+  --space-10: calc(var(--spacing) * 10);
+  --space-12: calc(var(--spacing) * 12);
 
-  /* Ink */
-  --ink: #0f172a;
-  --ink-2: #334155;
-  --ink-3: #475569;
-  --ink-4: #94a3b8; /* placeholders and disabled marks only: below AA on purpose */
-
-  /* The one accent: the primary action and links (sky 700: sky 500 is below AA on white) */
-  --accent: #0369a1;
-  --accent-ink: #075985;
-  --accent-soft: #f0f9ff;
-  --accent-line: #bae6fd;
-  --on-accent: #ffffff;
-
-  /* Exceptions: a status is coloured only when it differs from normal */
-  --ok: #15803d;
-  --ok-soft: #f0fdf4;
-  --ok-line: #bbf7d0;
-  --warn: #b45309; /* needs you */
-  --warn-soft: #fffbeb;
-  --warn-line: #fde68a;
-  --on-warn: #ffffff;
-  --bad: #b91c1c; /* stopped, refused, limit reached */
-  --bad-soft: #fef2f2;
-  --bad-line: #fecaca;
-
-  /* Code blocks keep a dark surface in both themes */
-  --code-bg: #0f172a;
-  --code-ink: #e2e8f0;
-  --code-dim: #94a3b8;
-  --code-key: #7dd3fc;
-  --code-string: #bbf7d0;
-  --code-btn: #1e293b;
-  --code-btn-line: #334155;
-
-  /* Overlays */
-  --scrim: rgba(15, 23, 42, 0.4);
-  --shadow-overlay: 0 24px 64px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.06);
-  --knob: #ffffff;
-
-  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
-}
-
-/* ───── Dark, chosen: slate, sky ───── */
-[data-theme='dark'] {
-  color-scheme: dark;
-
-  --paper: #020817;
-  --paper-side: #0f172a;
-  --paper-raised: #0f172a;
-  --fill: #1e293b;
-  --hover: #0f172a;
-
-  --line: #1e293b;
-  --line-strong: #334155;
-
-  --ink: #f8fafc;
-  --ink-2: #cbd5e1;
-  --ink-3: #94a3b8;
-  --ink-4: #475569;
-
-  --accent: #38bdf8;
-  --accent-ink: #7dd3fc;
-  --accent-soft: #0c2a44;
-  --accent-line: #075985;
-  --on-accent: #020817;
-
-  --ok: #4ade80;
-  --ok-soft: #052e16;
-  --ok-line: #166534;
-  --warn: #fbbf24;
-  --warn-soft: #422006;
-  --warn-line: #92400e;
-  --on-warn: #020817;
-  --bad: #f87171;
-  --bad-soft: #450a0a;
-  --bad-line: #991b1b;
-
-  --code-bg: #0b1120;
-  --code-ink: #e2e8f0;
-  --code-dim: #94a3b8;
-  --code-key: #7dd3fc;
-  --code-string: #bbf7d0;
-  --code-btn: #1e293b;
-  --code-btn-line: #334155;
-
-  --scrim: rgba(0, 0, 0, 0.6);
-  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  --knob: #ffffff;
-
-  --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
-}
-
-/* ───── Dark, from the system: the same values, when no theme is chosen ───── */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    color-scheme: dark;
-
-    --paper: #020817;
-    --paper-side: #0f172a;
-    --paper-raised: #0f172a;
-    --fill: #1e293b;
-    --hover: #0f172a;
-
-    --line: #1e293b;
-    --line-strong: #334155;
-
-    --ink: #f8fafc;
-    --ink-2: #cbd5e1;
-    --ink-3: #94a3b8;
-    --ink-4: #475569;
-
-    --accent: #38bdf8;
-    --accent-ink: #7dd3fc;
-    --accent-soft: #0c2a44;
-    --accent-line: #075985;
-    --on-accent: #020817;
-
-    --ok: #4ade80;
-    --ok-soft: #052e16;
-    --ok-line: #166534;
-    --warn: #fbbf24;
-    --warn-soft: #422006;
-    --warn-line: #92400e;
-    --on-warn: #020817;
-    --bad: #f87171;
-    --bad-soft: #450a0a;
-    --bad-line: #991b1b;
-
-    --code-bg: #0b1120;
-    --code-ink: #e2e8f0;
-    --code-dim: #94a3b8;
-    --code-key: #7dd3fc;
-    --code-string: #bbf7d0;
-    --code-btn: #1e293b;
-    --code-btn-line: #334155;
-
-    --scrim: rgba(0, 0, 0, 0.6);
-    --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    --knob: #ffffff;
-
-    --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
-  }
+  /* ───── Motion: one atomic transition ───── */
+  --duration-fast: var(--default-transition-duration);
+  --duration-base: var(--default-transition-duration);
 }

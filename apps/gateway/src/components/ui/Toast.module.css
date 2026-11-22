@@ -18,7 +18,7 @@
   background: var(--paper-raised);
   box-shadow: var(--shadow-overlay);
   color: var(--ink);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
   pointer-events: auto;
   animation: rise var(--duration-base) var(--ease-out);
 }
@@ -29,7 +29,7 @@
 }
 /* A success is said in the accent: green is for checklist ticks only. */
 .tone_ok .icon {
-  color: var(--accent);
+  color: var(--primary);
 }
 .tone_bad .icon {
   color: var(--bad);

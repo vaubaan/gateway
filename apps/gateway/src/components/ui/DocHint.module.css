@@ -18,7 +18,7 @@
   background: var(--paper);
   color: var(--ink-3);
   font-family: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   font-style: italic;
   font-weight: var(--weight-regular);
   line-height: 1;
@@ -51,7 +51,7 @@
   background: var(--paper-raised);
   box-shadow: var(--shadow-overlay);
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
   font-style: normal;
   font-weight: var(--weight-regular);
   line-height: 1.45;
@@ -88,11 +88,11 @@
   align-self: flex-start;
   margin-top: var(--space-1);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   text-decoration: none;
 }
 .link:hover {
-  color: var(--accent-ink);
+  color: var(--primary-ink);
   text-decoration: underline;
 }
 .link:focus-visible {

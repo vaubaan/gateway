@@ -6,8 +6,8 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
-  font-size: var(--text-sm);
+  color: var(--primary);
+  font-size: var(--text-secondary);
   text-align: left;
 }
 .toggle:hover {

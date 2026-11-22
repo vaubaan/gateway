@@ -30,7 +30,7 @@
   border-radius: var(--radius-lg);
   background: var(--paper-side);
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 
 /* Long URLs and ids break rather than push the page sideways. */
@@ -48,9 +48,9 @@
 .servicePage {
   min-width: 0;
 
-  --pp-accent: var(--accent);
-  --pp-accent-ink: var(--accent-ink);
-  --pp-accent-soft: var(--accent-soft);
+  --pp-accent: var(--primary);
+  --pp-accent-ink: var(--primary-ink);
+  --pp-accent-soft: var(--primary-soft);
   --pp-ask-bg: var(--warn-soft);
   --pp-ask-ink: var(--warn);
   --pp-ask-line: var(--warn-line);
@@ -65,7 +65,7 @@
   --pp-ink: var(--ink);
   --pp-ink-2: var(--ink-2);
   --pp-ink-3: var(--ink-3);
-  --pp-leading-tight: var(--leading-tight);
+  --pp-leading-tight: var(--leading-heading);
   --pp-line: var(--line);
   --pp-line-strong: var(--line-strong);
   --pp-measure: var(--measure);
@@ -81,9 +81,9 @@
   --pp-row1-bg: var(--ok-soft);
   --pp-row1-line: var(--ok-soft);
   --pp-row1-ink: var(--ok);
-  --pp-row2-bg: var(--accent-soft);
-  --pp-row2-line: var(--accent-soft);
-  --pp-row2-ink: var(--accent-ink);
+  --pp-row2-bg: var(--primary-soft);
+  --pp-row2-line: var(--primary-soft);
+  --pp-row2-ink: var(--primary-ink);
   --pp-row3-bg: var(--warn-soft);
   --pp-row3-line: var(--warn-soft);
   --pp-row3-ink: var(--warn);
@@ -98,15 +98,15 @@
   --pp-space-8: var(--space-8);
   --pp-space-10: var(--space-10);
   --pp-space-12: var(--space-12);
-  --pp-text-xs: var(--text-xs);
-  --pp-text-sm: var(--text-sm);
-  --pp-text-base: var(--text-base);
-  --pp-text-lg: var(--text-base);
+  --pp-text-xs: var(--text-caption);
+  --pp-text-sm: var(--text-secondary);
+  --pp-text-base: var(--text-body);
+  --pp-text-lg: var(--text-body);
   --pp-text-title: var(--text-title);
   --pp-text-hero: var(--text-title);
   --pp-text-section: var(--text-title);
-  --pp-text-card: var(--text-base);
-  --pp-text-column: var(--text-base);
+  --pp-text-card: var(--text-body);
+  --pp-text-column: var(--text-body);
   --pp-tip-bg: var(--ink);
   --pp-tip-ink: var(--paper);
   --pp-warn-line: var(--warn-line);

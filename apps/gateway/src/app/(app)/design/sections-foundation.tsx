@@ -37,37 +37,38 @@ import styles from './design.module.css';
 import { type GalleryIcons, GallerySection, Line, Pile, Specimen } from './specimen';
 
 const COLOURS: readonly { token: string; use: string }[] = [
-  { token: '--paper', use: 'the page' },
-  { token: '--paper-side', use: 'side navigation, group rows' },
-  { token: '--paper-raised', use: 'controls, dialogs' },
-  { token: '--fill', use: 'current entry, neutral pill' },
-  { token: '--hover', use: 'a row under the pointer' },
-  { token: '--line', use: 'hairlines' },
-  { token: '--line-strong', use: 'control borders' },
-  { token: '--ink', use: 'text' },
-  { token: '--ink-2', use: 'secondary text' },
-  { token: '--ink-3', use: 'ledes, hints, captions' },
-  { token: '--ink-4', use: 'placeholders only' },
-  { token: '--accent', use: 'the primary action, links' },
-  { token: '--accent-soft', use: 'where to go next' },
-  { token: '--warn', use: 'needs you' },
-  { token: '--warn-soft', use: 'the one filled box' },
-  { token: '--bad', use: 'stopped, refused, limit' },
-  { token: '--bad-soft', use: 'a refused row' },
-  { token: '--ok', use: 'checklist ticks only' },
-  { token: '--ok-soft', use: 'a done step' },
-  { token: '--code-bg', use: 'code blocks' },
+  { token: '--background', use: 'the page: plan paper' },
+  { token: '--sidebar', use: 'side navigation, group rows' },
+  { token: '--card', use: 'controls, dialogs, the one filled box' },
+  { token: '--muted', use: 'quiet fills: inline code, tags' },
+  { token: '--accent', use: 'a row under the pointer, the current entry' },
+  { token: '--border', use: 'hairlines' },
+  { token: '--border-strong', use: 'card edge, control borders' },
+  { token: '--foreground', use: 'text' },
+  { token: '--muted-foreground', use: 'secondary text, ledes, hints' },
+  { token: '--faint', use: 'placeholders only' },
+  { token: '--primary', use: 'the primary action, links, focus' },
+  { token: '--primary-soft', use: 'where to go next, a selected row' },
+  { token: '--approval-bg', use: 'what waits for you: the one filled box' },
+  { token: '--refused-fg', use: 'refused, stopped, limit reached' },
+  { token: '--refused-bg', use: 'a refused row' },
+  { token: '--allowed-fg', use: 'checklist ticks only' },
+  { token: '--row-1-bg', use: 'Harmless' },
+  { token: '--row-2-bg', use: 'Worth a look' },
+  { token: '--row-3-bg', use: 'Repairable, at a price' },
+  { token: '--row-4-bg', use: 'Cannot be repaired' },
+  { token: '--code', use: 'code blocks' },
 ];
 
 const TYPE: readonly { token: string; size: string; use: string; strong?: boolean }[] = [
   { token: '--text-title', size: '20 px', use: 'Ship the billing page', strong: true },
   {
-    token: '--text-base',
+    token: '--text-body',
     size: '14 px',
     use: 'Body text, and section headings in the strong weight',
   },
-  { token: '--text-sm', size: '13 px', use: 'Rows, tables, controls, ledes' },
-  { token: '--text-xs', size: '12 px', use: 'Captions, chips, table heads, ids' },
+  { token: '--text-secondary', size: '13 px', use: 'Rows, tables, controls, ledes' },
+  { token: '--text-caption', size: '12 px', use: 'Captions, chips, table heads, ids' },
 ];
 
 const SPACES = [4, 8, 12, 16, 20, 24, 32, 40, 48] as const;
@@ -91,7 +92,7 @@ export function TokenSections() {
       <GallerySection
         id="colour"
         title="Colour"
-        rule="Ink on paper, one blue accent for the primary action and links, and status colour only where a status differs from normal: amber needs you, red is stopped. Green appears on checklist ticks."
+        rule="Ink on paper, one blue accent for the primary action, links and what waits for you, and status colour only where a status differs from normal: red is refused or stopped, never orange or yellow. The four rows of risk are light pills, green to deep plum. Green ticks appear on checklists."
       >
         <Specimen name="Palette">
           {() => (

@@ -6,7 +6,7 @@
 /* "Refreshing…" while a page refreshes the stale accounts it shows (AutoRefresh). */
 .refreshing {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .strong {
   font-weight: var(--weight-strong);
@@ -40,7 +40,7 @@ a.name:hover {
 }
 .sub {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 /* A count and its quiet qualifier: "5 · 1 at its limit". */
@@ -62,7 +62,7 @@ a.name:hover {
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .permission {
   display: flex;
@@ -79,12 +79,12 @@ a.name:hover {
 .detailHead {
   margin: 0 0 var(--space-2);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 /* A count that unfolds what it sums up ("12 of 17"). */
 .reveal {
-  color: var(--accent);
+  color: var(--primary);
 }
 .reveal:hover {
   text-decoration: underline;

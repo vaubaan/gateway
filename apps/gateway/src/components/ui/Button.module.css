@@ -35,17 +35,17 @@
 .s_md {
   height: var(--control-md);
   padding: 0 var(--space-3);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 .s_sm {
   height: var(--control-sm);
   padding: 0 var(--space-2);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 .s_lg {
   height: var(--control-lg);
   padding: 0 var(--space-4);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 /* 26 and 30 px to the eye, 32 px to the pointer (style guide §6). */
 .s_sm::after,
@@ -56,13 +56,13 @@
 }
 
 .v_primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 .v_primary:hover:not(:disabled) {
-  background: var(--accent-ink);
-  border-color: var(--accent-ink);
+  background: var(--primary-ink);
+  border-color: var(--primary-ink);
 }
 .v_primary:disabled {
   background: var(--fill);

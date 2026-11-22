@@ -2,12 +2,12 @@
 .empty {
   padding: var(--section-gap) 0;
   text-align: center;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .emptyTitle {
   margin: 0;
   color: var(--ink-2);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 .emptyText {
   max-width: 52ch;
@@ -26,7 +26,7 @@
   max-width: 66ch;
   margin: 0;
   color: var(--ink-2);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
   line-height: 1.55;
 }
 .lede b,
@@ -42,7 +42,7 @@
   margin: 28px 0 var(--space-2);
   padding: 0;
   list-style: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .node {
   display: flex;
@@ -84,12 +84,12 @@
   border-radius: var(--radius-full);
   background: var(--ink);
   color: var(--paper);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   font-weight: var(--weight-strong);
 }
 .step_next {
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 .step_later {
   background: var(--fill);

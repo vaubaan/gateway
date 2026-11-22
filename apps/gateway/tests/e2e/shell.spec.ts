@@ -494,12 +494,20 @@ test('the gallery shows every component in both themes', async ({ page }) => {
       ]),
     ),
   );
-  for (const pair of islands) {
-    expect(pair).toEqual([
-      ['light', 'rgb(255, 255, 255)'],
-      ['dark', 'rgb(2, 8, 23)'],
-    ]);
-  }
+  // The paper of each theme, as the browser computes the shared `--background` there.
+  const paper = await page.evaluate(() =>
+    (['light', 'dark'] as const).map((theme) => {
+      const probe = document.createElement('div');
+      probe.setAttribute('data-theme', theme);
+      probe.style.background = 'var(--background)';
+      document.body.append(probe);
+      const colour = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return [theme, colour];
+    }),
+  );
+  expect(paper[0]?.[1]).not.toBe(paper[1]?.[1]);
+  for (const pair of islands) expect(pair).toEqual(paper);
 
   // "Show details" adds the detail columns of a table, and the page remembers.
   const people = page.locator('[data-detail-scope="design:people:light"]');

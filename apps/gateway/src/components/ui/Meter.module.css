@@ -3,7 +3,7 @@
   align-items: center;
   gap: 10px;
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   vertical-align: middle;

@@ -10,7 +10,7 @@
   gap: 14px;
   padding: var(--row-y) 0;
   border-bottom: 1px solid var(--line);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 .lead {
   display: inline-flex;
@@ -32,7 +32,7 @@
   font-weight: var(--weight-regular);
 }
 .description a {
-  color: var(--accent);
+  color: var(--primary);
 }
 .aside {
   display: flex;

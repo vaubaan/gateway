@@ -59,6 +59,8 @@ import {
 vi.mock('next/navigation', () => ({ usePathname: () => '/design' }));
 
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
+/** The markup without its classes: what a test reads is the structure, not the styling. */
+const bare = (html: string) => html.replace(/ class="[^"]*"/g, '');
 
 describe('PageHeader', () => {
   it('renders the title as the one h1, the lede and the actions; the crumbs go to the path bar', () => {
@@ -308,9 +310,9 @@ describe('marks', () => {
     const html = renderToStaticMarkup(
       <WhyCells values={{ reversibility: 'costly', blast: 'account', data: 'secret' }} />,
     );
-    expect(html.match(/<dt>/g)).toHaveLength(3);
-    expect(html).toContain('<dt>Blast radius</dt><dd>whole account</dd>');
-    expect(html).toContain('<dt>Data</dt><dd>secrets</dd>');
+    expect(bare(html).match(/<dt>/g)).toHaveLength(3);
+    expect(bare(html)).toContain('<dt>Blast radius</dt><dd>whole account</dd>');
+    expect(bare(html)).toContain('<dt>Data</dt><dd>secrets</dd>');
   });
 
   it('draws a person, a machine key and a team differently, and the same person the same way', () => {
@@ -434,7 +436,7 @@ describe('PermissionRow', () => {
     const panel = /aria-controls="([^"]+)"/.exec(html)?.[1];
     expect(html).toContain(`id="${panel}"`);
     expect(html).toMatch(/<tr[^>]*hidden=""/);
-    expect(html).toContain('<dt>Undo</dt><dd>costly</dd>');
+    expect(bare(html)).toContain('<dt>Undo</dt><dd>costly</dd>');
     expect(html).toContain('href="/reference/github#risk-github.merge-protected"');
     expect(html).toContain('tools: merge_pull_request');
   });

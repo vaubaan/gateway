@@ -209,8 +209,8 @@ guide and the design system are extended, then the screen is built. Rules a comp
 ## 9. Known gaps between this guide and the interface
 
 - Until the migration of [recognise Vaubaan at a glance](../intents/recognise-vaubaan-at-a-glance.md)
-  lands, the interface keeps its former palette (amber, a sky-blue accent, rows 2 to 4 in amber and
-  red) and its hand-written components.
+  lands, the interface's components not yet rebuilt on the shared primitives keep their own style
+  sheets, which read the shared tokens through aliases of their former names.
 
 - Raw lengths remain in page style sheets and for mark dimensions.
 - The consent pages and the refusals of a forwarded request URL load nothing and repeat the tokens

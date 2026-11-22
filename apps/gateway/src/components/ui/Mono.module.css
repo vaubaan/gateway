@@ -6,9 +6,9 @@
 }
 .quiet {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .link:hover {
-  color: var(--accent);
+  color: var(--primary);
   text-decoration: underline;
 }

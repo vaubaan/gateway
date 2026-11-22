@@ -20,7 +20,7 @@
   margin: calc(-1 * var(--page-pad-top)) 0 var(--space-6);
   border-bottom: 1px solid var(--line);
   background: var(--paper);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
 }
 .group {
   display: flex;
@@ -32,7 +32,7 @@
 .groupLabel {
   padding: 0 var(--space-1) 0 0;
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .item {
   display: inline-flex;

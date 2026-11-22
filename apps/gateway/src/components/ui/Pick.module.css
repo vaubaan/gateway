@@ -20,7 +20,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   color: var(--ink);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 a.card:hover {
@@ -41,7 +41,7 @@ a.card:hover {
 }
 .description {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .unavailable {
   border-style: dashed;

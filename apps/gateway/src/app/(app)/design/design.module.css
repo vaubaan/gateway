@@ -15,7 +15,7 @@
   max-width: var(--measure);
   margin: var(--space-1) 0 var(--space-5);
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 
 .specimen {
@@ -29,12 +29,12 @@
 }
 .specimenName {
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
   font-weight: var(--weight-strong);
 }
 .specimenNote {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 /* The two themes, one under the other: a table needs the width. */
@@ -57,7 +57,7 @@
   right: 10px;
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 .line {
@@ -80,7 +80,7 @@
 .swatch {
   display: grid;
   gap: var(--space-1);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .chip {
   height: 36px;
@@ -109,7 +109,7 @@
 .typeName {
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 
 .spaces {
@@ -124,10 +124,10 @@
   gap: var(--space-1);
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .spaceBox {
-  background: var(--accent-soft);
+  background: var(--primary-soft);
   border: 1px solid var(--accent-line);
 }
 .radius {

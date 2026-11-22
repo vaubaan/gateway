@@ -5,7 +5,7 @@
   gap: 6px var(--space-4);
   max-width: var(--measure);
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .line {
   display: contents;
@@ -23,7 +23,7 @@
   font-weight: var(--weight-regular);
 }
 .allow dd a {
-  color: var(--accent);
+  color: var(--primary);
 }
 /* The one coloured line: something here needs a person. */
 .asks dt {
@@ -36,7 +36,7 @@
 .compact {
   grid-template-columns: 62px minmax(0, 1fr);
   gap: var(--space-1) var(--space-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 
 @media (max-width: 720px) {

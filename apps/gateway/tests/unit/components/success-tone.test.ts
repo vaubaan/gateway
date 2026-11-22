@@ -23,13 +23,13 @@ function ruleOf(file: string, selector: string): string {
 describe('a success is drawn in the accent, never in green', () => {
   it('the ok callout is tinted with the accent', () => {
     const rule = ruleOf('Callout.module.css', '.tone_ok');
-    expect(rule).toContain('var(--accent');
+    expect(rule).toContain('var(--primary');
     expect(rule).not.toMatch(/var\(--ok/);
   });
 
   it('the ok toast marks its check with the accent', () => {
     const rule = ruleOf('Toast.module.css', '.tone_ok .icon');
-    expect(rule).toContain('var(--accent)');
+    expect(rule).toContain('var(--primary)');
     expect(rule).not.toMatch(/var\(--ok/);
   });
 });

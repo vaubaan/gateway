@@ -3,7 +3,7 @@
   display: block;
   margin-top: var(--space-half);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
 }
 /* What is running, one click under the sentence that nothing needs the person. */
@@ -19,7 +19,7 @@
   margin-top: var(--space-2);
 }
 .setupNote a {
-  color: var(--accent);
+  color: var(--primary);
 }
 /* Trust-raise proposals, one callout each, under what waits. */
 .trustRaises {

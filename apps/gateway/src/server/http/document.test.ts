@@ -1,7 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { TOKENS } from '@vaubaan/design-tokens';
 import { describe, expect, it } from 'vitest';
 
 import { THEME_COOKIE } from '../../lib/theme';
@@ -14,31 +11,19 @@ import {
   messageDocument,
 } from './document';
 
-const TOKENS_CSS = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../../styles/tokens.css'),
-  'utf8',
-);
-
-/** The declarations of one block of the token sheet, by the selector that opens it. */
-function blockOf(selector: string): Map<string, string> {
-  const start = TOKENS_CSS.indexOf(`${selector} {`);
-  if (start < 0) throw new Error(`no block ${selector} in tokens.css`);
-  const body = TOKENS_CSS.slice(start, TOKENS_CSS.indexOf('}', start));
-  const values = new Map<string, string>();
-  for (const match of body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) {
-    values.set(match[1] ?? '', (match[2] ?? '').trim());
-  }
-  return values;
-}
+/** The shared palette, by theme: name (with `--`) to sRGB hex. */
+const SHEET = {
+  light: new Map(TOKENS.map((token) => [`--${token.name}`, token.light])),
+  dark: new Map(TOKENS.map((token) => [`--${token.name}`, token.dark])),
+};
 
 describe('the self-contained document', () => {
-  it('repeats the tokens of the interface value for value, in both themes', () => {
-    const sheet = { light: blockOf("[data-theme='light']"), dark: blockOf("[data-theme='dark']") };
+  it('repeats the shared tokens value for value, in both themes', () => {
     for (const theme of ['light', 'dark'] as const) {
       const tokens = Object.entries(DOCUMENT_TOKENS[theme]);
       expect(tokens.length).toBeGreaterThan(8);
       for (const [name, value] of tokens) {
-        expect(`${theme} ${name}: ${sheet[theme].get(name)}`).toBe(`${theme} ${name}: ${value}`);
+        expect(`${theme} ${name}: ${SHEET[theme].get(name)}`).toBe(`${theme} ${name}: ${value}`);
       }
     }
     // The two themes declare the same names: a token cannot be missing in one.

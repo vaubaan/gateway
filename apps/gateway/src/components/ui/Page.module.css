@@ -9,7 +9,7 @@
   gap: 6px;
   margin-bottom: var(--space-2);
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .crumb {
   display: inline-flex;
@@ -44,7 +44,7 @@
   margin: 0;
   font-size: var(--text-title);
   font-weight: var(--weight-strong);
-  line-height: var(--leading-tight);
+  line-height: var(--leading-heading);
   letter-spacing: var(--tracking-title);
 }
 .titleMark,
@@ -55,7 +55,7 @@
   max-width: var(--measure);
   margin: 3px 0 0;
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .actions {
   display: flex;
@@ -85,12 +85,12 @@
 .sectionTitle {
   flex: none;
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--text-body);
   font-weight: var(--weight-strong);
   white-space: nowrap;
 }
 h3.sectionTitle {
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .sectionCount {
   margin-left: 6px;
@@ -103,11 +103,11 @@ h3.sectionTitle {
   gap: var(--space-3);
   min-width: 0;
   color: var(--ink-3);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
   text-align: right;
 }
 .sectionNote a {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 /* ── Summary line ────────────────────────────────────────────────────────── */
@@ -117,14 +117,14 @@ h3.sectionTitle {
   gap: var(--space-1) 18px;
   margin: 0;
   color: var(--ink-2);
-  font-size: var(--text-base);
+  font-size: var(--text-body);
   font-variant-numeric: tabular-nums;
 }
 .summaryCentered {
   justify-content: center;
 }
 .summaryLink {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 /* ── Key / value ─────────────────────────────────────────────────────────── */
@@ -133,7 +133,7 @@ h3.sectionTitle {
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px 18px;
   margin: 0;
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .kvRow {
   display: contents;
@@ -155,18 +155,18 @@ h3.sectionTitle {
 }
 .statLabel {
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
 }
 .statValue {
   margin: 1px 0 0;
-  font-size: var(--text-base);
+  font-size: var(--text-body);
   font-weight: var(--weight-strong);
   font-variant-numeric: tabular-nums;
 }
 .statNote {
   margin-left: var(--space-1);
   color: var(--ink-3);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   font-weight: var(--weight-regular);
 }
 .stat_warn {
@@ -180,10 +180,10 @@ h3.sectionTitle {
   max-width: var(--measure);
   margin: 10px 0 0;
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-secondary);
 }
 .hint a {
-  color: var(--accent);
+  color: var(--primary);
 }
 
 /* A narrow window: the actions go under the title. */
