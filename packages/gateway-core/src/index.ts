@@ -70,12 +70,14 @@ export {
 } from './risk-gateway.ts';
 export type { CallVerdict, ResourceSetToJudge } from './risk-gateway.ts';
 export {
+  ACCOUNT_ARGUMENT,
   callAuditBase,
   CallPipeline,
   checkDoor,
   checkMissionActive,
   DoorAuthenticator,
   parseBearer,
+  splitAccountArgument,
   isUpstreamFailureError,
   isUpstreamRefusalError,
   upstreamErrorClassName,

@@ -331,7 +331,7 @@ export const refuse = {
       code: 'account-ambiguous',
       service: input.service,
       accounts: input.accounts,
-      hint: `${why} The accounts and what the mission reaches on each: ${listed}. Call again naming one resource of the account you mean (one call per account when you need several); the gateway never picks one for you.`,
+      hint: `${why} The accounts and what the mission reaches on each: ${listed}. Call again naming one resource of the account you mean, or name the account with the argument 'vaubaan_account' (its name or id), as a list, a search or a creation needs; one call per account when you need several. The gateway never picks one for you.`,
     };
   },
 

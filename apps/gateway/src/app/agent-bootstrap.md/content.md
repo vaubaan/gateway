@@ -96,6 +96,14 @@ Tool names are prefixed by service (`github__…`, `supabase__…`). Cite
 resources by the refs of your setup kit (`owner/repo`, a project ref): they
 are the only refs the mission knows.
 
+When the mission holds several accounts of one service (two GitHub
+repositories, each with its own key), the service is listed once, and its
+tools take one more optional argument, `vaubaan_account`, listing the
+accounts. A call that names a resource needs nothing more: the resource says
+the account. A call that names none (a list, a search, a creation) names the
+account with `vaubaan_account`, its name or its id; without it, the call is
+refused `account-ambiguous`. With one account, never needed.
+
 ## 4. One set of limits, however many agents or keys
 
 Sub-agents use the **same** MCP configuration and the **same** key. Every
@@ -152,18 +160,18 @@ A refusal is a JSON-RPC error (code `-32603`) whose `data` is the refusal:
 its `code`, the fields of that code and a `hint`. Read the hint, then act
 according to the code:
 
-| Code                      | What happened                                                                                                                            | What you do                                                                                                                                |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `risk-not-accepted`       | The mission does not hold a permission this call needs.                                                                                  | Do not look for another way to the same effect. Tell the human which permissions are missing (`missing_risks`).                            |
-| `budget-exhausted`        | The limit of a permission is reached for the period.                                                                                     | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop.                 |
-| `approval-required`       | The mission creator asked to be asked first for one or more permissions of the call. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait for their yes, then replay the call with **exactly** the same arguments.      |
-| `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                                       | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                                   |
-| `account-ambiguous`       | The mission holds several accounts of the call's service, and the call names no resource or resources of two of them.                    | `accounts` lists each one with its resources. Call again naming one resource of the account you mean; one call per account.                |
-| `rate-limited`            | Too many actions on a permission in a short window.                                                                                      | Wait `retry_after_seconds`, retry once. Nothing was counted against the limit.                                                             |
-| `account-unavailable`     | The account behind the call needs reconnecting.                                                                                          | Nothing you can do fixes it. Tell the human who owns the account (`owner`).                                                                |
-| `account-revoked`         | The account behind the call no longer serves this mission: removed (`final: true`) or its creator lost access (`final: false`).          | Keep using the mission's other accounts. Do not retry through that one; tell the human, who can have a mission issued for its replacement. |
-| `mission-inactive`        | The mission is expired, without an owner (`orphaned`) or stopped (`revoked`).                                                            | Stop calling with this key and report to the human.                                                                                        |
-| `wrong-credential-kind`   | The key was presented on the wrong door.                                                                                                 | A mission key only opens the execution endpoint (`/mcp`).                                                                                  |
+| Code                      | What happened                                                                                                                            | What you do                                                                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `risk-not-accepted`       | The mission does not hold a permission this call needs.                                                                                  | Do not look for another way to the same effect. Tell the human which permissions are missing (`missing_risks`).                                                        |
+| `budget-exhausted`        | The limit of a permission is reached for the period.                                                                                     | Stop that kind of action. Hand `claim_url` to the human; continue with work that does not need it. Do not retry in a loop.                                             |
+| `approval-required`       | The mission creator asked to be asked first for one or more permissions of the call. `risk_ids` lists them; one request covers the call. | Nothing was executed. Hand `approval_url` to the human, wait for their yes, then replay the call with **exactly** the same arguments.                                  |
+| `resource-not-in-mission` | The arguments cite a resource outside the mission.                                                                                       | Use one of the refs in `allowed_resources`, or ask the human to have the resource added.                                                                               |
+| `account-ambiguous`       | The mission holds several accounts of the call's service, and the call names no resource or resources of two of them.                    | `accounts` lists each one with its resources. Call again naming one resource of the account you mean, or add `vaubaan_account` (its name or id); one call per account. |
+| `rate-limited`            | Too many actions on a permission in a short window.                                                                                      | Wait `retry_after_seconds`, retry once. Nothing was counted against the limit.                                                                                         |
+| `account-unavailable`     | The account behind the call needs reconnecting.                                                                                          | Nothing you can do fixes it. Tell the human who owns the account (`owner`).                                                                                            |
+| `account-revoked`         | The account behind the call no longer serves this mission: removed (`final: true`) or its creator lost access (`final: false`).          | Keep using the mission's other accounts. Do not retry through that one; tell the human, who can have a mission issued for its replacement.                             |
+| `mission-inactive`        | The mission is expired, without an owner (`orphaned`) or stopped (`revoked`).                                                            | Stop calling with this key and report to the human.                                                                                                                    |
+| `wrong-credential-kind`   | The key was presented on the wrong door.                                                                                                 | A mission key only opens the execution endpoint (`/mcp`).                                                                                                              |
 
 **Never work around a refusal.** No other tool, no other key, no direct
 access to the service, no splitting of an action to slip under a limit.

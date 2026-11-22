@@ -15,8 +15,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   own token, go in one mission: a call runs with the account holding the resource it names, judged
   and counted in that account's sets, and its audit line names that account. `tools/list` shows the
   service once; the git remote reaches each repository at its own URL with the same key. A call
-  that names no resource, or resources of two accounts, is refused with the new code
-  `account-ambiguous`, which lists each account and its resources: the gateway never picks one.
+  that names no resource (a list, a search, a creation) names its account with the optional
+  argument `vaubaan_account`, which `tools/list` adds only then. Without it, or naming resources
+  of two accounts, the call is refused with the new code `account-ambiguous`, which lists each
+  account and its resources: the gateway never picks one.
   `vaubaan` plugin 0.5.2 drops the former rule from `preview_policy`.
 - **Roll back a plugin from its row.** Administration › Plugins offers **Roll back to x.y.z** on a
   plugin's row, to the version it ran before, behind one confirmation that names the permissions

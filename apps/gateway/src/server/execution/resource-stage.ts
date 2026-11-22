@@ -9,7 +9,10 @@
  * With several (spec §3.1, risk model §4.7 "The account of a call"), each is
  * tried as below, and the call runs with the one whose resources it names; a
  * call naming none, or resources of two accounts, is `account-ambiguous`: the
- * gateway never picks an account for the agent.
+ * gateway never picks an account for the agent. The agent may name it
+ * (`ACCOUNT_ARGUMENT`, taken out of the arguments by the door): a list, a
+ * search or a creation names no resource and needs it; a call that names a
+ * resource of another account than the one named is refused.
  *
  * The resource: the host does not know which argument of which tool carries a
  * ref — the plugin's classifier does, and it writes the ref into the slices it
@@ -34,6 +37,7 @@
  * (step 3), not the typed refusal. Either way nothing is evaluated or executed.
  */
 import {
+  ACCOUNT_ARGUMENT,
   refuse,
   type CallRequest,
   type MissionAccount,
@@ -266,16 +270,27 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
           : { ok: true, target: { account, resource } };
       };
 
-      if (candidates.length === 1) {
-        const unavailable = toolUnavailableOn(plugin, first, call.tool);
+      /** The call on one account, read against that account's resources alone. */
+      const on = async (account: MissionAccount): Promise<ResourceResolution> => {
+        const unavailable = toolUnavailableOn(plugin, account, call.tool);
         if (unavailable) return { ok: false, reason: unavailable };
-        const pool = await poolOf(first, ctx);
-        const reading = read(plugin, call, first, pool, pool);
+        const pool = await poolOf(account, ctx);
+        const reading = read(plugin, call, account, pool, pool);
         if (reading.kind === 'foreign') {
-          return notInMission(reading.ref, first, allowedOn(ctx, first));
+          return notInMission(reading.ref, account, allowedOn(ctx, account));
         }
-        return { ok: true, target: { account: first, resource: reading.resource } };
-      }
+        return { ok: true, target: { account, resource: reading.resource } };
+      };
+
+      // The account the agent named (`vaubaan_account`) is taken as named, once
+      // sure that the call names no resource of another account of the service.
+      const picked =
+        call.account === undefined
+          ? undefined
+          : pickAccount(candidates, call.account, plugin.displayName);
+      if (picked !== undefined && !picked.ok) return { ok: false, reason: picked.reason };
+      const asked = picked?.ok === true ? picked.account : undefined;
+      if (candidates.length === 1) return on(asked ?? first);
 
       const pools = await Promise.all(candidates.map((account) => poolOf(account, ctx)));
       const shown: Pool = {
@@ -286,6 +301,22 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
         account,
         reading: read(plugin, call, account, pools[index] ?? { allowed: [], known: [] }, shown),
       }));
+      if (asked !== undefined) {
+        const elsewhere = readings.find(
+          ({ account, reading }) => account.id !== asked.id && reading.kind !== 'none',
+        );
+        if (elsewhere === undefined) return on(asked);
+        const ref =
+          elsewhere.reading.kind === 'foreign'
+            ? elsewhere.reading.ref
+            : elsewhere.reading.kind === 'named'
+              ? (elsewhere.reading.resource?.ref ?? '')
+              : '';
+        return {
+          ok: false,
+          reason: `the call names '${ref}', held by the ${plugin.displayName} account '${elsewhere.account.display_name}', while ${ACCOUNT_ARGUMENT} names '${asked.display_name}'. One call runs with one account: drop ${ACCOUNT_ARGUMENT}, or name the account that holds the resource.`,
+        };
+      }
       const named = readings.flatMap(({ account, reading }) =>
         reading.kind === 'named' ? [{ account, resource: reading.resource }] : [],
       );
@@ -325,6 +356,31 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
         }),
       };
     },
+  };
+}
+
+/**
+ * The account `ACCOUNT_ARGUMENT` names among the service's: by id, else by name
+ * (case aside). A name two accounts share names neither.
+ */
+function pickAccount(
+  candidates: readonly MissionAccount[],
+  named: string,
+  serviceLabel: string,
+): { ok: true; account: MissionAccount } | { ok: false; reason: string } {
+  const byId = candidates.find((a) => a.id === named);
+  if (byId !== undefined) return { ok: true, account: byId };
+  const lower = named.toLowerCase();
+  const byName = candidates.filter((a) => a.display_name.toLowerCase() === lower);
+  const [one] = byName;
+  if (one !== undefined && byName.length === 1) return { ok: true, account: one };
+  const listed = candidates.map((a) => `'${a.display_name}' (${a.id})`).join(', ');
+  return {
+    ok: false,
+    reason:
+      byName.length > 1
+        ? `${ACCOUNT_ARGUMENT} '${named}' names several ${serviceLabel} accounts of this mission; name one by its id: ${listed}.`
+        : `${ACCOUNT_ARGUMENT} '${named}' names no ${serviceLabel} account of this mission; its ${serviceLabel} accounts: ${listed}.`,
   };
 }
 

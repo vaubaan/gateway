@@ -24,7 +24,7 @@ status: draft
 > can only read (§0 Resource).
 >
 > 2026-11-22 — a mission may carry several accounts of one service; a call runs with the account
-> holding the resource it names (§3.1, §4.1; ADR
+> holding the resource it names, or the one the agent names with `vaubaan_account` (§3.1, §4.1; ADR
 > [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md),
 > amendment 2026-11-22).
 
@@ -376,9 +376,9 @@ Executor(s)                   same token, same budget, optional agent label
 - **The owner needs no share** to issue missions on their account.
 - **Several accounts of one service in a mission**, each checked against the creator's authority
   there, each with its own resources, sets and budget. A call runs with **the account holding the
-  resource it names**; a call that names none while two accounts of its service could serve it is
-  refused `account-ambiguous` (§4.1), never sent to one of them by default; so is a call naming
-  resources of two of them.
+  resource it names**, or the account the agent names (`vaubaan_account`, §4.1); a call that names
+  neither while two accounts of its service could serve it is refused `account-ambiguous` (§4.1),
+  never sent to one of them by default; so is a call naming resources of two of them.
 - **Resource sets.** Within one account, a mission can give different resources different
   policies and budgets. Each resource belongs to one set. A call that cannot be placed in one set is
   judged by the strictest of its candidate sets (risk model §4.7).
@@ -520,11 +520,14 @@ The execution MCP endpoint (`Authorization: Bearer <mission token>`) and, for a 
 agents speak git, the git remote of §4.1 ter: same token, admission, decision and audit.
 
 - **Discovery** (`tools/list`): the tools of the mission's services, a lost account's excepted,
-  listed once per service whatever the number of its accounts in the mission,
+  listed once per service whatever the number of its accounts in the mission (with several, each
+  tool takes one more optional argument, `vaubaan_account`, listing them),
   filtered per service, not per tool: a listed tool may still be refused `risk-not-accepted`
   (§11.2).
-- **Call** (`tools/call`): the account that serves it (the one holding the resource the call
-  names; the only one of its service otherwise), classification by the plugin, intersection with
+- **Call** (`tools/call`): the account that serves it (the one the agent names with
+  `vaubaan_account`, by id or name, taken out of the arguments before any stage, so no plugin sees
+  it; else the one holding the resource the call names; else the only one of its service). A call
+  that names an account and a resource of another is refused. Then classification by the plugin, intersection with
   the catalog, `risks_touched ⊆ accepted_risks`, budget check, upstream credential mint, forward, audit.
   Arguments that are not JSON values (a non-finite number…) are refused before any stage, audited,
   no budget spent. The audit copy of a structural refusal reason replaces argument values with
@@ -539,9 +542,9 @@ agents speak git, the git remote of §4.1 ter: same token, admission, decision a
     (of every account of that service).
   - `account-ambiguous`: several accounts of the call's service could serve it, because the call
     names no resource or names resources of two of them (risk model §4.7): the service, each
-    candidate account (id, name) with its resources; the hint says to name the resource. A tool
-    that can name no resource (listing what the service holds) is refused so too: the refusal
-    is the listing, and the catalog gives the same.
+    candidate account (id, name) with its resources; the hint says to name a resource, or the
+    account with `vaubaan_account`, which a tool that can name no resource (a list, a search, a
+    creation) needs.
   - `rate-limited`: `RiskId`, limit, delay before retry.
   - `account-unavailable`: the account is `expired`; its name and the owner to contact.
   - `account-revoked`: the account no longer serves this mission: account id and name,

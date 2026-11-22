@@ -3,8 +3,8 @@
  * "The account of a call"; ADR one-place-to-authorize-services-token-first,
  * amendment 2026-11-22): issued as any other, `tools/list` shows the service
  * once, a call runs with the account holding the resource it names — its key,
- * its resources, its audit line — and a call naming none is `account-ambiguous`,
- * with nothing reaching the plugin.
+ * its resources, its audit line — or with the one `vaubaan_account` names, and
+ * a call naming neither is `account-ambiguous`, with nothing reaching the plugin.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -67,6 +67,22 @@ describe('a mission with two accounts of one service', () => {
     const names = ((body.result?.tools ?? []) as { name: string }[]).map((t) => t.name);
     expect(names).toContain('depot__read_item');
     expect(new Set(names).size).toBe(names.length);
+    const tools = (body.result?.tools ?? []) as {
+      name: string;
+      inputSchema: { properties?: Record<string, unknown> };
+    }[];
+    const read = tools.find((t) => t.name === 'depot__read_item');
+    expect(read?.inputSchema.properties).toHaveProperty('vaubaan_account');
+  });
+
+  it('runs a call naming no resource on the account vaubaan_account names, never passing it on', async () => {
+    const body = await instance.call(issued, 'depot__read_item', {
+      vaubaan_account: 'Depot second',
+    });
+    expect(body.error).toBeUndefined();
+    const [run] = instance.depot.calls;
+    expect(run?.ctx.credential).toEqual(depotSecret(SECOND_KEY));
+    expect(run?.args).not.toHaveProperty('vaubaan_account');
   });
 
   it('runs each call with the account holding the resource it names', async () => {

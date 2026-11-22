@@ -372,6 +372,51 @@ describe('several accounts of one service in a mission', () => {
     expect(resolved).toMatchObject({ ok: true, target: { account: { id: 'c-b' } } });
   });
 
+  it('gives each tool the optional vaubaan_account argument, only with several accounts', () => {
+    for (const tool of callableTools(two, registry)) {
+      const property = tool.inputSchema.properties?.['vaubaan_account'] as { description: string };
+      expect(property.description).toContain("'Depot B' (c-b)");
+      expect(tool.inputSchema.required ?? []).not.toContain('vaubaan_account');
+    }
+    for (const tool of callableTools(context([account('c-a', 'Depot A')]), registry)) {
+      expect(tool.inputSchema.properties ?? {}).not.toHaveProperty('vaubaan_account');
+    }
+  });
+
+  it('runs a call naming no resource on the account named by vaubaan_account, by id or by name', async () => {
+    const byName = await stage.resolve(two, { ...call('read_item'), account: 'depot b' });
+    expect(byName).toMatchObject({
+      ok: true,
+      target: { account: { id: 'c-b' }, resource: { ref: 'beta' } },
+    });
+    const byId = await stage.resolve(two, { ...call('whoami'), account: 'c-a' });
+    expect(byId).toMatchObject({ ok: true, target: { account: { id: 'c-a' } } });
+  });
+
+  it('refuses a call naming a resource of another account than the one vaubaan_account names', async () => {
+    const refused = await stage.resolve(two, {
+      ...call('read_item', { space: 'alpha' }),
+      account: 'Depot B',
+    });
+    expect(refused).toMatchObject({ ok: false });
+    expect((refused as { reason: string }).reason).toContain(
+      "names 'alpha', held by the Depot account 'Depot A'",
+    );
+  });
+
+  it('refuses a vaubaan_account that names no account of the service, listing them', async () => {
+    for (const ctx of [two, context([account('c-a', 'Depot A')])]) {
+      const refused = await stage.resolve(ctx, { ...call('read_item'), account: 'Depot Z' });
+      expect(refused).toMatchObject({ ok: false });
+      expect((refused as { reason: string }).reason).toContain("'Depot A' (c-a)");
+    }
+    const one = context([account('c-a', 'Depot A')]);
+    expect(await stage.resolve(one, { ...call('read_item'), account: 'Depot A' })).toMatchObject({
+      ok: true,
+      target: { account: { id: 'c-a' }, resource: { ref: 'alpha' } },
+    });
+  });
+
   it('keeps the single account default: a call naming nothing reaches its only resource', async () => {
     const one = context([account('c-a', 'Depot A')]);
     const resolved = await stage.resolve(one, call('read_item'));

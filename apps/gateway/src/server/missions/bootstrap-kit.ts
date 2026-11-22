@@ -139,7 +139,7 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
   'resource-not-in-mission':
     'the arguments cite a resource outside the mission. Use one of the refs listed above (`allowed_resources`), or ask the human to have the resource added.',
   'account-ambiguous':
-    'the mission holds several accounts of this service and the call does not say which one: it names no resource, or resources of two accounts. `accounts` lists each one with the resources the mission reaches on it. Call again naming one resource of the account you mean (one call per account when you need several).',
+    'the mission holds several accounts of this service and the call does not say which one: it names no resource, or resources of two accounts. `accounts` lists each one with the resources the mission reaches on it. Call again naming one resource of the account you mean, or add the argument `vaubaan_account` with its name or id (a list, a search or a creation names no resource); one call per account when you need several.',
   'rate-limited':
     'too many actions on that permission in a short window. Wait `retry_after_seconds`, then retry once; nothing was counted against the limit.',
   'account-unavailable':

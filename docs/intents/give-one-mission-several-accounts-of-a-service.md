@@ -26,6 +26,13 @@ requires: mission, account, resource
 anchors: apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/src/server/git/scope.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 
+## Name the account of a call that names no resource
+
+status: implemented
+requires: mission, account
+anchors: packages/gateway-core/src/pipeline.ts, apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
+spec: ../spec/vaubaan-gateway.md#41-execution-surface
+
 ## Let a tool that names no resource answer every account
 
 status: proposed

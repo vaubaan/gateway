@@ -20,7 +20,13 @@
  * Xavier's token on mission X" (spec §0 "Mission token": the holder is
  * authenticated).
  */
-import { tokenHolderLabel, type AccountLoss, type MissionContext } from '@vaubaan/gateway-core';
+import {
+  ACCOUNT_ARGUMENT,
+  tokenHolderLabel,
+  type AccountLoss,
+  type MissionAccount,
+  type MissionContext,
+} from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { unavailableReason } from './resource-stage';
@@ -65,13 +71,34 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
     // a tool is listed when one account of the service that still serves the
     // mission can run it (the resource stage refuses it on the others).
     const accounts = ctx.accounts.filter((c) => c.service === plugin.id && !c.lost);
-    tools.push(
-      ...plugin.tools.filter((t) =>
-        accounts.some((account) => unavailableReason(plugin, account, t.name) === null),
-      ),
+    const listed = plugin.tools.filter((t) =>
+      accounts.some((account) => unavailableReason(plugin, account, t.name) === null),
     );
+    tools.push(...(accounts.length > 1 ? listed.map(withAccountArgument(accounts)) : listed));
   }
   return tools;
+}
+
+/**
+ * With several accounts of the service, each tool takes `ACCOUNT_ARGUMENT`: the
+ * way to name the account of a call that names no resource of one of them (a
+ * list, a search, a creation). Optional: a call naming a resource needs none.
+ */
+function withAccountArgument(
+  accounts: readonly Pick<MissionAccount, 'id' | 'display_name'>[],
+): (tool: McpToolDeclaration) => McpToolDeclaration {
+  const names = accounts.map((a) => `'${a.display_name}' (${a.id})`).join(', ');
+  const property = {
+    type: 'string',
+    description: `The account of this call, by name or id: ${names}. Needed only when the call names no resource of one of them; otherwise the resource it names says the account.`,
+  };
+  return (tool) => ({
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: { ...tool.inputSchema.properties, [ACCOUNT_ARGUMENT]: property },
+    },
+  });
 }
 
 export interface CatalogTool {

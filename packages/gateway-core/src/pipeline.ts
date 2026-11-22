@@ -239,9 +239,35 @@ export interface ClientOrigin {
 export const CALL_CHANNELS = ['mcp', 'git'] as const;
 export type CallChannel = (typeof CALL_CHANNELS)[number];
 
+/**
+ * The argument by which an agent names the account of a call (spec §4.1
+ * "Call"): needed only when the mission holds several accounts of the tool's
+ * service and the call names no resource of one of them (a list, a search, a
+ * creation). The door takes it out of the arguments (`splitAccountArgument`):
+ * no plugin ever sees it.
+ */
+export const ACCOUNT_ARGUMENT = 'vaubaan_account';
+
+/** The arguments without `ACCOUNT_ARGUMENT`, and its value when it is a non-empty string. */
+export function splitAccountArgument(args: Record<string, unknown>): {
+  readonly args: Record<string, unknown>;
+  readonly account?: string;
+} {
+  if (!Object.hasOwn(args, ACCOUNT_ARGUMENT)) return { args };
+  const { [ACCOUNT_ARGUMENT]: value, ...rest } = args;
+  return typeof value === 'string' && value.trim() !== ''
+    ? { args: rest, account: value.trim() }
+    : { args: rest };
+}
+
 export interface CallRequest {
   readonly tool: string;
   readonly args: Record<string, unknown>;
+  /**
+   * The account the agent named (`ACCOUNT_ARGUMENT`): its id or its name.
+   * Absent: the resource stage finds it by the resource the call names.
+   */
+  readonly account?: string;
   /** The door the call came through ; absent means `mcp`. */
   readonly channel?: CallChannel;
   /** Optional free-form attribution (spec §0 "Mission token"). */

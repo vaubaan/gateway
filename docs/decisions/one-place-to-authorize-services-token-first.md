@@ -242,9 +242,11 @@ of the product but of the routing: the gateway found a call's account by its ser
 The owner (Renaud Pelissier) lets **a mission carry several accounts of one service**. A call runs
 with the account holding the resource it names; the gateway never picks one for the agent: a call
 that names no resource, or resources of two accounts, is refused `account-ambiguous`, naming the
-candidate accounts and their resources. Tools are listed once per service; a tool that can name no
-resource is refused the same way, the refusal being the listing. The git remote needs nothing: its
-path names the repository.
+candidate accounts and their resources. The agent may name the account instead, with the optional
+argument `vaubaan_account` (its id or name), which the gateway takes out before the plugin: a tool
+that can name no resource (a list, a search, a creation) needs it, and without it would never run.
+Tools are listed once per service; with several accounts, each takes that argument. The git remote
+needs nothing: its path names the repository.
 
 ### Consequences
 
@@ -253,6 +255,8 @@ path names the repository.
 - Each account keeps its own resources, sets and counters; nothing is shared between two accounts
   of one service.
 - A new refusal code, `account-ambiguous`, documented for agents like every other.
+- `vaubaan_account` is reserved: a plugin tool never declares an argument of that name, since the
+  door takes it out of every call.
 - The store keys a mission's policy lines, counters and gate openings by set, whose account is
   known; what found an account by its service (the resource stage, the attribution of old lines by
   the risk's service prefix) finds it by resource.
@@ -271,8 +275,8 @@ account is reconnected; an agent's instructions would name accounts instead of r
 #### A tool that names no resource runs on every account, results merged
 
 Each account would be judged, charged, gated and audited apart for one call, with a partial answer
-when one of them waits for an approval. The refusal already names every account's resources; the
-merge stays a proposed intent.
+when one of them waits for an approval, and a creation still needs one account. `vaubaan_account`
+covers every such tool with one call per account; the merge stays a proposed intent.
 
 #### The first account of the service by default
 

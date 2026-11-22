@@ -71,6 +71,7 @@ import {
   checkMissionActive,
   refusalToRpcError,
   rpcError,
+  splitAccountArgument,
   tokenHolderLabel,
   type CallPipeline,
   type CallRequest,
@@ -357,10 +358,13 @@ export class ExecutionDoor {
         service !== null && this.deps.callGate
           ? await this.deps.callGate.enter(service)
           : () => undefined;
+      // The account the agent named, if any, never reaches the plugin (spec §4.1 "Call").
+      const { args: callArgs, account } = splitAccountArgument(args ?? {});
       try {
         const outcome = await this.deps.pipeline.execute(ctx, {
           tool: name,
-          args: args ?? {},
+          args: callArgs,
+          ...(account !== undefined ? { account } : {}),
           agent_label: this.agentLabel(scope, meta),
           client: scope.client,
           ...(onPart ? { onPart } : {}),
@@ -386,7 +390,7 @@ export class ExecutionDoor {
               accountId: outcome.audit.account_id,
               resourceSetIds: outcome.audit.resource_set_ids ?? [],
               result: outcome.result,
-              args: args ?? {},
+              args: callArgs,
             });
             // What the plugin returned (`McpToolResult`), forwarded as is.
             return outcome.result as CallToolResult;
