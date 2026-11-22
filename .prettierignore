@@ -32,3 +32,6 @@ packages/design-tokens/theme.css
 
 # Written by apps/website/scripts/drawing-facts.ts (JSON.stringify), read by drawings/gen.py.
 apps/website/drawings/facts.json
+
+# Research pages saved byte for byte from their published artifacts.
+docs/research/*.html

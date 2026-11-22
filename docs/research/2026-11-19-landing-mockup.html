@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vaubaan — let your agent work alone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#ffffff;color:#1b1c1e;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,"Noto Sans",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#2448b0}a:hover{color:#1b3a8f}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,"Liberation Mono",Consolas,monospace}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;gap:10px;min-height:48px;padding:0 22px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;box-sizing:border-box;border:1px solid transparent;cursor:pointer;font-family:inherit}
+.btn:focus-visible,.tab:focus-visible,.seg:focus-visible{outline:2px solid #2f55c7;outline-offset:2px}
+.tab,.seg{font-family:inherit;cursor:pointer}
+.navlinks a{color:#4f5156;text-decoration:none}
+.navlinks a:hover{color:#1b1c1e}
+@media (max-width:720px){.navlinks{display:none !important}.hero-h{font-size:40px !important}.sec-h{font-size:30px !important}}
+</style>
+</helmet>
+
+<div style="background:#ffffff">
+
+<!-- ========== NAV ========== -->
+<header style="border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:flex;align-items:center;justify-content:space-between;gap:24px;height:68px">
+  <a href="#top" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#1b1c1e">
+    <svg width="28" height="28" viewBox="0 0 256 256" aria-hidden="true"><rect width="256" height="256" rx="56" fill="#1b1c1e"></rect><path d="M56 64 L96 64 L128 168 L160 64 L200 64 L144 200 L112 200 Z" fill="#ffffff"></path></svg>
+    <span style="font-weight:700;font-size:18px;letter-spacing:-0.01em">Vaubaan</span>
+  </a>
+  <nav class="navlinks" style="display:flex;gap:28px;font-size:15px" aria-label="Main">
+    <a href="#how">How it works</a>
+    <a href="#team">Teams</a>
+    <a href="#services">Services</a>
+    <a href="#security">Security</a>
+    <a href="https://vaubaan.com/docs">Docs</a>
+    <a href="https://github.com/vaubaan/gateway">GitHub</a>
+  </nav>
+  <a class="btn" href="#install" style="background:#1b1c1e;color:#ffffff;min-height:40px;padding:0 16px;font-size:14px">Download</a>
+</div>
+</header>
+
+<!-- ========== HERO ========== -->
+<section id="top" style="position:relative;overflow:hidden;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:56px;align-items:center;padding-top:88px;padding-bottom:96px">
+
+  <div style="display:flex;flex-direction:column;gap:28px;min-width:0">
+    <p style="margin:0;font-size:14px;color:#4f5156;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="display:inline-block;padding:3px 10px;border:1px solid #d2d1cc;border-radius:999px;font-size:13px">Pre-release</span>
+      Open source, free, runs on your computer
+    </p>
+    <h1 class="hero-h" style="margin:0;font-size:60px;line-height:1.04;letter-spacing:-0.035em;font-weight:700;text-wrap:balance">Let your agent work alone.<br><span style="color:#2f55c7">It stops where you said.</span></h1>
+    <p style="margin:0;font-size:20px;line-height:1.5;color:#3a3c40;max-width:34em">Vaubaan keeps your GitHub, Supabase and Vercel credentials. Your coding agent gets a mission instead: what it may touch, how many times, and what it must ask you first.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <a class="btn" href="#install" style="background:#2f55c7;color:#ffffff">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M5 21h14"></path></svg>
+        Download for macOS
+      </a>
+      <a class="btn" href="#install" style="background:#ffffff;color:#1b1c1e;border-color:#d2d1cc">Windows</a>
+      <a class="btn" href="#install" style="background:#ffffff;color:#1b1c1e;border-color:#d2d1cc">Docker</a>
+    </div>
+    <p style="margin:0;font-size:14px;color:#6a6d74">No account to create. Nothing leaves your machine but the calls you allow.</p>
+  </div>
+
+  <!-- the moment -->
+  <div style="position:relative;min-width:0">
+    <svg viewBox="0 0 600 560" aria-hidden="true" style="position:absolute;inset:-40px -40px auto auto;width:640px;max-width:none;opacity:1;pointer-events:none">
+      <polygon points="300,20 377,148 421,180 566,213 468,326 451,378 465,527 327,468 273,468 135,527 149,378 132,326 34,213 179,180 223,148" fill="none" stroke="#e6e5e1" stroke-width="1.5"></polygon>
+      <polygon points="300,60 365,171 403,198 528,226 443,322 429,366 441,494 323,443 277,443 159,494 171,366 157,322 72,226 197,198 235,171" fill="none" stroke="#efeeea" stroke-width="1"></polygon>
+    </svg>
+
+    <div style="position:relative;background:#16181b;color:#e8e9ea;border-radius:12px;box-shadow:0 24px 60px rgba(20,22,26,0.18);overflow:hidden;max-width:560px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #2a2d31;font-size:13px;color:#a3a7ad">
+        <span style="display:flex;gap:6px" aria-hidden="true"><i style="width:10px;height:10px;border-radius:50%;background:#3a3d42;display:block"></i><i style="width:10px;height:10px;border-radius:50%;background:#3a3d42;display:block"></i><i style="width:10px;height:10px;border-radius:50%;background:#3a3d42;display:block"></i></span>
+        <span>Mission “Rate limiter for the API” · Claude Code</span>
+        <span></span>
+      </div>
+      <div class="mono" style="padding:18px 18px 8px;font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;gap:10px">
+        <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:02</span><span style="color:#7fb0ff">✓</span><span>read <span style="color:#a3a7ad">acme/api</span> · 14 files</span></div>
+        <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:31</span><span style="color:#7fb0ff">✓</span><span>push <span style="color:#a3a7ad">feature/rate-limit</span></span></div>
+        <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:33</span><span style="color:#7fb0ff">✓</span><span>apply migration on <span style="color:#a3a7ad">staging</span></span></div>
+        <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:34</span><span style="color:#7fb0ff">✓</span><span>open pull request <span style="color:#a3a7ad">#142</span></span></div>
+        <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:36</span><span style="color:#ff9b8a">✕</span><span>apply migration on <span style="color:#a3a7ad">production</span><br><span style="color:#ff9b8a">resource-not-in-mission</span></span></div>
+        <sc-if value="{{notApproved}}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:37</span><span style="color:#f2b45a">◆</span><span>merge <span style="color:#a3a7ad">#142</span> into <span style="color:#a3a7ad">main</span><br><span style="color:#f2b45a">approval-required · waiting for you</span></span></div>
+        </sc-if>
+        <sc-if value="{{approved}}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:37</span><span style="color:#f2b45a">◆</span><span style="color:#a3a7ad">merge #142 into main · asked you</span></div>
+          <div style="display:grid;grid-template-columns:44px 18px 1fr;gap:8px"><span style="color:#7c8189">10:41</span><span style="color:#7fb0ff">✓</span><span>merge <span style="color:#a3a7ad">#142</span> into <span style="color:#a3a7ad">main</span> · <span style="color:#7fb0ff">approved by you</span></span></div>
+        </sc-if>
+      </div>
+      <div style="padding:10px 18px 16px;font-size:12.5px;color:#7c8189;border-top:1px solid #2a2d31;margin-top:10px">Every line is in your Activity: who called, what it needed, what was decided.</div>
+    </div>
+
+    <!-- the request page, on the phone -->
+    <div style="position:relative;margin:-56px 0 0 auto;width:268px;max-width:80%;background:#ffffff;border:1px solid #d2d1cc;border-radius:22px;box-shadow:0 18px 44px rgba(20,22,26,0.16);padding:18px 18px 16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#6a6d74"><span>Waiting for you</span><span>10:37</span></div>
+      <div style="font-size:16px;font-weight:600;line-height:1.3">Merge pull request #142 into main?</div>
+      <div style="font-size:13px;color:#4f5156;line-height:1.45">acme/api · asked by Claude Code on “Rate limiter for the API”</div>
+      <div class="mono" style="font-size:11.5px;background:#f3f3f0;border-radius:6px;padding:8px 10px;color:#3a3c40;line-height:1.5">github.merge-protected<br>merge_method: squash</div>
+      <sc-if value="{{notApproved}}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" onClick="{{approve}}" style="flex:1;justify-content:center;min-height:44px;background:#2f55c7;color:#ffffff;font-size:15px;padding:0 12px">Approve</button>
+          <button type="button" class="btn" style="flex:1;justify-content:center;min-height:44px;background:#ffffff;color:#1b1c1e;border-color:#d2d1cc;font-size:15px;padding:0 12px">Refuse</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{approved}}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px">
+          <span style="font-size:14px;color:#1b1c1e;font-weight:600">Approved. The agent replays the call.</span>
+          <button type="button" onClick="{{reset}}" style="background:none;border:0;color:#2448b0;font-size:13px;cursor:pointer;font-family:inherit;padding:8px">Again</button>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ========== THE MISSION ========== -->
+<section id="how" style="padding:104px 0;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:64px;align-items:start">
+  <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+    <p style="margin:0;font-size:14px;font-weight:600;color:#2f55c7">The mission</p>
+    <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance">You write what it may do. Not a token that can do everything.</h2>
+    <p style="margin:0;font-size:18px;line-height:1.6;color:#3a3c40;max-width:32em">A token pasted into an agent can do anything it allows, for as long as it lives. A mission names each permission from the service’s catalog, gives it a limit, and marks the few actions that wait for your yes.</p>
+    <div style="display:flex;flex-direction:column;gap:18px;margin-top:6px">
+      <div style="display:grid;grid-template-columns:28px 1fr;gap:12px"><span style="font-weight:700;color:#2f55c7">1</span><p style="margin:0;font-size:16px;line-height:1.55"><b>Named, never “all”.</b> <span style="color:#4f5156">Pushing to a feature branch and merging into main are two different permissions.</span></p></div>
+      <div style="display:grid;grid-template-columns:28px 1fr;gap:12px"><span style="font-weight:700;color:#2f55c7">2</span><p style="margin:0;font-size:16px;line-height:1.55"><b>Counted.</b> <span style="color:#4f5156">A looping agent hits its own limit and stops, with a link where you give more.</span></p></div>
+      <div style="display:grid;grid-template-columns:28px 1fr;gap:12px"><span style="font-weight:700;color:#2f55c7">3</span><p style="margin:0;font-size:16px;line-height:1.55"><b>Asked.</b> <span style="color:#4f5156">What cannot be undone waits for you, with the exact arguments in front of you.</span></p></div>
+    </div>
+  </div>
+
+  <div style="border:1px solid #d2d1cc;border-radius:12px;background:#ffffff;overflow:hidden;min-width:0">
+    <div style="padding:18px 20px;border-bottom:1px solid #e6e5e1;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <span style="font-weight:600;font-size:16px">Rate limiter for the API</span>
+        <span style="font-size:13px;color:#6a6d74">Example mission · per day</span>
+      </div>
+      <div role="group" aria-label="Trust level" style="display:flex;background:#f3f3f0;border-radius:8px;padding:3px;gap:3px">
+        <sc-for list="{{levels}}" as="lv" hint-placeholder-count="3">
+          <button type="button" class="seg" onClick="{{lv.pick}}" aria-pressed="{{lv.pressed}}" style="{{lv.style}}">{{lv.label}}</button>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:13px;color:#4f5156">{{levelNote}}</p>
+    </div>
+
+    <div style="padding:6px 20px 4px;font-size:13px;color:#6a6d74;display:flex;justify-content:space-between;border-bottom:1px solid #efeeea;padding-top:14px;padding-bottom:10px"><span style="font-weight:600;color:#1b1c1e">GitHub · acme/api</span><span>Read, Propose</span></div>
+    <sc-for list="{{github}}" as="row" hint-placeholder-count="5">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;padding:11px 20px;border-bottom:1px solid #efeeea;align-items:center">
+        <div style="min-width:0"><div style="font-size:15px">{{row.label}}</div><div class="mono" style="font-size:12px;color:#6a6d74">{{row.id}}</div></div>
+        <div style="{{row.badgeStyle}}">{{row.verdict}}</div>
+      </div>
+    </sc-for>
+    <div style="padding:14px 20px 10px;font-size:13px;color:#6a6d74;display:flex;justify-content:space-between;border-bottom:1px solid #efeeea"><span style="font-weight:600;color:#1b1c1e">Supabase · staging</span><span>Read, Change</span></div>
+    <sc-for list="{{supabase}}" as="row" hint-placeholder-count="2">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;padding:11px 20px;border-bottom:1px solid #efeeea;align-items:center">
+        <div style="min-width:0"><div style="font-size:15px">{{row.label}}</div><div class="mono" style="font-size:12px;color:#6a6d74">{{row.id}}</div></div>
+        <div style="{{row.badgeStyle}}">{{row.verdict}}</div>
+      </div>
+    </sc-for>
+    <div style="padding:14px 20px 18px;font-size:14px;color:#6a6d74;display:flex;flex-direction:column;gap:4px">
+      <span>Supabase · production: <b style="color:#1b1c1e;font-weight:600">not in this mission</b></span>
+      <span>Delete a repository, change branch protection: <b style="color:#1b1c1e;font-weight:600">not in this mission</b></span>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ========== FOUR STEPS ========== -->
+<section style="padding:104px 0;background:#f6f6f4;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:flex;flex-direction:column;gap:48px">
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:720px">
+    <p style="margin:0;font-size:14px;font-weight:600;color:#2f55c7">On your computer</p>
+    <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance">From download to your agent’s first call, without writing code.</h2>
+  </div>
+  <ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:20px">
+    <li style="background:#ffffff;border:1px solid #e6e5e1;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+      <span class="mono" style="font-size:13px;color:#6a6d74">1</span>
+      <h3 style="margin:0;font-size:19px;letter-spacing:-0.01em">Install Vaubaan</h3>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">A Mac or Windows app. It opens in your browser on your own computer.</p>
+    </li>
+    <li style="background:#ffffff;border:1px solid #e6e5e1;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+      <span class="mono" style="font-size:13px;color:#6a6d74">2</span>
+      <h3 style="margin:0;font-size:19px;letter-spacing:-0.01em">Connect GitHub</h3>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Paste a token you make at GitHub; a guide shows where. It is encrypted here and never given to the agent.</p>
+    </li>
+    <li style="background:#ffffff;border:1px solid #e6e5e1;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+      <span class="mono" style="font-size:13px;color:#6a6d74">3</span>
+      <h3 style="margin:0;font-size:19px;letter-spacing:-0.01em">Tick what it may do</h3>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Read, Propose, Ship, each at a trust level. Vaubaan writes every permission and limit; adjust any of them.</p>
+    </li>
+    <li style="background:#ffffff;border:1px solid #e6e5e1;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+      <span class="mono" style="font-size:13px;color:#6a6d74">4</span>
+      <h3 style="margin:0;font-size:19px;letter-spacing:-0.01em">Give your agent its key</h3>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">One button adds the mission to Claude, Cursor or any MCP client. Stop it or replace the key whenever you want.</p>
+    </li>
+  </ol>
+  <p style="margin:0;font-size:15px;color:#4f5156">Rather look first? <a href="#install">Open the demo</a>: seeded accounts and missions, simulated services, nothing to connect.</p>
+</div>
+</section>
+
+<!-- ========== TEAM ========== -->
+<section id="team" style="padding:104px 0;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:64px;align-items:center">
+  <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+    <p style="margin:0;font-size:14px;font-weight:600;color:#2f55c7">Then your team</p>
+    <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance">Same missions, on a server your team signs in to.</h2>
+    <p style="margin:0;font-size:18px;line-height:1.6;color:#3a3c40;max-width:32em">Run the same software with Docker on your network, behind your identity provider. Accounts are connected once and shared permission by permission; nobody hands a token to anybody.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:28px 32px;min-width:0">
+    <div style="display:flex;flex-direction:column;gap:6px;border-top:2px solid #1b1c1e;padding-top:14px"><h3 style="margin:0;font-size:17px">Give access, not tokens</h3><p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">The owner of the GitHub account gives Bob the permissions he may use in his missions. Never more than the owner holds.</p></div>
+    <div style="display:flex;flex-direction:column;gap:6px;border-top:2px solid #1b1c1e;padding-top:14px"><h3 style="margin:0;font-size:17px">One key per person</h3><p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Teammates on a mission make their own key. Every call carries a name; a person who leaves loses theirs at once.</p></div>
+    <div style="display:flex;flex-direction:column;gap:6px;border-top:2px solid #1b1c1e;padding-top:14px"><h3 style="margin:0;font-size:17px">Yes from your phone</h3><p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Install the interface from the browser; a request notifies you and opens on the page where you answer.</p></div>
+    <div style="display:flex;flex-direction:column;gap:6px;border-top:2px solid #1b1c1e;padding-top:14px"><h3 style="margin:0;font-size:17px">Who did what</h3><p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Activity shows every call, allowed or refused, by mission, key holder and agent.</p></div>
+  </div>
+</div>
+</section>
+
+<!-- ========== SERVICES ========== -->
+<section id="services" style="padding:104px 0;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:flex;flex-direction:column;gap:36px">
+  <div style="display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap">
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:680px">
+      <p style="margin:0;font-size:14px;font-weight:600;color:#2f55c7">Services</p>
+      <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance">Twenty services, each with its permissions written out.</h2>
+    </div>
+    <a href="https://vaubaan.com/plugins" style="font-size:16px;font-weight:600;text-decoration:none">Read every permission →</a>
+  </div>
+  <ul style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px">
+    <sc-for list="{{services}}" as="s" hint-placeholder-count="20">
+      <li style="padding:10px 16px;border:1px solid #e6e5e1;border-radius:999px;font-size:15px;background:#ffffff">{{s}}</li>
+    </sc-for>
+  </ul>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 32px;align-items:center;background:#f6f6f4;border-radius:12px;padding:24px 28px">
+    <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <h3 style="margin:0;font-size:18px">Your own service is missing?</h3>
+      <p style="margin:0;font-size:15px;line-height:1.55;color:#4f5156">Write its plugin with your coding agent from the kit on npm. Keep it private, signed with your company’s key, or submit it to the public catalog.</p>
+    </div>
+    <a class="btn" href="https://vaubaan.com/docs" style="background:#ffffff;color:#1b1c1e;border-color:#d2d1cc">Write a plugin</a>
+  </div>
+</div>
+</section>
+
+<!-- ========== SECURITY ========== -->
+<section id="security" style="padding:104px 0;background:#16181b;color:#e8e9ea">
+<div class="wrap" style="display:flex;flex-direction:column;gap:48px">
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:760px">
+    <p style="margin:0;font-size:14px;font-weight:600;color:#7fb0ff">For the person who has to say yes</p>
+    <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance;color:#ffffff">What it protects, and what it does not.</h2>
+    <p style="margin:0;font-size:18px;line-height:1.6;color:#b9bcc1">Written by the project for your security review, before you ask.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:40px">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <h3 style="margin:0;font-size:17px;color:#ffffff">It protects</h3>
+      <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:10px;font-size:15px;line-height:1.55;color:#c9ccd0">
+        <li>The agent never holds a service credential, not even for git.</li>
+        <li>Credentials encrypted at rest, one key per account, from a master key you keep.</li>
+        <li>Every call decided against the mission and recorded, allowed or refused.</li>
+        <li>An agent cannot widen its mission or approve its own action.</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <h3 style="margin:0;font-size:17px;color:#ffffff">It does not</h3>
+      <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:10px;font-size:15px;line-height:1.55;color:#c9ccd0">
+        <li>Protect you from whoever runs the server: they hold the master key.</li>
+        <li>Sandbox plugins: they run in the process, signed for who built them.</li>
+        <li>Intercept CLIs or SDKs: only MCP and git through Vaubaan.</li>
+        <li>Come audited: no third-party review yet. It is pre-release.</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <h3 style="margin:0;font-size:17px;color:#ffffff">Read it yourself</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:15px">
+        <a href="https://vaubaan.com/trust" style="color:#a9c8ff">Trust center →</a>
+        <a href="https://github.com/vaubaan/gateway" style="color:#a9c8ff">Threat model, with every accepted risk numbered →</a>
+        <a href="https://vaubaan.com/docs" style="color:#a9c8ff">Known limitations →</a>
+        <a href="https://github.com/vaubaan/gateway" style="color:#a9c8ff">The source, Apache-2.0 →</a>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ========== INSTALL ========== -->
+<section id="install" style="padding:104px 0;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:flex;flex-direction:column;gap:36px">
+  <div style="display:flex;flex-direction:column;gap:16px;max-width:720px">
+    <p style="margin:0;font-size:14px;font-weight:600;color:#2f55c7">Install</p>
+    <h2 class="sec-h" style="margin:0;font-size:44px;line-height:1.08;letter-spacing:-0.03em;font-weight:700;text-wrap:balance">Start alone in a minute. Move to a server when your team joins.</h2>
+  </div>
+  <div style="border:1px solid #d2d1cc;border-radius:12px;overflow:hidden">
+    <div role="tablist" aria-label="Install" style="display:flex;flex-wrap:wrap;border-bottom:1px solid #e6e5e1;background:#f6f6f4">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+        <button type="button" role="tab" class="tab" aria-selected="{{t.selected}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:32px;padding:32px">
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+        <h3 style="margin:0;font-size:22px;letter-spacing:-0.01em">{{tab.title}}</h3>
+        <p style="margin:0;font-size:16px;line-height:1.6;color:#3a3c40">{{tab.body}}</p>
+        <p style="margin:0;font-size:14px;color:#6a6d74">{{tab.needs}}</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;justify-content:center;min-width:0">
+        <sc-if value="{{tab.isDownload}}" hint-placeholder-val="{{ true }}">
+          <a class="btn" href="#install" style="background:#2f55c7;color:#ffffff;align-self:flex-start">{{tab.cta}}</a>
+          <span style="font-size:13px;color:#6a6d74">{{tab.file}}</span>
+        </sc-if>
+        <sc-if value="{{tab.isCode}}" hint-placeholder-val="{{ false }}">
+          <pre class="mono" style="margin:0;background:#16181b;color:#e8e9ea;border-radius:8px;padding:18px 20px;font-size:13.5px;line-height:1.6;overflow-x:auto;white-space:pre">{{tab.code}}</pre>
+          <a href="https://vaubaan.com/docs/install" style="font-size:14px">{{tab.cta}}</a>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ========== QUESTIONS ========== -->
+<section style="padding:104px 0;border-bottom:1px solid #e6e5e1">
+<div class="wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:48px">
+  <h2 class="sec-h" style="margin:0;font-size:36px;line-height:1.1;letter-spacing:-0.03em;font-weight:700">Questions</h2>
+  <dl style="margin:0;display:flex;flex-direction:column;grid-column:span 2;min-width:0">
+    <div style="border-top:1px solid #e6e5e1;padding:18px 0;display:flex;flex-direction:column;gap:6px"><dt style="font-weight:600;font-size:17px">Which agents work with it?</dt><dd style="margin:0;font-size:16px;line-height:1.6;color:#4f5156">Any MCP client that sends a bearer header over HTTP: Claude Code, Claude Desktop, Cursor and others. The mission’s key is that header.</dd></div>
+    <div style="border-top:1px solid #e6e5e1;padding:18px 0;display:flex;flex-direction:column;gap:6px"><dt style="font-weight:600;font-size:17px">Does my agent ever see my token?</dt><dd style="margin:0;font-size:16px;line-height:1.6;color:#4f5156">No. Vaubaan runs each allowed call with the credential and returns the result. Git goes through Vaubaan’s own remote, so cloning and pushing need no token either.</dd></div>
+    <div style="border-top:1px solid #e6e5e1;padding:18px 0;display:flex;flex-direction:column;gap:6px"><dt style="font-weight:600;font-size:17px">Is there a hosted version?</dt><dd style="margin:0;font-size:16px;line-height:1.6;color:#4f5156">No. It runs on your computer or your server, nowhere else. There is no account to create.</dd></div>
+    <div style="border-top:1px solid #e6e5e1;padding:18px 0;display:flex;flex-direction:column;gap:6px"><dt style="font-weight:600;font-size:17px">Is it ready for production?</dt><dd style="margin:0;font-size:16px;line-height:1.6;color:#4f5156">Not yet. Versions are 2.0.0-alpha, breaking changes are expected until 2.0.0, and no third-party audit has happened. The known limitations are listed in the docs.</dd></div>
+    <div style="border-top:1px solid #e6e5e1;padding:18px 0;display:flex;flex-direction:column;gap:6px"><dt style="font-weight:600;font-size:17px">What does it cost?</dt><dd style="margin:0;font-size:16px;line-height:1.6;color:#4f5156">Nothing. Apache-2.0, on your own machines.</dd></div>
+  </dl>
+</div>
+</section>
+
+<!-- ========== FOOTER ========== -->
+<footer style="padding:48px 0 64px">
+<div class="wrap" style="display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;font-size:14px;color:#6a6d74">
+  <span>Vaubaan · open source, Apache-2.0 · pre-release</span>
+  <span style="display:flex;gap:22px;flex-wrap:wrap">
+    <a href="https://vaubaan.com/docs" style="color:#4f5156">Docs</a>
+    <a href="https://vaubaan.com/plugins" style="color:#4f5156">Plugins</a>
+    <a href="https://vaubaan.com/trust" style="color:#4f5156">Trust center</a>
+    <a href="https://github.com/vaubaan/gateway" style="color:#4f5156">GitHub</a>
+  </span>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":5600}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { level: 'trusting', tab: 'mac', approved: false };
+  }
+  renderVals() {
+    var s = this.state;
+    var self = this;
+    var LV = [
+      { id: 'careful', label: 'Careful', note: 'Careful: anything that changes something asks you first. Small limits.' },
+      { id: 'trusting', label: 'Trusting', note: 'Trusting: ordinary work runs freely; what is hard to undo asks you. Limits ×3.' },
+      { id: 'autonomous', label: 'Autonomous', note: 'Autonomous: only what cannot be repaired asks you. Limits ×10.' }
+    ];
+    var mult = { careful: 1, trusting: 3, autonomous: 10 }[s.level];
+    var free = 'display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;white-space:nowrap;background:#eef2fc;color:#2448b0';
+    var ask = 'display:inline-block;padding:4px 10px;border-radius:999px;font-size:13px;white-space:nowrap;background:#fbf2df;color:#8a4f00;font-weight:600';
+    function line(label, id, base, gates) {
+      var g = gates[s.level];
+      return { label: label, id: id, verdict: (g === 'ask' ? 'ask me first · ' : 'runs freely · ') + (base * mult) + ' a day', badgeStyle: g === 'ask' ? ask : free };
+    }
+    var github = [
+      line('Read code, branches and commits', 'github.read-code', 100, { careful: 'free', trusting: 'free', autonomous: 'free' }),
+      line('Push to a feature branch', 'github.feature-branch-write', 10, { careful: 'ask', trusting: 'free', autonomous: 'free' }),
+      line('Open a pull request', 'github.create-pr', 3, { careful: 'ask', trusting: 'free', autonomous: 'free' }),
+      line('Merge into main', 'github.merge-protected', 1, { careful: 'ask', trusting: 'ask', autonomous: 'ask' })
+    ];
+    var supabase = [
+      line('Read data and schema', 'supabase.read-data', 50, { careful: 'free', trusting: 'free', autonomous: 'free' }),
+      line('Apply a migration', 'supabase.migration-write', 2, { careful: 'ask', trusting: 'ask', autonomous: 'free' })
+    ];
+    var levels = LV.map(function (l) {
+      var on = l.id === s.level;
+      return {
+        label: l.label, pressed: on ? 'true' : 'false',
+        pick: function () { self.setState({ level: l.id }); },
+        style: 'flex:1;min-height:40px;border:0;border-radius:6px;font-size:14px;font-weight:600;' + (on ? 'background:#ffffff;color:#1b1c1e;box-shadow:0 1px 2px rgba(0,0,0,0.12)' : 'background:transparent;color:#4f5156')
+      };
+    });
+    var levelNote = LV.filter(function (l) { return l.id === s.level; })[0].note;
+
+    var TABS = [
+      { id: 'mac', label: 'macOS', title: 'Vaubaan for Mac', body: 'Open the app and Vaubaan runs on your Mac, in your browser at localhost. Connect an account, write a mission, add it to your agent. Your credentials stay in the app, under a key kept in your keychain.', needs: 'macOS 13 or later, Apple silicon or Intel.', isDownload: true, isCode: false, cta: 'Download for macOS', file: 'Vaubaan.dmg · signed and notarized' },
+      { id: 'win', label: 'Windows', title: 'Vaubaan for Windows', body: 'Install, and Vaubaan runs on your PC, in your browser at localhost. The same interface and missions as on a server, for one person.', needs: 'Windows 10 or 11, 64-bit.', isDownload: true, isCode: false, cta: 'Download for Windows', file: 'Vaubaan-Setup.exe · signed' },
+      { id: 'docker', label: 'Docker', title: 'One command, on any machine', body: 'For developers who already run Docker. The same local instance as the apps, on localhost, its data in a volume.', needs: 'Docker Desktop or Docker Engine.', isDownload: false, isCode: true, code: 'docker run -p 3210:3210 -v vaubaan:/data \\\n  ghcr.io/vaubaan/gateway', cta: 'Docker options →' },
+      { id: 'team', label: 'Team server', title: 'For a team, behind your sign-in', body: 'Docker Compose with automatic HTTPS, your identity provider (OpenID Connect or GitHub) or local accounts with a second factor, and scheduled encrypted backups.', needs: 'A server, a DNS name, ports 80 and 443.', isDownload: false, isCode: true, code: 'git clone https://github.com/vaubaan/gateway\ncd gateway && cp deploy/config/.env.example deploy/config/.env\ndocker compose --env-file deploy/config/.env \\\n  -f deploy/compose.yaml up -d', cta: 'Every step of a team install →' }
+    ];
+    var tabs = TABS.map(function (t) {
+      var on = t.id === s.tab;
+      return {
+        label: t.label, selected: on ? 'true' : 'false',
+        pick: function () { self.setState({ tab: t.id }); },
+        style: 'min-height:52px;padding:0 22px;border:0;border-bottom:2px solid ' + (on ? '#2f55c7' : 'transparent') + ';background:' + (on ? '#ffffff' : 'transparent') + ';font-size:15px;font-weight:600;color:' + (on ? '#1b1c1e' : '#4f5156')
+      };
+    });
+    var tab = TABS.filter(function (t) { return t.id === s.tab; })[0];
+
+    return {
+      approved: s.approved,
+      notApproved: !s.approved,
+      approve: function () { self.setState({ approved: true }); },
+      reset: function () { self.setState({ approved: false }); },
+      levels: levels, levelNote: levelNote, github: github, supabase: supabase,
+      tabs: tabs, tab: tab,
+      services: ['GitHub', 'GitHub Projects', 'Supabase', 'Vercel', 'Fly.io', 'Railway', 'Cloudflare DNS', 'Stripe', 'Resend', 'Upstash Redis', 'Notion', 'Asana', 'Miro', 'Gmail', 'Outlook', 'Google Calendar', 'CalDAV', 'Axonaut', 'Context7', 'SSH']
+    };
+  }
+}
+</script>
+</body>
+</html>

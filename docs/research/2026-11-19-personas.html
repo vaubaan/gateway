@@ -1,0 +1,531 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Vaubaan, travail sur table</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column like a staff map sheet; drawings break out wider, each numbered as a plate. */
+:root {
+  --bg: #f2f5f4; --card: #ffffff; --ink: #17242b; --muted: #57676f; --line: #cdd7d7;
+  --accent: #1f5fa8; --accent-soft: #dfeaf6; --warn: #a25a06; --warn-soft: #fbeed5; --stop: #a33a2a;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10181c; --card: #172228; --ink: #e4ecec; --muted: #94a5ab; --line: #2c3b42;
+  --accent: #82b6ee; --accent-soft: #1a3048; --warn: #e3a74d; --warn-soft: #382a10; --stop: #e88a78; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10181c; --card: #172228; --ink: #e4ecec; --muted: #94a5ab; --line: #2c3b42;
+  --accent: #82b6ee; --accent-soft: #1a3048; --warn: #e3a74d; --warn-soft: #382a10; --stop: #e88a78; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); }
+.sheet { max-width: 1060px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet > * { min-width: 0; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.45rem, 3vw, 1.9rem); font-weight: 700; letter-spacing: -0.01em; margin-top: 72px; }
+h3 { font-size: 1.08rem; font-weight: 700; }
+p { margin: 0; max-width: 68ch; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.lede { font-size: 1.15rem; color: var(--ink); max-width: 62ch; }
+.eyebrow { font: 500 0.78rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+a { color: var(--accent); }
+header.top { display: flex; flex-direction: column; gap: 16px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.sommaire { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.92rem; padding: 0; margin: 0; list-style: none; }
+.note { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; color: var(--muted); font-size: 0.93rem; max-width: 70ch; }
+.section-intro { margin-top: 12px; }
+
+/* plates */
+figure { margin: 26px 0 0; }
+.plate { background: var(--card); border: 1px solid var(--line); border-radius: 4px; overflow-x: auto; }
+.plate svg { display: block; width: 100%; min-width: 720px; height: auto; color: var(--ink); font-family: var(--body); }
+figcaption { margin-top: 10px; font-size: 0.9rem; color: var(--muted); max-width: 78ch; }
+figcaption b { color: var(--ink); font-weight: 600; }
+svg text { fill: var(--ink); font-size: 12px; }
+svg .t-m { fill: var(--muted); }
+svg .t-s { font-size: 11px; }
+svg .t-b { font-weight: 600; }
+svg .t-a { fill: var(--accent); }
+svg .t-w { fill: var(--warn); }
+svg .bx { fill: var(--card); stroke: var(--ink); stroke-width: 1.2; }
+svg .bx-q { fill: var(--bg); stroke: var(--muted); stroke-width: 1; }
+svg .bx-a { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+svg .bx-w { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.2; }
+svg .wall { fill: none; stroke: var(--ink); stroke-width: 3; }
+svg .ln { stroke: var(--ink); stroke-width: 1.2; fill: none; }
+svg .ln-m { stroke: var(--muted); stroke-width: 1; fill: none; stroke-dasharray: 4 4; }
+svg .ln-w { stroke: var(--warn); stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; }
+svg .ln-a { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+svg .f-ink { fill: var(--ink); } svg .f-w { fill: var(--warn); } svg .f-a { fill: var(--accent); } svg .f-m { fill: var(--muted); }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+
+/* personas */
+.cast { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 0 32px; margin-top: 26px; }
+.persona { padding: 18px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.persona .who { color: var(--muted); font-size: 0.93rem; }
+.persona dl { margin: 0; display: grid; grid-template-columns: 5.6em 1fr; gap: 4px 10px; font-size: 0.93rem; }
+.persona dt { font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 3px; }
+.persona dd { margin: 0; }
+.seat { font: 500 0.74rem var(--mono); color: var(--accent); letter-spacing: 0.05em; }
+
+/* tables */
+.scroll { overflow-x: auto; margin-top: 26px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child > td, tr:last-child > th { border-bottom: 0; }
+thead th { font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); white-space: nowrap; }
+tbody th { font-weight: 600; white-space: nowrap; }
+.hats { min-width: 640px; }
+.chip { display: inline-block; font: 500 0.78rem var(--mono); padding: 1px 7px; border: 1px solid var(--ink); border-radius: 999px; margin: 1px 3px 1px 0; }
+.chip.a { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.chip.none { border-style: dashed; border-color: var(--line); color: var(--muted); }
+.board { min-width: 860px; }
+.board td { text-align: center; padding: 8px 4px; white-space: nowrap; }
+.board thead th { text-align: center; white-space: normal; font-size: 0.68rem; padding: 9px 4px; vertical-align: bottom; }
+.board thead th b { display: block; font-size: 0.8rem; color: var(--ink); }
+.m { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin: 0 2px; }
+.m.act { border-radius: 50%; background: var(--ink); }
+.m.val { border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.m.fr { background: var(--warn); transform: rotate(45deg); width: 10px; height: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; font-size: 0.88rem; color: var(--muted); }
+
+/* scenes */
+.scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 0 36px; margin-top: 30px; }
+.scene { border-top: 1px solid var(--line); padding: 16px 0 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.scene .n { font: 500 0.74rem var(--mono); color: var(--muted); letter-spacing: 0.05em; }
+.scene p { font-size: 0.94rem; }
+.tag { font: 500 0.7rem var(--mono); text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 6px; border-radius: 3px; margin-right: 6px; white-space: nowrap; }
+.tag.ok { background: var(--accent-soft); color: var(--accent); }
+.tag.ko { background: var(--warn-soft); color: var(--warn); }
+.src { font: 400 0.76rem var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+/* theses */
+.theses { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px 36px; margin-top: 26px; counter-reset: th; }
+.thesis { display: flex; flex-direction: column; gap: 8px; border-top: 2px solid var(--ink); padding-top: 12px; min-width: 0; }
+.thesis p { font-size: 0.95rem; }
+.holes { min-width: 900px; }
+.holes td:first-child { font: 500 0.78rem var(--mono); color: var(--muted); }
+.sev { font: 500 0.72rem var(--mono); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.sev.h { color: var(--stop); } .sev.m { color: var(--warn); } .sev.l { color: var(--muted); }
+ol.steps { margin: 8px 0 0; padding-left: 1.6em; columns: 2 300px; column-gap: 40px; font-size: 0.9rem; color: var(--muted); }
+ol.steps li { break-inside: avoid; padding: 1px 0; }
+details { margin-top: 12px; font-size: 0.92rem; }
+summary { cursor: pointer; color: var(--accent); }
+summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.questions { margin: 22px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.questions li { border-top: 1px solid var(--line); padding: 14px 0; display: grid; grid-template-columns: 2.4em 1fr; gap: 0 8px; }
+.questions li > span { font: 500 0.82rem var(--mono); color: var(--accent); padding-top: 3px; }
+.questions li p { font-size: 0.96rem; }
+.questions li p + p { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+.keeps { margin: 14px 0 0; padding-left: 1.2em; max-width: 72ch; font-size: 0.95rem; }
+.keeps li { padding: 2px 0; }
+</style>
+
+<div class="sheet">
+
+<header class="top">
+  <span class="eyebrow">Vaubaan Gateway · travail sur table · 19 novembre 2026</span>
+  <h1>Huit personnes autour d'une passerelle</h1>
+  <p class="lede">On assoit autour de la table tous ceux qui touchent Vaubaan, on joue une histoire de bout en bout, et on regarde où chacun gagne quelque chose et où il bute. Le but est de savoir où la valeur naît vraiment avant de dessiner la page d'accueil.</p>
+  <p class="note">Tout ce qui décrit le produit vient du dépôt lu aujourd'hui : la spec, les intents, le modèle de menace, les handbooks, le site. Les jugements (qui gagne quoi, quelle gravité) sont les miens et sont marqués comme tels. L'histoire jouée est inventée ; Alice, Bob et Carol sont les personnes de la démo.</p>
+  <ul class="sommaire">
+    <li><a href="#table">1. La table</a></li>
+    <li><a href="#chapeaux">2. Les chapeaux</a></li>
+    <li><a href="#partie">3. La partie</a></li>
+    <li><a href="#valeur">4. La valeur</a></li>
+    <li><a href="#trous">5. Les trous</a></li>
+    <li><a href="#landing">6. Vers la landing</a></li>
+  </ul>
+</header>
+
+<!-- ================= 1 ================= -->
+<h2 id="table">1. La table : qui est assis, et où dans la place</h2>
+<p class="section-intro">La doc du dépôt parle déjà de « portes » : la porte MCP et le remote git. Le dessin reprend ce vocabulaire. Les agents restent dehors, les identifiants restent dedans, et une seule pièce décide de chaque appel.</p>
+
+<figure>
+  <div class="plate">
+  <svg viewBox="0 0 960 500" role="img" aria-label="Plan de la passerelle : les agents dehors présentent une clé de mission à deux portes ; à l'intérieur la décision, le coffre et le journal ; les personnes à l'intérieur ; l'auteur de plugin et le relecteur sécurité à l'extérieur.">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="f-ink"/></marker>
+      <marker id="arm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="f-m"/></marker>
+      <marker id="ara" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="f-a"/></marker>
+    </defs>
+    <!-- zones -->
+    <text x="30" y="28" class="t-m t-s">DEHORS</text>
+    <text x="262" y="28" class="t-m t-s">L'INSTANCE, SUR LE RÉSEAU DE L'ENTREPRISE</text>
+    <text x="770" y="28" class="t-m t-s">LES SERVICES</text>
+    <!-- wall with two doors on the left side -->
+    <path class="wall" d="M250 168 V44 H710 V390 H250 V296 M250 262 V202"/>
+    <text x="244" y="189" text-anchor="end" class="t-s t-b">porte MCP</text>
+    <text x="244" y="283" text-anchor="end" class="t-s t-b">remote git</text>
+    <!-- outside left -->
+    <rect class="bx-q" x="30" y="60" width="150" height="40" rx="3"/><text x="105" y="85" text-anchor="middle">① Évaluateur</text>
+    <rect class="bx" x="30" y="160" width="150" height="50" rx="3"/><text x="105" y="181" text-anchor="middle" class="t-b">⑥ Agent</text><text x="105" y="198" text-anchor="middle" class="t-s t-m">Claude Code, Cursor…</text>
+    <rect class="bx" x="30" y="258" width="150" height="42" rx="3"/><text x="105" y="276" text-anchor="middle">Runner de CI</text><text x="105" y="291" text-anchor="middle" class="t-s t-m">clé machine</text>
+    <path class="ln-m" d="M180 80 H216 V110" marker-end="url(#arm)"/><text x="186" y="126" class="t-s t-m">démo, puis</text><text x="186" y="139" class="t-s t-m">installe</text>
+    <path class="ln-a" d="M180 185 H332" marker-end="url(#ara)"/><text x="262" y="176" class="t-s t-a">clé de mission</text>
+    <path class="ln" d="M180 279 H332" marker-end="url(#ar)"/><text x="262" y="270" class="t-s">push, clone</text>
+    <!-- inside: people row -->
+    <rect class="bx" x="270" y="62" width="130" height="42" rx="3"/><text x="335" y="80" text-anchor="middle" class="t-b">④ Créateur</text><text x="335" y="95" text-anchor="middle" class="t-s t-m">écrit la mission</text>
+    <rect class="bx" x="415" y="62" width="130" height="42" rx="3"/><text x="480" y="80" text-anchor="middle" class="t-b">③ Propriétaire</text><text x="480" y="95" text-anchor="middle" class="t-s t-m">branche le compte</text>
+    <rect class="bx" x="560" y="62" width="130" height="42" rx="3"/><text x="625" y="80" text-anchor="middle" class="t-b">⑤ Coéquipier</text><text x="625" y="95" text-anchor="middle" class="t-s t-m">sa propre clé</text>
+    <!-- decision -->
+    <rect class="bx-a" x="334" y="150" width="292" height="70" rx="3"/>
+    <text x="480" y="172" text-anchor="middle" class="t-b t-a">La décision</text>
+    <text x="480" y="190" text-anchor="middle" class="t-s">appel → permissions nommées → limites</text>
+    <text x="480" y="206" text-anchor="middle" class="t-s">→ oui · non · « demande-moi d'abord »</text>
+    <path class="ln" d="M335 104 V150" marker-end="url(#ar)"/><text x="341" y="132" class="t-s t-m">la mission</text>
+    <path class="ln" d="M480 104 V150" marker-end="url(#ar)"/><text x="486" y="132" class="t-s t-m">l'accès donné</text>
+    <!-- vault and record -->
+    <rect class="bx" x="334" y="254" width="138" height="48" rx="3"/><text x="403" y="274" text-anchor="middle" class="t-b">Le coffre</text><text x="403" y="290" text-anchor="middle" class="t-s t-m">identifiants chiffrés</text>
+    <rect class="bx" x="488" y="254" width="138" height="48" rx="3"/><text x="557" y="274" text-anchor="middle" class="t-b">Le journal</text><text x="557" y="290" text-anchor="middle" class="t-s t-m">chaque appel, oui ou non</text>
+    <path class="ln" d="M403 254 V220" marker-end="url(#ar)"/>
+    <path class="ln" d="M557 220 V254" marker-end="url(#ar)"/>
+    <!-- admin + plugins -->
+    <rect class="bx" x="270" y="332" width="150" height="42" rx="3"/><text x="345" y="350" text-anchor="middle" class="t-b">② Administrateur</text><text x="345" y="365" text-anchor="middle" class="t-s t-m">installe, tient en vie</text>
+    <rect class="bx" x="440" y="332" width="250" height="42" rx="3"/><text x="565" y="350" text-anchor="middle" class="t-b">Les plugins, un par service</text><text x="565" y="365" text-anchor="middle" class="t-s t-m">classent l'appel, puis l'exécutent</text>
+    <path class="ln-m" d="M650 332 V190 H626" marker-end="url(#arm)"/>
+    <!-- services -->
+    <rect class="bx" x="770" y="150" width="160" height="30" rx="3"/><text x="850" y="170" text-anchor="middle">GitHub</text>
+    <rect class="bx" x="770" y="186" width="160" height="30" rx="3"/><text x="850" y="206" text-anchor="middle">Supabase</text>
+    <rect class="bx" x="770" y="222" width="160" height="30" rx="3"/><text x="850" y="242" text-anchor="middle">Vercel, Fly, Stripe…</text>
+    <path class="ln-a" d="M626 174 H770" marker-end="url(#ara)"/>
+    <text x="716" y="150" class="t-s t-a">appel exécuté</text><text x="716" y="163" class="t-s t-a">par l'instance</text>
+    <!-- outside bottom -->
+    <rect class="bx" x="270" y="430" width="150" height="42" rx="3"/><text x="345" y="448" text-anchor="middle" class="t-b">⑧ Auteur de plugin</text><text x="345" y="463" text-anchor="middle" class="t-s t-m">avec son agent</text>
+    <rect class="bx" x="470" y="430" width="190" height="42" rx="3"/><text x="565" y="448" text-anchor="middle">Catalogue public</text><text x="565" y="463" text-anchor="middle" class="t-s t-m">reconstruit et signe</text>
+    <path class="ln" d="M420 451 H470" marker-end="url(#ar)"/>
+    <path class="ln" d="M565 430 V374" marker-end="url(#ar)"/><text x="572" y="412" class="t-s t-m">installé à la première connexion</text>
+    <rect class="bx-q" x="770" y="430" width="160" height="42" rx="3"/><text x="850" y="448" text-anchor="middle" class="t-b">⑦ Relecteur sécurité</text><text x="850" y="463" text-anchor="middle" class="t-s t-m">ne touche à rien</text>
+    <path class="ln-m" d="M850 430 V320 H716" marker-end="url(#arm)"/><text x="856" y="345" class="t-s t-m">lit le modèle</text><text x="856" y="358" class="t-s t-m">de menace,</text><text x="856" y="371" class="t-s t-m">puis le journal</text>
+  </svg>
+  </div>
+  <figcaption><b>Planche 1.</b> En bleu, le seul trajet qui produit quelque chose : une clé de mission entre, une décision est prise, l'instance exécute l'appel avec un identifiant que l'agent n'a jamais vu. Les deux personnes en pointillé n'utilisent pas le produit : l'une décide de l'installer, l'autre a le droit de dire non.</figcaption>
+</figure>
+
+<div class="cast">
+  <div class="persona"><span class="seat">① ÉVALUATEUR</span><h3>Celui qui a déjà collé un jeton dans la config d'un agent</h3>
+    <p class="who">Un lead dev ou un dev seul. Il arrive par vaubaan.com, avec dix minutes.</p>
+    <dl><dt>Veut</dt><dd>Savoir si c'est pour lui avant la fin de son café.</dd><dt>Craint</dt><dd>Une soirée perdue à installer quelque chose de « pre-release ».</dd><dt>Bascule</dt><dd>Quand il voit de ses yeux un appel refusé, avec la raison.</dd></dl></div>
+  <div class="persona"><span class="seat">② ADMINISTRATEUR</span><h3>Celui qui installe et qui sera appelé si ça tombe</h3>
+    <p class="who">L'opérateur de la spec : image, configuration, connexion des personnes, plugins, sauvegarde.</p>
+    <dl><dt>Veut</dt><dd>Une commande, puis oublier.</dd><dt>Craint</dt><dd>Perdre la clé maîtresse. Une mise à jour qui casse un lundi.</dd><dt>Bascule</dt><dd>« Finish setup » : le lien d'amorçage est révoqué, l'instance est à lui.</dd></dl></div>
+  <div class="persona"><span class="seat">③ PROPRIÉTAIRE DE COMPTE</span><h3>Celui dont le jeton est dans le coffre</h3>
+    <p class="who">Il branche le compte GitHub ou Supabase, étiquette <code>prod</code> et <code>staging</code>, donne accès.</p>
+    <dl><dt>Veut</dt><dd>Garder la main sur ce que son jeton permet aux autres.</dd><dt>Craint</dt><dd>Une mission sur la prod dont il ne sait rien.</dd><dt>Bascule</dt><dd>La page du compte, qui nomme chaque mission qui le porte.</dd></dl></div>
+  <div class="persona"><span class="seat">④ CRÉATEUR DE MISSION</span><h3>Celui qui lance l'agent et voudrait partir déjeuner</h3>
+    <p class="who">Le développeur au quotidien. Tout le produit converge vers lui.</p>
+    <dl><dt>Veut</dt><dd>Un agent qui travaille seul sur du vrai.</dd><dt>Craint</dt><dd>Être dérangé sans cesse, ou ne pas l'être le jour où il fallait.</dd><dt>Bascule</dt><dd>« Merge sur main ? » arrive sur son téléphone, arguments en clair.</dd></dl></div>
+  <div class="persona"><span class="seat">⑤ COÉQUIPIER</span><h3>Celui qui travaille sur la mission d'un autre</h3>
+    <p class="who">Il génère sa propre clé ; chaque appel porte son nom.</p>
+    <dl><dt>Veut</dt><dd>Ne rien configurer.</dd><dt>Craint</dt><dd>Rester bloqué quand le créateur n'est pas là.</dd><dt>Bascule</dt><dd>Sa clé en un clic, sans demander de jeton à personne.</dd></dl></div>
+  <div class="persona"><span class="seat">⑥ AGENT</span><h3>L'exécutant, tenu pour non fiable</h3>
+    <p class="who">Ce n'est pas une personne, mais il lit plus de texte du produit que tous les autres : le kit, les outils, les refus.</p>
+    <dl><dt>Veut</dt><dd>Un refus qu'il sait lire et une suite à donner.</dd><dt>Craint</dt><dd>La boucle : réessayer sans savoir si quelque chose a changé.</dd><dt>Bascule</dt><dd><code>approval-required</code> avec l'adresse à transmettre.</dd></dl></div>
+  <div class="persona"><span class="seat">⑦ RELECTEUR SÉCURITÉ</span><h3>Celui qui n'utilisera jamais le produit et peut l'interdire</h3>
+    <p class="who">RSSI, ou le CTO qui en tient lieu. Il lit le centre de confiance et le modèle de menace.</p>
+    <dl><dt>Veut</dt><dd>La liste de ce qui n'est pas couvert, sans emballage.</dd><dt>Craint</dt><dd>Du code tiers dans le processus qui déchiffre les identifiants.</dd><dt>Bascule</dt><dd>Les risques acceptés, numérotés A1 à A46, écrits par le projet lui-même.</dd></dl></div>
+  <div class="persona"><span class="seat">⑧ AUTEUR DE PLUGIN</span><h3>Celui qui écrit ce que les autres vont cocher</h3>
+    <p class="who">Il modélise un service : ses outils, et surtout son catalogue de permissions. Public par le catalogue, ou privé pour sa société.</p>
+    <dl><dt>Veut</dt><dd>Brancher un service en une après-midi, avec son agent.</dd><dt>Craint</dt><dd>Devoir lire le code de la passerelle.</dd><dt>Bascule</dt><dd>Son plugin activé, à l'essai, sur une vraie instance.</dd></dl></div>
+</div>
+<p class="note" style="margin-top:22px">Hors table mais dans la pièce : celui qui relit les soumissions au catalogue. Aujourd'hui c'est le mainteneur. Chaque « signé par Vaubaan » repose sur sa relecture.</p>
+
+<!-- ================= 2 ================= -->
+<h2 id="chapeaux">2. Les chapeaux : huit rôles, mais combien de personnes ?</h2>
+<p class="section-intro">La spec décrit des rôles. Selon la taille de l'équipe, une même personne en porte un ou six. C'est la première chose que la table fait apparaître.</p>
+
+<div class="scroll">
+<table class="hats">
+  <thead><tr><th>Rôle</th><th>Seule sur son portable</th><th>Équipe de six</th><th>Société de soixante</th></tr></thead>
+  <tbody>
+    <tr><th>Évaluateur</th><td><span class="chip a">Alice</span></td><td><span class="chip a">Alice</span></td><td><span class="chip">un lead</span></td></tr>
+    <tr><th>Administrateur</th><td><span class="chip a">Alice</span></td><td><span class="chip a">Alice</span></td><td><span class="chip">équipe plateforme</span></td></tr>
+    <tr><th>Propriétaire de compte</th><td><span class="chip a">Alice</span></td><td><span class="chip a">Alice</span><span class="chip">Carol</span></td><td><span class="chip">plateforme</span><span class="chip">leads</span></td></tr>
+    <tr><th>Créateur de mission</th><td><span class="chip a">Alice</span></td><td><span class="chip a">Alice</span><span class="chip">Bob</span><span class="chip">Carol</span></td><td><span class="chip">chaque dev</span></td></tr>
+    <tr><th>Coéquipier</th><td><span class="chip none">personne</span></td><td><span class="chip">Bob</span><span class="chip">Carol</span></td><td><span class="chip">chaque dev</span></td></tr>
+    <tr><th>Relecteur sécurité</th><td><span class="chip a">Alice</span>, sa conscience</td><td><span class="chip a">Alice</span>, ou le CTO</td><td><span class="chip">RSSI</span>, avec veto</td></tr>
+    <tr><th>Auteur de plugin</th><td><span class="chip a">Alice</span>, s'il manque un service</td><td><span class="chip a">Alice</span>, ou <span class="chip none">personne</span></td><td><span class="chip">plateforme</span><span class="chip">éditeurs</span></td></tr>
+  </tbody>
+</table>
+</div>
+<figcaption><b>Planche 2.</b> En bleu, la même personne. Lecture personnelle des rôles de la spec, pas une mesure.</figcaption>
+
+<div class="stack" style="margin-top:20px">
+<p>Le produit est taillé pour la colonne de droite : fournisseur d'identité, groupes, accès restreints, second facteur, administrateurs nommés. C'est ce qui le rend crédible devant un RSSI.</p>
+<p>Mais on n'entre jamais par la colonne de droite. Une société de soixante adopte parce qu'une Alice l'a d'abord essayé seule, puis l'a montré à cinq collègues. Tant qu'Alice est seule, la cérémonie d'entreprise est un coût sans contrepartie : elle se donne accès à elle-même.</p>
+</div>
+
+<!-- ================= 3 ================= -->
+<h2 id="partie">3. La partie : onze scènes, de la découverte au plugin maison</h2>
+<p class="section-intro">L'histoire : Alice découvre Vaubaan, l'installe pour son équipe de six, Bob et Carol s'y mettent, la sécurité relit, un service interne manque. Chaque colonne est une scène, chaque ligne une chaise.</p>
+
+<div class="scroll">
+<table class="board">
+  <thead><tr><th></th>
+    <th>0<b>Découvrir</b></th><th>1<b>Installer</b></th><th>2<b>Brancher</b></th><th>3<b>Donner accès</b></th><th>4<b>Créer la mission</b></th><th>5<b>Travailler</b></th><th>6<b>Demander un oui</b></th><th>7<b>S'absenter</b></th><th>8<b>Mettre à jour</b></th><th>9<b>Relire</b></th><th>10<b>Écrire un plugin</b></th></tr></thead>
+  <tbody>
+    <tr><th>① Évaluateur</th><td><i class="m act"></i><i class="m fr"></i></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><th>② Administrateur</th><td></td><td><i class="m act"></i><i class="m fr"></i></td><td></td><td></td><td></td><td></td><td></td><td><i class="m act"></i><i class="m fr"></i></td><td><i class="m act"></i></td><td></td><td><i class="m act"></i></td></tr>
+    <tr><th>③ Propriétaire</th><td></td><td></td><td><i class="m act"></i><i class="m fr"></i></td><td><i class="m act"></i></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr><th>④ Créateur</th><td></td><td></td><td></td><td></td><td><i class="m act"></i><i class="m fr"></i></td><td><i class="m val"></i></td><td><i class="m val"></i></td><td><i class="m fr"></i></td><td></td><td></td><td></td></tr>
+    <tr><th>⑤ Coéquipier</th><td></td><td></td><td></td><td><i class="m act"></i></td><td></td><td><i class="m act"></i></td><td></td><td><i class="m fr"></i></td><td></td><td></td><td></td></tr>
+    <tr><th>⑥ Agent</th><td></td><td></td><td></td><td></td><td></td><td><i class="m act"></i><i class="m fr"></i></td><td><i class="m act"></i><i class="m fr"></i></td><td></td><td></td><td></td><td></td></tr>
+    <tr><th>⑦ Sécurité</th><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><i class="m act"></i><i class="m fr"></i></td><td></td></tr>
+    <tr><th>⑧ Auteur</th><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td><i class="m act"></i></td><td></td><td><i class="m act"></i><i class="m fr"></i></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="legend"><span><i class="m act"></i> agit</span><span><i class="m val"></i> reçoit la valeur</span><span><i class="m fr"></i> bute</span></div>
+<figcaption><b>Planche 3.</b> Deux points bleus sur toute la table, tous deux chez le créateur, aux scènes 5 et 6. Neuf scènes sur onze existent pour rendre ces deux-là possibles.</figcaption>
+
+<div class="scenes">
+  <div class="scene"><span class="n">SCÈNE 0 · ÉVALUATEUR</span><h3>Découvrir</h3>
+    <p>Alice lit la page d'accueil et clique « Try the demo ». La démo est complète et bien scénarisée : trois personnes, des missions dans tous les états, une limite à atteindre, un merge à approuver.</p>
+    <p><span class="tag ko">bute</span>Il faut Node.js 26, npm 11, cloner le dépôt et attendre une compilation. La démo n'est pas dans l'image Docker, et elle répond avec des services simulés.</p>
+    <span class="src">docs/quick-look.mdx · handbook/demo-mode.md</span></div>
+  <div class="scene"><span class="n">SCÈNE 1 · ADMINISTRATEUR</span><h3>Installer</h3>
+    <p>Docker Compose, un proxy Caddy qui obtient le certificat, une clé maîtresse générée au premier démarrage et remise par la page de setup. Les comptes locaux évitent d'avoir un fournisseur d'identité.</p>
+    <p><span class="tag ko">bute</span>Un nom DNS et les ports 80 et 443 ouverts sont exigés avant toute chose. L'URL publique doit être en https. Je compte une douzaine de gestes avant la première page utile.</p>
+    <span class="src">deploy/README.md · spec §7.1</span></div>
+  <div class="scene"><span class="n">SCÈNE 2 · PROPRIÉTAIRE</span><h3>Brancher un compte</h3>
+    <p><span class="tag ok">tient</span>Alice choisit GitHub, le plugin s'installe tout seul à cette première connexion, un guide montre où créer le jeton, le jeton est vérifié avant d'être rangé.</p>
+    <p><span class="tag ko">bute</span>Il faut étiqueter les environnements avant de créer une mission : une permission liée à <code>prod</code> n'est délivrée que si une ressource choisie porte l'étiquette. Rien ne l'annonce à ce moment.</p>
+    <span class="src">handbook/first-install.md, étape 4 · spec §0 Resource</span></div>
+  <div class="scene"><span class="n">SCÈNE 3 · PROPRIÉTAIRE → COÉQUIPIER</span><h3>Donner accès</h3>
+    <p><span class="tag ok">tient</span>Alice coche pour Bob les permissions qu'il pourra à son tour confier à ses missions. Chaque main donne moins que la précédente, jamais « tout ».</p>
+    <p>Pour une personne seule cette scène n'existe pas, et c'est très bien : le propriétaire n'a besoin d'aucun accès sur son propre compte.</p>
+    <span class="src">spec §3.1, §7.3</span></div>
+  <div class="scene"><span class="n">SCÈNE 4 · CRÉATEUR</span><h3>Créer la mission</h3>
+    <p><span class="tag ok">tient</span>Un seul écran. On coche « Read » et « Propose » au niveau Trusting, et la politique complète est écrite. Aucune confirmation.</p>
+    <p><span class="tag ko">bute</span>Ensuite vient le kit : la clé montrée une fois, une variable à exporter, un bloc <code>.mcp.json</code>, un bloc d'instructions pour l'agent, un helper git. Quatre copier-coller par projet, à la main.</p>
+    <span class="src">spec §4.4, §7.4</span></div>
+  <div class="scene"><span class="n">SCÈNE 5 · AGENT, CRÉATEUR</span><h3>Travailler</h3>
+    <p><span class="tag ok">valeur</span>L'agent lit, pousse sur une branche, ouvre une pull request. Alice n'est pas là. Chaque appel est compté et écrit au journal. C'est le premier moment où le produit rend quelque chose.</p>
+    <p><span class="tag ko">bute</span>La liste d'outils est filtrée par service, pas par outil : l'agent voit des outils qu'il n'a pas le droit d'appeler, essaie, et se fait refuser.</p>
+    <span class="src">spec §4.1 · known-limitations.md</span></div>
+  <div class="scene"><span class="n">SCÈNE 6 · AGENT, CRÉATEUR</span><h3>Demander un oui</h3>
+    <p><span class="tag ok">valeur</span>L'agent veut fusionner sur <code>main</code>. Refus <code>approval-required</code>, Alice est prévenue sur son téléphone, lit l'outil et les arguments en clair, dit oui. C'est le second moment, et le plus visible.</p>
+    <p><span class="tag ko">bute</span>Le retour vers l'agent. Voir la planche 4.</p>
+    <span class="src">spec §3.5, §4.2 bis · ADR unified-gates-drop-confirm</span></div>
+  <div class="scene"><span class="n">SCÈNE 7 · CRÉATEUR, COÉQUIPIER, ADMIN</span><h3>S'absenter, puis partir</h3>
+    <p><span class="tag ko">bute</span>Alice est en congé. Bob travaille sur sa mission, son agent demande un oui. Seul le créateur répond : la demande expire. C'est une règle voulue, mais Bob la vit comme une panne.</p>
+    <p><span class="tag ko">bute</span>Six mois plus tard Carol quitte la société. Rien ne vient du fournisseur d'identité : elle reste active jusqu'à ce qu'un administrateur la désactive, et ses missions deviennent alors orphelines.</p>
+    <span class="src">spec §3.4, §2.3 · known-limitations.md</span></div>
+  <div class="scene"><span class="n">SCÈNE 8 · AUTEUR, ADMINISTRATEUR</span><h3>Mettre à jour un plugin</h3>
+    <p><span class="tag ok">tient</span>Un service change son API. L'auteur publie par le catalogue, l'administrateur le voit dans le flux des versions, installe en un clic, lit ce qui change, active. La version démarre à l'essai et revient seule en arrière si elle ne charge pas.</p>
+    <p>Le retour à une version gardée et les correctifs de sécurité automatiques sont écrits, pas encore construits.</p>
+    <span class="src">spec §7.11 · intents/install-a-plugin-on-my-gateway.md</span></div>
+  <div class="scene"><span class="n">SCÈNE 9 · RELECTEUR SÉCURITÉ</span><h3>Relire</h3>
+    <p><span class="tag ok">tient</span>Le modèle de menace est franc : chaque contrôle renvoie à un test, les limites acceptées sont numérotées. Peu de projets donnent autant à lire.</p>
+    <p><span class="tag ko">bute</span>Aucun audit tiers. Un plugin s'exécute dans le processus qui tient les identifiants, et sa signature dit qui l'a construit, pas qu'il est inoffensif. Le journal reste dans l'instance, 90 jours par défaut ; son export est une question ouverte de la spec.</p>
+    <span class="src">handbook/threat-model.md · spec §8, §11.2</span></div>
+  <div class="scene"><span class="n">SCÈNE 10 · AUTEUR</span><h3>Écrire un plugin maison</h3>
+    <p><span class="tag ok">tient</span>Le kit s'installe depuis npm, une commande crée le projet avec ses skills pour l'agent, une autre le dépose sur une instance où un administrateur l'active.</p>
+    <p><span class="tag ko">bute</span>Entre les deux, presque tout est « proposed » : essayer un appel sans passerelle, lancer une passerelle locale avec le plugin, signer avec une clé de société, soumettre au catalogue en une commande.</p>
+    <span class="src">intents/ship-a-plugin.md · spec/plugin-authoring.md</span></div>
+</div>
+
+<figure>
+  <div class="plate">
+  <svg viewBox="0 0 860 330" role="img" aria-label="Séquence d'une demande d'approbation : l'agent appelle, la passerelle refuse avec une adresse, le créateur est prévenu et dit oui, mais rien ne prévient l'agent, qui doit rejouer l'appel à l'identique.">
+    <text x="110" y="28" text-anchor="middle" class="t-b">⑥ Agent</text>
+    <text x="430" y="28" text-anchor="middle" class="t-b">La passerelle</text>
+    <text x="750" y="28" text-anchor="middle" class="t-b">④ Créateur</text>
+    <line class="grid" x1="110" y1="40" x2="110" y2="310"/><line class="grid" x1="430" y1="40" x2="430" y2="310"/><line class="grid" x1="750" y1="40" x2="750" y2="310"/>
+    <path class="ln" d="M110 70 H430" marker-end="url(#ar)"/><text x="126" y="62" class="t-s">1 · merge sur main</text>
+    <path class="ln" d="M430 110 H110" marker-end="url(#ar)"/><text x="126" y="102" class="t-s">2 · approval-required, avec l'adresse de la demande</text>
+    <path class="ln" d="M430 150 H750" marker-end="url(#ar)"/><text x="446" y="142" class="t-s">3 · notification : « une demande vous attend »</text>
+    <path class="ln-a" d="M750 190 H430" marker-end="url(#ara)"/><text x="446" y="182" class="t-s t-a">4 · oui, sur la page de la demande</text>
+    <rect class="bx-w" x="126" y="212" width="288" height="36" rx="3"/>
+    <text x="270" y="228" text-anchor="middle" class="t-s t-w t-b">5 · rien ne repart vers l'agent</text>
+    <text x="270" y="241" text-anchor="middle" class="t-s t-w">il a rendu la main, ou il attend sans savoir</text>
+    <path class="ln" d="M110 290 H430" marker-end="url(#ar)"/><text x="126" y="282" class="t-s">6 · le même appel, à l'octet près, s'il est rejoué à temps</text>
+  </svg>
+  </div>
+  <figcaption><b>Planche 4.</b> La passerelle ne garde jamais un appel en attente : c'est une décision d'architecture, et elle est bonne. Mais le « oui » d'Alice ne réveille personne. Entre 4 et 6, c'est un humain qui doit dire à l'agent de recommencer, pendant la courte validité de l'approbation. À vérifier ensemble : je n'ai pas trouvé dans la spec de moyen pour l'agent de savoir qu'une réponse est arrivée.</figcaption>
+</figure>
+
+<!-- ================= 4 ================= -->
+<h2 id="valeur">4. Où la valeur naît, et qui la paie</h2>
+
+<div class="theses">
+  <div class="thesis"><h3>Elle naît en un seul point</h3>
+    <p>La décision sous le nom de l'outil : <code>github.merge-protected</code> n'est pas <code>github.git-push</code>. Le coffre, le proxy, le journal, la connexion par OIDC existent ailleurs. Ce qui n'existe pas ailleurs, c'est un catalogue relu qui transforme un appel avec ses arguments en permissions qu'un humain sait lire.</p>
+    <p>L'actif du projet est donc l'ensemble des catalogues, pas le serveur.</p></div>
+  <div class="thesis"><h3>Elle se touche à deux moments</h3>
+    <p>Le silence : une heure où l'agent a travaillé seul sur de vraies ressources sans qu'on y pense. Et le oui : une action grave arrêtée au bon endroit, montrée en clair, tranchée en dix secondes.</p>
+    <p>Ce que le créateur achète, c'est de l'autonomie. La sécurité est la condition, pas le produit.</p></div>
+  <div class="thesis"><h3>Elle est payée par d'autres</h3>
+    <p>L'administrateur installe et entretient. L'auteur de plugin modélise un service entier. Ni l'un ni l'autre ne vit les deux moments. Le relecteur sécurité, lui, ne gagne rien et peut tout bloquer.</p>
+    <p>Chaque friction chez ces trois-là coûte plus cher qu'une friction chez le créateur, parce que rien ne les retient.</p></div>
+</div>
+
+<figure><div class="plate"><svg viewBox="0 0 860 366" role="img" aria-label="Pour chaque chaise, l'effort demandé et la valeur reçue : le créateur reçoit beaucoup pour peu, l'administrateur et l'auteur donnent beaucoup pour peu.">
+<line class="grid" x1="460" y1="40" x2="460" y2="322"/><text x="460" y="30" text-anchor="middle" class="t-s t-m">faible</text>
+<line class="grid" x1="620" y1="40" x2="620" y2="322"/><text x="620" y="30" text-anchor="middle" class="t-s t-m">moyen</text>
+<line class="grid" x1="780" y1="40" x2="780" y2="322"/><text x="780" y="30" text-anchor="middle" class="t-s t-m">fort</text>
+<line class="grid" x1="300" y1="40" x2="300" y2="322"/>
+<text x="24" y="74">④ Créateur de mission</text>
+<path class="ln-a" d="M468 70 H772"/>
+<rect x="454" y="64" width="12" height="12" class="f-w" transform="rotate(45 460 70)"/><circle cx="780" cy="70" r="7" class="f-a"/>
+<text x="24" y="112">⑤ Coéquipier</text>
+<path class="ln-a" d="M388.0 108 H612"/>
+<rect x="374.0" y="102" width="12" height="12" class="f-w" transform="rotate(45 380.0 108)"/><circle cx="620" cy="108" r="7" class="f-a"/>
+<text x="24" y="150">③ Propriétaire de compte</text>
+<rect x="607" y="140" width="12" height="12" class="f-w" transform="rotate(45 613 146)"/><circle cx="628" cy="146" r="7" class="f-a"/>
+<text x="24" y="188">⑦ Relecteur sécurité</text>
+<path class="ln-w" d="M548.0 184 H612"/>
+<rect x="614" y="178" width="12" height="12" class="f-w" transform="rotate(45 620 184)"/><circle cx="540.0" cy="184" r="7" class="f-a"/>
+<text x="24" y="226">① Évaluateur</text>
+<path class="ln-w" d="M468 222 H612"/>
+<rect x="614" y="216" width="12" height="12" class="f-w" transform="rotate(45 620 222)"/><circle cx="460" cy="222" r="7" class="f-a"/>
+<text x="24" y="264">② Administrateur</text>
+<path class="ln-w" d="M468 260 H772"/>
+<rect x="774" y="254" width="12" height="12" class="f-w" transform="rotate(45 780 260)"/><circle cx="460" cy="260" r="7" class="f-a"/>
+<text x="24" y="302">⑧ Auteur de plugin</text>
+<path class="ln-w" d="M468 298 H772"/>
+<rect x="774" y="292" width="12" height="12" class="f-w" transform="rotate(45 780 298)"/><circle cx="460" cy="298" r="7" class="f-a"/>
+<rect x="294" y="338" width="12" height="12" class="f-w" transform="rotate(45 300 344)"/><text x="314" y="348" class="t-s">effort demandé</text><circle cx="450" cy="344" r="7" class="f-a"/><text x="464" y="348" class="t-s">valeur reçue</text>
+</svg></div><figcaption><b>Planche 5.</b> Estimation de ma part, à contredire : aucune de ces positions n'est mesurée. Trait bleu, la chaise reçoit plus qu'elle ne donne ; trait ambre, l'inverse. La valeur du relecteur sécurité est conditionnelle : elle n'existe que s'il peut dire oui.</figcaption></figure>
+
+<figure>
+  <div class="plate">
+  <svg viewBox="0 0 860 400" role="img" aria-label="Boucle de croissance : plugins au catalogue, services couverts, instances installées, rapports d'usage, confiance affichée, auteurs. Trois liens sont faibles : l'installation, les rapports et le parcours de l'auteur.">
+    <rect class="bx-a" x="355" y="40" width="150" height="40" rx="3"/><text x="430" y="65" text-anchor="middle" class="t-b t-a">Catalogues relus</text>
+    <rect class="bx" x="589" y="110" width="170" height="40" rx="3"/><text x="674" y="135" text-anchor="middle">Services couverts</text>
+    <rect class="bx" x="589" y="250" width="170" height="40" rx="3"/><text x="674" y="275" text-anchor="middle">Instances qui tournent</text>
+    <rect class="bx" x="355" y="320" width="150" height="40" rx="3"/><text x="430" y="345" text-anchor="middle">Rapports d'usage</text>
+    <rect class="bx" x="101" y="250" width="170" height="40" rx="3"/><text x="186" y="275" text-anchor="middle">Confiance affichée</text>
+    <rect class="bx" x="101" y="110" width="170" height="40" rx="3"/><text x="186" y="135" text-anchor="middle">Auteurs de plugins</text>
+    <defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="f-w"/></marker></defs>
+    <path class="ln" d="M505 66 L589 114" marker-end="url(#ar)"/>
+    <path class="ln-w" d="M674 150 V250" marker-end="url(#arw)"/>
+    <text x="684" y="196" class="t-s t-w t-b">installer</text><text x="684" y="210" class="t-s t-w">DNS, TLS, 20 gestes</text>
+    <path class="ln-w" d="M589 286 L505 334" marker-end="url(#arw)"/>
+    <text x="560" y="328" class="t-s t-w t-b">télémétrie</text><text x="560" y="342" class="t-s t-w">éteinte par défaut</text>
+    <path class="ln" d="M355 334 L271 286" marker-end="url(#ar)"/>
+    <path class="ln" d="M186 250 V150" marker-end="url(#ar)"/>
+    <path class="ln-w" d="M271 114 L355 66" marker-end="url(#arw)"/>
+    <text x="176" y="70" class="t-s t-w t-b">le kit de l'auteur</text><text x="176" y="84" class="t-s t-w">à moitié construit</text>
+    <text x="430" y="186" text-anchor="middle" class="t-m">Une vingtaine de plugins,</text>
+    <text x="430" y="203" text-anchor="middle" class="t-m">tous écrits dans le dépôt du projet.</text>
+    <text x="430" y="226" text-anchor="middle" class="t-s t-m">La plupart n'ont jamais appelé leur vrai service.</text>
+  </svg>
+  </div>
+  <figcaption><b>Planche 6.</b> La spec dit que la confiance dans un plugin vient de l'usage. Cela suppose que cette roue tourne. Trois de ses six liens sont en pointillé aujourd'hui, et ce sont exactement les trois chaises qui paient sans recevoir : l'administrateur, l'instance qui accepte de rapporter, l'auteur.</figcaption>
+</figure>
+
+<!-- ================= 5 ================= -->
+<h2 id="trous">5. Les trous dans la raquette</h2>
+<p class="section-intro">Classés par ce qu'ils coûtent à l'adoption, à mon jugement. La colonne « preuve » dit où le dépôt le reconnaît lui-même.</p>
+
+<div class="scroll">
+<table class="holes">
+  <thead><tr><th>#</th><th>Le trou</th><th>Qui bute</th><th>Preuve</th><th>Poids</th><th>Piste</th></tr></thead>
+  <tbody>
+    <tr><td>T1</td><td><b>Pas d'essai sans Node 26 ni compilation.</b> La démo n'est pas dans l'image.</td><td>① Évaluateur</td><td class="src">quick-look.mdx</td><td><span class="sev h">fort</span></td><td>La démo dans l'image : une ligne <code>docker run</code>.</td></tr>
+    <tr><td>T2</td><td><b>Pas d'instance sans DNS, TLS et ports ouverts.</b> L'URL publique doit être https.</td><td>②, et Alice seule</td><td class="src">deploy/README.md</td><td><span class="sev h">fort</span></td><td>Un mode local sur <code>localhost</code>, vraie instance, vrais services.</td></tr>
+    <tr><td>T3</td><td><b>Une vingtaine de gestes avant le premier appel gouverné.</b> Voir planche 7.</td><td>② ③ ④</td><td class="src">first-install.md</td><td><span class="sev h">fort</span></td><td>Un premier parcours qui enchaîne compte, mission et kit.</td></tr>
+    <tr><td>T4</td><td><b>Le oui ne réveille pas l'agent.</b></td><td>④ ⑥</td><td class="src">spec §1.1, §3.5</td><td><span class="sev h">fort</span></td><td>Un outil « cette demande a-t-elle une réponse ? », sans tenir d'appel ouvert.</td></tr>
+    <tr><td>T5</td><td><b>Le kit se colle à la main, projet par projet.</b> La clé n'est montrée qu'une fois.</td><td>④</td><td class="src">spec §4.4</td><td><span class="sev m">moyen</span></td><td>Une commande qui écrit le kit dans le projet.</td></tr>
+    <tr><td>T6</td><td><b>Seul le créateur répond.</b> Absent, toute l'équipe attend.</td><td>⑤</td><td class="src">spec §3.4</td><td><span class="sev m">moyen</span></td><td>Un suppléant nommé par le créateur. Règle à trancher, pas à bricoler.</td></tr>
+    <tr><td>T7</td><td><b>L'ordre caché :</b> étiqueter les environnements avant la mission.</td><td>③ ④</td><td class="src">first-install.md</td><td><span class="sev m">moyen</span></td><td>Le dire sur l'écran de création, là où la permission manque.</td></tr>
+    <tr><td>T8</td><td><b>L'agent voit des outils qu'il ne peut pas appeler.</b></td><td>⑥</td><td class="src">known-limitations.md</td><td><span class="sev m">moyen</span></td><td>Filtrer la liste par outil. Déjà dans la feuille de route, sans plan.</td></tr>
+    <tr><td>T9</td><td><b>La preuve manque.</b> Pas d'audit tiers, « validé par la communauté » vide, peu de plugins éprouvés en vrai.</td><td>⑦ ①</td><td class="src">known-limitations.md</td><td><span class="sev m">moyen</span></td><td>Publier ce qui a tourné en vrai, plugin par plugin.</td></tr>
+    <tr><td>T10</td><td><b>Le journal ne sort pas.</b> 90 jours, pas d'export.</td><td>⑦</td><td class="src">spec §8, §11.2</td><td><span class="sev m">moyen</span></td><td>Un export simple vers un fichier ou un collecteur.</td></tr>
+    <tr><td>T11</td><td><b>L'auteur ne peut ni essayer ni soumettre d'une commande.</b></td><td>⑧</td><td class="src">intents/ship-a-plugin.md</td><td><span class="sev m">moyen</span></td><td>Finir le kit, dans l'ordre : essayer, passerelle locale, signer, soumettre.</td></tr>
+    <tr><td>T12</td><td><b>Une personne qui part reste active.</b></td><td>②</td><td class="src">known-limitations.md</td><td><span class="sev l">faible</span></td><td>Acceptable à six. À traiter avant soixante.</td></tr>
+    <tr><td>T13</td><td><b>Image publiée en amd64 seulement</b> selon les limites connues, alors que le workflow de release parle d'arm64.</td><td>Alice sur Mac</td><td class="src">known-limitations.md</td><td><span class="sev l">à vérifier</span></td><td>Je n'ai pas contrôlé le registre. Bloquant pour un mode desktop si c'est vrai.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<figure><div class="plate"><svg viewBox="0 0 860 236" role="img" aria-label="Vingt gestes aujourd'hui avant le premier appel gouverné, contre six dans une cible à discuter.">
+<text x="30" y="24" class="t-b">Aujourd'hui, sur un serveur</text>
+<rect class="bx" x="30" y="36" width="36" height="30" rx="3"/><text x="48" y="56" text-anchor="middle" class="t-s">1</text>
+<rect class="bx" x="70" y="36" width="36" height="30" rx="3"/><text x="88" y="56" text-anchor="middle" class="t-s">2</text>
+<rect class="bx" x="110" y="36" width="36" height="30" rx="3"/><text x="128" y="56" text-anchor="middle" class="t-s">3</text>
+<rect class="bx" x="150" y="36" width="36" height="30" rx="3"/><text x="168" y="56" text-anchor="middle" class="t-s">4</text>
+<rect class="bx" x="190" y="36" width="36" height="30" rx="3"/><text x="208" y="56" text-anchor="middle" class="t-s">5</text>
+<rect class="bx" x="230" y="36" width="36" height="30" rx="3"/><text x="248" y="56" text-anchor="middle" class="t-s">6</text>
+<rect class="bx" x="270" y="36" width="36" height="30" rx="3"/><text x="288" y="56" text-anchor="middle" class="t-s">7</text>
+<rect class="bx" x="310" y="36" width="36" height="30" rx="3"/><text x="328" y="56" text-anchor="middle" class="t-s">8</text>
+<rect class="bx" x="350" y="36" width="36" height="30" rx="3"/><text x="368" y="56" text-anchor="middle" class="t-s">9</text>
+<rect class="bx" x="390" y="36" width="36" height="30" rx="3"/><text x="408" y="56" text-anchor="middle" class="t-s">10</text>
+<rect class="bx" x="430" y="36" width="36" height="30" rx="3"/><text x="448" y="56" text-anchor="middle" class="t-s">11</text>
+<rect class="bx" x="470" y="36" width="36" height="30" rx="3"/><text x="488" y="56" text-anchor="middle" class="t-s">12</text>
+<rect class="bx" x="510" y="36" width="36" height="30" rx="3"/><text x="528" y="56" text-anchor="middle" class="t-s">13</text>
+<rect class="bx" x="550" y="36" width="36" height="30" rx="3"/><text x="568" y="56" text-anchor="middle" class="t-s">14</text>
+<rect class="bx" x="590" y="36" width="36" height="30" rx="3"/><text x="608" y="56" text-anchor="middle" class="t-s">15</text>
+<rect class="bx" x="630" y="36" width="36" height="30" rx="3"/><text x="648" y="56" text-anchor="middle" class="t-s">16</text>
+<rect class="bx" x="670" y="36" width="36" height="30" rx="3"/><text x="688" y="56" text-anchor="middle" class="t-s">17</text>
+<rect class="bx" x="710" y="36" width="36" height="30" rx="3"/><text x="728" y="56" text-anchor="middle" class="t-s">18</text>
+<rect class="bx" x="750" y="36" width="36" height="30" rx="3"/><text x="768" y="56" text-anchor="middle" class="t-s">19</text>
+<rect class="bx-a" x="790" y="36" width="36" height="30" rx="3"/><text x="808" y="56" text-anchor="middle" class="t-s">20</text>
+<path class="ln" d="M30 72 V78 H106 V72"/><text x="68.0" y="94" text-anchor="middle" class="t-s t-m">prérequis</text>
+<path class="ln" d="M110 72 V78 H306 V72"/><text x="208.0" y="94" text-anchor="middle" class="t-s t-m">installer</text>
+<path class="ln" d="M310 72 V78 H506 V72"/><text x="408.0" y="94" text-anchor="middle" class="t-s t-m">premier accès</text>
+<path class="ln" d="M510 72 V78 H586 V72"/><text x="548.0" y="94" text-anchor="middle" class="t-s t-m">brancher</text>
+<path class="ln" d="M590 72 V78 H786 V72"/><text x="688.0" y="94" text-anchor="middle" class="t-s t-m">mission et kit</text>
+<path class="ln" d="M790 72 V78 H826 V72"/><text x="808.0" y="94" text-anchor="middle" class="t-s t-m">appel</text>
+<text x="30" y="140" class="t-b">Cible à discuter, sur son portable</text>
+<rect class="bx" x="30" y="152" width="127" height="34" rx="3"/><text x="93.5" y="173" text-anchor="middle" class="t-s">docker run</text>
+<rect class="bx" x="165" y="152" width="127" height="34" rx="3"/><text x="228.5" y="173" text-anchor="middle" class="t-s">ouvrir localhost</text>
+<rect class="bx" x="300" y="152" width="127" height="34" rx="3"/><text x="363.5" y="173" text-anchor="middle" class="t-s">coller un jeton</text>
+<rect class="bx" x="435" y="152" width="127" height="34" rx="3"/><text x="498.5" y="173" text-anchor="middle" class="t-s">mission pré-remplie</text>
+<rect class="bx" x="570" y="152" width="127" height="34" rx="3"/><text x="633.5" y="173" text-anchor="middle" class="t-s">une ligne dans l'agent</text>
+<rect class="bx-a" x="705" y="152" width="127" height="34" rx="3"/><text x="768.5" y="173" text-anchor="middle" class="t-s">premier appel</text>
+<text x="30" y="214" class="t-s t-m">Les six cases du bas ne décrivent rien qui existe : c'est l'hypothèse à tester avec Q1 et Q3.</text>
+</svg></div><figcaption><b>Planche 7.</b> La distance entre « je suis curieux » et le premier point bleu de la planche 3. C'est elle que la page d'accueil devra promettre de franchir.</figcaption></figure>
+
+<details><summary>Les vingt gestes d'aujourd'hui, un par un</summary>
+<ol class="steps">
+  <li>Faire pointer un nom DNS vers la machine</li><li>Ouvrir les ports 80 et 443</li>
+  <li>Cloner le dépôt</li><li>Copier les deux fichiers de configuration</li><li>Générer le jeton d'amorçage</li><li>Renseigner domaine, URL, administrateurs, jeton</li><li>Lancer Compose et attendre la construction</li>
+  <li>Ouvrir le lien d'amorçage, coller le jeton</li><li>Télécharger la clé maîtresse et la ranger ailleurs</li><li>Créer le premier administrateur ou tester un fournisseur d'identité</li><li>Enrôler le second facteur</li><li>Terminer le setup</li>
+  <li>Créer un jeton chez le service et le coller</li><li>Étiqueter les environnements</li>
+  <li>Créer la mission</li><li>Copier la clé et exporter la variable</li><li>Ajouter l'entrée <code>.mcp.json</code></li><li>Coller le bloc d'instructions</li><li>Installer le helper git</li>
+  <li>Premier appel de l'agent</li>
+</ol>
+<p class="muted" style="margin-top:8px;font-size:0.88rem">Compté à partir de deploy/README.md et du handbook first-install. Le découpage est le mien ; à deux ou trois gestes près selon les choix.</p>
+</details>
+
+<h3 style="margin-top:36px">Ce qui tient déjà, et qu'il ne faut pas casser</h3>
+<ul class="keeps">
+  <li>Le plugin qui s'installe seul quand une personne branche son service pour la première fois.</li>
+  <li>Un seul écran pour créer une mission, sans confirmation, avec des niveaux de confiance qui écrivent la politique.</li>
+  <li>Des refus structurés, chacun avec sa suite à donner.</li>
+  <li>L'historique d'une mission et le retour à une version qui marchait.</li>
+  <li>Les notifications sur le téléphone sans application native, et aucun oui donné ailleurs que sur la page.</li>
+  <li>Un modèle de menace qui dit ce qu'il ne couvre pas.</li>
+</ul>
+
+<!-- ================= 6 ================= -->
+<h2 id="landing">6. Ce que la table dit de la page d'accueil</h2>
+<div class="stack section-intro">
+<p>La page actuelle s'ouvre sur « un serveur que vous installez sur votre réseau ». Elle parle à l'administrateur de la colonne de droite. La table dit que celui qui arrive est Alice, seule, et que ce qu'elle veut s'appelle l'autonomie de son agent.</p>
+<p>Trois conséquences, avant tout dessin :</p>
+</div>
+<ul class="keeps">
+  <li><b>La promesse</b> est le moment de la scène 5 et de la scène 6, montré : l'agent travaille, puis s'arrête au bon endroit. Les identifiants à l'abri viennent en preuve, pas en titre.</li>
+  <li><b>Le premier geste</b> tient en une ligne. La page ne peut le promettre que si T1 et T2 sont comblés ; sinon elle ment dès le premier bouton.</li>
+  <li><b>Trois portes, pas une</b> : essayer seul, installer pour l'équipe, et une entrée à part pour le relecteur sécurité, qui veut lire sans être séduit.</li>
+</ul>
+
+<h3 style="margin-top:36px">Ce qu'il faut trancher ensemble avant de dessiner</h3>
+<ol class="questions">
+  <li><span>Q1</span><div><p><b>« Mode desktop » veut dire quoi ?</b> Une vraie application à installer, ou un <code>docker run</code> sur <code>localhost</code> présenté comme tel ?</p><p>Les deux butent sur la même chose : https exigé et second facteur obligatoire pour un administrateur. Assouplir pour une instance locale est une décision de sécurité, donc un ADR.</p></div></li>
+  <li><span>Q2</span><div><p><b>À qui parle la première phrase ?</b> À Alice seule (son agent travaille sans elle) ou à l'équipe (une frontière lisible pour tous) ?</p><p>Ma lecture de la table penche pour Alice, avec l'équipe juste en dessous. C'est un pari, pas une donnée.</p></div></li>
+  <li><span>Q3</span><div><p><b>La démo simulée et l'instance locale réelle : une seule chose ou deux ?</b></p><p>Si le mode local arrive avec un service simulé déjà branché, la démo devient la première minute du vrai produit, et T1 et T2 se ferment d'un seul geste.</p></div></li>
+  <li><span>Q4</span><div><p><b>Seul le créateur répond : on l'assume ou on ouvre un suppléant ?</b></p><p>La règle protège l'invariant « un humain responsable par mission ». Elle se paie à la scène 7.</p></div></li>
+  <li><span>Q5</span><div><p><b>L'auteur de plugin : d'abord le plugin privé, ou d'abord le catalogue public ?</b></p><p>Le privé a un payeur évident, la société qui veut brancher son service interne. Le public fait tourner la roue de la planche 6.</p></div></li>
+  <li><span>Q6</span><div><p><b>Que montre-t-on comme preuve, sans audit tiers ?</b></p><p>Ce qui a réellement tourné, les limites écrites noir sur blanc, le code. La page actuelle le fait déjà avec honnêteté ; il faut garder ce ton.</p></div></li>
+</ol>
+
+</div>
+
+</body></html>

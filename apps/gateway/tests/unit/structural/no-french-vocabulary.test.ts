@@ -33,6 +33,14 @@ const ALLOWED: Record<string, string> = {
     'an applied migration is checksummed: its text never changes',
   'apps/gateway/migrations/0027_mission_connection_trust_levels.sql':
     'rewrites the values stored under their old names',
+  'docs/research/2026-11-19-personas.html':
+    'research saved byte for byte from its artifact, in French: « écran » is not the retired word',
+  'docs/research/2026-11-19-personas.md':
+    'transcription of that research page, in French: « écran » is not the retired word',
+  'docs/research/2026-11-20-facade.html':
+    'research saved byte for byte from its artifact, in French: « écran » is not the retired word',
+  'docs/research/2026-11-20-facade.md':
+    'transcription of that research page, in French: « écran » is not the retired word',
   'apps/gateway/tests/unit/server/store/migrate.test.ts':
     'proves that migration 0027 rewrites those stored values',
 };
