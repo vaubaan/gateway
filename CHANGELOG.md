@@ -25,6 +25,9 @@ What an operator or a plugin author reads first; every point is detailed below.
 - **Stricter permissions in GitHub, Supabase and SSH**, and a mission an agent issues never
   outlives the mission that issued it.
 - **Plugin versions come from the catalog's index** and activate without a restart.
+- **Updating plugins is one click per plugin, or one for all**: Administration › Plugins lists
+  what runs, each update behind one confirmation with nothing to type, and the catalog has a page
+  of its own. The pages of Settings are listed under its entry in the side column.
 
 ### Plugin SDK
 
@@ -67,6 +70,18 @@ What an operator or a plugin author reads first; every point is detailed below.
 
 ### Changed
 
+- **Administration › Plugins lists what runs and updates it in one confirmation.** Only the plugins
+  this gateway runs are listed. A plugin behind the catalog, or with a Vaubaan-signed version
+  already downloaded and waiting, shows **Update** on its row; one dialog, with nothing to type,
+  downloads the version if needed, checks its signature and starts it on trial. **Update all**
+  does every plugin behind at once and names any that failed. A plugin installed here shows
+  **Stop** behind the same dialog. The catalog's other plugins, the archive upload and the trusted
+  signers moved to **Browse the catalog** (`/admin/plugins/catalog`). A version not signed by
+  Vaubaan still asks for its plugin's id typed (ADR plugins-activated-by-an-administrator-on-trial,
+  amendment 2026-11-22).
+- **The pages of Settings are listed under its entry in the side column**, as soon as one is in
+  Settings, instead of a row of tabs above the page; a narrow window or a phone keeps them above
+  the page.
 - **Miro (plugin 0.5.1): the tool list captured again.** Miro's descriptions of five tools are
   today's. Its new `content_search` is left out: it searches every board, space and call recording
   the person can open, beyond the mission's boards (agents keep `list_boards`). Tables, prototypes
