@@ -18,6 +18,11 @@ export const REFUSAL_CODES = [
   'approval-required',
   /** The arguments cite a resource outside the mission's selection. */
   'resource-not-in-mission',
+  /**
+   * Several accounts of the call's service could serve it: the call names no
+   * resource, or resources of two of them. Names each account and its resources.
+   */
+  'account-ambiguous',
   /** Sliding-window rate limit of a risk exceeded. */
   'rate-limited',
   /** The account is `expired`: its owner reconnects it. */

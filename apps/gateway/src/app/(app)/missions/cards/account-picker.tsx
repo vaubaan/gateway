@@ -45,30 +45,6 @@ import styles from './cards.module.css';
 export type Picking =
   { readonly kind: 'add' } | { readonly kind: 'change'; readonly card: CardState };
 
-/** The account cannot be added: another account of its service is in the mission. */
-function blockedBy(
-  context: readonly IssuanceAccount[],
-  state: Pick<FormState, 'cards'>,
-  account: IssuanceAccount,
-): string | null {
-  const taken = state.cards.some((card) => {
-    const other = context.find((c) => c.id === card.accountId);
-    return other !== undefined && other.service === account.service && other.id !== account.id;
-  });
-  return taken ? CARD_WORDS.oneAccountPerService : null;
-}
-
-/** The accounts "+ Add an account" offers, in context order, with why one cannot be taken. */
-export function offeredAccounts(
-  context: readonly IssuanceAccount[],
-  state: Pick<FormState, 'cards'>,
-): { readonly account: IssuanceAccount; readonly blocked: string | null }[] {
-  return context.map((account) => ({
-    account,
-    blocked: blockedBy(context, state, account),
-  }));
-}
-
 export function AccountPicker({
   context,
   state,
@@ -91,7 +67,8 @@ export function AccountPicker({
 
   if (!account) {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const offered = offeredAccounts(context, state).filter(({ account: c }) => {
+    // Any account may join, two of one service included (spec §3.1).
+    const offered = context.filter((c) => {
       const text = `${c.service_label} ${c.display_name}`.toLowerCase();
       return terms.every((term) => text.includes(term));
     });
@@ -114,7 +91,7 @@ export function AccountPicker({
           onChange={(event) => setQuery(event.target.value)}
         />
         <ul className={styles.accountList}>
-          {offered.map(({ account: c, blocked }) => {
+          {offered.map((c) => {
             const has = cardsOf(state, c.id).length > 0;
             const free = has ? freeResources(c, state) : null;
             return (
@@ -122,15 +99,12 @@ export function AccountPicker({
                 <button
                   type="button"
                   className={styles.accountItem}
-                  disabled={blocked !== null}
-                  title={blocked ?? undefined}
                   onClick={() => setAccountId(c.id)}
                 >
                   <ServiceMark name={c.service_label} icon={icons[c.service] ?? null} />
                   {accountLabel(c)}
                   <span className={styles.accountFree}>
-                    {blocked ??
-                      (free ? CARD_WORDS.free(free.free, free.total, c.resource_noun.other) : '')}
+                    {free ? CARD_WORDS.free(free.free, free.total, c.resource_noun.other) : ''}
                   </span>
                 </button>
               </li>

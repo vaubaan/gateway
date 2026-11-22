@@ -623,8 +623,6 @@ export function issueSentence(
       return 'Give the mission a name.';
     case 'no-account':
       return 'Add at least one account.';
-    case 'duplicate-service':
-      return 'A mission takes one account per service.';
     case 'invalid-period':
       return 'Choose how often the limits reset.';
     case 'invalid-expiry':

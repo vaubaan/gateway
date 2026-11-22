@@ -14,26 +14,17 @@ while each key still reaches one resource.
 
 ## Put two accounts of one service in a mission
 
-status: proposed
+status: implemented
 requires: mission, account, service
+anchors: apps/gateway/src/lib/missions/preview.ts, apps/gateway/src/app/(app)/missions/cards/account-picker.tsx, apps/gateway/tests/integration/execution/several-accounts.test.ts
 spec: ../spec/vaubaan-gateway.md#31-the-chain
-acceptance:
-
-- Creating or editing a mission with two accounts of one service succeeds; the mission page shows each account with its own resources, permissions and budget
-- Each account is still checked against the creator's authority on it; an account outside it is refused by name
 
 ## Let my agent call the right account by the resource it names
 
-status: proposed
+status: implemented
 requires: mission, account, resource
+anchors: apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/src/server/git/scope.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
-acceptance:
-
-- `tools/list` shows a service's tools once, whatever the number of its accounts in the mission
-- A call naming a resource runs with the account that holds it, is judged and charged in that account's set, and its audit entry names that account
-- A call naming a resource no account of the mission holds is refused `resource-not-in-mission`, listing the resources of every account of that service
-- A call that names no resource, or resources of two accounts, while two accounts of its service could serve it is refused `account-ambiguous`, naming the candidate accounts with their resources and telling the agent to name the resource; a tool that can name no resource is refused so too
-- The git remote exposes each account's repository at its own URL (`/git/github/<owner>/<repo>.git`), both reachable with the same mission token; the URL names the repository, so it never needs disambiguating
 
 ## Let a tool that names no resource answer every account
 

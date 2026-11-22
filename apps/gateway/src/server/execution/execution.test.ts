@@ -267,6 +267,121 @@ describe('an account connected a way the plugin no longer offers', () => {
   });
 });
 
+describe('several accounts of one service in a mission', () => {
+  // Spec §3.1, risk model §4.7 "The account of a call": a call runs with the account
+  // holding the resource it names; the gateway never picks one for the agent.
+  const depot = depotPlugin().plugin;
+  const registry = createRegistry([depot]);
+  const resource = (account_id: string, ref: string) => ({
+    id: `r-${ref}`,
+    account_id,
+    service: 'depot',
+    ref,
+    env: null,
+    displayName: `Space ${ref}`,
+    discovered_at: '2026-11-22T00:00:00.000Z',
+  });
+  const record = (ref: string) => ({
+    id: `r-${ref}`,
+    ref,
+    env: null,
+    displayName: `Space ${ref}`,
+    discoveredAt: '2026-11-22T00:00:00.000Z',
+  });
+  const account = (id: string, display_name: string, extra: object = {}) => ({
+    id,
+    service: 'depot',
+    display_name,
+    ...extra,
+  });
+  const context = (accounts: readonly object[]): MissionContext =>
+    ({
+      mission: { id: 'm' },
+      accounts,
+      // The mission reaches alpha on the first account and beta on the second.
+      resources: [resource('c-a', 'alpha'), resource('c-b', 'beta')],
+      policy: [{ risk_id: 'depot.read' }],
+    }) as unknown as MissionContext;
+  const two = context([account('c-a', 'Depot A'), account('c-b', 'Depot B')]);
+  // The second account also knows gamma, which the mission does not reach.
+  const known: Record<string, string[]> = { 'c-a': ['alpha'], 'c-b': ['beta', 'gamma'] };
+  const stage = createResourceStage({
+    registry,
+    accounts: {
+      listResources: async (id: string) => (known[id] ?? []).map(record),
+    } as never,
+  });
+  const call = (tool: string, args: Record<string, unknown> = {}) =>
+    ({ tool: `depot__${tool}`, args }) as unknown as CallRequest;
+
+  it('lists the service tools once, whatever the number of its accounts', () => {
+    expect(callableTools(two, registry).map((t) => t.name)).toEqual(
+      callableTools(context([account('c-a', 'Depot A')]), registry).map((t) => t.name),
+    );
+  });
+
+  it('runs a call with the account holding the resource it names', async () => {
+    const resolved = await stage.resolve(two, call('read_item', { space: 'beta' }));
+    expect(resolved).toMatchObject({
+      ok: true,
+      target: { account: { id: 'c-b' }, resource: { ref: 'beta' } },
+    });
+    const first = await stage.resolve(two, call('write_item', { space: 'alpha' }));
+    expect(first).toMatchObject({ ok: true, target: { account: { id: 'c-a' } } });
+  });
+
+  it('refuses account-ambiguous a call that names no resource, naming each account and its resources', async () => {
+    for (const unnamed of [call('read_item'), call('whoami')]) {
+      const refused = await stage.resolve(two, unnamed);
+      expect(refused).toMatchObject({
+        ok: false,
+        refusal: {
+          code: 'account-ambiguous',
+          service: 'depot',
+          accounts: [
+            { id: 'c-a', name: 'Depot A', resources: [{ ref: 'alpha' }] },
+            { id: 'c-b', name: 'Depot B', resources: [{ ref: 'beta' }] },
+          ],
+        },
+      });
+      const hint = (refused as { refusal: { hint: string } }).refusal.hint;
+      expect(hint).toContain('names no resource');
+      expect(hint).toContain("'Depot B' (beta)");
+    }
+  });
+
+  it('refuses resource-not-in-mission a resource an account holds outside the mission, listing every account reached', async () => {
+    const refused = await stage.resolve(two, call('read_item', { space: 'gamma' }));
+    expect(refused).toMatchObject({
+      ok: false,
+      refusal: {
+        code: 'resource-not-in-mission',
+        cited_ref: 'gamma',
+        account: { id: 'c-b', name: 'Depot B' },
+        allowed_resources: [{ ref: 'alpha' }, { ref: 'beta' }],
+      },
+    });
+  });
+
+  it('sends a call naming nothing to the only account that still serves the mission', async () => {
+    const lost = context([
+      account('c-a', 'Depot A', { lost: { cause: 'account-revoked', final: true } }),
+      account('c-b', 'Depot B'),
+    ]);
+    const resolved = await stage.resolve(lost, call('whoami'));
+    expect(resolved).toMatchObject({ ok: true, target: { account: { id: 'c-b' } } });
+  });
+
+  it('keeps the single account default: a call naming nothing reaches its only resource', async () => {
+    const one = context([account('c-a', 'Depot A')]);
+    const resolved = await stage.resolve(one, call('read_item'));
+    expect(resolved).toMatchObject({
+      ok: true,
+      target: { account: { id: 'c-a' }, resource: { ref: 'alpha' } },
+    });
+  });
+});
+
 describe('token verifier', () => {
   const BEARER = `vbn_live_AbCd1234_${'s'.repeat(32)}`;
   const token: VerifiedToken = {

@@ -35,7 +35,10 @@ export const DECISION_REPORT_KEYS = [
 /**
  * `allowed`, or the refusal code the execution door answered. A token that
  * is not a mission token (`wrong-credential-kind`) names no plugin and is
- * not a decision about a call.
+ * not a decision about a call; a call that does not say which account of its
+ * service it means (`account-ambiguous`) is refused before any risk is read,
+ * and the collector's schema, external, does not know the code: neither is
+ * reported.
  */
 /**
  * The collector's names of the refusal codes renamed since its schema was written (ADR
@@ -56,10 +59,14 @@ export function wireDecisionOf(decision: string): string {
   return (WIRE_REFUSAL_NAMES as Readonly<Record<string, string>>)[decision] ?? decision;
 }
 
-export type DecisionOutcome = 'allowed' | WireName<Exclude<RefusalCode, 'wrong-credential-kind'>>;
+/** The refusal codes no decision report carries (see above). */
+const NOT_REPORTED = ['wrong-credential-kind', 'account-ambiguous'] as const;
+type NotReported = (typeof NOT_REPORTED)[number];
+
+export type DecisionOutcome = 'allowed' | WireName<Exclude<RefusalCode, NotReported>>;
 export const DECISION_OUTCOMES: readonly DecisionOutcome[] = [
   'allowed',
-  ...REFUSAL_CODES.filter((code) => code !== 'wrong-credential-kind').map(
+  ...REFUSAL_CODES.filter((code) => !(NOT_REPORTED as readonly string[]).includes(code)).map(
     (code) => wireDecisionOf(code) as DecisionOutcome,
   ),
 ];

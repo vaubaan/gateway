@@ -334,7 +334,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     fail('the simulated GitHub has fewer than three tokens', 0);
   }
   const github = await seeder.connectGithub(alice.user, product, 'Acme app');
-  // A mission carries one account per service: one repository per mission.
+  // A mission may carry both: one call runs with the account of the repository it names.
   await seeder.connectGithub(alice.user, webToken, 'Acme web');
   const platformGithub = await seeder.connectGithub(
     alice.user,

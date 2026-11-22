@@ -4,9 +4,12 @@
  * whose arguments cite a resource outside the mission's selection is refused
  * with `resource-not-in-mission`, before any risk is evaluated").
  *
- * The account: a tool belongs to one plugin (`registry.serviceForTool`)
- * and a mission holds at most one account per service (handbook missions,
- * "One account per service"), so `(mission, service)` names it.
+ * The account: a tool belongs to one plugin (`registry.serviceForTool`). With
+ * one account of that service in the mission, `(mission, service)` names it.
+ * With several (spec §3.1, risk model §4.7 "The account of a call"), each is
+ * tried as below, and the call runs with the one whose resources it names; a
+ * call naming none, or resources of two accounts, is `account-ambiguous`: the
+ * gateway never picks an account for the agent.
  *
  * The resource: the host does not know which argument of which tool carries a
  * ref — the plugin's classifier does, and it writes the ref into the slices it
@@ -150,6 +153,21 @@ export function doorMismatch(plugin: ServicePlugin, call: CallRequest): string |
   return null;
 }
 
+/** What a classifier is shown of an account: the resources the mission reaches, and all it knows. */
+interface Pool {
+  readonly allowed: readonly MissionResource[];
+  readonly known: readonly MissionResource[];
+}
+
+/** What one account makes of a call, before an account is chosen. */
+type AccountReading =
+  /** The call names resources the mission reaches on this account. */
+  | { readonly kind: 'named'; readonly resource: MissionResource | null }
+  /** The call names a resource this account holds that the mission does not reach. */
+  | { readonly kind: 'foreign'; readonly ref: string }
+  /** The call names nothing of this account; `resource` is its only one, if so. */
+  | { readonly kind: 'none'; readonly resource: MissionResource | null };
+
 export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
   function notInMission(
     citedRef: string,
@@ -162,13 +180,57 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
         cited_ref: citedRef,
         account: { id: account.id, name: account.display_name },
         ...(account.takes_future_resources === true ? { takes_future_resources: true } : {}),
-        allowed_resources: allowed.map((r) => ({
-          ref: r.ref,
-          env: r.env ?? null,
-          display_name: r.displayName,
-        })),
+        allowed_resources: allowed.map(resourceView),
       }),
     };
+  }
+
+  /** The resources the mission may touch on an account, and every one the account knows. */
+  async function poolOf(account: MissionAccount, ctx: MissionContext): Promise<Pool> {
+    const known = (await deps.accounts.listResources(account.id)).map((record) =>
+      missionResourceOf(account, record),
+    );
+    return { allowed: allowedOn(ctx, account), known };
+  }
+
+  /**
+   * How the call reads against one account: the reading of steps 1 and 2 above.
+   * The classifier is shown `shown` — the account's own pool, or, when the mission
+   * carries several accounts of the service, theirs together: a classifier that
+   * defaults to "the only resource" must then be told which one, so a call that
+   * names none is never read as naming each account's. Only this account's refs
+   * are read off its slices.
+   */
+  function read(
+    plugin: ServicePlugin,
+    call: CallRequest,
+    account: MissionAccount,
+    own: Pool,
+    shown: Pool,
+  ): AccountReading {
+    const allowedRefs = new Set(own.allowed.map((r) => r.ref));
+    const knownRefs = new Set(own.known.map((r) => r.ref));
+    const only = own === shown && own.allowed.length === 1 ? (own.allowed[0] ?? null) : null;
+
+    const narrow = classifySafely(plugin, call, shown.allowed, account);
+    if ('slices' in narrow) {
+      const cited = citedRefs(narrow.slices, knownRefs);
+      const foreign = cited.find((ref) => !allowedRefs.has(ref));
+      if (foreign !== undefined) return { kind: 'foreign', ref: foreign };
+      const resource = own.allowed.find((r) => cited.includes(r.ref));
+      return resource === undefined
+        ? { kind: 'none', resource: only }
+        : { kind: 'named', resource };
+    }
+
+    if (shown.known.some((r) => !shown.allowed.some((a) => a.ref === r.ref))) {
+      const wide = classifySafely(plugin, call, shown.known, account);
+      if ('slices' in wide) {
+        const foreign = citedRefs(wide.slices, knownRefs).find((ref) => !allowedRefs.has(ref));
+        if (foreign !== undefined) return { kind: 'foreign', ref: foreign };
+      }
+    }
+    return { kind: 'none', resource: null };
   }
 
   return {
@@ -183,8 +245,9 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
       const { plugin } = registered;
       const wrongDoor = doorMismatch(plugin, call);
       if (wrongDoor) return { ok: false, reason: wrongDoor };
-      const account = ctx.accounts.find((c) => c.service === plugin.id);
-      if (!account) {
+      const candidates = ctx.accounts.filter((c) => c.service === plugin.id);
+      const first = candidates[0];
+      if (first === undefined) {
         return {
           ok: false,
           reason: `tool '${call.tool}' belongs to ${plugin.displayName}, and this mission holds no ${plugin.displayName} account.`,
@@ -193,34 +256,87 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
 
       // A tool the account's way of connecting cannot run (a token where the
       // tool needs the company's app) is refused here, before any budget is touched.
-      const unavailable = toolUnavailableOn(plugin, account, call.tool);
-      if (unavailable) return { ok: false, reason: unavailable };
+      const within = (
+        account: MissionAccount,
+        resource: MissionResource | null,
+      ): ResourceResolution => {
+        const unavailable = toolUnavailableOn(plugin, account, call.tool);
+        return unavailable
+          ? { ok: false, reason: unavailable }
+          : { ok: true, target: { account, resource } };
+      };
 
-      const allowed = ctx.resources.filter((r) => r.account_id === account.id);
-      const allowedRefs = new Set(allowed.map((r) => r.ref));
-      const known = (await deps.accounts.listResources(account.id)).map((record) =>
-        missionResourceOf(account, record),
-      );
-      const knownRefs = new Set(known.map((r) => r.ref));
-
-      const narrow = classifySafely(plugin, call, allowed, account);
-      if ('slices' in narrow) {
-        const cited = citedRefs(narrow.slices, knownRefs);
-        const foreign = cited.find((ref) => !allowedRefs.has(ref));
-        if (foreign !== undefined) return notInMission(foreign, account, allowed);
-        const resource =
-          allowed.find((r) => cited.includes(r.ref)) ?? (allowed.length === 1 ? allowed[0] : null);
-        return { ok: true, target: { account, resource: resource ?? null } };
-      }
-
-      if (known.some((r) => !allowedRefs.has(r.ref))) {
-        const wide = classifySafely(plugin, call, known, account);
-        if ('slices' in wide) {
-          const foreign = citedRefs(wide.slices, knownRefs).find((ref) => !allowedRefs.has(ref));
-          if (foreign !== undefined) return notInMission(foreign, account, allowed);
+      if (candidates.length === 1) {
+        const unavailable = toolUnavailableOn(plugin, first, call.tool);
+        if (unavailable) return { ok: false, reason: unavailable };
+        const pool = await poolOf(first, ctx);
+        const reading = read(plugin, call, first, pool, pool);
+        if (reading.kind === 'foreign') {
+          return notInMission(reading.ref, first, allowedOn(ctx, first));
         }
+        return { ok: true, target: { account: first, resource: reading.resource } };
       }
-      return { ok: true, target: { account, resource: null } };
+
+      const pools = await Promise.all(candidates.map((account) => poolOf(account, ctx)));
+      const shown: Pool = {
+        allowed: pools.flatMap((p) => p.allowed),
+        known: pools.flatMap((p) => p.known),
+      };
+      const readings = candidates.map((account, index) => ({
+        account,
+        reading: read(plugin, call, account, pools[index] ?? { allowed: [], known: [] }, shown),
+      }));
+      const named = readings.flatMap(({ account, reading }) =>
+        reading.kind === 'named' ? [{ account, resource: reading.resource }] : [],
+      );
+      const foreign = readings.flatMap(({ account, reading }) =>
+        reading.kind === 'foreign' ? [{ account, ref: reading.ref }] : [],
+      );
+      const [chosen] = named;
+      if (chosen !== undefined && named.length === 1 && foreign.length === 0) {
+        return within(chosen.account, chosen.resource);
+      }
+      const [outside] = foreign;
+      if (outside !== undefined && named.length === 0) {
+        // Every resource the mission reaches on the service, whichever account holds it.
+        const allowed = candidates.flatMap((account) => allowedOn(ctx, account));
+        return notInMission(outside.ref, outside.account, allowed);
+      }
+      // A call naming nothing goes to the only account that still serves the
+      // mission, a lost one being refused by the pipeline anyway.
+      const serving = readings.filter(({ account }) => account.lost === undefined);
+      const [alone] = serving;
+      if (alone !== undefined && named.length === 0 && serving.length === 1) {
+        return within(alone.account, alone.reading.kind === 'none' ? alone.reading.resource : null);
+      }
+      return {
+        ok: false,
+        refusal: refuse.accountAmbiguous({
+          service: plugin.id,
+          service_label: plugin.displayName,
+          names_several: named.length + foreign.length > 1,
+          accounts: (serving.length > 0 ? serving.map((r) => r.account) : candidates).map(
+            (account) => ({
+              id: account.id,
+              name: account.display_name,
+              resources: allowedOn(ctx, account).map(resourceView),
+            }),
+          ),
+        }),
+      };
     },
   };
+}
+
+/** The resources the mission may touch on one account. */
+function allowedOn(ctx: MissionContext, account: MissionAccount): MissionResource[] {
+  return ctx.resources.filter((r) => r.account_id === account.id);
+}
+
+function resourceView(r: MissionResource): {
+  ref: string;
+  env: string | null;
+  display_name: string | null;
+} {
+  return { ref: r.ref, env: r.env ?? null, display_name: r.displayName };
 }

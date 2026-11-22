@@ -35,11 +35,12 @@ describe('toolPrefixFor / splitToolName', () => {
 });
 
 describe('refusal codes', () => {
-  test('exactly the nine codes of spec §4.1 and §6', () => {
+  test('exactly the ten codes of spec §4.1 and §6', () => {
     expect([...REFUSAL_CODES].sort()).toEqual(
       [
         'approval-required',
         'budget-exhausted',
+        'account-ambiguous',
         'account-revoked',
         'account-unavailable',
         'mission-inactive',

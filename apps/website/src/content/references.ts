@@ -130,6 +130,8 @@ export const PERSON_NEXT: Readonly<Record<RefusalCode, string>> = {
     'Open the link, or **Waiting for you**: the request shows the exact call. Approve it or refuse it; unanswered, it closes when it expires. An approval is used once, for that call with those arguments.',
   'resource-not-in-mission':
     'If the task needs that resource, **Edit mission** and select it: the agent keeps its key and its next call reaches it. A resource created outside the gateway reaches a mission that takes "the resources found later" once discovery finds it.',
+  'account-ambiguous':
+    'Nothing: the agent calls again naming the resource it means. A mission may hold several accounts of one service (one GitHub repository per key, say); each call runs with the account of the resource it names.',
   'rate-limited':
     'Nothing, usually: the agent waits and retries. If the per-minute limit is too low for the task, raise it under **Edit mission**, **Advanced**.',
   'account-unavailable':
@@ -173,6 +175,23 @@ const EXAMPLES: Readonly<Record<RefusalCode, Refusal>> = {
     cited_ref: 'acme/billing',
     account: { id: 'acc_02', name: 'acme' },
     allowed_resources: [{ ref: 'acme/web', env: null, display_name: null }],
+  }),
+  'account-ambiguous': refuse.accountAmbiguous({
+    service: 'github',
+    service_label: 'GitHub',
+    names_several: false,
+    accounts: [
+      {
+        id: 'acc_02',
+        name: 'acme web',
+        resources: [{ ref: 'acme/web', env: null, display_name: null }],
+      },
+      {
+        id: 'acc_04',
+        name: 'acme api',
+        resources: [{ ref: 'acme/api', env: null, display_name: null }],
+      },
+    ],
   }),
   'rate-limited': refuse.rateLimited({
     risk_id: 'notion.content-append',

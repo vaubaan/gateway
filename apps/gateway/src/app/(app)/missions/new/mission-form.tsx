@@ -82,7 +82,7 @@ import { messageOf } from '@/lib/http/message-of';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
 import cardStyles from '../cards/cards.module.css';
-import { AccountPicker, offeredAccounts, type Picking } from '../cards/account-picker';
+import { AccountPicker, type Picking } from '../cards/account-picker';
 import { actionRows, cardDigest, changeSummary, levelMatching } from '../cards/card-model';
 import { CustomModal } from '../cards/custom-modal';
 import { LostAccountCard } from '../cards/lost-account-card';
@@ -406,7 +406,6 @@ export function MissionForm({
   );
   const cardKeys = new Set(state.cards.map((c) => c.accountId));
   const loose = issues.filter((i) => i.account_id === undefined || !cardKeys.has(i.account_id));
-  const offered = offeredAccounts(context, state).filter(({ blocked }) => blocked === null);
   const customCard = custom ? state.cards.find((c) => c.key === custom.cardKey) : undefined;
   const customAccount = customCard ? accountOf(customCard) : undefined;
 
@@ -686,15 +685,15 @@ export function MissionForm({
           <div className={cardStyles.addRow}>
             <Button
               type="button"
-              disabled={offered.length === 0}
-              title={offered.length === 0 ? CARD_WORDS.noAccountLeft : undefined}
+              disabled={context.length === 0}
+              title={context.length === 0 ? CARD_WORDS.noAccountLeft : undefined}
               onClick={() => setPicking({ kind: 'add' })}
               data-testid="add-account"
             >
               {CARD_WORDS.addAccount}
             </Button>
             <span className={cardStyles.marks} aria-hidden="true">
-              {[...new Map(offered.map(({ account: c }) => [c.service, c])).values()].map((c) => (
+              {[...new Map(context.map((c) => [c.service, c])).values()].map((c) => (
                 <ServiceMark
                   key={c.service}
                   name={c.service_label}

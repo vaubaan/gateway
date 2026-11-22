@@ -281,7 +281,6 @@ export const PREVIEW_ISSUE_CODES = [
   'account-ambiguous',
   'account-unavailable',
   'duplicate-account',
-  'duplicate-service',
   'resource-not-in-account',
   'resource-stale',
   'resource-self',

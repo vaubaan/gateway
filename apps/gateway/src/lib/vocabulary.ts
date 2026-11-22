@@ -783,6 +783,7 @@ export const REFUSAL_WORDS = {
   'budget-exhausted': 'limit reached',
   'approval-required': 'asked first',
   'resource-not-in-mission': 'resource not in this mission',
+  'account-ambiguous': 'which account was not said',
   'rate-limited': 'too fast: per-minute limit',
   'account-unavailable': 'account needs reconnecting',
   'account-revoked': 'account no longer in this mission',
@@ -1727,8 +1728,7 @@ export const CARD_WORDS = {
   /** "2 of 4 boards free": what another card of the account may still take. */
   free: (free: number, total: number, other: string): string =>
     `${formatNumber(free)} of ${formatNumber(total)} ${other} free`,
-  noAccountLeft: 'Every account you may use is in the mission.',
-  oneAccountPerService: 'A mission takes one account per service.',
+  noAccountLeft: 'You may use no account yet: connect one, or ask its owner to share it.',
   whatItCanDo: 'What it can do',
   trust: 'Trust',
   removeCard: (account: string): string => `Remove ${account}`,

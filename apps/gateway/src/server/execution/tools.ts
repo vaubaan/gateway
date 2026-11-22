@@ -61,10 +61,15 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
   const tools: McpToolDeclaration[] = [];
   for (const { plugin } of registry.all()) {
     if (!services.has(plugin.id)) continue;
-    // A mission holds one account per service; a tool its way of
-    // connecting cannot run is not listed (the resource stage refuses it too).
-    const account = ctx.accounts.find((c) => c.service === plugin.id);
-    tools.push(...plugin.tools.filter((t) => unavailableReason(plugin, account, t.name) === null));
+    // Listed once per service, whatever the number of its accounts (spec §4.1):
+    // a tool is listed when one account of the service that still serves the
+    // mission can run it (the resource stage refuses it on the others).
+    const accounts = ctx.accounts.filter((c) => c.service === plugin.id && !c.lost);
+    tools.push(
+      ...plugin.tools.filter((t) =>
+        accounts.some((account) => unavailableReason(plugin, account, t.name) === null),
+      ),
+    );
   }
   return tools;
 }

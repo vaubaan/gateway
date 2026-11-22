@@ -94,7 +94,8 @@ success and otherwise a fixed keyword (`network`, `timeout`,
 **Level `usage-stats`** adds:
 
 - `decisions`: one per call the gateway decided. `decision` is `allowed` or
-  the refusal code of the execution door; `risks` are the account-scoped
+  the refusal code of the execution door (`account-ambiguous`, refused
+  before any risk is read, is not sent); `risks` are the account-scoped
   RiskIds of the plugin the call touched — never with the environment label
   the company chose (`github.git-push`, never `github[prod].git-push`); `gate`
   is `approval` or `none`; `tool` is null when the agent named a tool the

@@ -206,11 +206,13 @@ describe('execution door: the call pipeline', () => {
   });
 
   describe('structured refusals — every code, every field, the hint', () => {
-    it('covers the nine codes of the spec', () => {
+    it('covers the ten codes of the spec', () => {
+      // `account-ambiguous` is exercised in several-accounts.test.ts.
       expect([...REFUSAL_CODES].sort()).toEqual(
         [
           'approval-required',
           'budget-exhausted',
+          'account-ambiguous',
           'account-revoked',
           'account-unavailable',
           'mission-inactive',

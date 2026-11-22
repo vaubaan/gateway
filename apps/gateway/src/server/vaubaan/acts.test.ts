@@ -1220,7 +1220,8 @@ describe('tool definitions and results', () => {
     expect(text.get_catalog).toContain('explicit RiskIds');
     expect(text.get_catalog).toContain('macro_actions');
     expect(text.preview_policy).toContain('explicit RiskIds only');
-    expect(text.preview_policy).toContain('one account per service');
+    // Several accounts of one service may be in a mission: no rule says otherwise.
+    expect(text.preview_policy).not.toContain('one account per service');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');
     expect(text.preview_policy).toContain('labelled with that environment');
     // `all` and future resources are told apart where a draft is composed.

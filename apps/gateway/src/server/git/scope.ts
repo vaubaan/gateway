@@ -50,11 +50,25 @@ export function pushCall(scope: Scope, args: Record<string, unknown>): CallReque
   return gitCall(scope, scope.registered.plugin.gitRemote!.pushTool, args);
 }
 
-/** The target of an admitted call: the mission's account to the plugin's service. */
+/**
+ * The target of an admitted call: the mission's account to the plugin's service,
+ * the one that holds the repository when the mission carries several (the
+ * path names the repository, hence the account: spec §4.1 ter).
+ */
 export function targetOf(scope: Scope): GitTarget {
   const { plugin } = scope.registered;
-  const account = scope.ctx.accounts.find((c) => c.service === plugin.id);
-  // The precheck's resource stage refuses a mission without this account.
+  const accounts = scope.ctx.accounts.filter((c) => c.service === plugin.id);
+  const account =
+    accounts.length === 1
+      ? accounts[0]
+      : accounts.find((c) =>
+          scope.ctx.resources.some(
+            // Repository names are case-blind at the services that serve git.
+            (r) => r.account_id === c.id && r.ref.toLowerCase() === scope.repository.toLowerCase(),
+          ),
+        );
+  // The precheck's resource stage refuses a mission without this account, and a
+  // repository no account of the mission reaches.
   if (!account) throw new Error('git door: a prechecked call without its account');
   return { plugin, remote: plugin.gitRemote!, account, repository: scope.repository };
 }

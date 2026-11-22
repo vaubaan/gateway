@@ -211,7 +211,7 @@ describe('previewDraft — partition per account', () => {
     expect(p.resolved.map((c) => c.account_id)).toEqual(['conn-acme', 'conn-beta']);
   });
 
-  it('refuses the same account twice and two accounts of one service', () => {
+  it('refuses the same account twice, and takes two accounts of one service', () => {
     const second = acmeAccount({ id: 'conn-acme-2', display_name: 'Acme second' });
     const twice = preview([
       { account_id: 'conn-acme', trust_levels: { read: 'careful' } },
@@ -225,14 +225,9 @@ describe('previewDraft — partition per account', () => {
       ],
       [acmeAccount(), second],
     );
-    expect(codes(sameService)).toEqual(['duplicate-service']);
-    // The refusal names both accounts, says why, and says what to do instead.
-    const [issue] = sameService.issues;
-    expect(issue?.message).toContain('one account per service');
-    expect(issue?.message).toContain(acmeAccount().display_name);
-    expect(issue?.message).toContain(second.display_name);
-    expect(issue?.message).toContain('counted per service');
-    expect(issue?.message).toContain('issue a second mission for the other');
+    // A call runs with the account holding the resource it names (spec §3.1).
+    expect(sameService.issues).toEqual([]);
+    expect(sameService.resolved.map((c) => c.account_id)).toEqual(['conn-acme', 'conn-acme-2']);
   });
 
   it('resolves an account named by service, and refuses an ambiguous one', () => {

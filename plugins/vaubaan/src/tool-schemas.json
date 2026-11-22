@@ -298,7 +298,7 @@
           },
           "additionalProperties": false
         },
-        "description": "At least one account; at most one account per service."
+        "description": "At least one account; several accounts of one service are allowed, a call runs with the one holding the resource it names."
       },
       "period": {
         "oneOf": [
@@ -592,7 +592,7 @@
           },
           "additionalProperties": false
         },
-        "description": "At least one account; at most one account per service."
+        "description": "At least one account; several accounts of one service are allowed, a call runs with the one holding the resource it names."
       },
       "period": {
         "oneOf": [
@@ -900,7 +900,7 @@
           },
           "additionalProperties": false
         },
-        "description": "At least one account; at most one account per service."
+        "description": "At least one account; several accounts of one service are allowed, a call runs with the one holding the resource it names."
       },
       "period": {
         "oneOf": [

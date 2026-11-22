@@ -9,6 +9,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **A mission carries several accounts of one service.** Two GitHub repositories, each with its
+  own token, go in one mission: a call runs with the account holding the resource it names, judged
+  and counted in that account's sets, and its audit line names that account. `tools/list` shows the
+  service once; the git remote reaches each repository at its own URL with the same key. A call
+  that names no resource, or resources of two accounts, is refused with the new code
+  `account-ambiguous`, which lists each account and its resources: the gateway never picks one.
+  `vaubaan` plugin 0.5.2 drops the former rule from `preview_policy`.
+
 ## [2.0.0-alpha.29] - 2026-11-22
 
 ### Highlights

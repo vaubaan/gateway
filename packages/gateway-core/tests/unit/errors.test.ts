@@ -66,6 +66,24 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
         { ref: 'acme/web', env: 'prod', display_name: null },
       ],
     }),
+  'account-ambiguous': () =>
+    refuse.accountAmbiguous({
+      service: 'github',
+      service_label: 'GitHub',
+      names_several: false,
+      accounts: [
+        {
+          id: 'con_1',
+          name: 'acme/api',
+          resources: [{ ref: 'acme/api', env: null, display_name: 'API' }],
+        },
+        {
+          id: 'con_2',
+          name: 'acme/web',
+          resources: [{ ref: 'acme/web', env: 'prod', display_name: null }],
+        },
+      ],
+    }),
   'rate-limited': () =>
     refuse.rateLimited({
       risk_id: 'github.read-repo',
@@ -94,9 +112,9 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
 };
 
 describe('refusal codes', () => {
-  test('there are exactly nine codes and a builder sample for each', () => {
-    expect(REFUSAL_CODES).toHaveLength(9);
-    expect(new Set(REFUSAL_CODES).size).toBe(9);
+  test('there are exactly ten codes and a builder sample for each', () => {
+    expect(REFUSAL_CODES).toHaveLength(10);
+    expect(new Set(REFUSAL_CODES).size).toBe(10);
     expect(Object.keys(SAMPLES).sort()).toEqual([...REFUSAL_CODES].sort());
   });
 
@@ -360,8 +378,8 @@ describe('a mission token that stopped working', () => {
       expect(error.message).toMatch(/human/);
       expect((REFUSAL_CODES as readonly string[]).includes(reason)).toBe(false);
     }
-    // The nine refusal codes are untouched.
-    expect(REFUSAL_CODES).toHaveLength(9);
+    // The ten refusal codes are untouched.
+    expect(REFUSAL_CODES).toHaveLength(10);
   });
 
   test('an unknown bearer carries no reason: nothing is said about a token that was never proven', () => {

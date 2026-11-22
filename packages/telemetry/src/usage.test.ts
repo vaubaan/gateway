@@ -49,10 +49,12 @@ describe('DecisionReport', () => {
     expect(Object.isFrozen(report?.risks)).toBe(true);
   });
 
-  it('carries every refusal code of the execution door, and not the wrong-door one', () => {
+  it('carries every refusal code of the execution door, but the wrong-door and the account-ambiguous ones', () => {
     expect(DECISION_OUTCOMES).toContain('allowed');
     expect(DECISION_OUTCOMES).toContain('budget-exhausted');
     expect(DECISION_OUTCOMES).not.toContain('wrong-credential-kind');
+    // Refused before any risk is read, and unknown to the collector's external schema.
+    expect(DECISION_OUTCOMES).not.toContain('account-ambiguous');
   });
 
   it('sends a renamed refusal code under the name the collector knows (ADR one-word-per-thing-account-service-plugin)', () => {
@@ -78,6 +80,7 @@ describe('DecisionReport', () => {
     ['risk that is free text', { risks: ['drop table users'] }],
     ['unknown decision', { decision: 'maybe' }],
     ['wrong-door decision', { decision: 'wrong-credential-kind' }],
+    ['decision that names no account', { decision: 'account-ambiguous' }],
     ['unknown gate', { gate: 'confirm' }],
     ['tool carrying an argument', { tool: 'supabase__execute_sql?q=1' }],
     ['too many risks', { risks: Array.from({ length: 33 }, (_, i) => `supabase.r${i}`) }],

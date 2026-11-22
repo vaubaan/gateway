@@ -847,7 +847,6 @@ function accountWide(issue: PreviewIssue): boolean {
     issue.code === 'account-unknown' ||
     issue.code === 'account-ambiguous' ||
     issue.code === 'duplicate-account' ||
-    issue.code === 'duplicate-service' ||
     issue.code === 'resource-sets-overlap' ||
     issue.code === 'resource-sets-mixed'
   );

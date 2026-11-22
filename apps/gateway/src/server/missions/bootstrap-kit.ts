@@ -138,6 +138,8 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
     'the mission creator asked to be asked first for this action. Nothing was executed. Hand `approval_url` to the human, wait for their yes, then replay the call with exactly the same arguments; any change asks again.',
   'resource-not-in-mission':
     'the arguments cite a resource outside the mission. Use one of the refs listed above (`allowed_resources`), or ask the human to have the resource added.',
+  'account-ambiguous':
+    'the mission holds several accounts of this service and the call does not say which one: it names no resource, or resources of two accounts. `accounts` lists each one with the resources the mission reaches on it. Call again naming one resource of the account you mean (one call per account when you need several).',
   'rate-limited':
     'too many actions on that permission in a short window. Wait `retry_after_seconds`, then retry once; nothing was counted against the limit.',
   'account-unavailable':

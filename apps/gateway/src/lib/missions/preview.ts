@@ -1172,7 +1172,6 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
   const previews: AccountPreview[] = [];
   const used: IssuanceAccount[] = [];
   const seenAccounts = new Set<string>();
-  const seenServices = new Map<string, string>();
 
   draft.accounts.forEach((draftAccount, index) => {
     const found = findAccount(context, draftAccount, index);
@@ -1191,18 +1190,6 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       return;
     }
     seenAccounts.add(account.id);
-    const sameService = seenServices.get(account.service);
-    if (sameService !== undefined) {
-      // The policy is keyed by RiskId, whose first segment is the service: two
-      // accounts of one service would share one partition and one budget.
-      issues.push({
-        code: 'duplicate-service',
-        message: `A mission carries one account per service, and "${sameService}" and "${account.display_name}" are both ${account.service_label} accounts. The risks and the budget of a mission are counted per service, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
-        ...where,
-      });
-      return;
-    }
-    seenServices.set(account.service, account.display_name);
     if (account.status !== 'active') {
       issues.push({
         code: 'account-unavailable',

@@ -657,10 +657,10 @@ export class MissionService {
       const state = await this.stateOf(mission);
       const creator = await this.deps.store.users.getById(mission.creatorUserId);
       const membership = await this.membershipOf(mission, user.id);
-      const accepted = mission.policy.filter(
-        (entry) => parseRiskId(entry.riskId)?.service === account.service,
-      );
       const selection = mission.accounts.find((c) => c.accountId === accountId);
+      // The lines of this account's sets: another account of its service has its own.
+      const sets = new Set(selection?.resourceSets.map((set) => set.id) ?? []);
+      const accepted = mission.policy.filter((entry) => sets.has(entry.resourceSetId));
       listed.push({
         id: mission.id,
         name: mission.name,
@@ -1105,7 +1105,15 @@ export class MissionService {
     for (const [index, c] of mission.accounts.entries()) {
       const account = await this.deps.store.accounts.getById(c.accountId);
       if (!account) continue;
-      const own = lines.filter((line) => parseRiskId(line.risk_id)?.service === account.service);
+      const sets = reached.find((r) => r.id === account.id)?.resource_sets ?? [];
+      // A line placed in a set belongs to that set's account; an unplaced one to
+      // every account of its service (several may be in the mission).
+      const own = lines.filter(
+        (line) =>
+          parseRiskId(line.risk_id)?.service === account.service &&
+          (line.resource_set_id === undefined ||
+            sets.some((set) => set.id === line.resource_set_id)),
+      );
       if (own.length === 0) continue;
       for (const line of own) judged.add(line.risk_id);
       // A revoked account's part of the mission is lost for good: nothing widens on it.
@@ -1123,7 +1131,6 @@ export class MissionService {
         });
         continue;
       }
-      const sets = reached.find((r) => r.id === account.id)?.resource_sets ?? [];
       for (const set of sets) {
         const ofSet = own.filter((line) => (line.resource_set_id ?? set.id) === set.id);
         if (ofSet.length === 0) continue;

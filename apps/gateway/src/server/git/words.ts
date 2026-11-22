@@ -23,6 +23,7 @@ const LINE_OF: { readonly [C in Refusal['code']]: (r: Extract<Refusal, { code: C
   'budget-exhausted': (r) => `limit of ${r.risk_id} reached — ${r.claim_url}`,
   'approval-required': (r) => `approval required — ${r.approval_url}`,
   'resource-not-in-mission': (r) => `repository ${r.cited_ref} is not in this mission`,
+  'account-ambiguous': () => 'the repository is held by several accounts of this mission',
   'rate-limited': (r) => `too many actions on ${r.risk_id}; retry in ${r.retry_after_seconds} s`,
   'account-unavailable': (r) =>
     `the account ${r.account.name} is ${r.status}; ask ${r.owner.display} to reconnect it`,

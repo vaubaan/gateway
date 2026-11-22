@@ -192,7 +192,9 @@ export const missionDraftSchema = z
     accounts: z
       .array(accountSchema)
       .max(MAX_ACCOUNTS)
-      .describe('At least one account; at most one account per service.'),
+      .describe(
+        'At least one account; several accounts of one service are allowed, a call runs with the one holding the resource it names.',
+      ),
     period: periodSchema,
     expires_at: z
       .string()

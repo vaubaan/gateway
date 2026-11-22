@@ -94,6 +94,24 @@ export interface ResourceNotInMissionRefusal extends RefusalBase<'resource-not-i
   }[];
 }
 
+/** One account a refused call could have meant, with what the mission reaches on it. */
+export interface CandidateAccount {
+  readonly id: string;
+  readonly name: string;
+  readonly resources: readonly {
+    readonly ref: string;
+    readonly env: string | null;
+    readonly display_name: string | null;
+  }[];
+}
+
+export interface AccountAmbiguousRefusal extends RefusalBase<'account-ambiguous'> {
+  /** The service whose accounts the call could mean. */
+  readonly service: string;
+  /** Every account of that service in the mission that could serve the call. */
+  readonly accounts: readonly CandidateAccount[];
+}
+
 export interface RateLimitedRefusal extends RefusalBase<'rate-limited'> {
   readonly risk_id: RiskId;
   readonly limit: RateLimit;
@@ -148,6 +166,7 @@ export type Refusal =
   | BudgetExhaustedRefusal
   | ApprovalRequiredRefusal
   | ResourceNotInMissionRefusal
+  | AccountAmbiguousRefusal
   | RateLimitedRefusal
   | AccountUnavailableRefusal
   | AccountRevokedRefusal
@@ -287,6 +306,32 @@ export const refuse = {
       account: { id: input.account.id, name: input.account.name },
       allowed_resources: input.allowed_resources,
       hint: `Resource '${input.cited_ref}' is not part of this mission on account '${input.account.name}'. The mission may touch: ${allowed}. A resource this mission creates through the gateway is reached right after its creation. For one created elsewhere, use one of these refs, or ask the mission creator to add the resource: they edit the mission, your key stays the same and your next call reaches it.`,
+    };
+  },
+
+  accountAmbiguous(input: {
+    service: string;
+    /** The service's name as people read it ("GitHub"). */
+    service_label: string;
+    accounts: readonly CandidateAccount[];
+    /** The call names resources of two accounts, rather than none. */
+    names_several: boolean;
+  }): AccountAmbiguousRefusal {
+    const listed = input.accounts
+      .map((a) => {
+        const refs =
+          a.resources.length === 0 ? 'no resource' : a.resources.map((r) => r.ref).join(', ');
+        return `'${a.name}' (${refs})`;
+      })
+      .join('; ');
+    const why = input.names_several
+      ? `This call names resources of several ${input.service_label} accounts of this mission, and one call runs with one account.`
+      : `This call names no resource, and this mission holds several ${input.service_label} accounts.`;
+    return {
+      code: 'account-ambiguous',
+      service: input.service,
+      accounts: input.accounts,
+      hint: `${why} The accounts and what the mission reaches on each: ${listed}. Call again naming one resource of the account you mean (one call per account when you need several); the gateway never picks one for you.`,
     };
   },
 
