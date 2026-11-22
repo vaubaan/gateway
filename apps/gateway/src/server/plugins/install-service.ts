@@ -202,7 +202,8 @@ export interface PluginInstallService {
   activate(digest: string, typedId: string, actor: PluginActor): Promise<PluginActResult>;
   /**
    * Updates a plugin from the catalog in one act: downloads the version, keeps it only
-   * signed by the catalog, and activates it on trial as `activate` would.
+   * signed by the catalog, and activates it on trial as `activate` would. A version of that
+   * id and number already here, signed by Vaubaan, pending or kept, is activated as it is.
    */
   updateFromCatalog(
     pluginId: string,
@@ -537,6 +538,16 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     },
 
     async updateFromCatalog(pluginId, version, actor) {
+      // A version the catalog already delivered here (downloaded and left pending, or kept
+      // to go back to) is activated as it is: its signature was checked when it came.
+      const kept = (await deps.versions.list()).find(
+        (v) =>
+          v.pluginId === pluginId &&
+          v.version === version &&
+          v.trust === 'vaubaan' &&
+          (v.state === 'pending' || v.state === 'previous'),
+      );
+      if (kept !== undefined) return activateVersion(kept, actor);
       const installed = await fromCatalog(pluginId, version, actor);
       if (!installed.ok) return installed;
       return activateVersion(installed.version, actor);

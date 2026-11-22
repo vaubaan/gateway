@@ -158,6 +158,36 @@ describe('Administration › Plugins', () => {
     expect(inMemory).not.toContain('data-testid="update-all"');
   });
 
+  it('offers a Vaubaan version already downloaded as the row’s Update, not a second time below', () => {
+    const pending = {
+      digest: 'b'.repeat(64),
+      pluginId: 'vercel',
+      version: '4.2.4',
+      packageName: '@vaubaan/plugin-vercel',
+      sdkRange: '^1.0.0',
+      trust: 'vaubaan' as const,
+      signer: null,
+      riskIds: [],
+      state: 'pending' as const,
+      failure: null,
+      uploadedAt: '2026-11-22T14:09:00.000Z',
+      uploadedBy: 'user-ops',
+      viaMissionId: null,
+      changedAt: '2026-11-22T14:09:00.000Z',
+      changedBy: 'user-ops',
+    };
+    const html = render(view({ report: BEHIND, install: { ...INSTALL, versions: [pending] } }));
+    expect(html).toContain('value="vercel@4.2.4"');
+    expect(html).toContain('value="github@5.1.0,vercel@4.2.4,linear@2.1.0"');
+    expect(text(html)).toContain('Update all (3)');
+    expect(html).not.toContain('data-testid="install-versions"');
+    // An upload not signed by Vaubaan still waits below, with its id to type.
+    const unsigned = { ...pending, digest: 'c'.repeat(64), trust: 'unsigned' as const };
+    const waiting = render(view({ install: { ...INSTALL, versions: [unsigned] } }));
+    expect(waiting).toContain('data-testid="install-versions"');
+    expect(waiting).not.toContain('value="vercel@4.2.4"');
+  });
+
   it('says when and where the feed was read, and nothing more when it reports nothing', () => {
     const html = render(view());
     expect(html).not.toContain('data-testid="updates-advisories"');

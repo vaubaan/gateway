@@ -1,7 +1,8 @@
 /**
  * Administration › Plugins, from a view the page assembles (`page.tsx`): only the plugins
  * this gateway runs, each on one row with the acts it allows — Update when the catalog has
- * a newer version, Stop when it runs a version installed here — each behind one dialog,
+ * a newer version or one signed by Vaubaan is downloaded and waiting, Stop when it runs a
+ * version installed here — each behind one dialog,
  * and Update all when several are behind (intent "Update my installed plugins in a few
  * clicks"). Above them, only what asks for attention: an advisory, the gateway behind, a
  * version waiting for activation, a restart. What the gateway does not run is on the
@@ -102,17 +103,27 @@ function subjectOf(advisory: AdvisoryHit, lines: readonly PluginLine[]): string 
   return advisory.subject === 'gateway' ? 'the gateway' : nameOf(lines, advisory.subject.plugin);
 }
 
-/** The newer catalog version of each running plugin, by id. */
-function behindOf(
+/**
+ * The version each running plugin can be updated to, by id: a Vaubaan-signed version
+ * already downloaded and waiting, or the catalog's newer one, which wins when they differ.
+ */
+function updatesOf(
   report: UpdatesReport | null,
   lines: readonly PluginLine[],
+  install: InstallView,
 ): ReadonlyMap<string, string> {
   const running = new Set(lines.filter((l) => l.entry.enabled).map((l) => l.entry.id));
-  return new Map(
-    (report?.pluginsBehind ?? [])
-      .filter((behind) => running.has(behind.id))
-      .map((behind) => [behind.id, behind.released]),
-  );
+  const updates = new Map<string, string>();
+  if (!install.canInstall) return updates;
+  for (const v of install.versions) {
+    if (v.state === 'pending' && v.trust === 'vaubaan' && running.has(v.pluginId)) {
+      updates.set(v.pluginId, v.version);
+    }
+  }
+  for (const behind of report?.pluginsBehind ?? []) {
+    if (running.has(behind.id)) updates.set(behind.id, behind.released);
+  }
+  return updates;
 }
 
 /** An advisory names a version this gateway runs: the page's one filled box. */
@@ -272,14 +283,24 @@ export function PluginsPage({ view }: { view: PluginsView }) {
   const { install, report, lines } = view;
   const running = lines.filter((line) => line.entry.enabled);
   const leftOut = lines.filter((line) => !line.entry.enabled);
-  const behind = install.canInstall ? behindOf(report, lines) : new Map<string, string>();
+  const behind = updatesOf(report, lines, install);
   const olderPins = new Map((report?.olderPins ?? []).map((pin) => [pin.id, pin.bundled]));
-  const waiting = install.versions.filter((v) => v.state === 'pending' || v.state === 'failed');
+  // A version an Update button already offers is not asked about a second time.
+  const waiting = install.versions.filter(
+    (v) =>
+      (v.state === 'pending' || v.state === 'failed') &&
+      !(v.state === 'pending' && behind.get(v.pluginId) === v.version && v.trust === 'vaubaan'),
+  );
   const kept = install.versions.filter((v) => v.state === 'previous');
   const restart =
     install.versions.some((v) => v.state === 'trial') ||
     (install.flash?.kind === 'done' && install.flash.code === 'followed-image');
-  const all = [...behind].map(([id, version]) => `${id}@${version}`).join(',');
+  // In the order of the rows, so the dialog reads like the page.
+  const ordered = running.flatMap((line) => {
+    const version = behind.get(line.entry.id);
+    return version === undefined ? [] : [[line.entry.id, version] as const];
+  });
+  const all = ordered.map(([id, version]) => `${id}@${version}`).join(',');
   return (
     <>
       <PageHeader
@@ -302,7 +323,7 @@ export function PluginsPage({ view }: { view: PluginsView }) {
                   testId="update-all"
                 >
                   <ul data-testid="update-all-list">
-                    {[...behind].map(([id, version]) => (
+                    {ordered.map(([id, version]) => (
                       <li key={id}>
                         {nameOf(lines, id)}{' '}
                         <Mono>{running.find((l) => l.entry.id === id)?.entry.version}</Mono> →{' '}

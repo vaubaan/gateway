@@ -7,8 +7,8 @@
  *   - an archive without the catalog's signature, or of another version than asked, is
  *     refused and nothing is kept, even for an id the configuration allows unsigned;
  *   - a version the catalog has not published is said so;
- *   - an update downloads, verifies and activates in one act, with no id typed, and
- *     activates nothing when the download is refused;
+ *   - an update activates in one act, with no id typed, a version already downloaded
+ *     without fetching it again, and activates nothing when the download is refused;
  *   - once the versions feed names a catalog id, an archive of that id the catalog did not
  *     sign is refused at upload, even one the configuration allows unsigned.
  */
@@ -193,9 +193,11 @@ describe('installing a catalog version in one click', () => {
     await root!.pluginInstall.service.refuse(digest, ADMIN);
   });
 
-  it('updates a plugin in one act: downloaded, verified and activated, with nothing typed', async () => {
-    served.set('notion-v0.2.0/notion-v0.2.0.tgz', NOTION);
+  it('updates a plugin in one act, with nothing typed, activating the version already downloaded', async () => {
+    // notion 0.2.0 is pending since the first test: it is activated, not fetched again.
+    const before = requested.length;
     const result = await root!.pluginInstall.service.updateFromCatalog('notion', '0.2.0', ADMIN);
+    expect(requested.length).toBe(before);
     expect(result).toMatchObject({ ok: true });
     const notion = (await root!.pluginInstall.service.list()).find(
       (v) => v.pluginId === 'notion' && v.version === '0.2.0',
