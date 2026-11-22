@@ -15,7 +15,7 @@
   max-width: var(--measure);
   margin: var(--space-1) 0 var(--space-5);
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 
 .specimen {
@@ -29,7 +29,7 @@
 }
 .specimenName {
   margin: 0;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   font-weight: var(--weight-strong);
 }
 .specimenNote {

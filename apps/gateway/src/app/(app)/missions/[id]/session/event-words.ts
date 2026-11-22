@@ -6,7 +6,7 @@
  *
  * An event has a short outcome — "allowed", "refused", "asked first", "key
  * replaced" — a tone only when it is an exception (red: refused or stopped;
- * amber: something asks the creator), and a few lines of detail. A date is a
+ * the accent: something asks the creator), and a few lines of detail. A date is a
  * field and not part of a text: the page prints it in the reader's time zone.
  * Protocol names (refusal codes, permission ids, key prefixes) are marked
  * `mono` and printed as the protocol spells them.

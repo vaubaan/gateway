@@ -190,20 +190,20 @@ test('the pages a handler answers itself follow the theme the person chose', asy
   expect(plain?.status()).toBe(403);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Not yours to answer');
   await expect(page.getByText('This request is addressed to its creator.')).toBeVisible();
-  // Light by default, in the tokens of the interface.
+  // Light by default, in the shared tokens (#fbfbf9 and #0e1215: `DOCUMENT_TOKENS`).
   await expect(page.locator('html')).not.toHaveAttribute('data-theme');
   const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(await paper()).toBe('rgb(255, 255, 255)');
+  expect(await paper()).toBe('rgb(251, 251, 249)');
   // The system asks for dark: the page follows it.
   await page.emulateMedia({ colorScheme: 'dark' });
-  expect(await paper()).toBe('rgb(2, 8, 23)');
+  expect(await paper()).toBe('rgb(14, 18, 21)');
   await page.emulateMedia({ colorScheme: 'light' });
 
   // The person chose dark in the application: the document arrives dark, with no script.
   await context.addCookies([{ name: 'vaubaan_theme', value: 'dark', url: PUBLIC_URL }]);
   const dark = await page.goto(address);
   expect(await dark?.text()).toMatch(/<html lang="en" data-theme="dark">/);
-  expect(await paper()).toBe('rgb(2, 8, 23)');
+  expect(await paper()).toBe('rgb(14, 18, 21)');
   expect(await page.locator('script').count()).toBe(0);
   await snap(page, 'request-forbidden-dark');
 

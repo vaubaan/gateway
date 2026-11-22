@@ -34,7 +34,7 @@
 }
 .clear {
   color: var(--primary);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .moreFilters {
   display: grid;
@@ -140,7 +140,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .pagerLines {
   color: var(--ink-3);
@@ -175,7 +175,7 @@
   align-items: center;
   gap: 6px;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 
 /* A phone: the box would be a slit; the page scrolls instead. */
@@ -189,7 +189,7 @@
 .missionLinks {
   margin: 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .missionLinks a {
   color: var(--primary);

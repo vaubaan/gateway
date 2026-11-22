@@ -118,7 +118,7 @@ export function Gallery({ icons }: { icons: GalleryIcons }) {
             Press the theme toggle at the bottom left: System, Light, Dark — the choice is kept and
             the page never flashes at load. Narrow the window under 1024 px to see the navigation
             collapse to its icons, and under 640 px to see it become a bar. “Waiting for you” shows
-            its count in amber when something waits.
+            its count in the accent when something waits.
           </Callout>
         </GallerySection>
         <PageFrameSections icons={icons} />

@@ -22,7 +22,15 @@ import { createContext, useCallback, useContext, useEffect, useId, useState } fr
 
 import { ACTIONS } from '@/lib/vocabulary';
 
-import styles from './Disclosure.module.css';
+/** The parts of a disclosure, on Tailwind and the shared tokens. */
+const S = {
+  disclosure: 'min-w-0',
+  // A link that acts: the accent, no box.
+  toggle: 'cursor-pointer p-0 text-left text-small text-primary hover:underline',
+  panel: 'mt-3',
+  // Shown while the nearest scope is open; a scope inside an open one keeps its own answer.
+  detailOnly: 'hidden [[data-details=open]_&:not([data-details=closed]_&)]:block',
+} as const;
 
 const STORAGE_PREFIX = 'vaubaan:open:';
 
@@ -80,7 +88,7 @@ function ToggleButton({
   return (
     <button
       type="button"
-      className={styles.toggle}
+      className={S.toggle}
       aria-expanded={open}
       aria-controls={controls}
       onClick={onToggle}
@@ -113,7 +121,7 @@ export function Disclosure({
   const [open, setOpen] = useRemembered(remember ? id : null, defaultOpen);
   const panelId = useId();
   return (
-    <div className={styles.disclosure} data-testid={testId}>
+    <div className={S.disclosure} data-testid={testId}>
       <ToggleButton
         open={open}
         onToggle={() => setOpen(!open)}
@@ -121,7 +129,7 @@ export function Disclosure({
         show={show}
         hide={hide}
       />
-      <div id={panelId} className={styles.panel} hidden={!open}>
+      <div id={panelId} className={S.panel} hidden={!open}>
         {children}
       </div>
     </div>
@@ -170,5 +178,5 @@ export function DetailToggle({
 
 /** A block shown only while the nearest `DetailScope` is open. No hook: server-renderable. */
 export function DetailOnly({ children }: { children: React.ReactNode }) {
-  return <div className={styles.detailOnly}>{children}</div>;
+  return <div className={S.detailOnly}>{children}</div>;
 }

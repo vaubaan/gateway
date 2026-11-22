@@ -36,7 +36,7 @@ export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement
 }
 
 export function CardTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="m-0 text-secondary font-semibold">{children}</h3>;
+  return <h3 className="m-0 text-small font-semibold">{children}</h3>;
 }
 
 export function CardBody({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {

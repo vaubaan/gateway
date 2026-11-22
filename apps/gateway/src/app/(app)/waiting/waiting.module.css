@@ -9,12 +9,12 @@
   max-width: var(--measure);
   margin: var(--space-2) 0 0;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .erased {
   margin: 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .permission + .permission {
   margin-top: var(--space-2);
@@ -48,7 +48,7 @@
   gap: 6px var(--space-4);
   max-width: 760px;
   margin: 0;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .consequences > div {
   display: contents;
@@ -85,7 +85,7 @@
   align-items: center;
   gap: var(--space-2);
   margin: var(--space-2) 0 0 37px;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .amount {
   width: 96px;

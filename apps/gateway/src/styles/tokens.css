@@ -14,7 +14,7 @@
  * `--accent-ink` `--primary-ink`, `--accent-soft` `--primary-soft`,
  * `--on-accent` `--primary-foreground`; `--text-xs`, `--text-sm` and
  * `--text-base` (Tailwind's own scale) became `--text-caption`,
- * `--text-secondary` and `--text-body`.
+ * `--text-small` and `--text-body`.
  *
  * The aliases are declared on every themed element, not on `:root` alone: a
  * custom property is resolved where it is declared, and a dark island of the
@@ -30,14 +30,12 @@
   --paper-side: var(--sidebar);
   --paper-raised: var(--card);
   --fill: var(--muted);
-  --hover: var(--accent);
   --line: var(--border);
   --line-strong: var(--border-strong);
   --ink: var(--foreground);
   --ink-2: var(--muted-foreground);
   --ink-3: var(--muted-foreground);
   --ink-4: var(--faint);
-  --knob: var(--background);
 
   /* ───── The accent's border, and the exceptions ───── */
   --accent-line: var(--approval-border);
@@ -54,15 +52,6 @@
   --ok: var(--allowed-fg);
   --ok-soft: var(--allowed-bg);
   --ok-line: var(--allowed-border);
-
-  /* ───── Marks: the hues an avatar or a service mark takes; never a status ───── */
-  --hue-1: var(--chart-1);
-  --hue-2: var(--chart-2);
-  --hue-3: var(--chart-3);
-  --hue-4: var(--chart-4);
-  --hue-5: var(--chart-5);
-  --hue-0: var(--chart-5);
-  --on-hue: var(--primary-foreground);
 
   /* ───── Focus ───── */
   --focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
@@ -87,5 +76,4 @@
 
   /* ───── Motion: one atomic transition ───── */
   --duration-fast: var(--default-transition-duration);
-  --duration-base: var(--default-transition-duration);
 }

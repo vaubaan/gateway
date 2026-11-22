@@ -13,7 +13,7 @@
  */
 import Link from 'next/link';
 
-import styles from './Inbox.module.css';
+import { cn } from '@/lib/utils';
 
 export function InboxFrame({
   list,
@@ -23,9 +23,9 @@ export function InboxFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className={styles.frame}>
-      <div className={styles.side}>{list}</div>
-      <div className={styles.main}>{children}</div>
+    <div className="grid grid-cols-[280px_minmax(0,1fr)] items-start gap-10 max-[1360px]:grid-cols-[250px_minmax(0,1fr)] max-[1360px]:gap-7 max-[900px]:grid-cols-1 max-[900px]:gap-6">
+      <div className="min-w-0">{list}</div>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -45,8 +45,8 @@ export function InboxList({
 }) {
   return (
     <nav aria-label={label} data-testid={testId}>
-      <ul className={styles.list}>{children}</ul>
-      {footer && <p className={styles.footer}>{footer}</p>}
+      <ul className="m-0 list-none p-0">{children}</ul>
+      {footer && <p className="m-0 px-2.5 py-3 text-small text-muted-foreground">{footer}</p>}
     </nav>
   );
 }
@@ -77,15 +77,21 @@ export function InboxItem({
     <li>
       <Link
         href={href}
-        className={[styles.item, current ? styles.current : ''].join(' ')}
+        className={cn(
+          'grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5 border-b border-border px-2.5 py-3 text-small hover:bg-accent hover:no-underline',
+          // The open item: a fill, not a colour.
+          current && 'rounded-md border-b-transparent bg-muted hover:bg-muted',
+        )}
         aria-current={current ? 'page' : undefined}
         data-testid={testId}
       >
-        <span className={styles.who}>{who}</span>
-        <span className={styles.text}>
-          <span className={styles.title}>{title}</span>
-          {context && <span className={styles.context}>{context}</span>}
-          {meta && <span className={styles.meta}>{meta}</span>}
+        <span className="mt-px inline-flex">{who}</span>
+        <span className="grid min-w-0 gap-0.5">
+          <span className="leading-[1.35] font-semibold [overflow-wrap:anywhere]">{title}</span>
+          {context && (
+            <span className="text-muted-foreground [overflow-wrap:anywhere]">{context}</span>
+          )}
+          {meta && <span className="text-caption text-muted-foreground">{meta}</span>}
         </span>
       </Link>
     </li>

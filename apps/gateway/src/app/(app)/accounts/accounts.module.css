@@ -22,7 +22,7 @@
 .prose {
   max-width: var(--measure);
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .prose p {
   margin: 0;
@@ -99,7 +99,7 @@
   border: 0;
   background: none;
   color: var(--primary);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .linkButton:hover {
   text-decoration: underline;
@@ -116,7 +116,7 @@
   gap: var(--space-3);
   margin-top: var(--section-gap);
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 
 /* The public key of an SSH account. */
@@ -138,7 +138,7 @@
   gap: 6px;
   margin-top: var(--space-4);
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .startsEnd {
   display: inline-flex;
@@ -159,7 +159,7 @@
 .summary {
   margin: var(--space-3) 0 0;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .dialogNotes {
   display: flex;
@@ -170,7 +170,7 @@
 .restores {
   margin: var(--space-2) 0 0;
   padding-left: var(--space-5);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .restores li + li {
   margin-top: var(--space-1);

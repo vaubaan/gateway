@@ -30,7 +30,7 @@
 .resources {
   min-width: 0;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   overflow-wrap: anywhere;
 }
 .headEnd {
@@ -49,7 +49,7 @@
   padding: var(--space-2) var(--space-4) var(--space-2) var(--space-8);
   border-bottom: 1px solid var(--line);
   color: var(--bad);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 
 /* ── The rows: one per macro-action ──────────────────────────────────────── */
@@ -224,7 +224,7 @@
 .popoverTitle {
   margin: 0 0 var(--space-2);
   color: var(--ink);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   font-weight: var(--weight-strong);
 }
 .popoverGroup {
@@ -259,7 +259,7 @@
 .permissions {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .permissions th {
   padding: var(--space-1) var(--space-2);
@@ -358,7 +358,7 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .groupCount {
   color: var(--ink-3);
@@ -411,13 +411,13 @@
   flex: 1 1 16rem;
   min-width: 0;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .barIssues {
   margin: var(--space-1) 0 0;
   padding-left: var(--space-4);
   color: var(--bad);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .barActions {
   display: flex;
@@ -519,7 +519,7 @@
   margin: var(--space-1) 0 0;
   padding: 0 var(--space-4);
   color: var(--bad);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   overflow-wrap: anywhere;
 }
 .lostBody {
@@ -527,7 +527,7 @@
 }
 .lostDetails {
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .lostDetails p {
   margin: 0 0 var(--space-2);

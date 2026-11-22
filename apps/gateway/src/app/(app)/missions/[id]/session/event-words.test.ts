@@ -119,7 +119,7 @@ describe('what the activity of a mission says of an event', () => {
       outcome: 'limit reached',
       tone: 'bad',
     });
-    // A call that asked first needs a person, it was not stopped: amber, not red.
+    // A call that asked first needs a person, it was not stopped: the accent, not red.
     expect(words(event('call-refused', { refusal_code: 'approval-required' }))).toMatchObject({
       outcome: 'asked first',
       tone: 'warn',

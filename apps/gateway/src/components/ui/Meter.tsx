@@ -66,7 +66,7 @@ export function Meter({
   const figure = format === 'percent' ? `${formatNumber(percent)}%` : usage(used, limit);
   return (
     <span
-      className="inline-flex items-center gap-2.5 whitespace-nowrap align-middle text-secondary tabular-nums text-muted-foreground"
+      className="inline-flex items-center gap-2.5 whitespace-nowrap align-middle text-small tabular-nums text-muted-foreground"
       data-state={state}
     >
       <span

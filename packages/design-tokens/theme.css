@@ -97,11 +97,13 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* The app's four sizes; Tailwind's own scale (text-xs … text-6xl) stays for the site. */
+  /* The app's four sizes; Tailwind's own scale (text-xs … text-6xl) stays for the site. The
+     secondary lines are `small`: a size named `secondary` would share its utility with shadcn's
+     `secondary` colour, and `text-secondary` resolves to the colour. */
   --text-caption: 0.75rem;
   --text-caption--line-height: 1rem;
-  --text-secondary: 0.8125rem;
-  --text-secondary--line-height: 1.25rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.25rem;
   --text-body: 0.875rem;
   --text-body--line-height: 1.375rem;
   --text-title: 1.25rem;

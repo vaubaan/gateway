@@ -8,11 +8,12 @@
  * that cannot be taken yet is dashed, says why, and leads to where it is
  * fixed when the person can fix it.
  *
- * No hook: it renders in server and client components alike.
+ * No hook: it renders in server and client components alike. Tailwind on the
+ * shared tokens.
  */
 import Link from 'next/link';
 
-import styles from './Pick.module.css';
+import { cn } from '@/lib/utils';
 
 export function PickGrid({
   children,
@@ -25,7 +26,11 @@ export function PickGrid({
   testId?: string;
 }) {
   return (
-    <ul className={styles.grid} aria-label={label} data-testid={testId}>
+    <ul
+      className="m-0 grid max-w-[760px] list-none grid-cols-3 gap-2.5 p-0 max-[900px]:grid-cols-2 max-[560px]:grid-cols-1"
+      aria-label={label}
+      data-testid={testId}
+    >
       {children}
     </ul>
   );
@@ -50,18 +55,22 @@ export function PickCard({
   unavailable?: boolean;
   testId?: string;
 }) {
-  const classes = [styles.card, unavailable ? styles.unavailable : ''].join(' ');
+  const classes = cn(
+    'flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-border px-3.5 py-3 text-small text-foreground transition-colors',
+    href && 'hover:border-muted-foreground hover:no-underline',
+    unavailable && 'border-dashed text-muted-foreground',
+  );
   const body = (
     <>
-      {lead && <span className={styles.lead}>{lead}</span>}
-      <span className={styles.text}>
-        <span className={styles.title}>{title}</span>
-        {description && <span className={styles.description}>{description}</span>}
+      {lead && <span className="inline-flex flex-none">{lead}</span>}
+      <span className="flex min-w-0 flex-col">
+        <span className="[overflow-wrap:anywhere]">{title}</span>
+        {description && <span className="text-caption text-muted-foreground">{description}</span>}
       </span>
     </>
   );
   return (
-    <li className={styles.item} data-testid={testId}>
+    <li className="flex" data-testid={testId}>
       {href ? (
         <Link href={href} className={classes}>
           {body}

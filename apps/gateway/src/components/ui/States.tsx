@@ -8,8 +8,9 @@
  *   then the steps (as `Rows` whose `lead` is a `StepMark` or a `CheckMark`).
  * - `Skeleton` — the shape of what is loading, in place of it.
  */
+import { cn } from '@/lib/utils';
+
 import { Icon } from './Icon.tsx';
-import styles from './States.module.css';
 
 export function EmptyState({
   title,
@@ -29,18 +30,24 @@ export function EmptyState({
   testId?: string;
 }) {
   return (
-    <div className={styles.empty} data-testid={testId}>
-      <p className={styles.emptyTitle}>{title}</p>
-      {children && <p className={styles.emptyText}>{children}</p>}
-      {action && <div className={styles.emptyAction}>{action}</div>}
-      {links && <div className={styles.emptyLinks}>{links}</div>}
+    <div className="py-(--section-gap) text-center text-small" data-testid={testId}>
+      <p className="m-0 text-body text-muted-foreground">{title}</p>
+      {children && (
+        <p className="mx-auto mt-1 mb-0 max-w-[52ch] text-muted-foreground">{children}</p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
+      {links && <div className="mt-4">{links}</div>}
     </div>
   );
 }
 
 /** The one paragraph a newcomer reads: what the product is, with its three words in bold. */
 export function Lede({ children }: { children: React.ReactNode }) {
-  return <p className={styles.lede}>{children}</p>;
+  return (
+    <p className="m-0 max-w-[66ch] text-body leading-[1.55] text-muted-foreground [&_b]:text-foreground [&_strong]:text-foreground">
+      {children}
+    </p>
+  );
 }
 
 export interface ModelNode {
@@ -51,12 +58,27 @@ export interface ModelNode {
 /** The model in a few nodes, read left to right: Account → Mission → Key → Agent → Activity. */
 export function ModelDiagram({ nodes, label }: { nodes: readonly ModelNode[]; label: string }) {
   return (
-    <ol className={styles.model} aria-label={label}>
-      {nodes.map((node) => (
-        <li key={node.name} className={styles.node}>
-          <span className={styles.nodeBox}>
+    <ol
+      className="mt-7 mb-2 flex list-none flex-wrap items-center gap-y-2 p-0 text-small"
+      aria-label={label}
+    >
+      {nodes.map((node, index) => (
+        <li key={node.name} className="flex items-center">
+          {index > 0 && (
+            // The arrow between two nodes: a hairline and its head.
+            <svg
+              width="28"
+              height="7"
+              viewBox="0 0 28 7"
+              className="block flex-none text-border-strong"
+              aria-hidden="true"
+            >
+              <path d="M0 3.5h27M24 0.5l3 3-3 3" fill="none" stroke="currentColor" />
+            </svg>
+          )}
+          <span className="block rounded-md border border-border-strong bg-card px-3 py-[7px] whitespace-nowrap">
             <span>{node.name}</span>
-            <small>{node.note}</small>
+            <small className="block text-muted-foreground">{node.note}</small>
           </span>
         </li>
       ))}
@@ -66,10 +88,26 @@ export function ModelDiagram({ nodes, label }: { nodes: readonly ModelNode[]; la
 
 export type StepState = 'todo' | 'next' | 'later' | 'done';
 
+const STEP: Readonly<Record<StepState, string>> = {
+  todo: 'bg-foreground text-background',
+  next: 'bg-primary text-primary-foreground',
+  later: 'bg-muted text-muted-foreground',
+  done: 'bg-allowed-bg text-allowed-fg',
+};
+
+const CHECK =
+  'inline-grid size-5 flex-none place-items-center rounded-full text-[11px] font-semibold';
+
 /** The number of a step, as the `lead` of a `Row`: done, the next one, or later. */
 export function StepMark({ n, state = 'todo' }: { n: number; state?: StepState }) {
   return (
-    <span className={[styles.step, styles[`step_${state}`]].join(' ')}>
+    <span
+      className={cn(
+        'inline-grid size-6 flex-none place-items-center rounded-full text-caption font-semibold',
+        STEP[state],
+      )}
+      data-state={state}
+    >
       {state === 'done' ? <Icon name="check" size={12} /> : n}
       <span className="vbn-sr-only">
         {state === 'done' ? ` Step ${n}, done` : state === 'next' ? ' — next' : ''}
@@ -84,7 +122,7 @@ export type CheckState = 'done' | 'todo' | 'partial';
 export function CheckMark({ state, partial }: { state: CheckState; partial?: string }) {
   if (state === 'done') {
     return (
-      <span className={[styles.check, styles.check_done].join(' ')}>
+      <span className={cn(CHECK, 'bg-allowed-bg text-allowed-fg')} data-state="done">
         <Icon name="check" size={11} />
         <span className="vbn-sr-only">Done</span>
       </span>
@@ -92,14 +130,17 @@ export function CheckMark({ state, partial }: { state: CheckState; partial?: str
   }
   if (state === 'partial') {
     return (
-      <span className={[styles.check, styles.check_partial].join(' ')}>
+      <span className={cn(CHECK, 'bg-approval-bg text-approval-fg')} data-state="partial">
         {partial}
         <span className="vbn-sr-only"> done</span>
       </span>
     );
   }
   return (
-    <span className={[styles.check, styles.check_todo].join(' ')}>
+    <span
+      className={cn(CHECK, 'border-[1.5px] border-dashed border-border-strong')}
+      data-state="todo"
+    >
       <span className="vbn-sr-only">To do</span>
     </span>
   );
@@ -119,7 +160,13 @@ export function Skeleton({
 }) {
   return (
     <span
-      className={[styles.skeleton, styles[`skeleton_${height}`]].join(' ')}
+      className={cn(
+        'block max-w-full animate-breathe rounded-sm bg-muted',
+        height === 'text' && 'my-[5px] h-3',
+        height === 'title' && 'my-1 h-5',
+        height === 'row' &&
+          'h-11 rounded-none border-b border-border bg-[linear-gradient(var(--muted),var(--muted))] bg-[length:40%_12px] bg-[position:left_center] bg-no-repeat [background-color:transparent]',
+      )}
       style={{ width }}
       role={label ? 'status' : undefined}
       aria-label={label || undefined}

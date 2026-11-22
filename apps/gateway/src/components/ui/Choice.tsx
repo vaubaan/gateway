@@ -8,9 +8,13 @@
  * hint ("needs a prod project — none selected"), so that nobody picks a
  * choice that would yield nothing, and nobody wonders where it went.
  *
+ * This is the trust level picker: the chosen chip is the ink, twice (border and
+ * weight), never a colour — trust levels are said in ink (style guide §3.1).
+ * shadcn/ui's RadioGroup look on native radios, on the shared tokens.
+ *
  * No hook: renders in server and client components alike.
  */
-import styles from './Choice.module.css';
+import { cn } from '@/lib/utils';
 
 export function ChoiceRow({
   legend,
@@ -23,7 +27,7 @@ export function ChoiceRow({
   testId?: string;
 }) {
   return (
-    <fieldset className={styles.row} data-testid={testId}>
+    <fieldset className="m-0 flex min-w-0 flex-wrap gap-1.5 border-0 p-0" data-testid={testId}>
       <legend className="vbn-sr-only">{legend}</legend>
       {children}
     </fieldset>
@@ -56,22 +60,32 @@ export function ChoiceChip({
   const off = typeof unavailable === 'string' && unavailable !== '';
   return (
     <label
-      className={[styles.chip, checked ? styles.on : '', off ? styles.off : ''].join(' ')}
+      className={cn(
+        'inline-flex min-h-8 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-card px-[11px] text-small text-foreground transition-colors has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring',
+        // The chosen one: the ink, twice. Not a colour.
+        checked && 'border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]',
+        // Cannot be chosen now: dashed, and its hint says why.
+        off
+          ? 'cursor-not-allowed border-dashed bg-sidebar text-muted-foreground'
+          : 'hover:border-muted-foreground',
+      )}
       title={title}
       data-choice={value}
       data-unavailable={off ? 'true' : undefined}
     >
       <input
         type="radio"
-        className={styles.radio}
+        className="m-0 size-3.5 flex-none accent-primary focus-visible:outline-none"
         name={name}
         value={value}
         checked={checked}
         disabled={off}
         onChange={() => onChange(value)}
       />
-      <span className={styles.label}>{label}</span>
-      {(off || hint) && <span className={styles.hint}>{off ? unavailable : hint}</span>}
+      <span className={cn('whitespace-nowrap', checked && 'font-semibold')}>{label}</span>
+      {(off || hint) && (
+        <span className="font-normal text-muted-foreground">{off ? unavailable : hint}</span>
+      )}
     </label>
   );
 }

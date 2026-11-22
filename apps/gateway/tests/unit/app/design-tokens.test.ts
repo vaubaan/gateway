@@ -148,6 +148,15 @@ describe('the styles of the interface', () => {
     expect([...ALIAS.keys()].filter((name) => !used.has(name))).toEqual([]);
   });
 
+  it('says the secondary size with `text-small`: `text-secondary` is a near-white colour', () => {
+    const misread: string[] = [];
+    for (const [path, body] of text) {
+      if (!/\.tsx?$/.test(path) || path.endsWith('lib/utils.ts')) continue;
+      if (/(?<![-\w])text-secondary\b(?!-)/.test(body)) misread.push(relative(SRC, path));
+    }
+    expect(misread).toEqual([]);
+  });
+
   it('holds no raw colour outside the shared sheet', () => {
     const raw: string[] = [];
     for (const path of [...sheets, ALIASES_FILE]) {

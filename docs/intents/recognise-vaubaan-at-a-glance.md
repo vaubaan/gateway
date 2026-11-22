@@ -32,8 +32,9 @@ acceptance:
 
 ## Use the interface's components rebuilt on shared primitives
 
-status: proposed
+status: implemented
 requires: component
+anchors: apps/gateway/src/components/ui/, apps/gateway/src/lib/utils.ts, apps/gateway/src/app/(app)/design/, apps/gateway/tests/e2e/shell.spec.ts, apps/gateway/tests/unit/app/design-system.test.tsx, apps/gateway/tests/unit/app/class-names.test.ts
 spec: ../spec/style-guide.md#5-components
 acceptance:
 

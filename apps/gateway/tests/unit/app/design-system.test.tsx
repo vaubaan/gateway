@@ -208,12 +208,12 @@ describe('DataTable', () => {
     expect(html).toContain('<caption class="vbn-sr-only">People</caption>');
     expect(html.match(/<th role="columnheader" scope="col"/g)).toHaveLength(4);
     expect(html).toContain('<span class="vbn-sr-only">Actions</span>');
-    expect(html).not.toContain('data-details');
-    expect(html).toMatch(/<td role="cell" class="[^"]*detail[^"]*" data-column="key"/);
-    expect(html).toMatch(/<tr role="row" class="[^"]*row_quiet[^"]*" data-row="b">/);
+    expect(bare(html)).not.toContain('data-details');
+    expect(bare(html)).toMatch(/<td role="cell" data-detail="" data-column="key"/);
+    expect(html).toContain('<tr role="row" data-tone="quiet" data-row="b">');
     // On a phone a row is drawn as a block: every cell after the first carries the name
     // of its column, and the roles keep the table a table whatever its drawing.
-    expect(html).toMatch(/<table role="table" class="[^"]*stack[^"]*"/);
+    expect(html).toMatch(/<table role="table" [^>]*data-narrow="stack"/);
     const firstRow = html.slice(html.indexOf('data-row="a"'), html.indexOf('data-row="b"'));
     const labels = [...firstRow.matchAll(/data-column="([a-z]+)"(?: data-label="([^"]*)")?/g)].map(
       (match) => [match[1], match[2]],
@@ -234,7 +234,7 @@ describe('DataTable', () => {
         narrow="scroll"
       />,
     );
-    expect(grid).not.toMatch(/<table role="table" class="[^"]*stack/);
+    expect(grid).toMatch(/<table role="table" [^>]*data-narrow="scroll"/);
 
     const open = renderToStaticMarkup(
       <DataTable caption="People" columns={COLUMNS} rows={LINES} rowKey={(l) => l.id} details />,
@@ -330,7 +330,7 @@ describe('marks', () => {
     }
     const machine = renderToStaticMarkup(<Avatar name="nightly" kind="machine" />);
     expect(machine).toContain('data-hue="0"');
-    expect(machine).toMatch(/class="[^"]*machine/);
+    expect(machine).toContain('data-kind="machine"');
     expect(renderToStaticMarkup(<Avatar name="Eve" muted />)).toContain('data-hue="0"');
 
     const stack = renderToStaticMarkup(
@@ -350,7 +350,7 @@ describe('marks', () => {
     const withIcon = renderToStaticMarkup(<ServiceMark name="Stripe" icon={icon} />);
     expect(withIcon).toContain('<path d="M12 2 22 22H2Z" fill="currentColor"');
     expect(withIcon).toContain('viewBox="0 0 24 24"');
-    expect(withIcon).toMatch(/class="[^"]*serviceIcon/);
+    expect(withIcon).toContain('data-mark="icon"');
     expect(withIcon).toContain('--mark-color:#635BFF');
     expect(withIcon).toContain('--mark-color-dark:#635BFF');
     expect(withIcon).not.toContain('data-hue');
@@ -379,7 +379,7 @@ describe('marks', () => {
     expect(renderToStaticMarkup(<ServiceMark name="Acme Cloud" icon={null} />)).toBe(fallback);
 
     const large = renderToStaticMarkup(<ServiceMark name="Stripe" icon={icon} size="lg" />);
-    expect(large).toMatch(/class="[^"]*serviceLg/);
+    expect(large).toContain('data-size="lg"');
   });
 
   it('prints an id as the protocol spells it, wrapping between its words', () => {
@@ -524,7 +524,7 @@ describe('Field', () => {
     );
     expect(text(html)).toContain('Team id · optional');
     expect(html).toMatch(/aria-describedby="[^"]+"/);
-    expect(html).not.toContain('aria-invalid');
+    expect(bare(html)).not.toContain('aria-invalid');
   });
 
   it('labels a switch by what happens', () => {
@@ -556,7 +556,7 @@ describe('the rest', () => {
         hint="Recorded in the activity."
       />,
     );
-    expect(html).toContain('<h2 class="_title_');
+    expect(bare(html)).toContain('<h2 id="t">Replace your key?</h2>');
     expect(html).toMatch(/id="d"[^>]*>You get a new key, shown once\./);
     expect(html.indexOf('shown once')).toBeLessThan(html.indexOf('Replace key</button>'));
   });
@@ -612,10 +612,10 @@ describe('the components added with the mission pages', () => {
     expect(html).toContain('aria-haspopup="menu"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="More actions"');
-    expect(html).toMatch(/role="menu"[^>]* hidden=""/);
-    expect(html).toMatch(/<a [^>]*role="menuitem"[^>]*href="\/missions\/m1\/session"/);
-    expect(html.match(/role="menuitem"/g)).toHaveLength(3);
-    expect(html).toContain('Its creator alone can copy it');
+    // Closed, the panel is not in the page at all (Radix mounts it on opening); the items,
+    // the link and the disabled one are walked by the browser tests (`mission-pages.ts`).
+    expect(html).not.toContain('role="menuitem"');
+    expect(html).not.toContain('Stop the mission');
   });
 
   it('draws a choice that would yield nothing as unavailable, with its reason in words', () => {

@@ -32,7 +32,28 @@ import {
 } from '@/lib/vocabulary';
 
 import { GateMark, RowChip, WhyCells } from './Marks.tsx';
-import styles from './Permission.module.css';
+
+/**
+ * The table's look, on the table itself: every cell is styled through its
+ * column (`data-col`) and its row (`data-group`, `data-out`, `data-why`), so a
+ * page's markup stays plain and the rules read as one block. shadcn/ui's Table,
+ * written for the rows of a permission on the shared tokens.
+ */
+const TABLE = [
+  'w-full border-collapse text-small',
+  '[&_th]:border-b [&_th]:border-border [&_th]:px-(--cell-x) [&_th]:py-1.5 [&_th]:text-left [&_th]:text-caption [&_th]:font-normal [&_th]:whitespace-nowrap [&_th]:text-muted-foreground',
+  '[&_td]:border-b [&_td]:border-border [&_td]:px-(--cell-x) [&_td]:py-1.5 [&_td]:align-middle',
+  '[&_tbody:last-child_tr:last-child_td]:border-b-0',
+  '[&_[data-col=select]]:w-7 [&_[data-col=select]]:pr-0',
+  '[&_[data-col=number]]:w-[100px] [&_[data-col=number]]:text-right [&_[data-col=number]]:whitespace-nowrap [&_[data-col=number]]:tabular-nums',
+  '[&_[data-col=row]]:w-[170px] [&_[data-col=usage]]:w-[230px] [&_[data-col=gate]]:w-[170px] [&_[data-col=gate]]:whitespace-nowrap',
+  // A group of rows: its head on the side paper, in the strong weight.
+  '[&_tr[data-group]>*]:bg-sidebar [&_tr[data-group]>*]:py-[5px] [&_tr[data-group]>*]:text-caption [&_tr[data-group]>*]:font-semibold [&_tr[data-group]>*]:text-muted-foreground',
+  // Listed, not included: the row is quiet and holds no limit.
+  '[&_tr[data-out]>td]:text-muted-foreground',
+  // The reason behind "why?", indented under its row.
+  '[&_tr[data-why]>td]:bg-sidebar [&_tr[data-why]>td]:pt-2.5 [&_tr[data-why]>td]:pr-(--cell-x) [&_tr[data-why]>td]:pb-3 [&_tr[data-why]>td]:pl-10',
+].join(' ');
 
 export type PermissionVariant = 'editor' | 'read' | 'usage' | 'pick';
 
@@ -121,13 +142,13 @@ export function PermissionTable({
   const layout = LAYOUTS[variant];
   return (
     <LayoutContext.Provider value={layout}>
-      <div className={styles.scroll}>
-        <table className={styles.table} data-variant={variant} data-testid={testId}>
+      <div className="max-w-full overflow-x-auto">
+        <table className={TABLE} data-variant={variant} data-testid={testId}>
           <caption className="vbn-sr-only">{caption}</caption>
           <thead>
             <tr>
               {layout.select && (
-                <th scope="col" className={styles.selectCell}>
+                <th scope="col" data-col="select">
                   <span className="vbn-sr-only">Included</span>
                 </th>
               )}
@@ -135,12 +156,12 @@ export function PermissionTable({
               {layout.row && <th scope="col">{ROW_LABEL}</th>}
               {layout.usage && <th scope="col">{labels?.usage ?? LIMIT_WORDS.usedToday}</th>}
               {layout.perDay && (
-                <th scope="col" className={styles.number}>
+                <th scope="col" data-col="number">
                   {labels?.limit ?? LIMIT_WORDS.perDay}
                 </th>
               )}
               {layout.perMinute && (
-                <th scope="col" className={styles.number}>
+                <th scope="col" data-col="number">
                   {LIMIT_WORDS.perMinute}
                 </th>
               )}
@@ -172,11 +193,11 @@ export function PermissionGroup({
   const span = columnCount(layout) - (layout.select ? 1 : 0);
   return (
     <tbody>
-      <tr className={styles.group}>
-        {layout.select && <td className={styles.selectCell}>{select}</td>}
+      <tr data-group="">
+        {layout.select && <td data-col="select">{select}</td>}
         <th colSpan={span} scope="rowgroup">
           {title}
-          {note && <span className={styles.groupNote}>{note}</span>}
+          {note && <span className="ml-1.5 font-normal">{note}</span>}
         </th>
       </tr>
       {children}
@@ -247,7 +268,7 @@ export function PermissionRow({
   const whyButton = why && (
     <button
       type="button"
-      className={styles.why}
+      className="cursor-pointer text-caption text-primary hover:underline aria-expanded:font-semibold"
       aria-expanded={open}
       aria-controls={panelId}
       onClick={() => setOpen(!open)}
@@ -258,29 +279,32 @@ export function PermissionRow({
 
   return (
     <>
-      <tr className={included ? undefined : styles.out} data-permission={id}>
-        {layout.select && <td className={styles.selectCell}>{select}</td>}
+      <tr data-out={included ? undefined : ''} data-permission={id}>
+        {layout.select && <td data-col="select">{select}</td>}
         <td>
-          <span className={styles.label}>
+          <span className="block">
             {label}
-            {tag && <span className={styles.tag}>{tag}</span>}
+            {tag && <span className="ml-1.5">{tag}</span>}
           </span>
-          {id && <code className={styles.id}>{id}</code>}
+          {id && (
+            // An id wraps between its words, never inside one.
+            <code className="block font-mono text-caption text-muted-foreground [overflow-wrap:anywhere]">
+              {id}
+            </code>
+          )}
         </td>
         {layout.row && (
-          <td className={styles.rowCell}>
+          <td data-col="row">
             {row !== undefined && <RowChip row={row} reason={rowReason} />}
-            {!layout.gate && whyButton}
+            {!layout.gate && whyButton && <span className="ml-2">{whyButton}</span>}
           </td>
         )}
-        {layout.usage && <td className={styles.usageCell}>{included ? usage : null}</td>}
-        {layout.perDay && <td className={styles.number}>{included ? limitCell(perDay) : null}</td>}
-        {layout.perMinute && (
-          <td className={styles.number}>{included ? limitCell(perMinute) : null}</td>
-        )}
+        {layout.usage && <td data-col="usage">{included ? usage : null}</td>}
+        {layout.perDay && <td data-col="number">{included ? limitCell(perDay) : null}</td>}
+        {layout.perMinute && <td data-col="number">{included ? limitCell(perMinute) : null}</td>}
         {layout.gate && (
-          <td className={styles.gateCell}>
-            <span className={styles.gateRow}>
+          <td data-col="gate">
+            <span className="inline-flex items-center gap-2">
               {included && gateControl}
               {(shownGate !== 'free' || !gateControl) && <GateMark gate={shownGate} />}
               {whyButton}
@@ -289,15 +313,15 @@ export function PermissionRow({
         )}
       </tr>
       {why && (
-        <tr className={styles.whyRow} hidden={!open}>
+        <tr data-why="" hidden={!open}>
           <td colSpan={columnCount(layout)} id={panelId}>
-            <div className={styles.whyBox}>
-              <div className={styles.reason}>
+            <div className="grid gap-2 text-small text-muted-foreground">
+              <div className="max-w-(--measure)">
                 {why.reason}
                 {why.referenceHref && (
                   <>
                     {' '}
-                    <a href={why.referenceHref} className={styles.reference}>
+                    <a href={why.referenceHref} className="text-primary">
                       Full entry in the reference
                     </a>
                   </>
@@ -305,7 +329,7 @@ export function PermissionRow({
               </div>
               {why.cells && <WhyCells values={why.cells} />}
               {why.tools && why.tools.length > 0 && (
-                <div className={styles.tools}>tools: {why.tools.join(', ')}</div>
+                <div className="font-mono text-caption">tools: {why.tools.join(', ')}</div>
               )}
             </div>
           </td>

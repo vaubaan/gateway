@@ -14,6 +14,11 @@
  *   table row, `mono` for an identifier or a secret).
  * - `Checkbox`, `Radio`, `Switch` — native inputs with their words beside
  *   them. A `Switch` is labelled by what happens ("Ask me first").
+ *
+ * shadcn/ui's Input, Textarea, Label and Switch, drawn on the shared tokens
+ * (ADR design-system-on-shadcn-shared-by-the-app-and-the-site). The controls
+ * stay native elements: a server form posts them as they are, and a page's
+ * `onChange` keeps its event.
  */
 import {
   cloneElement,
@@ -25,19 +30,29 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 
-import styles from './Input.module.css';
+import { cn } from '@/lib/utils';
 
 type ControlSize = 'sm' | 'md';
 
+/** The look every text control shares: the boundary at 3:1, a red line and halo when invalid. */
 function controlClasses(
   size: ControlSize,
   mono: boolean | undefined,
-  extra: readonly (string | undefined)[],
+  ...extra: (string | undefined | false)[]
 ): string {
-  return [styles.control, size === 'sm' ? styles.sm : '', mono ? styles.mono : '', ...extra]
-    .filter(Boolean)
-    .join(' ');
+  return cn(
+    'w-full rounded-md border border-input bg-card text-body leading-normal text-foreground transition-colors placeholder:text-faint hover:enabled:not-focus:border-muted-foreground focus-visible:rounded-md disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground aria-invalid:border-refused aria-invalid:shadow-[0_0_0_2px_var(--refused-bg)]',
+    size === 'sm' ? 'h-7 px-[7px]' : 'h-8 px-2.5',
+    mono && 'font-mono',
+    ...extra,
+  );
 }
+
+const CHEVRON =
+  'appearance-none bg-[linear-gradient(45deg,transparent_50%,var(--muted-foreground)_50%),linear-gradient(135deg,var(--muted-foreground)_50%,transparent_50%)] bg-[length:5px_5px,5px_5px] bg-[position:right_15px_center,right_10px_center] bg-no-repeat';
+
+const CHOICE = 'inline-flex cursor-pointer items-center gap-2 text-body';
+const BOX = 'm-0 size-[15px] flex-none cursor-pointer accent-primary disabled:cursor-not-allowed';
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   size?: ControlSize;
@@ -49,7 +64,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { className, size = 'md', mono, ...rest }: InputProps,
   ref,
 ) {
-  return <input ref={ref} className={controlClasses(size, mono, [className])} {...rest} />;
+  return <input ref={ref} className={controlClasses(size, mono, className)} {...rest} />;
 });
 
 export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -63,7 +78,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   return (
     <textarea
       ref={ref}
-      className={controlClasses('md', mono, [styles.textarea, className])}
+      className={controlClasses('md', mono, 'h-auto min-h-20 resize-y px-2.5 py-2', className)}
       {...rest}
     />
   );
@@ -78,7 +93,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   ref,
 ) {
   return (
-    <select ref={ref} className={controlClasses(size, false, [styles.select, className])} {...rest}>
+    <select
+      ref={ref}
+      className={controlClasses(size, false, CHEVRON, size === 'sm' ? 'pr-6' : 'pr-8', className)}
+      {...rest}
+    >
       {children}
     </select>
   );
@@ -93,10 +112,10 @@ export const Checkbox = forwardRef<HTMLInputElement, ChoiceProps>(function Check
   { className, children, ...rest }: ChoiceProps,
   ref,
 ) {
-  const box = <input ref={ref} type="checkbox" className={styles.box} {...rest} />;
+  const box = <input ref={ref} type="checkbox" className={BOX} {...rest} />;
   if (children === undefined) return box;
   return (
-    <label className={[styles.choice, className ?? ''].join(' ')}>
+    <label className={cn(CHOICE, className)}>
       {box}
       <span>{children}</span>
     </label>
@@ -107,10 +126,10 @@ export const Radio = forwardRef<HTMLInputElement, ChoiceProps>(function Radio(
   { className, children, ...rest }: ChoiceProps,
   ref,
 ) {
-  const box = <input ref={ref} type="radio" className={styles.box} {...rest} />;
+  const box = <input ref={ref} type="radio" className={BOX} {...rest} />;
   if (children === undefined) return box;
   return (
-    <label className={[styles.choice, className ?? ''].join(' ')}>
+    <label className={cn(CHOICE, className)}>
       {box}
       <span>{children}</span>
     </label>
@@ -118,19 +137,25 @@ export const Radio = forwardRef<HTMLInputElement, ChoiceProps>(function Radio(
 });
 
 /**
- * On or off, taking effect at once. Amber when on: in this interface a switch
- * turns "ask me first" on, which is the exception worth seeing.
+ * On or off, taking effect at once. The accent when on: in this interface a
+ * switch turns "ask me first" on, which waits for the person.
  */
 export const Switch = forwardRef<HTMLInputElement, ChoiceProps>(function Switch(
   { className, children, ...rest }: ChoiceProps,
   ref,
 ) {
   const control = (
-    <input ref={ref} type="checkbox" role="switch" className={styles.switch} {...rest} />
+    <input
+      ref={ref}
+      type="checkbox"
+      role="switch"
+      className="relative m-0 h-4 w-7 flex-none cursor-pointer appearance-none rounded-full bg-input transition-colors after:absolute after:top-0.5 after:left-0.5 after:size-3 after:rounded-full after:bg-background after:transition-transform after:content-[''] checked:bg-primary checked:after:translate-x-3 focus-visible:rounded-full disabled:cursor-not-allowed disabled:opacity-50"
+      {...rest}
+    />
   );
   if (children === undefined) return control;
   return (
-    <label className={[styles.choice, className ?? ''].join(' ')}>
+    <label className={cn(CHOICE, className)}>
       {control}
       <span>{children}</span>
     </label>
@@ -171,8 +196,8 @@ export function Field({
   const labelText = (
     <>
       {label}
-      {shape && <span className={styles.shape}> · {shape}</span>}
-      {optional && <span className={styles.shape}> · optional</span>}
+      {shape && <span className="text-muted-foreground"> · {shape}</span>}
+      {optional && <span className="text-muted-foreground"> · optional</span>}
     </>
   );
   // The one control of the field is told about its note and its state.
@@ -188,28 +213,28 @@ export function Field({
       : children;
   return (
     <div
-      className={styles.field}
+      className="flex min-w-0 flex-col gap-[5px]"
       role={grouped ? 'group' : undefined}
       aria-labelledby={grouped ? labelId : undefined}
     >
       {label &&
         (htmlFor ? (
-          <label className={styles.label} htmlFor={htmlFor}>
+          <label className="block text-caption text-muted-foreground" htmlFor={htmlFor}>
             {labelText}
           </label>
         ) : (
-          <div className={styles.label} id={labelId}>
+          <div className="block text-caption text-muted-foreground" id={labelId}>
             {labelText}
           </div>
         ))}
       {control}
       {hint && !error && (
-        <div className={styles.hint} id={noteId}>
+        <div className="text-caption text-muted-foreground" id={noteId}>
           {hint}
         </div>
       )}
       {error && (
-        <div className={styles.error} id={noteId} role="alert">
+        <div className="text-small text-refused-fg" id={noteId} role="alert">
           {error}
         </div>
       )}

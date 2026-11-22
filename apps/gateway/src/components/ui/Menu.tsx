@@ -6,18 +6,32 @@
  *
  * `MoreMenu` is the button and its panel; `MenuItem` is one act — a button,
  * or a link when it navigates. The panel is one of the few surfaces with a
- * shadow. It closes on Escape (the focus goes back to the button), on a click
- * outside and once an item was chosen; the arrow keys move between its items.
- * `danger` draws the words of an act that stops something in red: never a red
- * fill.
+ * shadow. shadcn/ui's DropdownMenu on Radix (ADR
+ * design-system-on-shadcn-shared-by-the-app-and-the-site): it closes on
+ * Escape (the focus goes back to the button), on a click outside and once an
+ * item was chosen; the arrow keys move between its items, typing a letter
+ * finds one. `danger` draws the words of an act that stops something in red:
+ * never a red fill.
  */
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import Link from 'next/link';
-import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
+
+import { buttonVariants } from './Button.tsx';
 import { Icon } from './Icon.tsx';
-import styles from './Menu.module.css';
 
-const CloseContext = createContext<() => void>(() => {});
+/** The panel goes on the themed island the menu sits in (the gallery's dark one), else the body. */
+function useIslandContainer(): [React.RefObject<HTMLSpanElement | null>, HTMLElement | null] {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const island = anchor.current?.closest<HTMLElement>('[data-theme]');
+    setContainer(island && island !== document.documentElement ? island : document.body);
+  }, []);
+  return [anchor, container];
+}
 
 export function MoreMenu({
   label = 'More actions',
@@ -30,63 +44,34 @@ export function MoreMenu({
   children: React.ReactNode;
   testId?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
-  const panelId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const items = () =>
-      [...(panel.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].filter(
-        (item) => !item.hasAttribute('disabled'),
-      );
-    items()[0]?.focus();
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        button.current?.focus();
-        return;
-      }
-      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-      event.preventDefault();
-      const all = items();
-      const at = all.findIndex((item) => item === document.activeElement);
-      const step = event.key === 'ArrowDown' ? 1 : -1;
-      all[(at + step + all.length) % all.length]?.focus();
-    }
-    function onPointer(event: PointerEvent) {
-      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
-    }
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('pointerdown', onPointer);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('pointerdown', onPointer);
-    };
-  }, [open]);
-
+  const [anchor, container] = useIslandContainer();
   return (
-    <div ref={root} className={styles.root}>
-      <button
-        ref={button}
-        type="button"
-        className={styles.button}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={panelId}
-        aria-label={label}
-        title={label}
-        data-testid={testId}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <Icon name="more" size={16} />
-      </button>
-      <div ref={panel} id={panelId} role="menu" className={styles.panel} hidden={!open}>
-        <CloseContext.Provider value={() => setOpen(false)}>{children}</CloseContext.Provider>
-      </div>
-    </div>
+    <span ref={anchor} className="relative inline-flex">
+      <DropdownMenu.Root modal={false}>
+        <DropdownMenu.Trigger
+          // Drawn as a secondary Button of the same size, so that it reads as one of its
+          // neighbours in a page header, not as a faint glyph beside them.
+          className={cn(
+            buttonVariants({ variant: 'secondary', size: 'md' }),
+            'w-8 px-0 data-[state=open]:bg-accent [&_svg]:[stroke-width:3]',
+          )}
+          aria-label={label}
+          title={label}
+          data-testid={testId}
+        >
+          <Icon name="more" size={16} />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal container={container}>
+          <DropdownMenu.Content
+            align="end"
+            sideOffset={4}
+            className="z-50 flex min-w-[200px] flex-col rounded-lg bg-popover p-1 text-popover-foreground shadow-md outline-none"
+          >
+            {children}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </span>
   );
 }
 
@@ -109,33 +94,26 @@ export function MenuItem({
   /** A few quiet words under the act: what it does, or why it is not available. */
   note?: React.ReactNode;
 }) {
-  const close = useContext(CloseContext);
-  const classes = [styles.item, danger ? styles.danger : ''].join(' ');
+  const classes = cn(
+    'flex w-full cursor-pointer flex-col gap-0.5 whitespace-nowrap rounded-md px-2.5 py-[7px] text-left text-body no-underline outline-none hover:no-underline data-highlighted:bg-accent data-disabled:cursor-not-allowed data-disabled:text-faint',
+    danger ? 'text-destructive' : 'text-popover-foreground',
+  );
   const content = (
     <>
       <span>{children}</span>
-      {note && <span className={styles.note}>{note}</span>}
+      {note && <span className="text-caption whitespace-normal text-muted-foreground">{note}</span>}
     </>
   );
   if (href && !disabled) {
     return (
-      <Link href={href} role="menuitem" className={classes} onClick={close}>
-        {content}
-      </Link>
+      <DropdownMenu.Item asChild className={classes}>
+        <Link href={href}>{content}</Link>
+      </DropdownMenu.Item>
     );
   }
   return (
-    <button
-      type="button"
-      role="menuitem"
-      className={classes}
-      disabled={disabled}
-      onClick={() => {
-        close();
-        onSelect?.();
-      }}
-    >
+    <DropdownMenu.Item className={classes} disabled={disabled} onSelect={() => onSelect?.()}>
       {content}
-    </button>
+    </DropdownMenu.Item>
   );
 }

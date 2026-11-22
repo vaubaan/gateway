@@ -15,14 +15,55 @@
  * The attention budget these serve (style guide §1): above the fold at
  * 1440×900, at most three regions, one focal point, fifteen to twenty-five
  * data points.
+ *
+ * Tailwind on the shared tokens: the classes of each part are named once, in
+ * `S`, so the markup below reads as it did.
  */
 import Link from 'next/link';
 
+import { cn } from '@/lib/utils';
 import { formatNumber, type DocTarget } from '@/lib/vocabulary';
 
 import { DocHint } from './DocHint';
-import styles from './Page.module.css';
 import { TrailSetter } from './Trail';
+
+/** The parts of a page's frame. A narrow window puts the actions under the title. */
+const S = {
+  header: 'mb-[22px]',
+  crumbs: 'mb-2 flex flex-wrap items-center gap-1.5 text-small text-muted-foreground',
+  crumb: 'inline-flex gap-1.5 [&_a:hover]:text-foreground [&_a:hover]:no-underline',
+  crumbSep: 'text-faint',
+  headerRow: 'flex items-start justify-between gap-6 max-[720px]:flex-col max-[720px]:gap-3',
+  headerText: 'min-w-0',
+  titleLine: 'flex items-center gap-2',
+  title:
+    'm-0 flex flex-wrap items-center gap-x-3 gap-y-2 text-title leading-snug font-semibold tracking-(--tracking-title)',
+  titleMark: 'inline-flex',
+  titleStatus: 'inline-flex',
+  lede: 'mt-[3px] mb-0 max-w-(--measure) text-small text-muted-foreground',
+  actions: 'flex flex-none items-center gap-2 pt-0.5 max-[720px]:flex-wrap',
+  action: 'inline-flex',
+  section: 'mt-(--section-gap)',
+  sectionFirst: 'mt-0',
+  sectionHead:
+    'mb-2.5 flex items-baseline justify-between gap-4 max-[720px]:flex-col max-[720px]:gap-0.5',
+  sectionTitle: 'm-0 flex-none text-body font-semibold whitespace-nowrap [&:is(h3)]:text-small',
+  sectionCount: 'ml-1.5 tabular-nums text-muted-foreground',
+  sectionNote:
+    'flex min-w-0 items-center gap-3 text-right text-body text-muted-foreground max-[720px]:text-left [&_a]:text-primary',
+  summary: 'm-0 flex flex-wrap gap-x-[18px] gap-y-1 text-body tabular-nums text-muted-foreground',
+  summaryCentered: 'justify-center',
+  summaryLink: 'text-primary',
+  kv: 'm-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-[18px] gap-y-1.5 text-small [&_dd]:m-0 [&_dd]:min-w-0 [&_dt]:text-muted-foreground',
+  kvRow: 'contents',
+  stats: 'm-0 flex flex-wrap gap-x-10 gap-y-4',
+  statLabel: 'text-caption text-muted-foreground',
+  statValue: 'mt-px mb-0 text-body font-semibold tabular-nums',
+  stat_warn: 'text-approval-fg',
+  stat_bad: 'text-refused-fg',
+  statNote: 'ml-1 text-caption font-normal text-muted-foreground',
+  hint: 'mt-2.5 mb-0 max-w-(--measure) text-small text-muted-foreground [&_a]:text-primary',
+} as const;
 
 export type PageWidth = 'narrow' | 'default' | 'wide';
 
@@ -34,11 +75,11 @@ export interface Crumb {
 
 export function Crumbs({ items }: { items: readonly Crumb[] }) {
   return (
-    <nav className={styles.crumbs} aria-label="Breadcrumb">
+    <nav className={S.crumbs} aria-label="Breadcrumb">
       {items.map((item, index) => (
-        <span key={`${item.label}:${index}`} className={styles.crumb}>
+        <span key={`${item.label}:${index}`} className={S.crumb}>
           {index > 0 && (
-            <span className={styles.crumbSep} aria-hidden="true">
+            <span className={S.crumbSep} aria-hidden="true">
               /
             </span>
           )}
@@ -91,26 +132,26 @@ export function PageHeader({
   const label = title;
   const hasActions = Boolean(primary) || Boolean(secondary) || Boolean(more);
   return (
-    <header className={styles.header} data-page-width={level === 1 ? width : undefined}>
+    <header className={S.header} data-page-width={level === 1 ? width : undefined}>
       {/* The page's place, for the path bar of the shell: its crumbs, then its title. */}
       {level === 1 && <TrailSetter items={[...(crumbs ?? []), { label }]} />}
-      <div className={styles.headerRow}>
-        <div className={styles.headerText}>
-          <div className={styles.titleLine}>
-            <Title className={styles.title}>
-              {mark && <span className={styles.titleMark}>{mark}</span>}
+      <div className={S.headerRow}>
+        <div className={S.headerText}>
+          <div className={S.titleLine}>
+            <Title className={S.title}>
+              {mark && <span className={S.titleMark}>{mark}</span>}
               <span>{title}</span>
-              {status && <span className={styles.titleStatus}>{status}</span>}
+              {status && <span className={S.titleStatus}>{status}</span>}
             </Title>
             {doc && <DocHint to={doc} testId="page-doc-link" />}
           </div>
-          {lede && <p className={styles.lede}>{lede}</p>}
+          {lede && <p className={S.lede}>{lede}</p>}
         </div>
         {hasActions && (
-          <div className={styles.actions}>
+          <div className={S.actions}>
             {secondary?.map((action, index) => (
               // A fixed, ordered pair: the index is its identity.
-              <span key={index} className={styles.action}>
+              <span key={index} className={S.action}>
                 {action}
               </span>
             ))}
@@ -140,16 +181,16 @@ export function SectionHeading({
 }) {
   const Heading = level === 2 ? 'h2' : 'h3';
   return (
-    <div className={styles.sectionHead}>
-      <Heading className={styles.sectionTitle} id={id}>
+    <div className={S.sectionHead}>
+      <Heading className={S.sectionTitle} id={id}>
         {title}
         {count !== undefined && (
-          <span className={styles.sectionCount}>
+          <span className={S.sectionCount}>
             {typeof count === 'number' ? formatNumber(count) : count}
           </span>
         )}
       </Heading>
-      {note && <div className={styles.sectionNote}>{note}</div>}
+      {note && <div className={S.sectionNote}>{note}</div>}
     </div>
   );
 }
@@ -177,7 +218,7 @@ export function Section({
   return (
     <section
       id={id}
-      className={[styles.section, first ? styles.sectionFirst : ''].join(' ')}
+      className={cn(S.section, first && S.sectionFirst)}
       aria-labelledby={title ? headingId : undefined}
       data-testid={testId}
     >
@@ -201,10 +242,10 @@ export function SummaryLine({
   centered?: boolean;
 }) {
   return (
-    <p className={[styles.summary, centered ? styles.summaryCentered : ''].join(' ')}>
+    <p className={cn(S.summary, centered && S.summaryCentered)}>
       {items.map((item, index) =>
         item.href ? (
-          <Link key={index} href={item.href} className={styles.summaryLink}>
+          <Link key={index} href={item.href} className={S.summaryLink}>
             {item.label}
           </Link>
         ) : (
@@ -221,9 +262,9 @@ export function KeyValue({
   items: readonly { readonly term: React.ReactNode; readonly value: React.ReactNode }[];
 }) {
   return (
-    <dl className={styles.kv}>
+    <dl className={S.kv}>
       {items.map((item, index) => (
-        <div key={index} className={styles.kvRow}>
+        <div key={index} className={S.kvRow}>
           <dt>{item.term}</dt>
           <dd>{item.value}</dd>
         </div>
@@ -243,15 +284,13 @@ export interface Stat {
 
 export function Stats({ items }: { items: readonly Stat[] }) {
   return (
-    <dl className={styles.stats}>
+    <dl className={S.stats}>
       {items.map((item) => (
         <div key={item.label}>
-          <dt className={styles.statLabel}>{item.label}</dt>
-          <dd
-            className={[styles.statValue, item.tone ? styles[`stat_${item.tone}`] : ''].join(' ')}
-          >
+          <dt className={S.statLabel}>{item.label}</dt>
+          <dd className={cn(S.statValue, item.tone && S[`stat_${item.tone}`])}>
             {item.value}
-            {item.note && <span className={styles.statNote}>{item.note}</span>}
+            {item.note && <span className={S.statNote}>{item.note}</span>}
           </dd>
         </div>
       ))}
@@ -261,5 +300,5 @@ export function Stats({ items }: { items: readonly Stat[] }) {
 
 /** Quiet secondary text under a list: what is not shown, and where it is. */
 export function Hint({ children }: { children: React.ReactNode }) {
-  return <p className={styles.hint}>{children}</p>;
+  return <p className={S.hint}>{children}</p>;
 }

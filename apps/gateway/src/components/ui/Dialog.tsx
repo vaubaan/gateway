@@ -6,10 +6,12 @@
  * asked only before an act that deletes or stops something for good (spec
  * §4.2); creating, editing and reversible switches act at once.
  *
- * - `Dialog` — the modal surface: a native `<dialog>` opened with
- *   `showModal()`, so the browser keeps focus inside it, closes it on Escape
- *   and makes the page behind inert. Labelled by its title, described by its
- *   consequence.
+ * - `Dialog` — the modal surface: shadcn/ui's Dialog on Radix (ADR
+ *   design-system-on-shadcn-shared-by-the-app-and-the-site), so focus stays
+ *   inside it, Escape closes it, focus returns to where it was, and the page
+ *   behind is inert. Labelled by its title, described by its consequence. It
+ *   is drawn in a portal on the body, or on the themed island it sits in (the
+ *   gallery draws a dark one), so it takes that island's theme.
  * - `ConfirmDialog` — the question in full: title, consequence, optionally a
  *   choice between ways of doing it (`OptionCard`s — "stop the key now" or
  *   "keep it one hour"), the confirming button named after the act, Cancel,
@@ -22,12 +24,13 @@
  * A side sheet that stays open is not provided: a region that is always open
  * is a region that always competes.
  */
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { cn } from '@/lib/utils';
 import { ACTIONS } from '@/lib/vocabulary';
 
 import { Button } from './Button.tsx';
-import styles from './Dialog.module.css';
 import { Input } from './Input.tsx';
 
 export type DialogWidth = 'md' | 'lg';
@@ -57,27 +60,47 @@ export function DialogPanel({
 }) {
   return (
     <>
-      <div className={[styles.head, divided ? styles.headDivided : ''].join(' ')}>
-        <h2 className={styles.title} id={titleId}>
+      <div className={cn('flex-none px-5 pt-4 pb-3', divided && 'border-b border-border')}>
+        <h2 className="m-0 text-body leading-snug font-semibold" id={titleId}>
           {title}
         </h2>
         {description && (
-          <div className={styles.description} id={descriptionId}>
+          <div className="mt-1.5 text-body text-muted-foreground" id={descriptionId}>
             {description}
           </div>
         )}
       </div>
       {children && (
-        <div className={[styles.body, divided ? styles.bodyDivided : ''].join(' ')}>{children}</div>
+        <div className={cn('min-h-0 overflow-y-auto px-5 pb-3.5 text-body', divided && 'pt-3.5')}>
+          {children}
+        </div>
       )}
       {(footer || hint) && (
-        <div className={styles.foot}>
+        <div className="flex flex-none items-center gap-2.5 border-t border-border bg-sidebar px-5 py-3 max-[720px]:flex-wrap">
           {footer}
-          {hint && <span className={styles.hint}>{hint}</span>}
+          {hint && (
+            <span className="ml-auto text-right text-caption leading-[1.35] text-muted-foreground">
+              {hint}
+            </span>
+          )}
         </div>
       )}
     </>
   );
+}
+
+/**
+ * Where a dialog's portal goes: the themed island the dialog sits in (a part of
+ * the page drawn in the other theme), else the body.
+ */
+function useIslandContainer(): [React.RefObject<HTMLSpanElement | null>, HTMLElement | null] {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const island = anchor.current?.closest<HTMLElement>('[data-theme]');
+    setContainer(island && island !== document.documentElement ? island : document.body);
+  }, []);
+  return [anchor, container];
 }
 
 export function Dialog({
@@ -107,47 +130,55 @@ export function Dialog({
   dismissible?: boolean;
   testId?: string;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
+  const [anchor, container] = useIslandContainer();
   return (
-    <dialog
-      ref={ref}
-      className={[styles.dialog, width === 'lg' ? styles.wide : ''].join(' ')}
-      aria-labelledby={titleId}
-      aria-describedby={description ? descriptionId : undefined}
-      data-testid={testId}
-      onCancel={(event) => {
-        // Escape: the page decides (the state is the caller's), never the element alone.
-        event.preventDefault();
-        if (dismissible) onClose();
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && dismissible) onClose();
-      }}
-    >
-      {open && (
-        <DialogPanel
-          title={title}
-          titleId={titleId}
-          description={description}
-          descriptionId={descriptionId}
-          footer={footer}
-          hint={hint}
-          divided={divided}
-        >
-          {children}
-        </DialogPanel>
-      )}
-    </dialog>
+    <>
+      <span ref={anchor} hidden />
+      <DialogPrimitive.Root
+        open={open && container !== null}
+        onOpenChange={(next) => {
+          // Escape or the backdrop: the page decides (the state is the caller's).
+          if (!next && dismissible) onClose();
+        }}
+      >
+        <DialogPrimitive.Portal container={container}>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-scrim/40 dark:bg-scrim/60" />
+          <DialogPrimitive.Content
+            data-testid={testId}
+            // Without a consequence there is nothing to describe it by (Radix asks to say so).
+            {...(description ? {} : { 'aria-describedby': undefined })}
+            className={cn(
+              // Never taller than the window: the top margin and the same room under it are
+              // taken off the height, and the body scrolls between a head and a foot that
+              // stay in view. `--dialog-top` is the one number both use.
+              'fixed top-(--dialog-top) left-1/2 z-50 flex max-h-[calc(100dvh-var(--dialog-top)-var(--dialog-bottom))] max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col overflow-hidden rounded-lg bg-card text-foreground shadow-lg outline-none',
+              '[--dialog-bottom:1.5rem] [@media(max-height:820px)]:[--dialog-top:1.5rem] max-[720px]:[--dialog-bottom:1rem] max-[720px]:[--dialog-top:1rem]',
+              width === 'lg' ? 'w-[640px] [--dialog-top:60px]' : 'w-[520px] [--dialog-top:96px]',
+            )}
+          >
+            <DialogPanel
+              title={
+                <DialogPrimitive.Title asChild>
+                  <span>{title}</span>
+                </DialogPrimitive.Title>
+              }
+              description={
+                description ? (
+                  <DialogPrimitive.Description asChild>
+                    <div>{description}</div>
+                  </DialogPrimitive.Description>
+                ) : undefined
+              }
+              footer={footer}
+              hint={hint}
+              divided={divided}
+            >
+              {children}
+            </DialogPanel>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    </>
   );
 }
 
@@ -171,10 +202,16 @@ export function OptionCard({
   disabled?: boolean;
 }) {
   return (
-    <label className={[styles.option, checked ? styles.optionOn : ''].join(' ')}>
+    <label
+      className={cn(
+        'flex cursor-pointer items-start gap-2.5 rounded-md border border-border px-3 py-2.5 text-body has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring',
+        checked && 'border-foreground shadow-[inset_0_0_0_1px_var(--foreground)]',
+      )}
+      data-checked={checked || undefined}
+    >
       <input
         type="radio"
-        className={styles.optionInput}
+        className="mt-0.5 size-[15px] flex-none accent-primary focus-visible:outline-none"
         name={name}
         value={value}
         checked={checked}
@@ -182,8 +219,8 @@ export function OptionCard({
         onChange={() => onChange(value)}
       />
       <span>
-        <span className={styles.optionLabel}>{label}</span>
-        {description && <span className={styles.optionDescription}>{description}</span>}
+        <span className="block">{label}</span>
+        {description && <span className="mt-px block text-muted-foreground">{description}</span>}
       </span>
     </label>
   );
@@ -260,7 +297,7 @@ export function ConfirmDialog({
       }
     >
       {options && options.length > 0 && (
-        <div role="radiogroup" aria-label="How" className={styles.options}>
+        <div role="radiogroup" aria-label="How" className="grid gap-2">
           {options.map((option) => (
             <OptionCard
               key={option.value}
@@ -276,12 +313,16 @@ export function ConfirmDialog({
         </div>
       )}
       {children}
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
+      {error && <DialogError>{error}</DialogError>}
     </Dialog>
+  );
+}
+
+function DialogError({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-2 mb-0 text-body text-refused-fg" role="alert">
+      {children}
+    </p>
   );
 }
 
@@ -332,7 +373,7 @@ export function DangerConfirm({
         </>
       }
     >
-      <label className={styles.phraseLabel} htmlFor={inputId}>
+      <label className="mb-1.5 block text-muted-foreground" htmlFor={inputId}>
         Type <code>{phrase}</code> to confirm:
       </label>
       <Input
@@ -346,11 +387,7 @@ export function DangerConfirm({
         autoFocus
         mono
       />
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      )}
+      {error && <DialogError>{error}</DialogError>}
     </Dialog>
   );
 }

@@ -21,6 +21,7 @@ How `packages/design-tokens` (`@vaubaan/design-tokens`) produces the token sheet
 - **Values are chosen in hex, shipped in OKLCH** (shadcn's and Tailwind v4's form), the hex in a comment; contrast is computed on the rounded OKLCH, so a ratio describes what ships. A test holds the round trip within one step of 255.
 - **Themes**: light on `:root`, `.light`, `[data-theme='light']`; dark on `.dark`, `[data-theme='dark']`, and on the system preference when no `data-theme` is set — the app's System/Light/Dark switch before first paint (`apps/gateway/src/lib/theme.ts`). The two dark blocks are identical (a test).
 - **A consumer imports, in this order**: `tailwindcss`, `@vaubaan/design-tokens/tokens.css`, `@vaubaan/design-tokens/theme.css`. The fonts are the consumer's: `theme.css` reads `--font-geist-sans` and `--font-geist-mono`, which `geist`'s `next/font` classes set on `<html>`.
+- **No size shares a name with a colour**: a `--text-<name>` and a `--color-<name>` would make `text-<name>` one utility, and Tailwind gives the colour. The secondary size is `--text-small` (it was `--text-secondary`, which only ever drew shadcn's `secondary` colour). Every consumer's `cn` lists the sizes for tailwind-merge (`TEXT_SIZES`, tested against this sheet).
 - **shadcn's `accent` is a hover fill, not the brand accent**: the brand accent is `primary` (`#2F55C7`), its tinted forms `primary-soft` and `primary-ink`.
 
 ## Traps

@@ -20,8 +20,9 @@
  *
  * No hook: these render in server and client components alike.
  */
+import { cn } from '@/lib/utils';
+
 import { Icon, type IconName } from './Icon.tsx';
-import styles from './Request.module.css';
 
 export function RequestStatement({
   verb,
@@ -39,10 +40,12 @@ export function RequestStatement({
 }) {
   return (
     <div data-testid={testId}>
-      <p className={styles.verb}>{verb}</p>
-      <h2 className={styles.statement}>
+      <p className="m-0 mb-1 text-small text-muted-foreground [&_b]:text-foreground [&_strong]:text-foreground">
+        {verb}
+      </p>
+      <h2 className="m-0 flex flex-wrap items-center gap-x-3 gap-y-2 text-title leading-snug font-semibold tracking-(--tracking-title) [overflow-wrap:anywhere]">
         <span>{children}</span>
-        {status && <span className={styles.status}>{status}</span>}
+        {status && <span className="inline-flex tracking-normal">{status}</span>}
       </h2>
     </div>
   );
@@ -62,10 +65,10 @@ export function CallBox({
   testId?: string;
 }) {
   return (
-    <div className={styles.call} data-testid={testId}>
-      <div className={styles.callHead}>
+    <div className="mt-[18px] rounded-lg bg-sidebar px-3.5 py-3" data-testid={testId}>
+      <div className="mb-1.5 flex flex-wrap justify-between gap-x-4 gap-y-1 text-caption text-muted-foreground">
         <span>{label}</span>
-        {aside && <span className={styles.callAside}>{aside}</span>}
+        {aside && <span className="min-w-0 [overflow-wrap:anywhere]">{aside}</span>}
       </div>
       {children}
     </div>
@@ -80,9 +83,12 @@ export interface ArgItem {
 /** Each argument by its name. A value is printed whole: it wraps, and a long one scrolls. */
 export function ArgList({ items, testId }: { items: readonly ArgItem[]; testId?: string }) {
   return (
-    <dl className={styles.args} data-testid={testId}>
+    <dl
+      className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-[3px] font-mono text-caption leading-[1.6] max-sm:grid-cols-1 max-sm:gap-0.5 [&_dd]:m-0 [&_dd]:max-h-[180px] [&_dd]:overflow-auto [&_dd]:whitespace-pre-wrap [&_dd]:text-foreground [&_dd]:[overflow-wrap:anywhere] [&_dt]:text-muted-foreground max-sm:[&>div+div>dt]:mt-1.5"
+      data-testid={testId}
+    >
       {items.map((item) => (
-        <div key={item.name} className={styles.arg}>
+        <div key={item.name} className="contents">
           <dt>{item.name}</dt>
           <dd>{item.value}</dd>
         </div>
@@ -99,7 +105,7 @@ export interface Fact {
 
 export function FactColumns({ items }: { items: readonly Fact[] }) {
   return (
-    <dl className={styles.facts}>
+    <dl className="m-0 mt-4 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5 text-small [&_dd]:m-0 [&_dd]:tabular-nums [&_dt]:mb-[3px] [&_dt]:text-caption [&_dt]:text-muted-foreground">
       {items.map((item, index) => (
         // A fixed, ordered set of facts: the index is its identity.
         <div key={index} data-testid={item.testId}>
@@ -121,15 +127,23 @@ export function DecideBar({
   aside?: React.ReactNode;
 }) {
   return (
-    <div className={styles.decide}>
+    <div className="mt-5 flex flex-wrap items-center gap-2.5">
       {children}
-      {aside && <div className={styles.decideAside}>{aside}</div>}
+      {aside && (
+        <div className="ml-auto inline-flex items-center gap-2 text-small text-muted-foreground max-sm:ml-0">
+          {aside}
+        </div>
+      )}
     </div>
   );
 }
 
 export function ContextColumns({ children }: { children: React.ReactNode }) {
-  return <div className={styles.context}>{children}</div>;
+  return (
+    <div className="mt-8 grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-9 max-[1360px]:grid-cols-1 max-[1360px]:gap-7 [&>section>:first-child]:mt-0">
+      {children}
+    </div>
+  );
 }
 
 export type FeedTone = 'neutral' | 'ok' | 'warn' | 'bad';
@@ -139,6 +153,13 @@ const FEED_ICON: Readonly<Record<FeedTone, IconName | null>> = {
   ok: 'check',
   warn: 'alert',
   bad: 'cross',
+};
+
+const FEED_MARK: Readonly<Record<FeedTone, string>> = {
+  neutral: 'bg-muted text-muted-foreground',
+  ok: 'bg-allowed-bg text-allowed-fg',
+  warn: 'bg-approval-bg text-approval-fg',
+  bad: 'bg-refused-bg text-refused-fg',
 };
 
 const FEED_WORD: Readonly<Record<FeedTone, string>> = {
@@ -158,7 +179,7 @@ export function Feed({
   testId?: string;
 }) {
   return (
-    <ol className={styles.feed} aria-label={label} data-testid={testId}>
+    <ol className="m-0 list-none p-0 text-small" aria-label={label} data-testid={testId}>
       {children}
     </ol>
   );
@@ -177,12 +198,23 @@ export function FeedEvent({
 }) {
   const icon = FEED_ICON[tone];
   return (
-    <li className={styles.event}>
-      <span className={styles.time}>{time}</span>
-      <span className={[styles.mark, styles[`mark_${tone}`]].join(' ')} aria-hidden="true">
+    <li
+      className="grid grid-cols-[52px_18px_minmax(0,1fr)] items-start gap-2.5 py-[5px]"
+      data-tone={tone}
+    >
+      <span className="text-caption leading-[1.6] whitespace-nowrap tabular-nums text-muted-foreground">
+        {time}
+      </span>
+      <span
+        className={cn(
+          'mt-px inline-grid size-[18px] place-items-center rounded-full',
+          FEED_MARK[tone],
+        )}
+        aria-hidden="true"
+      >
         {icon && <Icon name={icon} size={11} />}
       </span>
-      <div className={styles.eventText}>
+      <div className="min-w-0 text-muted-foreground [overflow-wrap:anywhere]">
         {FEED_WORD[tone] && <span className="vbn-sr-only">{FEED_WORD[tone]}</span>}
         {children}
       </div>

@@ -13,8 +13,6 @@
  */
 import Link from 'next/link';
 
-import styles from './Running.module.css';
-
 export function RunList({
   children,
   label,
@@ -26,7 +24,11 @@ export function RunList({
   testId?: string;
 }) {
   return (
-    <ul className={styles.list} aria-label={label} data-testid={testId}>
+    <ul
+      className="m-0 list-none border-t border-border p-0"
+      aria-label={label}
+      data-testid={testId}
+    >
       {children}
     </ul>
   );
@@ -58,19 +60,30 @@ export function RunRow({
   testId?: string;
 }) {
   return (
-    <li className={styles.row} data-testid={testId}>
-      <div className={styles.text}>
-        <div className={styles.title}>
-          <Link href={href} className={styles.titleLink}>
+    <li
+      className="grid grid-cols-[minmax(0,1fr)_84px_210px_70px] items-center gap-3 border-b border-border py-2.5 text-small max-[860px]:grid-cols-[minmax(0,1fr)_auto]"
+      data-testid={testId}
+    >
+      <div className="min-w-0">
+        <div className="font-semibold [overflow-wrap:anywhere]">
+          <Link href={href} className="hover:underline">
             {title}
           </Link>
         </div>
-        {facts && <div className={styles.facts}>{facts}</div>}
+        {facts && (
+          <div className="mt-px text-caption text-muted-foreground [overflow-wrap:anywhere]">
+            {facts}
+          </div>
+        )}
         {detail}
       </div>
-      <div className={styles.holders}>{holders}</div>
-      <div className={styles.figure}>{figure}</div>
-      <div className={styles.last}>{last}</div>
+      <div className="flex items-center pl-1.5 max-[860px]:hidden">{holders}</div>
+      <div className="flex min-w-0 items-center text-muted-foreground max-[860px]:col-start-1">
+        {figure}
+      </div>
+      <div className="text-right whitespace-nowrap tabular-nums text-muted-foreground max-[860px]:col-start-2 max-[860px]:row-start-1">
+        {last}
+      </div>
     </li>
   );
 }

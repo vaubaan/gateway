@@ -67,7 +67,7 @@ const TYPE: readonly { token: string; size: string; use: string; strong?: boolea
     size: '14 px',
     use: 'Body text, and section headings in the strong weight',
   },
-  { token: '--text-secondary', size: '13 px', use: 'Rows, tables, controls, ledes' },
+  { token: '--text-small', size: '13 px', use: 'Rows, tables, controls, ledes' },
   { token: '--text-caption', size: '12 px', use: 'Captions, chips, table heads, ids' },
 ];
 

@@ -8,7 +8,7 @@
  */
 import Link from 'next/link';
 
-import styles from './List.module.css';
+import { cn } from '@/lib/utils';
 
 export function Rows({
   children,
@@ -21,7 +21,11 @@ export function Rows({
   testId?: string;
 }) {
   return (
-    <ul className={styles.rows} aria-label={label} data-testid={testId}>
+    <ul
+      className="m-0 list-none border-t border-border p-0"
+      aria-label={label}
+      data-testid={testId}
+    >
       {children}
     </ul>
   );
@@ -53,22 +57,42 @@ export function Row({
   testId?: string;
 }) {
   return (
-    <li className={[styles.row, muted ? styles.muted : ''].join(' ')} data-testid={testId}>
-      {lead && <span className={styles.lead}>{lead}</span>}
-      <div className={styles.grow}>
-        <div className={styles.title}>
+    <li
+      className="flex items-center gap-3.5 border-b border-border py-(--row-y) text-body max-[720px]:flex-wrap"
+      data-muted={muted || undefined}
+      data-testid={testId}
+    >
+      {lead && <span className="inline-flex flex-none">{lead}</span>}
+      <div className="min-w-0 flex-1">
+        <div className={muted ? 'font-normal text-muted-foreground' : 'font-semibold'}>
           {href ? (
-            <Link href={href} className={styles.titleLink}>
+            <Link href={href} className="hover:underline">
               {title}
             </Link>
           ) : (
             title
           )}
         </div>
-        {description && <div className={styles.description}>{description}</div>}
+        {description && (
+          <div className="mt-px font-normal text-muted-foreground [&_a]:text-primary">
+            {description}
+          </div>
+        )}
       </div>
-      {aside && <div className={styles.aside}>{aside}</div>}
-      {end && <div className={styles.end}>{end}</div>}
+      {aside && (
+        <div className="flex flex-none items-center gap-3 max-[720px]:order-3 max-[720px]:basis-full">
+          {aside}
+        </div>
+      )}
+      {end && (
+        <div
+          className={cn(
+            'ml-auto flex flex-none items-center gap-2 tabular-nums text-muted-foreground',
+          )}
+        >
+          {end}
+        </div>
+      )}
     </li>
   );
 }

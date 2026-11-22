@@ -4,11 +4,13 @@
  * Tabs: a list of tabs with the roles and the keyboard of the ARIA pattern
  * (arrows, Home, End; a tab is activated when it takes focus), and a panel.
  * The state is the caller's, so that a page can also select a tab from a URL
- * fragment.
+ * fragment. Drawn as shadcn/ui's Tabs (the line variant) on the shared tokens;
+ * the list and its panels stay separate elements, so a page can place them
+ * apart, which Radix's Tabs would not allow.
  */
 import { useRef } from 'react';
 
-import styles from './Tabs.module.css';
+import { cn } from '@/lib/utils';
 
 export interface TabItem<T extends string> {
   readonly id: T;
@@ -58,7 +60,13 @@ export function TabList<T extends string>({
   }
 
   return (
-    <div ref={list} role="tablist" aria-label={label} className={styles.list} onKeyDown={onKeyDown}>
+    <div
+      ref={list}
+      role="tablist"
+      aria-label={label}
+      className="flex min-w-0 gap-4 overflow-x-auto border-b border-border"
+      onKeyDown={onKeyDown}
+    >
       {tabs.map((tab) => {
         const selected = tab.id === active;
         return (
@@ -70,11 +78,22 @@ export function TabList<T extends string>({
             aria-selected={selected}
             aria-controls={panelId(base, tab.id)}
             tabIndex={selected ? 0 : -1}
-            className={[styles.tab, selected ? styles.tabOn : ''].join(' ')}
+            // The selected tab: a heavier word and a rule under it, not a colour. The rule
+            // sits on the hairline of the list.
+            className={cn(
+              '-mb-px inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-body transition-colors focus-visible:rounded-sm focus-visible:outline-offset-[-2px]',
+              selected
+                ? 'border-foreground font-semibold text-foreground'
+                : 'border-transparent font-normal text-muted-foreground hover:text-foreground',
+            )}
             onClick={() => onSelect(tab.id)}
           >
             {tab.label}
-            {tab.count !== undefined && <span className={styles.count}>{tab.count}</span>}
+            {tab.count !== undefined && (
+              <span className="text-caption font-normal tabular-nums text-muted-foreground">
+                {tab.count}
+              </span>
+            )}
           </button>
         );
       })}

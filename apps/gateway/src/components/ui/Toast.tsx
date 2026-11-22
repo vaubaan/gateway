@@ -11,7 +11,9 @@
  *
  * `ToastProvider` is mounted once by the application shell; a client
  * component calls `useToast()` and then `toast({ title })`. `ToastCard` is
- * the card alone (the gallery).
+ * the card alone (the gallery). Drawn as shadcn/ui's toast on the shared tokens
+ * (ADR design-system-on-shadcn-shared-by-the-app-and-the-site); no third-party
+ * toaster: the queue is these few lines.
  */
 import {
   createContext,
@@ -23,10 +25,10 @@ import {
   useState,
 } from 'react';
 
+import { cn } from '@/lib/utils';
 import type { Tone } from '@/lib/vocabulary';
 
 import { Icon } from './Icon.tsx';
-import styles from './Toast.module.css';
 
 const LIFETIME_MS = 5000;
 const MAX_SHOWN = 3;
@@ -54,18 +56,32 @@ export function ToastCard({
   onDismiss,
 }: ToastMessage & { onDismiss?: () => void }) {
   return (
-    <div className={[styles.toast, styles[`tone_${tone}`]].join(' ')} data-tone={tone}>
+    <div
+      className="pointer-events-auto flex animate-rise items-start gap-2.5 rounded-lg bg-popover px-3 py-2.5 text-small text-popover-foreground shadow-md"
+      data-tone={tone}
+    >
       {tone !== 'neutral' && (
-        <span className={styles.icon}>
+        <span
+          className={cn(
+            'mt-0.5 inline-flex flex-none',
+            // A success is said in the accent: green is for checklist ticks only.
+            tone === 'ok' ? 'text-primary' : 'text-refused',
+          )}
+        >
           <Icon name={tone === 'ok' ? 'check' : 'alert'} size={14} />
         </span>
       )}
-      <div className={styles.text}>
-        <div className={styles.title}>{title}</div>
-        {description && <div className={styles.description}>{description}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">{title}</div>
+        {description && <div className="text-muted-foreground">{description}</div>}
       </div>
       {onDismiss && (
-        <button type="button" className={styles.dismiss} onClick={onDismiss} aria-label="Dismiss">
+        <button
+          type="button"
+          className="-mt-0.5 -mr-1 inline-grid size-6 flex-none place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+        >
           <Icon name="cross" size={12} />
         </button>
       )}
@@ -99,7 +115,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className={styles.region} role="status" aria-live="polite" data-testid="toasts">
+      <div
+        className="pointer-events-none fixed right-6 bottom-6 z-[200] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+        role="status"
+        aria-live="polite"
+        data-testid="toasts"
+      >
         {shown.map((toast) => (
           <ToastCard key={toast.id} {...toast} onDismiss={() => dismiss(toast.id)} />
         ))}

@@ -1,10 +1,10 @@
 /**
- * Who, at a glance: a person is a round mark with initials, a machine key is a
- * dashed square, a service is its brand icon in one ink — the shape says
- * which, the colour never does. The hue of a person is taken from their name
- * (`hueOf`), so the same person has the same mark on every page; it is
- * decoration and carries no meaning, which is why none of the five hues is a
- * status colour.
+ * Who, at a glance: a person is a round teal mark with initials, a team the
+ * same mark squared a little, a machine key a dashed square, a service its
+ * brand icon in one ink — the shape says which, the colour never does
+ * (style guide §5). `hueOf` gives a name its stable hue (1–5), which the two
+ * letters of a service without an icon take; none of the hues is a status
+ * colour.
  *
  * - `Avatar`, `AvatarStack` — the mark, alone or overlapped.
  * - `KeyHolder` — the mark, the name, and the qualifiers said in words
@@ -15,15 +15,35 @@
  *   declares none (ADR service-icons-declared-by-the-plugin).
  * - `KeyMark` — a masked key in mono with the key icon.
  * - `AgentLabel` — the name an agent gave itself (never verified).
+ *
+ * shadcn/ui's Avatar look, written for Vaubaan on the shared tokens (`human`,
+ * `chart-1…5`); no image is ever loaded.
  */
 import type { CSSProperties } from 'react';
 
 import { serviceMarkColors } from '@vaubaan/shared/service-mark';
 
+import { cn } from '@/lib/utils';
+
 import { Icon } from './Icon.tsx';
-import styles from './Avatar.module.css';
 
 const HUES = 5;
+
+/** The fill of a hue: the shared chart family, never a status colour. 0 is the quiet slate. */
+const HUE_FILL: readonly string[] = [
+  'bg-chart-5',
+  'bg-chart-1',
+  'bg-chart-2',
+  'bg-chart-3',
+  'bg-chart-4',
+  'bg-chart-5',
+];
+
+const AVATAR_SIZE: Readonly<Record<AvatarSize, string>> = {
+  xs: 'size-[18px] text-[9px]',
+  sm: 'size-[22px] text-[10.5px]',
+  md: 'size-[30px] text-caption',
+};
 
 /** A stable hue (1–5) from a name: the same string always gives the same one. */
 export function hueOf(name: string): number {
@@ -68,12 +88,18 @@ export function Avatar({
   const machine = kind === 'machine';
   return (
     <span
-      className={[
-        styles.avatar,
-        styles[`size_${size}`],
-        machine ? styles.machine : '',
-        kind === 'team' ? styles.team : '',
-      ].join(' ')}
+      className={cn(
+        'inline-grid flex-none select-none place-items-center align-middle leading-none font-semibold tracking-normal',
+        AVATAR_SIZE[size],
+        machine
+          ? // A machine key: no person behind it. Dashed, squared, no hue.
+            'border border-dashed border-border-strong bg-muted text-muted-foreground'
+          : muted
+            ? 'bg-chart-5 text-primary-foreground'
+            : 'bg-human text-on-human',
+        machine || kind === 'team' ? (size === 'md' ? 'rounded-lg' : 'rounded-md') : 'rounded-full',
+      )}
+      data-kind={kind}
       data-hue={machine || muted ? 0 : hueOf(name)}
       title={name}
       aria-hidden="true"
@@ -99,11 +125,16 @@ export function AvatarStack({
   const shown = members.slice(0, max);
   const hidden = members.length - shown.length;
   return (
-    <span className={styles.stack} role="img" aria-label={members.map((m) => m.name).join(', ')}>
+    <span
+      // Overlapped: each mark is a little larger and ringed with the paper.
+      className="inline-flex items-center [&>[data-kind]]:-ml-1.5 [&>[data-kind]]:size-6 [&>[data-kind]]:border-2 [&>[data-kind]]:border-solid [&>[data-kind]]:border-background [&>[data-kind]:first-child]:ml-0"
+      role="img"
+      aria-label={members.map((m) => m.name).join(', ')}
+    >
       {shown.map((member) => (
         <Avatar key={`${member.kind ?? 'person'}:${member.name}`} {...member} />
       ))}
-      {hidden > 0 && <span className={styles.more}>+{hidden}</span>}
+      {hidden > 0 && <span className="ml-1 text-caption text-muted-foreground">+{hidden}</span>}
     </span>
   );
 }
@@ -123,11 +154,11 @@ export function KeyHolder({
   muted?: boolean;
 }) {
   return (
-    <span className={styles.holder}>
+    <span className="inline-flex min-w-0 items-center gap-2">
       <Avatar name={name} kind={kind} size={size} muted={muted} />
-      <span className={styles.holderText}>
-        <span className={styles.holderName}>{name}</span>
-        {qualifier && <span className={styles.qualifier}> {qualifier}</span>}
+      <span className="min-w-0">
+        <span className="font-semibold">{name}</span>
+        {qualifier && <span className="font-normal text-muted-foreground"> {qualifier}</span>}
       </span>
     </span>
   );
@@ -178,9 +209,12 @@ export function ServiceMark({
   icon?: ServiceMarkIcon | null;
   size?: 'sm' | 'lg';
 }) {
-  const sizeClass = size === 'lg' ? styles.serviceLg : '';
+  const box = cn(
+    'inline-grid flex-none select-none place-items-center align-middle leading-none font-semibold tracking-normal',
+    size === 'lg' ? 'size-[34px] rounded-lg text-small' : 'size-5 rounded-[5px] text-[9.5px]',
+  );
   if (icon) {
-    // Without a colour the mark keeps the secondary ink: the stylesheet's fallback.
+    // Without a colour the mark keeps the secondary ink: the fallback of its class.
     const style = icon.color
       ? ({
           '--mark-color': icon.color,
@@ -189,11 +223,23 @@ export function ServiceMark({
       : undefined;
     return (
       <span
-        className={[styles.service, styles.serviceIcon, sizeClass].join(' ')}
+        // The brand icon on the neutral fill, in the brand colour the plugin declares (the
+        // secondary ink without one); never a hue, never a status. In the dark theme a
+        // near-black brand takes the ink (ServiceMark sets both variables).
+        className={cn(
+          box,
+          'bg-muted text-[color:var(--mark-color,var(--muted-foreground))] theme-dark:text-[color:var(--mark-color-dark,var(--muted-foreground))]',
+        )}
         style={style}
         aria-hidden="true"
+        data-mark="icon"
+        data-size={size}
       >
-        <svg viewBox="0 0 24 24" className={styles.serviceGlyph} focusable="false">
+        <svg
+          viewBox="0 0 24 24"
+          className={cn('block', size === 'lg' ? 'size-[22px]' : 'size-3.5')}
+          focusable="false"
+        >
           <path d={icon.path} fill="currentColor" />
         </svg>
       </span>
@@ -201,7 +247,9 @@ export function ServiceMark({
   }
   return (
     <span
-      className={[styles.service, sizeClass].join(' ')}
+      className={cn(box, HUE_FILL[hueOf(name)], 'text-primary-foreground')}
+      data-mark="letters"
+      data-size={size}
       data-hue={hueOf(name)}
       aria-hidden="true"
     >
@@ -213,8 +261,8 @@ export function ServiceMark({
 /** A masked key (`vbn_live_XU2O…6uT`): mono, with the key icon. Never the whole secret. */
 export function KeyMark({ children }: { children: React.ReactNode }) {
   return (
-    <span className={styles.key}>
-      <Icon name="key" size={11} className={styles.keyIcon} />
+    <span className="inline-flex items-center gap-[5px] whitespace-nowrap font-mono text-caption text-muted-foreground">
+      <Icon name="key" size={11} className="flex-none" />
       {children}
     </span>
   );
@@ -223,7 +271,10 @@ export function KeyMark({ children }: { children: React.ReactNode }) {
 /** The label an agent sent about itself. It never authorises anything. */
 export function AgentLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className={styles.agent} title="What the agent said about itself; not verified">
+    <span
+      className="inline-flex items-center gap-1 whitespace-nowrap text-caption text-muted-foreground before:size-[5px] before:rounded-full before:bg-faint before:content-['']"
+      title="What the agent said about itself; not verified"
+    >
       {children}
     </span>
   );

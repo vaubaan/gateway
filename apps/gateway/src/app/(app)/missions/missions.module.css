@@ -10,7 +10,7 @@
   max-width: var(--measure);
   margin: 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .quietText {
   color: var(--ink-3);
@@ -68,7 +68,7 @@
   max-width: var(--measure);
   margin: -10px 0 22px;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .headNote a {
   color: var(--primary);
@@ -90,7 +90,7 @@
   margin: var(--space-2) 0 0;
   padding-left: var(--space-4);
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 
 /* ── One mission ─────────────────────────────────────────────────────────── */
@@ -130,7 +130,7 @@
   gap: var(--space-4);
   margin: var(--space-3) 0 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .pager a {
   color: var(--primary);
@@ -161,13 +161,13 @@
 }
 .kitTitle {
   margin: 0;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   font-weight: var(--weight-strong);
 }
 .kitHint {
   margin-left: auto;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   text-align: right;
 }
 /* A phone: the title, then its hint under it — not a 120 px column beside it. */
@@ -225,7 +225,7 @@
   align-items: center;
   gap: var(--space-3);
   min-height: var(--control-sm);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .accountName {
   font-size: var(--text-body);
@@ -269,7 +269,7 @@
   display: grid;
   gap: 6px;
   margin: 10px 0 0 27px;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .resourceScope p {
   max-width: var(--measure);
@@ -283,7 +283,7 @@
   padding: 10px var(--space-3);
   border-radius: var(--radius-md);
   background: var(--paper-side);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .resource {
   display: inline-flex;
@@ -298,7 +298,7 @@
   max-width: var(--measure);
   margin: 10px 0 0;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .counts {
   display: flex;
@@ -308,7 +308,7 @@
   margin-top: var(--space-2);
 }
 .counts > span {
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .countsLink {
   margin-left: auto;
@@ -316,7 +316,7 @@
   border: 0;
   background: none;
   color: var(--primary);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .countsLink:hover {
   text-decoration: underline;
@@ -369,12 +369,12 @@
   max-width: var(--measure);
   margin: 6px 0 0;
   color: var(--warn);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .notice {
   margin: 6px 0 0 27px;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .notice summary {
   color: var(--warn);
@@ -407,7 +407,7 @@
   gap: var(--space-1) var(--space-4);
   margin: var(--space-2) 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .editorShown {
   margin-left: auto;
@@ -443,7 +443,7 @@
   margin: 0;
   padding-top: 6px;
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .expiryDate {
   max-width: 260px;
@@ -454,7 +454,7 @@
 .railBlock {
   padding: 10px 0;
   border-top: 1px solid var(--line);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .railBlock:first-child {
   padding-top: 0;
@@ -488,7 +488,7 @@
 .railEmpty {
   margin: 0;
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .railIssues,
 .railRefused {
@@ -496,7 +496,7 @@
   padding: var(--space-3) 0 0 18px;
   border-top: 1px solid var(--line);
   color: var(--ink-3);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .railRefused {
   color: var(--bad);
@@ -568,7 +568,7 @@ p.railRefused {
   align-items: center;
   gap: var(--space-2) var(--space-3);
   min-height: var(--control-sm);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .resourceSetTitle {
   font-weight: var(--weight-strong);
@@ -587,7 +587,7 @@ p.railRefused {
   background: none;
   color: var(--ink-2);
   font: inherit;
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
   text-align: left;
   cursor: pointer;
 }

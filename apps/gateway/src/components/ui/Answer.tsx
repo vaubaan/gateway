@@ -6,14 +6,14 @@
  * - `AnswerList` / `AnswerRow` — the list of "Waiting for you" (the home, the
  *   inbox). Rows and hairlines.
  * - `AnswerRow` with `boxed` — the same row as the one filled box of a page:
- *   the banner at the top of a mission that waits for its creator. Amber
- *   surface, used **once per page at most**.
+ *   the banner at the top of a mission that waits for its creator. The
+ *   approval surface (the accent family), used **once per page at most**.
  *
  * The answers are the caller's (`answers`): `Approve` is the page's primary
  * action when something waits, `Refuse` a secondary one, `Details` a ghost.
  * For a limit that was reached the answer is `Raise`.
  */
-import styles from './Answer.module.css';
+import { cn } from '@/lib/utils';
 
 export function AnswerList({
   children,
@@ -25,7 +25,11 @@ export function AnswerList({
   testId?: string;
 }) {
   return (
-    <ul className={styles.list} aria-label={label} data-testid={testId}>
+    <ul
+      className="m-0 list-none border-t border-border p-0"
+      aria-label={label}
+      data-testid={testId}
+    >
       {children}
     </ul>
   );
@@ -50,26 +54,40 @@ export function AnswerRow({
   description?: React.ReactNode;
   /** The answer buttons: primary first. */
   answers?: React.ReactNode;
-  /** The filled, amber form: the one thing on the page that needs the person. */
+  /** The filled form, in the accent family: the one thing on the page that waits for the person. */
   boxed?: boolean;
   testId?: string;
 }) {
   const Tag = boxed ? 'div' : 'li';
   return (
     <Tag
-      className={[styles.item, boxed ? styles.boxed : ''].join(' ')}
+      className={cn(
+        'grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 text-small max-[720px]:grid-cols-[auto_minmax(0,1fr)]',
+        boxed
+          ? // The one filled box of a page: this mission waits for you.
+            'rounded-lg border border-approval-border bg-approval-bg px-3.5 py-3'
+          : 'border-b border-border py-3.5',
+      )}
       role={boxed ? 'status' : undefined}
       data-testid={testId}
     >
-      <span className={styles.who}>{who}</span>
-      <div className={styles.text}>
-        <div className={styles.title}>
+      <span className="inline-flex">{who}</span>
+      <div>
+        <div className={cn('font-semibold', boxed ? 'text-small' : 'text-body')}>
           {title}
-          {age && <span className={styles.age}>{age}</span>}
+          {age && (
+            <span className="ml-1.5 text-caption font-normal whitespace-nowrap text-muted-foreground">
+              {age}
+            </span>
+          )}
         </div>
-        {description && <div className={styles.description}>{description}</div>}
+        {description && <div className="mt-0.5 text-muted-foreground">{description}</div>}
       </div>
-      {answers && <div className={styles.answers}>{answers}</div>}
+      {answers && (
+        <div className="flex items-center gap-1.5 pt-0.5 max-[720px]:col-start-2 max-[720px]:flex-wrap">
+          {answers}
+        </div>
+      )}
     </Tag>
   );
 }

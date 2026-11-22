@@ -24,7 +24,7 @@ export interface MissionMark extends StateWord {
 
 /**
  * The state of a mission in words (spec §2.3). The normal state has no tone;
- * what needs the reader is amber, what is stopped against their will is red.
+ * what needs the reader is the accent, what is stopped against their will is red.
  * `waiting` is how many requests of this mission wait for its creator.
  */
 export function missionMark(

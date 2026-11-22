@@ -99,7 +99,7 @@
 .prose {
   max-width: var(--measure);
   color: var(--ink-2);
-  font-size: var(--text-secondary);
+  font-size: var(--text-small);
 }
 .prose p {
   margin: 0;

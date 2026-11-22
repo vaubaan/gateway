@@ -13,7 +13,6 @@
  *
  * No hook: renders in server and client components alike.
  */
-import styles from './Form.module.css';
 import { StepMark } from './States.tsx';
 
 export function FormWithRail({
@@ -26,9 +25,16 @@ export function FormWithRail({
   rail: React.ReactNode;
 }) {
   return (
-    <div className={styles.form}>
-      <div className={styles.steps}>{children}</div>
-      <aside className={styles.rail}>{rail}</aside>
+    <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-10 max-[1100px]:grid-cols-1 max-[1100px]:gap-8">
+      <div className="min-w-0">{children}</div>
+      {/*
+        The rail stays in view: the summary and the one action are never a scroll away. It is
+        shorter than the window by what stands above the form (the header of the page), and its
+        box keeps its head and its foot (the action) while what is between scrolls.
+      */}
+      <aside className="sticky top-6 flex max-h-[calc(100vh-168px)] min-w-0 max-[1100px]:static max-[1100px]:block max-[1100px]:max-h-none [&>*]:flex [&>*]:min-h-0 [&>*]:w-full [&>*]:flex-col [&>*>*]:flex-none [&>*>:not(:first-child):not(:last-child)]:min-h-0 [&>*>:not(:first-child):not(:last-child)]:flex-auto [&>*>:not(:first-child):not(:last-child)]:overflow-y-auto">
+        {rail}
+      </aside>
     </div>
   );
 }
@@ -51,13 +57,22 @@ export function FormStep({
 }) {
   const headingId = id ? `${id}-title` : undefined;
   return (
-    <section className={styles.step} id={id} aria-labelledby={headingId} data-testid={testId}>
-      <div className={styles.head}>
+    <section
+      className="mt-[30px] first:mt-0"
+      id={id}
+      aria-labelledby={headingId}
+      data-testid={testId}
+    >
+      <div className="mb-2.5 flex items-center gap-2.5 [&>:first-child]:size-5">
         <StepMark n={n} />
-        <h2 className={styles.title} id={headingId}>
+        <h2 className="m-0 flex-none text-body font-semibold whitespace-nowrap" id={headingId}>
           {title}
         </h2>
-        {hint && <div className={styles.hint}>{hint}</div>}
+        {hint && (
+          <div className="ml-auto flex min-w-0 items-center justify-end gap-3 text-right text-small text-muted-foreground">
+            {hint}
+          </div>
+        )}
       </div>
       {children}
     </section>
@@ -65,5 +80,9 @@ export function FormStep({
 }
 
 export function FormColumns({ children }: { children: React.ReactNode }) {
-  return <div className={styles.columns}>{children}</div>;
+  return (
+    <div className="grid grid-cols-[200px_200px_minmax(0,1fr)] items-start gap-3.5 max-[720px]:grid-cols-1">
+      {children}
+    </div>
+  );
 }

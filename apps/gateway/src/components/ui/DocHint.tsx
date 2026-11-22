@@ -40,8 +40,6 @@ import {
 import { docHref } from '@/lib/docs-links';
 import { docHintLabel, docLinkLabel, type DocTarget } from '@/lib/vocabulary';
 
-import styles from './DocHint.module.css';
-
 const DocsRootContext = createContext<string | null>(null);
 
 /** Rendered by the shell with `root.config.docs.url`. */
@@ -229,7 +227,8 @@ export function DocHint({ to, testId }: { to: DocTarget; testId?: string }) {
   return (
     <span
       ref={wrapper}
-      className={styles.hint}
+      // A doc hint: the (i), quiet until hovered, and the small popover it shows.
+      className="relative inline-flex flex-none align-middle"
       // A finger has no hover: a tap is a click, handled by `toggle`.
       onPointerEnter={(event) => {
         if (event.pointerType === 'mouse') later('pointer-in', OPEN_DELAY_MS);
@@ -251,7 +250,7 @@ export function DocHint({ to, testId }: { to: DocTarget; testId?: string }) {
       <button
         ref={trigger}
         type="button"
-        className={styles.trigger}
+        className="inline-flex size-5 flex-none cursor-help items-center justify-center rounded-full border border-border-strong bg-background p-0 text-caption leading-none font-normal tracking-normal text-muted-foreground italic hover:border-muted-foreground hover:text-foreground aria-expanded:border-muted-foreground aria-expanded:text-foreground"
         aria-label={docHintLabel(to)}
         aria-expanded={open}
         aria-controls={popoverId}
@@ -270,21 +269,23 @@ export function DocHint({ to, testId }: { to: DocTarget; testId?: string }) {
         role={pinned ? 'dialog' : 'tooltip'}
         aria-modal={pinned ? false : undefined}
         aria-labelledby={pinned ? titleId : undefined}
-        className={styles.popover}
+        // Placed by the component (`placeHint`): `left` and `top` from the (i)'s corner. Its
+        // `::before` bridges the gap, so the pointer reaches it without closing it.
+        className="absolute top-[calc(100%+6px)] left-0 z-50 flex w-[min(20rem,calc(100vw-32px))] animate-appear flex-col gap-1 rounded-md border border-border-strong bg-popover p-3 text-left text-small leading-[1.45] font-normal tracking-normal whitespace-normal text-muted-foreground not-italic normal-case shadow-md before:absolute before:right-0 before:bottom-full before:left-0 before:h-2 before:content-[''] data-[above=true]:before:top-full data-[above=true]:before:bottom-auto"
         data-above={place?.above ? 'true' : undefined}
         style={place ? { left: place.left, top: place.top } : { visibility: 'hidden' }}
         hidden={!open}
         data-testid="doc-hint"
       >
-        <span id={titleId} className={styles.title}>
+        <span id={titleId} className="font-semibold text-foreground">
           {to.label}
         </span>
-        <span id={textId} className={styles.text}>
+        <span id={textId} className="block">
           {to.hint}
         </span>
         {root && (
           <a
-            className={styles.link}
+            className="mt-1 self-start text-caption text-muted-foreground no-underline hover:text-primary-ink hover:underline focus-visible:rounded-sm"
             href={docHref(root, to)}
             target="_blank"
             rel="noreferrer noopener"

@@ -104,8 +104,9 @@ One word per thing; a person never learns the protocol's word. The word list is
 
 ### 3.2 Type
 
-Four sizes (title; body, rows, controls and section headings; secondary lines; captions and
-identifiers), weights 400 and 600, a sans-serif and a monospace for identifiers and code, both
+Four sizes (title; body, rows, controls and section headings; small, for secondary lines;
+captions and identifiers; named `title`, `body`, `small`, `caption` in the token sheet — a size
+never shares a name with a colour), weights 400 and 600, a sans-serif and a monospace for identifiers and code, both
 bundled, the same on the site.
 
 ### 3.3 Space, radius, motion
@@ -209,8 +210,9 @@ guide and the design system are extended, then the screen is built. Rules a comp
 ## 9. Known gaps between this guide and the interface
 
 - Until the migration of [recognise Vaubaan at a glance](../intents/recognise-vaubaan-at-a-glance.md)
-  lands, the interface's components not yet rebuilt on the shared primitives keep their own style
-  sheets, which read the shared tokens through aliases of their former names.
+  lands, the interface's components not yet rebuilt on the shared primitives (the data table, the
+  page frame, the local navigation, the filters, the disclosure, the doc hint) and the pages' own
+  style sheets keep CSS modules, which read the shared tokens through aliases of their former names.
 
 - Raw lengths remain in page style sheets and for mark dimensions.
 - The consent pages and the refusals of a forwarded request URL load nothing and repeat the tokens

@@ -106,8 +106,11 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(
     dialog.getByRole('heading', { name: `Give access to ${accountName}` }),
   ).toBeVisible();
-  // The page of the account stays under the dialog.
-  await expect(ines.getByRole('heading', { name: accountName, level: 1 })).toBeAttached();
+  // The page of the account stays under the dialog (hidden from assistive technology while
+  // the modal dialog is open).
+  await expect(
+    ines.getByRole('heading', { name: accountName, level: 1, includeHidden: true }),
+  ).toBeAttached();
 
   // The dialog is who, starting points, the checklist with a "why?" per line, and a one-line summary.
   const summary = dialog.getByTestId('restriction-summary');

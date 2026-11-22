@@ -18,10 +18,17 @@
 import Link from 'next/link';
 import { forwardRef, type InputHTMLAttributes } from 'react';
 
+import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/vocabulary';
 
-import styles from './Filter.module.css';
 import { Icon } from './Icon.tsx';
+
+/** shadcn/ui's ToggleGroup look: the chosen segment is the ink, not a colour. */
+const SEGMENT =
+  'inline-flex h-6 items-center whitespace-nowrap rounded-sm px-2.5 text-caption hover:no-underline';
+/** A filter not applied is dashed; applied, the ink twice. */
+const CHIP =
+  'inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-small hover:no-underline';
 
 export interface FilterOption<Value extends string = string> {
   readonly value: Value;
@@ -45,10 +52,19 @@ export function Segmented<Value extends string>({
   onChange?: (value: Value) => void;
 }) {
   return (
-    <div className={styles.segmented} role="group" aria-label={label}>
+    <div
+      className="inline-flex gap-0.5 rounded-md border border-border-strong bg-card p-0.5"
+      role="group"
+      aria-label={label}
+    >
       {options.map((option) => {
         const on = option.value === value;
-        const classes = [styles.segment, on ? styles.segmentOn : ''].join(' ');
+        const classes = cn(
+          SEGMENT,
+          on
+            ? 'bg-foreground text-background hover:bg-foreground'
+            : 'text-muted-foreground hover:bg-muted',
+        );
         return option.href ? (
           <Link
             key={option.value}
@@ -86,15 +102,22 @@ export function FilterChips<Value extends string>({
   onToggle?: (value: Value) => void;
 }) {
   return (
-    <div className={styles.chips} role="group" aria-label={label}>
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={label}>
       {options.map((option) => {
         const on = selected.includes(option.value);
-        const classes = [styles.chip, on ? styles.chipOn : ''].join(' ');
+        const classes = cn(
+          CHIP,
+          on
+            ? 'border-foreground bg-card text-foreground shadow-[inset_0_0_0_1px_var(--foreground)]'
+            : 'border-dashed border-border-strong bg-transparent text-muted-foreground hover:border-solid hover:text-foreground',
+        );
         const content = (
           <>
             {option.label}
             {option.count !== undefined && (
-              <span className={styles.chipCount}>{formatNumber(option.count)}</span>
+              <span className="text-caption tabular-nums text-muted-foreground">
+                {formatNumber(option.count)}
+              </span>
             )}
           </>
         );
@@ -135,18 +158,26 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
   ref,
 ) {
   return (
-    <span className={[styles.search, className ?? ''].join(' ')}>
-      <Icon name="search" size={13} className={styles.searchIcon} />
+    <span
+      className={cn(
+        'inline-flex h-8 min-w-40 items-center gap-2 rounded-md border border-transparent bg-muted px-[9px] text-small text-muted-foreground has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-ring',
+        className,
+      )}
+    >
+      <Icon name="search" size={13} className="flex-none" />
       <input
         ref={ref}
         type="search"
-        className={styles.searchInput}
+        className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-small text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline-none [&::-webkit-search-cancel-button]:appearance-none"
         aria-label={label}
         placeholder={placeholder ?? label}
         {...rest}
       />
       {shortcut && (
-        <kbd className={styles.kbd} aria-hidden="true">
+        <kbd
+          className="flex-none rounded-sm border border-border-strong px-1 text-caption leading-4 text-muted-foreground"
+          aria-hidden="true"
+        >
           {shortcut}
         </kbd>
       )}

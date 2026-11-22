@@ -10,9 +10,11 @@
  * `AllowSummary` is the wide form (a definition list, capped at the prose
  * measure); `compact` is the form of the rail (narrower labels, smaller text).
  */
+import { cn } from '@/lib/utils';
 import { ALLOW_WORDS } from '@/lib/vocabulary';
 
-import styles from './Allow.module.css';
+/** A line of the summary: its term and its value sit in the grid of the list. */
+const LINE = 'contents [&>dt]:whitespace-nowrap';
 
 export function AllowSummary({
   can,
@@ -37,23 +39,34 @@ export function AllowSummary({
   testId?: string;
 }) {
   return (
-    <dl className={[styles.allow, compact ? styles.compact : ''].join(' ')} data-testid={testId}>
-      <div className={styles.line}>
+    <dl
+      className={cn(
+        // The label column grows with its longest label: a label never runs under its value.
+        'm-0 grid max-w-(--measure) text-small max-[720px]:grid-cols-1 max-[720px]:gap-0',
+        '[&_dd]:m-0 [&_dd]:text-muted-foreground max-[720px]:[&_dd]:mb-2 [&_dd_a]:text-primary [&_dd_b]:font-normal [&_dd_b]:text-foreground [&_dd_strong]:font-normal [&_dd_strong]:text-foreground',
+        compact
+          ? 'grid-cols-[62px_minmax(0,1fr)] gap-x-2 gap-y-1'
+          : 'grid-cols-[minmax(110px,max-content)_minmax(0,1fr)] gap-x-4 gap-y-1.5',
+      )}
+      data-testid={testId}
+    >
+      <div className={LINE}>
         <dt>{ALLOW_WORDS.can}</dt>
         <dd>{can}</dd>
       </div>
       {asks && (
-        <div className={[styles.line, styles.asks].join(' ')}>
+        // The one coloured line: something here waits for a person.
+        <div className={cn(LINE, '[&>dt]:text-approval-fg')}>
           <dt>{asksLabel}</dt>
           <dd>{asks}</dd>
         </div>
       )}
-      <div className={[styles.line, styles.quiet].join(' ')}>
+      <div className={cn(LINE, '[&>dt]:text-muted-foreground')}>
         <dt>{ALLOW_WORDS.cannot}</dt>
         <dd>{cannot}</dd>
       </div>
       {limits && (
-        <div className={[styles.line, styles.quiet].join(' ')}>
+        <div className={cn(LINE, '[&>dt]:text-muted-foreground')}>
           <dt>{ALLOW_WORDS.limits}</dt>
           <dd>{limits}</dd>
         </div>

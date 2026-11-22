@@ -289,9 +289,22 @@ test('the theme has three states, is kept across a reload and is rendered by the
   await expect(html).not.toHaveAttribute('data-theme');
   await expect(toggle).toHaveAttribute('aria-label', 'Theme: System. Switch to Light.');
   const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(await paper()).toBe('rgb(255, 255, 255)');
+  // The paper of a theme, as the browser computes the shared `--background` on an element of it.
+  const paperOf = (theme: 'light' | 'dark') =>
+    page.evaluate((chosen) => {
+      const probe = document.createElement('div');
+      probe.setAttribute('data-theme', chosen);
+      probe.style.background = 'var(--background)';
+      document.body.append(probe);
+      const colour = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return colour;
+    }, theme);
+  const [light, dark] = [await paperOf('light'), await paperOf('dark')];
+  expect(light).not.toBe(dark);
+  expect(await paper()).toBe(light);
   await page.emulateMedia({ colorScheme: 'dark' });
-  expect(await paper()).toBe('rgb(2, 8, 23)');
+  expect(await paper()).toBe(dark);
   await page.emulateMedia({ colorScheme: 'light' });
 
   await toggle.click();
@@ -299,7 +312,7 @@ test('the theme has three states, is kept across a reload and is rendered by the
   await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await expect(toggle).toHaveAttribute('aria-label', 'Theme: Dark. Switch to System.');
-  expect(await paper()).toBe('rgb(2, 8, 23)');
+  expect(await paper()).toBe(dark);
 
   // Kept: the choice is a cookie, and the server writes the attribute itself —
   // the document arrives dark, before any script runs.
