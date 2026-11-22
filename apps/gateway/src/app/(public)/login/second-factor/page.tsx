@@ -9,7 +9,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { EnrolSecondFactor } from '@/components/auth/SecondFactorForms';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Callout } from '@/components/ui';

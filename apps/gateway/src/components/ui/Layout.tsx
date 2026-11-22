@@ -1,21 +1,37 @@
+/**
+ * A page outside the application shell (sign-in, the bootstrap page) sits in
+ * a `Container`: the page measure, centred, with the page's padding. Inside
+ * the shell the page column is the shell's (`components/shell`). `Stack`
+ * piles its children with one of the spacing steps.
+ */
 import type { HTMLAttributes } from 'react';
 
-export function Container({ children, ...rest }: HTMLAttributes<HTMLDivElement>) {
+import { cn } from '@/lib/utils';
+
+export function Container({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className={['vbn-container', rest.className ?? ''].join(' ')}>
+    <div
+      {...rest}
+      className={cn(
+        'mx-auto max-w-(--page-max) px-(--page-pad-x) pt-(--page-pad-top) pb-(--page-pad-bottom)',
+        className,
+      )}
+    >
       {children}
     </div>
   );
 }
 
+const GAP = { 1: 'gap-1', 2: 'gap-2', 3: 'gap-3', 4: 'gap-4', 6: 'gap-6' } as const;
+
 export function Stack({
-  gap = 'var(--space-3)',
+  gap = 3,
+  className,
   children,
-  style,
   ...rest
-}: HTMLAttributes<HTMLDivElement> & { gap?: string }) {
+}: HTMLAttributes<HTMLDivElement> & { gap?: keyof typeof GAP }) {
   return (
-    <div {...rest} style={{ display: 'flex', flexDirection: 'column', gap, ...style }}>
+    <div {...rest} className={cn('flex flex-col', GAP[gap], className)}>
       {children}
     </div>
   );

@@ -33,7 +33,7 @@ import {
 } from '@/components/ui';
 import { ACTIONS, DOC_PAGES, MISSION_ACTIONS, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
 
-import styles from './design.module.css';
+import styles from './design.styles';
 import { type GalleryIcons, GallerySection, Line, Pile, Specimen } from './specimen';
 
 const COLOURS: readonly { token: string; use: string }[] = [
@@ -72,19 +72,12 @@ const TYPE: readonly { token: string; size: string; use: string; strong?: boolea
 ];
 
 const SPACES = [4, 8, 12, 16, 20, 24, 32, 40, 48] as const;
-const SPACE_TOKEN: Readonly<Record<number, string>> = {
-  4: '--space-1',
-  8: '--space-2',
-  12: '--space-3',
-  16: '--space-4',
-  20: '--space-5',
-  24: '--space-6',
-  32: '--space-8',
-  40: '--space-10',
-  48: '--space-12',
-};
+/** Tailwind's spacing step (`--spacing`, 4 px): `gap-1` … `gap-12`. */
+const SPACE_TOKEN: Readonly<Record<number, string>> = Object.fromEntries(
+  [4, 8, 12, 16, 20, 24, 32, 40, 48].map((px) => [px, `--spacing × ${px / 4}`]),
+);
 
-const RADII = ['--radius-sm', '--radius-md', '--radius-lg', '--radius-full'] as const;
+const RADII = ['--radius-sm', '--radius-md', '--radius-lg', '--radius-xl'] as const;
 
 export function TokenSections() {
   return (
@@ -125,7 +118,7 @@ export function TokenSections() {
                   <span
                     style={{
                       fontSize: `var(${token})`,
-                      fontWeight: strong ? 'var(--weight-strong)' : 'var(--weight-regular)',
+                      fontWeight: strong ? 600 : 400,
                     }}
                   >
                     {use}
@@ -133,10 +126,8 @@ export function TokenSections() {
                 </div>
               ))}
               <div className={styles.typeRow}>
-                <span className={styles.typeName}>--weight-strong</span>
-                <span style={{ fontWeight: 'var(--weight-strong)' }}>
-                  A name, a title, the current entry
-                </span>
+                <span className={styles.typeName}>font-semibold · 600</span>
+                <span className="font-semibold">A name, a title, the current entry</span>
               </div>
               <div className={styles.typeRow}>
                 <span className={styles.typeName}>--font-mono</span>

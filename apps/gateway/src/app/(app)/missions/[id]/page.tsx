@@ -87,8 +87,8 @@ import { inboxRequestPath } from '@/server/requests/url';
 
 import { CallHeadline } from '../../waiting/parts';
 
-import styles from '../missions.module.css';
-import cardStyles from '../cards/cards.module.css';
+import styles from '../missions.styles';
+import cardStyles from '../cards/cards.styles';
 import { detailCards, type DetailCard } from '../cards/detail-cards';
 import { LostAccountCard, type LostAccountView } from '../cards/lost-account-card';
 import { MissionCard } from '../cards/mission-card';

@@ -44,7 +44,7 @@ import {
   type EnvLabelling,
 } from '@/lib/shares/restriction';
 
-import styles from '../../accounts.module.css';
+import styles from '../../accounts.styles';
 
 export interface GiveAccessInitial {
   readonly targetKind: 'user' | 'group';

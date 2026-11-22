@@ -5,7 +5,7 @@
  * upload, the signers of their private plugins (intent "Browse the catalog apart from what
  * runs"). Pure: a unit test renders it over invented views.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { Button, Hint, Mono, PageHeader, Row, Rows, Section, ServiceMark } from '@/components/ui';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
 import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';

@@ -11,7 +11,7 @@
  */
 import Link from 'next/link';
 
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { NoticeBanner } from '@/components/accounts/parts';
 import {
   Avatar,

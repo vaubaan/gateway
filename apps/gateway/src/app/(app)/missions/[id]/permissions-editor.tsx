@@ -8,7 +8,7 @@ import type { MissionPolicyEntry } from '@vaubaan/shared';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import { ROW_WORDS } from '@/lib/vocabulary';
 
-import styles from './permissions-editor.module.css';
+import styles from './permissions-editor.styles';
 
 /** What the editor says of a refused change: a conflict, the issues the gateway named, or a reload. */
 function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string {

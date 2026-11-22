@@ -8,7 +8,7 @@
  */
 import { renderSVG } from 'uqr';
 
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { Button, CodeBlock, Field, Input } from '@/components/ui';
 
 export function SecondFactorCodeForm({

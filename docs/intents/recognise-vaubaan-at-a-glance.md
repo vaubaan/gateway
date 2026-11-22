@@ -22,7 +22,7 @@ spec: ../spec/style-guide.md#3-tokens
 
 status: implemented
 requires: token, theme
-anchors: apps/gateway/src/app/globals.css, apps/gateway/src/styles/tokens.css, apps/gateway/src/components/ui/Marks.tsx, apps/gateway/src/server/http/document.ts, apps/gateway/tests/unit/app/design-tokens.test.ts, packages/design-tokens/tests/unit/contrast.test.ts
+anchors: apps/gateway/src/app/globals.css, apps/gateway/src/lib/brand.ts, apps/gateway/src/components/ui/Marks.tsx, apps/gateway/src/server/http/document.ts, apps/gateway/tests/unit/app/design-tokens.test.ts, packages/design-tokens/tests/unit/contrast.test.ts
 spec: ../spec/style-guide.md#31-colour
 acceptance:
 

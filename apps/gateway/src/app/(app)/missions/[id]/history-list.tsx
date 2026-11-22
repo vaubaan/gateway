@@ -21,7 +21,7 @@ import type { MissionVersionCause } from '@/lib/missions/versions';
 import { MISSION_HISTORY } from '@/lib/vocabulary';
 import type { MissionVersionView } from '@/server/missions/history';
 
-import styles from '../missions.module.css';
+import styles from '../missions.styles';
 
 /** Every cause has its words: a new cause does not compile without them. */
 const CAUSES: Readonly<Record<MissionVersionCause, string>> = MISSION_HISTORY.causes;

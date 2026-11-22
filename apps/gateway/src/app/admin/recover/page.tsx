@@ -10,7 +10,7 @@
 import { cookies } from 'next/headers';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { RecoverWithKey } from '@/components/auth/RecoverWithKey';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, ButtonLink, Callout, Field, Input, Mono, Select } from '@/components/ui';

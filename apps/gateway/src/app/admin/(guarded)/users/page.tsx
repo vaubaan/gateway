@@ -20,7 +20,7 @@
  * refused. When the configuration's admin rule changed since it was applied, the
  * section says so and offers to apply it: the configuration grants nothing by itself.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { NoticeBanner } from '@/components/accounts/parts';
 import {
   Avatar,

@@ -4,7 +4,7 @@
  * gateway). It says nothing about what exists.
  */
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { ButtonLink } from '@/components/ui';
 import { ROUTES } from '@/lib/vocabulary';

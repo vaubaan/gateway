@@ -7,7 +7,7 @@
 import Link from 'next/link';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, Callout, Field, Input } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';

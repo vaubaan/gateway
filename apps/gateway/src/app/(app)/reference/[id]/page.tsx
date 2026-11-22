@@ -28,7 +28,7 @@ import { gitRemoteBase } from '@/server/git/paths';
 import { servicePageInfo } from '@/server/plugins/service-page';
 
 import { pinnedPlugins, PinnedTag, ReferenceFrame } from '../frame';
-import styles from '../reference.module.css';
+import styles from '../reference.styles';
 
 export const dynamic = 'force-dynamic';
 

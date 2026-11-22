@@ -11,7 +11,7 @@
 import { Disclosure, ServiceMark, type ServiceMarkIcon } from '@/components/ui';
 import { LOST_ACCOUNT_WORDS } from '@/lib/vocabulary';
 
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 export interface LostAccountView {
   readonly account_id: string;

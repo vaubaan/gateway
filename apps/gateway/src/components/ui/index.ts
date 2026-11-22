@@ -60,6 +60,7 @@ export {
 export { Mono } from './Mono.tsx';
 export { RowChip, GateMark, WhyCells } from './Marks.tsx';
 export { Icon, type IconName } from './Icon.tsx';
+export { TraceMark, TRACE } from './TraceMark.tsx';
 
 // Permissions and what a mission allows
 export {

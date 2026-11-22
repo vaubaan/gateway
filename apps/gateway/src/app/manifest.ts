@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const { label } = await instanceIdentity();
-  const paper = DOCUMENT_TOKENS.light['--paper'];
+  const paper = DOCUMENT_TOKENS.light['--background'];
   return {
     name: label,
     short_name: label,

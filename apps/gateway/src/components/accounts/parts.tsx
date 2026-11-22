@@ -10,7 +10,7 @@ import { ACCOUNT_STATES } from '@/lib/vocabulary';
 import { FIELD_PREFIX, type FieldProblem, type Notice, type NoticeTone } from '@/server/accounts';
 import type { AccountStatus } from '@/server/store';
 
-import styles from './account.module.css';
+import styles from './account.styles';
 import { shapeOfPattern } from './shape';
 
 const NOTICE_TONE: Readonly<Record<NoticeTone, Tone>> = {

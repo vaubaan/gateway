@@ -18,7 +18,7 @@ import type { SubNavGroup } from '@/components/ui';
 import { NAV } from '@/lib/vocabulary';
 
 import { isCurrentSection, sectionOf } from './nav';
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export function SettingsSideNav({ groups }: { groups: readonly SubNavGroup[] }) {
   const pathname = usePathname() ?? '';

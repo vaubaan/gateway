@@ -4,7 +4,7 @@
  * password twice. The account administers from its creation; its first sign-in
  * enrols the second factor and shows the recovery codes.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   ButtonLink,

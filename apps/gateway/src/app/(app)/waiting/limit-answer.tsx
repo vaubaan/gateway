@@ -16,7 +16,7 @@ import { useId, useState } from 'react';
 import { Button, DecideBar, Input, OptionCard } from '@/components/ui';
 import { ANSWERS, formatNumber } from '@/lib/vocabulary';
 
-import styles from './waiting.module.css';
+import styles from './waiting.styles';
 
 export type LimitResolution = 'reset-period' | 'extend-quota' | 'extend-expiry' | 'refuse';
 

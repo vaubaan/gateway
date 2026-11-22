@@ -160,18 +160,20 @@ export function demoPage(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} — Vaubaan Gateway demo</title>
 <style>
-  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1c2030; }
-  .banner { background: #b45309; color: #fff; padding: 8px 16px; font-size: 14px; text-align: center; }
-  main { max-width: 520px; margin: 48px auto; padding: 32px; background: #fff; border-radius: 12px;
-         box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-  h1 { font-size: 22px; margin: 0 0 8px; }
+  /* The shared palette (\`@vaubaan/design-tokens\`, as hex): paper, ink, hairline, accent. */
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #fbfbf9; color: #1b2128; }
+  .banner { background: #e8edfb; color: #1f3f9e; border-bottom: 1px solid #b9c8f2; padding: 8px 16px;
+            font-size: 14px; text-align: center; }
+  main { max-width: 520px; margin: 48px auto; padding: 32px; background: #ffffff; border: 1px solid #dde1e6;
+         border-radius: 12px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
   ul { list-style: none; padding: 0; margin: 24px 0 0; }
   li + li { margin-top: 12px; }
-  a.account { display: block; padding: 14px 16px; border: 1px solid #d5d9e2; border-radius: 8px;
+  a.account { display: block; padding: 14px 16px; border: 1px solid #b4bcc6; border-radius: 8px;
               color: inherit; text-decoration: none; }
-  a.account:hover, a.account:focus { border-color: #4f46e5; background: #f5f5ff; }
-  a.account span { display: block; color: #5b6275; font-size: 14px; }
-  .error { color: #b91c1c; }
+  a.account:hover, a.account:focus { border-color: #2f55c7; background: #e8edfb; }
+  a.account span { display: block; color: #56606b; font-size: 14px; }
+  .error { color: #a3121e; }
 </style>
 </head>
 <body>

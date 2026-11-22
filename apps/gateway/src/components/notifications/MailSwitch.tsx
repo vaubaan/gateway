@@ -4,7 +4,7 @@
  * that switches it on or off; one sentence when the instance delivers no mail or the
  * account has no address. A server component.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { Button, Hint, Section } from '@/components/ui';
 import { NOTIFICATION_WORDS } from '@/lib/vocabulary';
 import { MAIL_API, MAIL_FIELD, type MailStatus } from '@/server/notifications';

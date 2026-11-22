@@ -63,7 +63,7 @@ import {
 } from '@/server/audit';
 import { riskExplainer } from '@/lib/services/reference';
 
-import styles from '../../missions.module.css';
+import styles from '../../missions.styles';
 import { missionMark } from '../../mission-view';
 import { PermissionsUsage } from '../permissions-usage';
 

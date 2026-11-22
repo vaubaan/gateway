@@ -18,7 +18,7 @@ import { Icon, textOf, useTrail, type TrailItem } from '@/components/ui';
 import { NAV } from '@/lib/vocabulary';
 
 import { sectionOf } from './nav';
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export function PathBar({
   instance,

@@ -64,8 +64,8 @@ import {
 } from '@/server/audit';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 
-import styles from './activity.module.css';
-import ov from './overview.module.css';
+import styles from './activity.styles';
+import ov from './overview.styles';
 import {
   actionUsages,
   isRecordAddress,

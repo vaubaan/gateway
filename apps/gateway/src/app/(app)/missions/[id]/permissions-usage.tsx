@@ -30,7 +30,7 @@ import type { CatalogRisk } from '@/lib/missions/model';
 import { riskReferencePath } from '@/lib/services/links';
 import { parseRiskId } from '@vaubaan/shared';
 
-import styles from '../missions.module.css';
+import styles from '../missions.styles';
 import { perMinuteOf } from '../mission-view';
 import { GateControl } from './gate-control';
 

@@ -1,6 +1,0 @@
-/* The two buttons of the home's proposal, side by side, wrapping on a phone. */
-.actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}

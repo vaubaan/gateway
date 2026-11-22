@@ -10,7 +10,7 @@
  * administrator's way in); one set by the mounted configuration is shown read-only
  * and always on. "Add a sign-in provider" opens the form.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   ButtonLink,

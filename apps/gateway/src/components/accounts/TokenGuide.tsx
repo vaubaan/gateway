@@ -22,7 +22,7 @@ import {
   type TokenPermissionView,
 } from '@/server/accounts';
 
-import styles from './TokenGuide.module.css';
+import styles from './TokenGuide.styles';
 
 /** One row per permission name: "read and write" when any declaration of it writes. */
 interface PermissionLine {

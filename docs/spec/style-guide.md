@@ -209,11 +209,7 @@ guide and the design system are extended, then the screen is built. Rules a comp
 
 ## 9. Known gaps between this guide and the interface
 
-- Until the migration of [recognise Vaubaan at a glance](../intents/recognise-vaubaan-at-a-glance.md)
-  lands, the interface's components not yet rebuilt on the shared primitives (the data table, the
-  page frame, the local navigation, the filters, the disclosure, the doc hint) and the pages' own
-  style sheets keep CSS modules, which read the shared tokens through aliases of their former names.
-
-- Raw lengths remain in page style sheets and for mark dimensions.
+- Raw lengths remain in the pages' class maps (`*.styles.ts`, arbitrary values carried over
+  from their former style sheets) and for mark dimensions.
 - The consent pages and the refusals of a forwarded request URL load nothing and repeat the tokens
   they need, value for value; a test keeps them equal.

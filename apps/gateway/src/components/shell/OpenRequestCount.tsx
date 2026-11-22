@@ -8,7 +8,7 @@
 import type { Principal } from '@/server/auth';
 import { getRoot } from '@/server/compose';
 
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export async function OpenRequestCount({ principal }: { principal: Principal }) {
   if (principal.kind !== 'user') return null;

@@ -33,7 +33,7 @@ import {
 } from '@/lib/vocabulary';
 import type { NowView, SetupView } from '@/server/now';
 
-import styles from './now.module.css';
+import styles from './now.styles';
 
 /** The checklist of an administrator; its open step (sign-in) takes the page's one accent. */
 function Setup({ setup }: { setup: SetupView }) {

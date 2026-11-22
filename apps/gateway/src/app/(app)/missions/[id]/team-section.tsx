@@ -45,7 +45,7 @@ import {
 } from '@/lib/vocabulary';
 import type { MissionTeam, TeamMemberView, TeamTokenView } from '@/server/missions/team-service';
 
-import styles from '../missions.module.css';
+import styles from '../missions.styles';
 import { useMissionActs } from './mission-actions';
 
 /** The calls of the current period made with the keys of one holder. */

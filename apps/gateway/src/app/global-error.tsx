@@ -6,7 +6,7 @@
  * theme cookie (the page follows the system's theme).
  */
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { Button, Mono } from '@/components/ui';
 
 import './globals.css';

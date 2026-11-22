@@ -11,7 +11,7 @@ import {
   LocalSignInProviderForm,
   SignInProviderForm,
 } from '@/components/settings/SignInProviderForm';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { Callout, PageHeader, Section } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';

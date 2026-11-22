@@ -26,7 +26,7 @@ import { Icon, type IconName } from '@/components/ui';
 import { NAV_MORE, NAV_SHORT, type NavKey } from '@/lib/vocabulary';
 
 import { PHONE_BAR, sectionOf } from './nav';
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export interface NavItem {
   readonly key: NavKey;

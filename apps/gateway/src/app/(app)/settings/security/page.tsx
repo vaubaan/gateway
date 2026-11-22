@@ -8,7 +8,7 @@ import { headers } from 'next/headers';
 
 import { EnrolSecondFactor } from '@/components/auth/SecondFactorForms';
 import { NoticeBanner } from '@/components/accounts/parts';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { SettingsFrame } from '@/components/shell/AppShell';
 import {
   Button,

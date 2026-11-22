@@ -8,9 +8,9 @@
  * Shown only when at least one account has no owner: a page shows the
  * exception and not the rule. The setup checklist leads here by its anchor.
  */
-import shared from '@/components/accounts/account.module.css';
+import shared from '@/components/accounts/account.styles';
 import { AccountState } from '@/components/accounts/parts';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   DataTable,

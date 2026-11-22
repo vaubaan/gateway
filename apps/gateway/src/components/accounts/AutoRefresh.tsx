@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { postJson } from '@/lib/http/post-json';
 import { ACCOUNT_WORDS } from '@/lib/vocabulary';
 
-import styles from './account.module.css';
+import styles from './account.styles';
 
 export const ACCOUNTS_REFRESH_URL = '/api/accounts/refresh';
 

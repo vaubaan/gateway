@@ -52,7 +52,7 @@ import {
 import { maskedToken, type MissionOverview } from '@/server/missions';
 
 import { missionMark, type MissionMark } from './mission-view';
-import styles from './missions.module.css';
+import styles from './missions.styles';
 
 export const dynamic = 'force-dynamic';
 

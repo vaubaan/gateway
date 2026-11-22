@@ -82,7 +82,7 @@ import type { CatalogRisk } from '@/lib/missions/model';
 import { riskReferencePath } from '@/lib/services/links';
 import { riskExplainer } from '@/lib/services/reference';
 
-import styles from '../activity.module.css';
+import styles from '../activity.styles';
 import { changeLines, type ChangeNames } from '../change-lines';
 import { FilterForm } from '../filter-form';
 import { linesWords, neighboursOf, setPage, type PageLink } from '../page-links';

@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 import { ACTIVITY_WORDS } from '@/lib/vocabulary';
 
-import styles from './activity.module.css';
+import styles from './activity.styles';
 
 export function Pager({
   lines,

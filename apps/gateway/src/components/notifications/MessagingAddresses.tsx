@@ -5,7 +5,7 @@
  * A server component: every act is a form post.
  */
 import { LocalDate } from '@/components/LocalDate';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   ConfirmSubmit,

@@ -15,7 +15,7 @@ import { servicePath } from '@/lib/services/links';
 import { serviceCards } from '@/lib/services/reference';
 
 import { catalogSize, pinnedPlugins, PinnedTag, ReferenceFrame } from './frame';
-import styles from './reference.module.css';
+import styles from './reference.styles';
 
 export const dynamic = 'force-dynamic';
 

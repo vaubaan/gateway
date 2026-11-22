@@ -15,7 +15,7 @@ import type { IssuanceAccount } from '@/lib/missions/model';
 import { defaultEntryFor, type CardState, type EntryState } from '../new/form-state';
 import { ratePhrase } from '../new/policy-lines';
 import { behaviourOf, gateOf, type Behaviour, type CustomView } from './card-model';
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 const BEHAVIOURS: readonly { readonly id: Behaviour; readonly label: string }[] = [
   { id: 'free', label: CARD_WORDS.runsFreely },

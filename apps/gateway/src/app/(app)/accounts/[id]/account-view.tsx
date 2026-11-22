@@ -16,7 +16,7 @@ import Link from 'next/link';
 
 import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { CloseOrphanedMission } from '@/components/accounts/CloseOrphanedMission';
-import shared from '@/components/accounts/account.module.css';
+import shared from '@/components/accounts/account.styles';
 import { AccountState, credentialKindLabel, NoticeBanner } from '@/components/accounts/parts';
 import { PermissionList } from '@/components/accounts/PermissionList';
 import { RevokeAccount } from '@/components/accounts/RevokeAccount';
@@ -104,7 +104,7 @@ import { ownResourceEnv } from '@/server/store/resource-env';
 import type { ValidationStatus } from '@/server/telemetry';
 
 import { RemoveAccess, TransferOwnership } from './account-actions';
-import styles from '../accounts.module.css';
+import styles from '../accounts.styles';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The query parameters that unfold one row of the page. */

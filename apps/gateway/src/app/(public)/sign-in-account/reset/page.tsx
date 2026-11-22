@@ -4,7 +4,7 @@
  * so and nothing else.
  */
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { accountErrorSentence, ChoosePasswordForm } from '@/components/auth/PasswordForm';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { ButtonLink, Callout } from '@/components/ui';

@@ -17,7 +17,7 @@ import type { SessionEventView } from '@/server/audit';
 import { riskReferencePath } from '@/lib/services/links';
 import { ROUTES } from '@/lib/vocabulary';
 
-import styles from '../missions.module.css';
+import styles from '../missions.styles';
 import { yesOf } from '../mission-view';
 import { eventWords } from './session/event-words';
 

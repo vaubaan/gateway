@@ -362,13 +362,13 @@ describe('marks', () => {
       <ServiceMark name="GitHub" icon={{ path: 'M12 2 22 22H2Z', color: '#181717' }} />,
     );
     expect(github).toContain('--mark-color:#181717');
-    expect(github).toContain('--mark-color-dark:var(--ink)');
+    expect(github).toContain('--mark-color-dark:var(--foreground)');
     const uncoloured = renderToStaticMarkup(
       <ServiceMark name="Acme" icon={{ path: 'M12 2 22 22H2Z', color: null }} />,
     );
     expect(uncoloured).not.toContain('style=');
-    expect(darkThemeMarkColor('#000000')).toBe('var(--ink)');
-    expect(darkThemeMarkColor('#24175B')).toBe('var(--ink)');
+    expect(darkThemeMarkColor('#000000')).toBe('var(--foreground)');
+    expect(darkThemeMarkColor('#24175B')).toBe('var(--foreground)');
     expect(darkThemeMarkColor('#EA4335')).toBe('#EA4335');
     expect(darkThemeMarkColor('#3FCF8E')).toBe('#3FCF8E');
 

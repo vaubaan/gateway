@@ -9,7 +9,7 @@
 import type { ServiceMarkIcon } from '@/components/ui';
 import type { ChosenTheme } from '@/lib/theme';
 
-import styles from './design.module.css';
+import styles from './design.styles';
 
 const THEMES: readonly ChosenTheme[] = ['light', 'dark'];
 

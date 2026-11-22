@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui';
 import { CARD_WORDS } from '@/lib/vocabulary';
 import { useAction } from '@/lib/http/post-json';
 
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 export function CloseOpening({
   missionId,

@@ -47,7 +47,7 @@ import {
 } from '@/components/ui';
 import { ACTIONS, WAITING } from '@/lib/vocabulary';
 
-import styles from './design.module.css';
+import styles from './design.styles';
 import { GallerySection, Line, Pile, Specimen } from './specimen';
 
 export function StateSections() {
@@ -228,7 +228,7 @@ function ReplaceKeySpecimen({ theme }: { theme: string }) {
           }
           hint={WAITING.recorded}
         >
-          <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+          <div className="grid gap-2">
             <OptionCard
               name={`preview-${theme}`}
               value="now"
@@ -309,7 +309,7 @@ function ToastSpecimen() {
   const toast = useToast();
   return (
     <Pile>
-      <div style={{ display: 'grid', gap: 'var(--space-2)', maxWidth: 360 }}>
+      <div className="grid max-w-[360px] gap-2">
         <ToastCard title="Copied" />
         <ToastCard
           tone="ok"

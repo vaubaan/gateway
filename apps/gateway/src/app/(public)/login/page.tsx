@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { PasswordSignInForm } from '@/components/auth/PasswordForm';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { BuildFooter } from '@/components/shell/BuildFooter';

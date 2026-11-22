@@ -41,7 +41,7 @@ export {
 export type { GateWord, Reason, Row, WhyAxis } from '@vaubaan/policy-engine';
 
 /** The product, and how it names itself in the shell. */
-export const PRODUCT = { name: 'Vaubaan', mark: 'V' } as const;
+export const PRODUCT = { name: 'Vaubaan' } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Navigation: seven entries, in this order. Routes follow the words.

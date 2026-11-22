@@ -14,6 +14,8 @@
  * puts in `body` (`escapeHtml`) and owns the response headers.
  */
 
+import { TRACE } from '../../lib/brand';
+
 export type DocumentTheme = 'light' | 'dark';
 
 /** The cookie the application keeps the chosen theme in (`lib/theme.ts`, `THEME_COOKIE`). */
@@ -70,7 +72,8 @@ html { background: var(--background); }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--background); color: var(--foreground); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; font-size: 0.875rem; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 main { flex: 1; width: 100%; max-width: 34rem; margin: 0 auto; padding: 12vh 1.5rem 3rem; }
 .brand { display: flex; align-items: center; gap: 9px; margin-bottom: 2rem; font-weight: 600; }
-.mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: var(--foreground); color: var(--background); font-size: 0.8125rem; line-height: 1; }
+.mark { display: inline-flex; width: 26px; height: 26px; color: var(--foreground); }
+.mark svg { width: 100%; height: 100%; fill: currentColor; }
 h1 { margin: 0 0 0.25rem; font-size: 1.25rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 h2 { margin: 1.5rem 0 0.25rem; font-size: 0.875rem; font-weight: 600; }
 p { margin: 0 0 0.75rem; }
@@ -143,7 +146,7 @@ export function htmlDocument(input: DocumentInput): string {
 <title>${escapeHtml(input.title)}</title>
 <style${nonce}>${DOCUMENT_STYLE}</style>
 </head>
-<body><main><div class="brand"><span class="mark" aria-hidden="true">V</span><span>Vaubaan</span></div>${input.body}</main>${input.footer ?? ''}</body>
+<body><main><div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="${TRACE}"/></svg></span><span>Vaubaan</span></div>${input.body}</main>${input.footer ?? ''}</body>
 </html>
 `;
 }

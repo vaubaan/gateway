@@ -8,7 +8,7 @@
  */
 import { PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
 
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   Callout,

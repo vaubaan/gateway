@@ -26,7 +26,7 @@ import {
 } from '@/lib/theme';
 import { THEME_WORDS } from '@/lib/vocabulary';
 
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 const ICONS: Readonly<Record<ThemeChoice, IconName>> = {
   system: 'system',

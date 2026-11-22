@@ -43,7 +43,7 @@ import { LocalDate } from '@/components/LocalDate';
 
 import { CloseOpening } from './close-opening';
 import { CustomTable } from './custom-table';
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 /** The use of the period, on the mission page only. */
 export interface CardToday {

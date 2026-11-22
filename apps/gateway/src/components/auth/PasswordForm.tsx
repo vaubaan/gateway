@@ -6,7 +6,7 @@
  */
 import Link from 'next/link';
 
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { Button, Field, Input } from '@/components/ui';
 import {
   FORGOT_PASSWORD_PAGE,

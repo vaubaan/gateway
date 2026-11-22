@@ -17,7 +17,7 @@ import {
   SIGN_IN_PRESETS,
   type SignInPreset,
 } from '@/components/settings/sign-in-presets';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { Callout, CodeBlock, Hint, PageHeader, Section, Segmented } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { DOC_PAGES, SETTINGS_PAGES } from '@/lib/vocabulary';

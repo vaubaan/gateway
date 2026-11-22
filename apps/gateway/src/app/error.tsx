@@ -6,7 +6,7 @@
  * the frame of those pages.
  */
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { Button, Mono } from '@/components/ui';
 
 export default function RootError({

@@ -6,7 +6,7 @@
  */
 import { buildInfoFromEnv, type BuildInfo } from '@/server/config/build-info';
 
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export function BuildFooter({ build = buildInfoFromEnv() }: { build?: BuildInfo }) {
   return (

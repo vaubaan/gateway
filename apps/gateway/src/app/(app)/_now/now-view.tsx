@@ -62,7 +62,7 @@ import { inboxRequestPath } from '@/server/requests/url';
 
 import { titleOf, WaitingDescription, WhoMark, whoOf } from '../waiting/parts';
 import { Today } from './today';
-import styles from './now.module.css';
+import styles from './now.styles';
 
 function missionPath(id: string): string {
   return `${ROUTES.missions}/${id}`;

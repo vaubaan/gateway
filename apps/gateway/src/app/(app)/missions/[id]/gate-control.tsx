@@ -15,7 +15,7 @@ import { GATE_WORDS } from '@/lib/vocabulary';
 import type { Gate } from '@vaubaan/shared';
 
 import { useAction } from '@/lib/http/post-json';
-import styles from '../missions.module.css';
+import styles from '../missions.styles';
 
 export function GateControl({
   missionId,

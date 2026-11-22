@@ -56,7 +56,7 @@ import {
   WAITING,
 } from '@/lib/vocabulary';
 
-import styles from './design.module.css';
+import styles from './design.styles';
 import { type GalleryIcons, GallerySection, Pile, Specimen } from './specimen';
 
 interface Person {
@@ -191,7 +191,7 @@ const CALL_COLUMNS: readonly Column<Call>[] = [
         <GateMark gate="ask">asked you</GateMark>
       ) : c.decision === 'refused' ? (
         <>
-          <span style={{ color: 'var(--bad)' }}>refused</span> · {c.reason}
+          <span className="text-refused-fg">refused</span> · {c.reason}
         </>
       ) : (
         c.decision

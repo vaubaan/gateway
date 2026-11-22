@@ -12,7 +12,7 @@ import { redirect } from 'next/navigation';
 import { LocalDate } from '@/components/LocalDate';
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import { BootstrapTokenInput } from '@/components/auth/BootstrapTokenInput';
-import styles from '@/components/auth/auth.module.css';
+import styles from '@/components/auth/auth.styles';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, ButtonLink, Callout, Field, Input, Mono } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';

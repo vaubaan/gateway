@@ -17,7 +17,7 @@ import { NeedsUser } from '@/components/auth/NeedsUser';
 import { MailSwitch } from '@/components/notifications/MailSwitch';
 import { MessagingAddresses } from '@/components/notifications/MessagingAddresses';
 import { ThisDevice } from '@/components/notifications/ThisDevice';
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   Callout,

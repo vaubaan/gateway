@@ -28,5 +28,5 @@ How `packages/design-tokens` (`@vaubaan/design-tokens`) produces the token sheet
 
 - **Tailwind's `dark:` variant does not follow the system preference**: it matches `.dark` or `[data-theme='dark']` only. A page without a chosen theme (the site) never writes `dark:`; the tokens change by themselves.
 - **A pair added to the interface is added to `CONTRAST_PAIRS`**, never tested elsewhere: a target of `0` is a documented exception (the placeholder ink), not a skipped check.
-- **The app imports `theme.css` with `theme(static)`**: Tailwind otherwise emits a theme variable only when a utility or a rule of the same compilation reads it, and the app's CSS modules (compiled apart) read `--text-body`, `--radius-md`… directly. The site needs no such thing.
+- **The app imports `theme.css` with `theme(static)`**: Tailwind otherwise emits a theme variable only when a utility or a rule of the same compilation reads it, and the app's arbitrary values (`[gap:var(--radius-md)]`, its pages' class maps) read shared variables directly. The site needs no such thing.
 - **Some shared names were the app's former names with another meaning**: `--accent` is shadcn's hover fill (the brand accent is `--primary`), `--text-xs/sm/base` are Tailwind's own scale. The app renamed where it read them instead of aliasing them (`apps/gateway/src/styles/tokens.css` header).

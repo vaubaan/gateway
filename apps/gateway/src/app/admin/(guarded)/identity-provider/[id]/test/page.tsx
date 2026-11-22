@@ -8,7 +8,7 @@
  */
 import { notFound } from 'next/navigation';
 
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import {
   Button,
   ButtonLink,

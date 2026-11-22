@@ -11,7 +11,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 
 import { Avatar } from '@/components/ui';
 
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 export function UserMenu({
   name,

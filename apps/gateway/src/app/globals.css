@@ -3,8 +3,9 @@
  * @vaubaan/design-tokens (style guide §3; ADR
  * design-system-on-shadcn-shared-by-the-app-and-the-site). The theme sheet is
  * imported `theme(static)`: every shared size, radius and font stays a CSS
- * variable, so the CSS modules not yet moved to Tailwind can read it. Then the
- * former names, aliased (`styles/tokens.css`), and the page measures.
+ * variable, which an arbitrary value (`[gap:var(--text-small)]`) can read.
+ * Then the page measures. Components style themselves with utilities; no
+ * module style sheet is left.
  *
  * Every rule on an element sits in the base layer: a Tailwind utility (a later
  * layer) wins over it, as it does on the site.
@@ -12,7 +13,6 @@
 @import 'tailwindcss';
 @import '@vaubaan/design-tokens/tokens.css';
 @import '@vaubaan/design-tokens/theme.css' theme(static);
-@import '../styles/tokens.css';
 
 /*
  * The dark theme however it was reached: chosen (`data-theme="dark"`, which
@@ -105,7 +105,7 @@
   body {
     min-height: 100vh;
     font-size: var(--text-body);
-    line-height: var(--leading);
+    line-height: var(--leading-normal);
     text-rendering: optimizeLegibility;
   }
 
@@ -141,7 +141,7 @@
 
   b,
   strong {
-    font-weight: var(--weight-strong);
+    font-weight: var(--font-weight-semibold);
   }
 
   small {
@@ -156,25 +156,25 @@
   /* Three headings, set once. Sentence case everywhere. */
   h1 {
     font-size: var(--text-title);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-heading);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--leading-snug);
     letter-spacing: var(--tracking-title);
-    margin: 0 0 var(--space-1);
+    margin: 0 0 calc(var(--spacing) * 1);
   }
   h2 {
     font-size: var(--text-body);
-    font-weight: var(--weight-strong);
+    font-weight: var(--font-weight-semibold);
     letter-spacing: var(--tracking-title);
-    margin: 0 0 var(--space-2);
+    margin: 0 0 calc(var(--spacing) * 2);
   }
   h3 {
     font-size: var(--text-small);
-    font-weight: var(--weight-strong);
-    margin: 0 0 var(--space-2);
+    font-weight: var(--font-weight-semibold);
+    margin: 0 0 calc(var(--spacing) * 2);
   }
 
   p {
-    margin: 0 0 var(--space-3);
+    margin: 0 0 calc(var(--spacing) * 3);
   }
 
   /* Tailwind's preflight removes a list's markers; a list the interface styles sets its own. */
@@ -193,17 +193,8 @@
 
   hr {
     border-top: 1px solid var(--border);
-    margin: var(--space-6) 0;
+    margin: calc(var(--spacing) * 6) 0;
   }
-}
-
-/* Layout — a page outside the application shell (sign-in, the bootstrap
-   page) sits in a <Container/>, which resolves to .vbn-container. Inside the
-   shell the page column is the shell's (`components/shell`). */
-.vbn-container {
-  max-width: var(--page-max);
-  margin: 0 auto;
-  padding: var(--page-pad-top) var(--page-pad-x) var(--page-pad-bottom);
 }
 
 /* Read by assistive technology, not drawn. */

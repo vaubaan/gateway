@@ -186,12 +186,12 @@ export interface ServiceMarkIcon {
 
 /**
  * The colour a mark takes in the dark theme: the brand colour itself, or
- * the ink when the brand is near black (it would vanish on the dark paper).
+ * the ink (`--foreground`) when the brand is near black (it would vanish on the dark paper).
  * `#RRGGBB` in, a CSS colour out. The rule is `serviceMarkColors`
  * (`@vaubaan/shared/service-mark`), the one the public site draws with too.
  */
 export function darkThemeMarkColor(hex: string): string {
-  return serviceMarkColors(hex).dark ?? 'var(--ink)';
+  return serviceMarkColors(hex).dark ?? 'var(--foreground)';
 }
 
 export function ServiceMark({

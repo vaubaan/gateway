@@ -31,6 +31,7 @@ import {
   SubNav,
   SubNavFrame,
   ToastProvider,
+  TraceMark,
   TrailProvider,
 } from '@/components/ui';
 import { currentTheme } from '@/lib/theme-server';
@@ -47,7 +48,7 @@ import { settingsNav } from './settings-nav';
 import { SettingsSideNav } from './SettingsSideNav';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
-import styles from './shell.module.css';
+import styles from './shell.styles';
 
 /** The count an entry carries (a server component; renders nothing at zero). */
 const COUNTS: Readonly<
@@ -128,7 +129,7 @@ export async function AppShell({
             <aside className={styles.side}>
               <Link href={NAV.now.href} className={styles.brand} title={brandTooltip(instance)}>
                 <span className={styles.brandMark} aria-hidden="true">
-                  {PRODUCT.mark}
+                  <TraceMark className="size-full" />
                 </span>
                 <span className={styles.brandText}>
                   <span className={styles.brandName}>{PRODUCT.name}</span>

@@ -13,7 +13,7 @@ import { Button, Callout } from '@/components/ui';
 import { proposalPutOff, putProposalOff } from '@/lib/notifications/push-client';
 import { NOTIFICATION_WORDS } from '@/lib/vocabulary';
 
-import styles from './notifications.module.css';
+import styles from './notifications.styles';
 import { usePushState, useSubscribe } from './ThisDevice';
 
 export function PushOffer({

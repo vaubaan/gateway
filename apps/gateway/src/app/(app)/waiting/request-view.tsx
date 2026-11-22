@@ -82,7 +82,7 @@ import { eventWords } from './event-words';
 import { LimitAnswer, type LimitChoice } from './limit-answer';
 import { LocalTime } from './local-time';
 import { CallHeadline, whoOf } from './parts';
-import styles from './waiting.module.css';
+import styles from './waiting.styles';
 
 /** How many events "What led here" shows before "Mission activity" takes over. */
 const EVENTS_SHOWN = 6;

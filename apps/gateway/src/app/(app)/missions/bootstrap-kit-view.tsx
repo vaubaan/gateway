@@ -18,7 +18,7 @@ import { Button, CodeBlock, Dialog, SecretBox, StepMark } from '@/components/ui'
 import { MISSION_ACTIONS, MISSION_WORDS } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 
-import styles from './missions.module.css';
+import styles from './missions.styles';
 import { isRecord } from '@vaubaan/shared/guards';
 
 function KitStep({

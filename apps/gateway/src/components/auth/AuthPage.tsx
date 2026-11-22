@@ -12,7 +12,9 @@ import { PRODUCT } from '@/lib/vocabulary';
 import type { InstanceIdentity } from '@/server/instance';
 
 import { brandTooltip } from '../shell/instance-label';
-import styles from './auth.module.css';
+import { TraceMark } from '@/components/ui/TraceMark';
+
+import styles from './auth.styles';
 
 export function AuthPage({
   instance,
@@ -33,7 +35,7 @@ export function AuthPage({
       <main className={styles.column}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">
-            {PRODUCT.mark}
+            <TraceMark className="size-full" />
           </span>
           <span className={styles.brandText} title={instance ? brandTooltip(instance) : undefined}>
             <span className={styles.brandName}>{PRODUCT.name}</span>

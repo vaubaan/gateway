@@ -39,7 +39,7 @@ import {
   showsEnv,
   type ResourceGroup,
 } from './card-model';
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 /** What the dialog edits: a new card (from step 1), or the resources of a card ("Change"). */
 export type Picking =

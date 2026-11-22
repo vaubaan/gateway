@@ -38,7 +38,7 @@ import {
 } from '@/server/audit';
 
 import { ActivityTable } from '../../missions/[id]/activity-table';
-import styles from '../activity.module.css';
+import styles from '../activity.styles';
 import { FilterForm } from '../filter-form';
 import { linesWords, neighboursOf, setPage, type PageLink } from '../page-links';
 import { Pager } from '../pager';

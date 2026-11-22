@@ -12,7 +12,7 @@ import { useRouter } from 'next/navigation';
 import { agoSentence, CARD_WORDS } from '@/lib/vocabulary';
 import { useAction } from '@/lib/http/post-json';
 
-import styles from '../cards/cards.module.css';
+import styles from '../cards/cards.styles';
 
 export function CheckNow({
   missionId,

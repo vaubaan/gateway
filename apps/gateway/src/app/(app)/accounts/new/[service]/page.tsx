@@ -70,7 +70,7 @@ import {
 } from '@/server/accounts';
 import { servicePath } from '@/lib/services/links';
 
-import styles from '../../accounts.module.css';
+import styles from '../../accounts.styles';
 import { DETAIL_PARAM, INSTALL_PROBLEM_PARAM } from '@/server/plugins/handlers';
 import { InstallFirst } from './install-first';
 

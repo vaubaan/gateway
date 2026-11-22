@@ -9,7 +9,7 @@
  * provider such as GitHub or personal Google accounts), the people of some
  * email domains and the invited addresses, or the invited addresses only.
  */
-import styles from '@/components/settings/settings.module.css';
+import styles from '@/components/settings/settings.styles';
 import { Button, ButtonLink, CodeBlock, Field, Input, Radio } from '@/components/ui';
 import { ACTIONS, SETTINGS_ACTIONS } from '@/lib/vocabulary';
 import { ENTRA_ISSUER_PREFIX, ENTRA_ISSUER_SUFFIX } from '@/server/config';

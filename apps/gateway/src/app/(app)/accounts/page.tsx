@@ -16,7 +16,7 @@
 import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import styles from '@/components/accounts/account.module.css';
+import styles from '@/components/accounts/account.styles';
 import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { OwnerlessAccounts } from '@/components/accounts/OwnerlessAccounts';
 import { AccountState, NoticeBanner } from '@/components/accounts/parts';

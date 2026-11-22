@@ -18,7 +18,7 @@ import type { RiskPlanes } from '@/lib/services/planes';
 import type { CardState, EntryState } from '../new/form-state';
 import { accountLabel, customDraftOf, customView, startFrom } from './card-model';
 import { CustomTable } from './custom-table';
-import styles from './cards.module.css';
+import styles from './cards.styles';
 
 /** The chip that shows every plane. */
 const ALL = 'all';

@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 
 import { formatClock, formatDay } from '@/lib/dates';
 
-import styles from './activity.module.css';
+import styles from './activity.styles';
 
 export function When({ ts }: { ts: string }) {
   const [local, setLocal] = useState(false);
