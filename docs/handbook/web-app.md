@@ -41,7 +41,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 ## Start here
 
 - [`lib/auth/session.ts`](../../apps/gateway/src/lib/auth/session.ts) — `currentPrincipal`, `requirePrincipal`, `currentUser`, `requireOperator`: how a page gets its reader.
-- [`components/shell/`](../../apps/gateway/src/components/shell/) — `AppShell`, `AdminShell`, the path bar, the navigation (`nav.ts`), the local tabs of Settings and Activity (`settings-nav.ts`, `activity-nav.ts`, drawn by `SubNav`).
+- [`components/shell/`](../../apps/gateway/src/components/shell/) — `AppShell`, `AdminShell`, the path bar, the navigation (`nav.ts`), the local navigation of Settings and Activity (`settings-nav.ts`, `activity-nav.ts`). Settings' is drawn twice from the same list, never both at once: under its entry in the side column (`SettingsSideNav`, a wide window, only while `sectionOf` is `settings`) and above the page (`SettingsFrame` → `SubNav`, wrapped in `.settingsAbove`, shown only at ≤ 1023 px). Both are named "Settings": the e2e tests find either by that name. It sits after the `Main` nav, not inside it, so `Main` keeps its seven links.
 - [`components/ui/`](../../apps/gateway/src/components/ui/) — the design system; each component's rule of use is in its header and on `/design`.
 - [`lib/vocabulary.ts`](../../apps/gateway/src/lib/vocabulary.ts) — every word a person reads, keyed by the protocol name it translates.
 - [`next.config.ts`](../../apps/gateway/next.config.ts) — `LEGACY_REDIRECTS`, what the standalone output traces and excludes.

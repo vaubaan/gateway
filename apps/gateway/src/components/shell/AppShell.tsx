@@ -10,10 +10,11 @@
  * gateway, the section, the page's crumbs and title — and holds, at its end,
  * the theme toggle and the person (their name, and behind it "Sign out").
  *
- * Administration is the same shell (`AdminShell`): the global navigation
- * stays, Settings is the current entry, and the pages of Administration get
- * the local navigation of Settings as a row of tabs under the bar
- * (`SettingsFrame`).
+ * Settings and Administration are the same shell (`AdminShell`): the global
+ * navigation stays, Settings is the current entry, and the pages of Settings
+ * are listed under it in the side column while the path is in Settings
+ * (`SettingsSideNav`). When the column collapses to its icons, or on a phone,
+ * the same list is drawn above the page instead (`SettingsFrame`).
  *
  * The words come from `lib/vocabulary`; a feature adds no entry here — seven
  * is the budget.
@@ -43,6 +44,7 @@ import { NavLinks, type NavItem } from './NavLinks';
 import { OpenRequestCount } from './OpenRequestCount';
 import { PathBar } from './PathBar';
 import { settingsNav } from './settings-nav';
+import { SettingsSideNav } from './SettingsSideNav';
 import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 import styles from './shell.module.css';
@@ -138,6 +140,8 @@ export async function AppShell({
               <nav className={styles.nav} aria-label="Main">
                 <NavLinks items={items} />
               </nav>
+              {/* Under Settings, the last entry, while the path is in Settings. */}
+              <SettingsSideNav groups={settingsNav(isOperatorPrincipal(principal))} />
             </aside>
             <div className={styles.main}>
               <PathBar instance={{ label: instance.label, host: instance.host }}>
@@ -161,7 +165,11 @@ export async function AppShell({
   );
 }
 
-/** The local navigation of Settings, a row of tabs under the bar: "You", then "Administration". */
+/**
+ * The local navigation of Settings above the page — "You", then "Administration" — for a
+ * window whose side column has no room for it (collapsed to icons, or a phone). In a wide
+ * window it is not drawn: `SettingsSideNav` lists the same pages under the Settings entry.
+ */
 export function SettingsFrame({
   principal,
   children,
@@ -172,7 +180,9 @@ export function SettingsFrame({
   return (
     <SubNavFrame
       nav={
-        <SubNav label={NAV.settings.label} groups={settingsNav(isOperatorPrincipal(principal))} />
+        <div className={styles.settingsAbove}>
+          <SubNav label={NAV.settings.label} groups={settingsNav(isOperatorPrincipal(principal))} />
+        </div>
       }
     >
       {children}
@@ -182,7 +192,7 @@ export function SettingsFrame({
 
 /**
  * Administration: the same shell and the same global navigation, with the
- * local navigation of Settings under the bar.
+ * local navigation of Settings under its entry (or above the page when narrow).
  */
 export function AdminShell({
   principal,

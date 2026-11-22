@@ -373,9 +373,72 @@
   text-align: center;
 }
 
+/* ── Settings, under its entry ───────────────────────────────────────────── */
+
+/* The pages of Settings, drawn under its entry while the path is in Settings:
+   indented to the word of the entry, quieter than the main navigation. */
+.sideSub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  margin-top: var(--space-1);
+  overflow-y: auto;
+}
+.sideSubGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sideSubLabel {
+  padding: var(--space-1) var(--space-2) 2px 31px;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.sideSubList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sideSubLink {
+  display: flex;
+  align-items: center;
+  height: var(--control-sm);
+  padding: 0 var(--space-2) 0 31px;
+  border-radius: var(--radius-md);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.sideSubLink:hover {
+  background: var(--fill);
+  text-decoration: none;
+}
+.sideSubLink:focus-visible {
+  box-shadow: inset var(--focus-ring);
+}
+/* The current page: a heavier word, the fill stays the section's. */
+.sideSubLinkOn {
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+/* Above the page instead, when the column has no room for words (`SettingsFrame`). */
+.settingsAbove {
+  display: none;
+}
+
 /* ── Collapsed: a narrow window keeps the icons ──────────────────────────── */
 
 @media (max-width: 1023px) {
+  .sideSub {
+    display: none;
+  }
+  .settingsAbove {
+    display: contents;
+  }
   .app {
     grid-template-columns: var(--side-width-collapsed) minmax(0, 1fr);
   }

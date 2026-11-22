@@ -125,8 +125,10 @@ Dark**, remembered and applied before first paint; part of a page may use the ot
   strong weight, not a colour; every page belongs to exactly one section.
 - **A path bar above the page**: the path (this gateway leading home, the section, crumbs, the
   title), then the theme toggle and the person. No search, no page action.
-- **Local navigation is a row of tabs under the path** (Settings: You, Administration; the
-  Reference); no local column. Administration is part of Settings.
+- **Settings lists its pages in the side column, under its entry**, while one is in Settings
+  (You, then Administration); a narrow window or a phone draws them above the page instead.
+  Administration is part of Settings. Another local navigation is a row of tabs under the path
+  (the Reference); no local column beside the page.
 - **Navigation, not a status panel**: no health line, no version; the build is said once, quietly,
   where a page ends.
 - **Narrow window**: icons only, still named; **phone**: a bar at the foot, rarer sections behind
