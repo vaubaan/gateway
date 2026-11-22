@@ -235,7 +235,12 @@ async function wholeHistory(rest: GithubRest, head: string, label: string): Prom
     };
   }
   const commit = await rest.gitObject(head);
-  const files = commit?.kind === 'commit' ? await rest.treePaths(commit.tree) : null;
+  const files =
+    commit?.kind !== 'commit'
+      ? null
+      : commit.tree === EMPTY_TREE
+        ? []
+        : await rest.treePaths(commit.tree);
   if (files === null) {
     return {
       ok: false,
@@ -251,6 +256,13 @@ async function wholeHistory(rest: GithubRest, head: string, label: string): Prom
   // Oldest first, as the compare API lists them.
   return { ok: true, status: 'ahead', commits: shas.length, shas: shas.reverse(), files };
 }
+
+/**
+ * git's empty tree, the tree of a commit made with `--allow-empty` on nothing
+ * (the usual "Initial commit" of a new repository): no path by definition, so
+ * the review never asks GitHub to list it.
+ */
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
 /** The reviewable comparison that brings the fewest commits, or the first refusal. */
 function narrowest(comparisons: readonly Comparison[]): Comparison {

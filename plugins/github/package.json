@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-github",
-  "version": "5.4.0",
+  "version": "5.4.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for GitHub — one repository per account, a fine-grained token, risk catalog and macro-actions",

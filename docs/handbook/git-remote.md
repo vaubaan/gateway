@@ -7,7 +7,7 @@ tracks:
   - packages/plugin-sdk/src/git/
   - plugins/github/src/
   - apps/gateway/src/server/store/repositories/pending-refs.ts
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-22
 ---
 
 # Git remote — handbook
@@ -75,6 +75,8 @@ plugin: [services/github](services/github.md).
   "no history in common". With no `refs/heads/*` at GitHub, a create is
   reviewed against nothing — every commit of its history, every path of its
   tip's tree (`?recursive=1`) — under the same 100-commit / 300-file limits.
+  An empty initial commit (`--allow-empty`) has git's empty tree
+  (`4b825dc6…`): it counts no file and GitHub is not asked to list it.
 - "No history in common" is a 404 of the compare API: a history that shares
   no commit with the base. The refusal tells the agent to fetch the branch
   and rebase onto it; it is never lifted, because no base means no diff to

@@ -496,6 +496,38 @@ describe('review', () => {
       expect(fetch.calls.some((c) => c.url.includes('/compare/'))).toBe(false);
     });
 
+    test('of one empty commit (git commit --allow-empty) is reviewed without listing its tree', async () => {
+      const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+      const fetch = mockFetch([
+        ...empty([NEW], []).filter((r) => !/\/git\/(commits|trees)\//.test(String(r.url))),
+        {
+          method: 'GET',
+          url: `${API}/git/commits/${NEW}`,
+          body: { sha: NEW, tree: { sha: EMPTY_TREE }, parents: [] },
+        },
+        { method: 'GET', url: `${API}/commits/${NEW}`, body: { files: [] } },
+      ]);
+      const reviewed = await review(executeCtx(fetch), 'acme/app', [
+        { ref: 'refs/heads/main', old: null, new: NEW },
+      ]);
+      expect(reviewed).toEqual({
+        ok: true,
+        updates: [
+          {
+            ref: 'refs/heads/main',
+            old: null,
+            new: NEW,
+            kind: 'create',
+            commits: 1,
+            files: [],
+            workflow_files: [],
+          },
+        ],
+      });
+      // The empty tree holds no path: GitHub is not asked to list it.
+      expect(fetch.calls.some((c) => c.url.includes('/git/trees/'))).toBe(false);
+    });
+
     test('of 300 files or more is refused with what to do', async () => {
       const many = Array.from({ length: 300 }, (_, i) => `f${i}`);
       const fetch = mockFetch(empty([NEW], many));

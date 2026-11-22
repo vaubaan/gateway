@@ -73,6 +73,13 @@ What an operator or a plugin author reads first; every point is detailed below.
 
 ### Fixed
 
+- **GitHub (plugin 5.4.1): an empty initial commit pushed to an empty repository goes through.**
+  A project prepared on a new repository commits nothing (`git commit --allow-empty -m "Initial
+commit"`) and pushes `main`. Its tip holds git's empty tree: the review counts no file without
+  asking GitHub to list that tree, so the push no longer depends on that answer. Gateways whose
+  GitHub plugin is older than 5.3.1 still refuse this push as "no history in common with main":
+  update the plugin.
+
 - **Vercel (plugin 4.3.0): an agent finds the projects of its mission.** Found in dogfood: with
   three Vercel projects in a mission, an agent spent twenty minutes looking for one.
   `list_projects` answered `[redacted by Vaubaan]` (Vercel's MCP server now wraps every answer in

@@ -17,6 +17,7 @@ import { line, type IssuedMission } from '../../support/execution/testing';
 import {
   ACCOUNT_TOKEN,
   DEVELOPER_TRUST_LEVELS,
+  BLANK_REPOSITORY,
   EMPTY_REPOSITORY,
   openGitRig,
   OTHER_REPOSITORY,
@@ -362,6 +363,38 @@ describe('push', () => {
     ]);
     // Nothing to compare with: the tip's whole tree was read instead.
     expect(rig.host.requests.some((r) => r.path.endsWith('?recursive=1'))).toBe(true);
+  });
+
+  it('pushes an empty initial commit to an empty repository (git commit --allow-empty)', async () => {
+    const owner = await rig.mission({
+      repositories: [BLANK_REPOSITORY],
+      policy: [
+        line('github.read-code'),
+        line('github.git-push'),
+        line('github.merge-protected'),
+        line('github.feature-branch-write'),
+      ],
+    });
+    // How a project is prepared on a new repository: clone it empty, commit nothing, push.
+    const repo = join(rig.workdir(), 'fresh-empty');
+    ok(
+      await rig.git(
+        rig.workdir(),
+        ['clone', '-q', rig.remote(BLANK_REPOSITORY), repo],
+        owner.token,
+      ),
+    );
+    ok(await rig.git(repo, ['checkout', '-q', '-b', 'main'], null));
+    ok(await rig.git(repo, ['commit', '-q', '--allow-empty', '-m', 'Initial commit'], null));
+    const head = (await rig.git(repo, ['rev-parse', 'HEAD'], null)).stdout.trim();
+    const result = await rig.git(repo, ['push', '-u', 'origin', 'main'], owner.token);
+    expect(result.stderr).not.toContain('cannot be reviewed');
+    ok(result);
+    expect(await rig.host.refOf(BLANK_REPOSITORY, 'refs/heads/main')).toBe(head);
+    const push = (await auditOf(owner)).filter((e) => e.tool === PUSH).at(-1);
+    expect(push).toMatchObject({ decision: 'allowed' });
+    // The empty tree holds no path: GitHub is not asked to list it.
+    expect(rig.host.requests.some((r) => r.path.includes('/git/trees/4b825dc6'))).toBe(false);
   });
 
   it('refuses a push the compare API cannot review in full (300 files)', async () => {
