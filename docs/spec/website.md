@@ -32,6 +32,15 @@ can I trust it with my cloud credentials; does the plugin for my service work.
   then the team they bring (pitch, a five-minute demo); the **operator** (commands that work as
   written); the **security reviewer** (threat model, what is not covered, exact telemetry, no
   marketing); the **plugin author**; and an **assistant or agent** reading for one of them (§2.6).
+  Who they are, and what hurts them, is [docs/profiles](../profiles/README.md).
+- The site says the product's promise and its three pillars as
+  [vaubaan-gateway](./vaubaan-gateway.md) §1 states them, and works toward its moments of truth:
+  the landing has one job, M1 (a refusal seen within ten seconds); `/try` has one job, M2 (the
+  first governed call); every other page exists so that M3 and M4 happen. The landing answers the
+  first competitor of a person alone, the agent client's own "allow once / always", in its second
+  section.
+- Three doors, not one: try alone, install for the team, and a separate entry for the security
+  reviewer, who wants to read without being sold to.
 - Examples come in two projects that speak to everyone: a developer on their code host and
   database, a consultant on their mail, notes and calendar.
 - **One home per audience**: user docs and the author guide live on the site; the repository keeps
@@ -325,3 +334,6 @@ A model must find the site, quote it correctly and act on it without a browser.
 2. **Languages**: English only; French for landing and trust center is a candidate.
 3. **Versioned docs**: the latest release only, until a second release line.
 4. **A docs MCP server**, if `llms.txt` and the Markdown pages prove insufficient.
+5. **What the site shows as proof without a third-party audit** (research Q6, 2026-11-19): what
+   really ran, the limits written plainly, the code. The current pages do so honestly; the tone is
+   to keep. Which runs count, and where they are listed, is still to settle.

@@ -27,6 +27,10 @@ status: draft
 > holding the resource it names, or the one the agent names with `vaubaan_account` (§3.1, §4.1; ADR
 > [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md),
 > amendment 2026-11-22).
+>
+> 2026-11-22 — the vision speaks to one person first, then the team, with the promise, its three
+> pillars and the moments that decide adoption, from the product research (owner decisions of
+> 2026-11-19 and 2026-11-20; §1).
 
 ## 0. Vocabulary
 
@@ -215,8 +219,55 @@ carries, a callback registered at a service).
 
 ## 1. Vision
 
-A server a company installs on its premises so that its coding agents reach its cloud services
-without ever holding a credential, within a declared objective.
+**Let your agent work alone. It stops where you said.** Vaubaan gives a person's agents missions
+instead of credentials: first one person on their own computer, then the team they bring, on a
+server their company runs, where the agents reach its cloud services without ever holding a
+credential, within a declared objective.
+
+The promise and its proof come from the product research of 2026-11-19 and 2026-11-20
+([the table](../research/2026-11-19-personas.md), [the façade](../research/2026-11-20-facade.md)),
+decided by the owner; who it serves is in [docs/profiles](../profiles/README.md).
+
+**Three pillars**, each shown with its proof wherever the product is presented:
+
+- **It works alone.** The person ticks verbs; Vaubaan writes each permission and its limit.
+- **It stops where you said.** What cannot be repaired waits for the person, with the exact call in
+  front of them; everything else outside the mission is refused with a reason the agent can read.
+- **It never holds your keys.** Credentials stay encrypted in Vaubaan; the agent holds a mission
+  key; every call is recorded.
+
+"Then your team" is not a fourth pillar but the second act: the same missions, shared accounts,
+one key per person.
+
+**What it replaces.** For one person the first competitor is not another gateway but the agent
+client's own "allow once / always": it asks per tool, only while the person watches, and never
+reads the arguments. Vaubaan decides on the arguments, counts, and keeps deciding while the person
+is away.
+
+**Where the value is born.** In one place: the decision under the tool's name — a merge into a
+protected branch is not a push — made by a reviewed catalog that turns a call and its arguments
+into permissions a human can read. The project's asset is the set of catalogs, not the server.
+The person feels it at two moments: the silence (an hour of real work, nothing asked, everything
+recorded) and the yes (one grave action stopped, shown in clear, decided in seconds). What the
+creator buys is autonomy; security is the condition, not the product. The value is paid for by
+others: the administrator who installs, the plugin author who models a service, and the security
+reviewer who gains nothing and can block everything; a friction on their side costs more than one
+on the creator's.
+
+**Moments that decide adoption** (the façade's M1–M7; the site's work toward them is
+[website](./website.md) §1):
+
+| #   | Moment                                                   | For whom              | Target                                        |
+| --- | -------------------------------------------------------- | --------------------- | --------------------------------------------- |
+| M1  | I see it refuse, before installing                       | everyone              | ten seconds on the landing                    |
+| M2  | My first governed call, on my own account                | the person alone      | under ten minutes from download               |
+| M3  | The silence: an hour of real work, nothing asked         | the mission creator   | day one, right after M2                       |
+| M4  | The yes: a merge or a client mail stopped, read, granted | the mission creator   | ten seconds, and the agent resumes on its own |
+| M5  | My key, without asking anyone for a token                | the teammate          | one click                                     |
+| M6  | They wrote what they do not protect                      | the security reviewer | two clicks from anywhere                      |
+| M7  | My plugin runs on a real instance                        | the plugin author     | one afternoon                                 |
+
+The rules that follow:
 
 1. **Credentials stay inside the company**, on its network, behind its identity provider.
 2. **A token is issued for an objective, not a person.** A policy says what the agent may risk, how
@@ -1375,3 +1426,9 @@ Not decided, or a v1 assumption usage may overturn.
 - **Per-tool discovery.** Should plugins declare per tool the risks it can touch, so a mission lists
   only what it can call (§4.1)?
 - **Audit export.** Format and scope beyond local retention.
+- **Who answers when the creator is away** (research Q4). v1: only the creator (§3.4), which keeps
+  one responsible human per mission; a teammate lives an expired request as an outage. Assume it,
+  or let the creator name a stand-in among the members? A rule to settle, not to patch.
+- **The demo and the local instance** (research Q3). Are the simulated demo and a real instance on
+  one computer one thing or two? If the local instance ships with a simulated service already
+  connected, the demo becomes the first minute of the real product.

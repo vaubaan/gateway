@@ -6,7 +6,7 @@
     "codex-cli",
     "opencode"
   ],
-  "renderedAt": "2026-11-22T18:39:02.827Z",
+  "renderedAt": "2026-11-22T18:47:12.781Z",
   "files": [
     ".agents/skills/harn-canvas-review/SKILL.md",
     ".agents/skills/harn-decision-record-writer/SKILL.md",
@@ -60,7 +60,8 @@
     ".opencode/commands/harn-workflow.md",
     "AGENTS.md",
     "CLAUDE.md",
-    "docs/intents/README.md"
+    "docs/intents/README.md",
+    "docs/profiles/README.md"
   ],
   "fileHashes": {
     ".claude/skills/harn-canvas-review/SKILL.md": "f63753b14969c4734d9b50d7fdb4f40b5a8975421669853209d6d3176227bfac",
@@ -113,8 +114,9 @@
     ".opencode/commands/harn-test-plan.md": "3559bb254654a797d2d3c87ee2929630e9615925e6fa6c357598c97fabc036e2",
     ".opencode/commands/harn-upgrade.md": "4629eab9e4e65585f1da065ffbdda16d2354cadbf3ea070cc384c9eb51c0c68d",
     ".opencode/commands/harn-workflow.md": "620488913f49b49b92698aa83b8194ab5bb7bfdf85441875b8d52fde1dba775a",
-    "AGENTS.md": "39f96ed8bfc632d804d1b59670b58fae4a4cdf7e684f8e9a913106bad94e4d99",
+    "AGENTS.md": "1346079e536fa017d20148c5ceca7ee00229fd07ca447b43561d06982c652fdf",
     "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
-    "docs/intents/README.md": "d297af2bbada81c3e7e2ef19ad9010ae46c5a98c9bc58cca4b5099341a371db3"
+    "docs/intents/README.md": "6d6ccc9020dbf136f3bbfb4262de87e9ec8b3e0977987ef3bf69a8c1aa00c152",
+    "docs/profiles/README.md": "ca4675a244a5a8d45a4268e84acfecec50c6137194f448435efb4e90b7007c55"
   }
 }

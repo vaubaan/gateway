@@ -1,7 +1,7 @@
 ---
 title: Install a plugin on my gateway
 status: proposed
-actors: [administrator, agent]
+actors: [team-lead, developer, consultant]
 spec: ../spec/vaubaan-gateway.md
 last_reviewed: 2026-11-22
 ---
@@ -65,6 +65,7 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 ### Activate a pending plugin version
 
 status: implemented
+relieves: an-update-that-breaks-on-a-monday
 requires: plugin, administrator
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-view.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
 spec: ../spec/vaubaan-gateway.md#42-human-surface
@@ -86,6 +87,7 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 ### Roll back a plugin to a kept version
 
 status: implemented
+relieves: an-update-that-breaks-on-a-monday
 requires: plugin, mission
 anchors: apps/gateway/src/app/admin/(guarded)/plugins/plugins-view.tsx, apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/compose/registry.ts, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/server/compose/kept-catalog-index.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
@@ -93,6 +95,7 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 ### Receive security patches automatically
 
 status: proposed
+delivers: one-command-then-forget
 requires: plugin, administrator
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 acceptance:

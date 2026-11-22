@@ -1,9 +1,9 @@
 ---
 title: Let an agent prepare missions for me
 status: proposed
-actors: [user, agent]
+actors: [developer]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-19
+last_reviewed: 2026-11-22
 ---
 
 # Let an agent prepare missions for me
@@ -17,6 +17,7 @@ nor anything that outlives my control of it.
 ### Issue a mission in my name from an agent
 
 status: implemented
+delivers: my-agent-works-alone-on-real-things
 requires: mission
 creates: mission
 anchors: apps/gateway/src/server/vaubaan/acts.ts, apps/gateway/src/server/vaubaan/acts.test.ts, apps/gateway/src/server/vaubaan/hard-deny.test.ts

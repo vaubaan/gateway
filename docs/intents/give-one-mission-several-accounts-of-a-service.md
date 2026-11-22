@@ -1,7 +1,7 @@
 ---
 title: Give one mission several accounts of a service
 status: proposed
-actors: [user, agent]
+actors: [developer, consultant]
 spec: ../spec/vaubaan-gateway.md
 last_reviewed: 2026-11-22
 ---

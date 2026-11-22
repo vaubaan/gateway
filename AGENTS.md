@@ -11,8 +11,9 @@ This file describes **how to work in this project**. The **business context** (w
 - `docs/tests/integration-tests.md` & `e2e-tests.md` — test scope, stack, conventions, known gaps.
 - `docs/workflow/coding-workflow.md` — CI, branches, PR, release. How this team works: follow it.
 - `docs/intents/<intent>.md` — user intents, one tree per level-1 intent, anchored to the code. `docs/intents/README.md` is the generated index.
+- `docs/profiles/<profile>.md` — who the project serves, their pains and gains. `docs/profiles/README.md` is the generated index: which intent serves which pain.
 
-Not in this project yet: `quality`, `profiles`. A pillar is added the day the project needs it, with `npx @vaubaan/harness add <pillar>`; the `harn-guide` skill says when each one is worth it. Propose it to the human, never create the folder unasked.
+Not in this project yet: `quality`. A pillar is added the day the project needs it, with `npx @vaubaan/harness add <pillar>`; the `harn-guide` skill says when each one is worth it. Propose it to the human, never create the folder unasked.
 
 ## Doc-first
 

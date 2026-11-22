@@ -1,9 +1,9 @@
 ---
 title: Choose how my instance signs in to a service
 status: proposed
-actors: [administrator]
+actors: [team-lead]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Choose how my instance signs in to a service

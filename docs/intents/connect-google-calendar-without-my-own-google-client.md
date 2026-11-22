@@ -1,9 +1,9 @@
 ---
 title: Connect Google Calendar without my own Google client
 status: proposed
-actors: [user, administrator]
+actors: [consultant, team-lead]
 spec: ../spec/oauth-broker.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Connect Google Calendar without my own Google client
@@ -14,6 +14,7 @@ Vaubaan's broker, so that I connect my agenda without creating an OAuth client a
 ## Sign in to Google Calendar through Vaubaan's broker
 
 status: proposed
+relieves: my-own-google-client-to-create
 requires: instance, broker
 creates: flow
 spec: ../spec/oauth-broker.md#2-what-it-does
@@ -26,6 +27,7 @@ acceptance:
 ## Enrol my instance with Vaubaan's broker at first launch
 
 status: proposed
+relieves: my-own-google-client-to-create
 requires: instance, broker
 spec: ../spec/oauth-broker.md#4-trust-model
 acceptance:

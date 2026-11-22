@@ -1,9 +1,9 @@
 ---
 title: Recognise Vaubaan at a glance
 status: proposed
-actors: [user]
+actors: [developer, consultant]
 spec: ../spec/style-guide.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Recognise Vaubaan at a glance

@@ -1,9 +1,9 @@
 ---
 title: Run Vaubaan on my computer
 status: proposed
-actors: [user, administrator]
+actors: [developer, consultant]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Run Vaubaan on my computer
@@ -16,6 +16,8 @@ sign-in provider, so that I give my agents missions today and bring my team late
 ### Install Vaubaan on my Mac
 
 status: proposed
+relieves: a-lost-evening-on-pre-release-software, no-way-to-try-without-a-terminal
+delivers: installed-like-any-other-app, my-first-governed-call-in-minutes
 creates: instance
 spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
@@ -28,6 +30,8 @@ acceptance:
 ### Install Vaubaan on Windows
 
 status: proposed
+relieves: a-lost-evening-on-pre-release-software, no-way-to-try-without-a-terminal
+delivers: installed-like-any-other-app, my-first-governed-call-in-minutes
 creates: instance
 spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
@@ -51,6 +55,8 @@ acceptance:
 ## Run a local instance with one docker command
 
 status: proposed
+relieves: a-lost-evening-on-pre-release-software
+delivers: my-first-governed-call-in-minutes
 creates: instance
 spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
@@ -58,6 +64,20 @@ acceptance:
 - `docker run` with one volume and one published port starts an instance reachable on `localhost`, on amd64 and arm64
 - No domain name, certificate or sign-in provider is asked; the first person signs in with a local account
 - The page says the instance answers on this computer only
+
+## Reach my agent's first call in one path
+
+status: proposed
+requires: instance
+creates: account, mission, mission-token
+relieves: a-lost-evening-on-pre-release-software, four-copy-pastes-per-project
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#7-workflows
+acceptance:
+
+- After the first launch, the interface leads from connecting an account to creating a mission to adding it to my agent, each step opening the next
+- From download to my agent's first governed call takes at most six actions of mine, counted as in plate 7 of the 2026-11-19 research
+- A step one person does not need (giving access, labelling environments no permission uses) is skipped, not shown
 
 ## Let my agent reach the instance on my computer
 

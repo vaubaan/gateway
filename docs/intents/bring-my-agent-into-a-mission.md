@@ -1,9 +1,9 @@
 ---
 title: Bring my agent into a mission
 status: proposed
-actors: [user, agent]
+actors: [developer, consultant, teammate]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-20
+last_reviewed: 2026-11-22
 ---
 
 # Bring my agent into a mission
@@ -14,6 +14,7 @@ configuration or relaying answers by hand, so that it works alone within what I 
 ## Add a mission to my agent in one step
 
 status: proposed
+relieves: four-copy-pastes-per-project
 requires: mission
 spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
 acceptance:
@@ -24,6 +25,7 @@ acceptance:
 ## Connect a desktop assistant without editing a config file
 
 status: proposed
+relieves: a-configuration-file-to-edit
 requires: mission
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 acceptance:
@@ -34,6 +36,7 @@ acceptance:
 ## Let my agent know my answer
 
 status: proposed
+relieves: relaying-my-yes-by-hand
 requires: request, approval
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 acceptance:
@@ -44,6 +47,7 @@ acceptance:
 ## Read what a refusal means
 
 status: proposed
+relieves: an-agent-that-keeps-hitting-walls
 requires: mission
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 acceptance:
@@ -54,6 +58,7 @@ acceptance:
 ## List only the tools a mission can call
 
 status: proposed
+relieves: an-agent-that-keeps-hitting-walls
 requires: mission
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 acceptance:
@@ -64,6 +69,7 @@ acceptance:
 ## Let my agent find the resources of its mission
 
 status: proposed
+relieves: an-agent-that-keeps-hitting-walls
 requires: mission
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 acceptance:

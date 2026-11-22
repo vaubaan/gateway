@@ -1,20 +1,31 @@
 ---
 title: Trust the gateway with my credentials
 status: proposed
-actors: [administrator]
-spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-20
+actors: [team-lead, security-reviewer]
+spec: [../spec/vaubaan-gateway.md, ../spec/website.md]
+last_reviewed: 2026-11-22
 ---
 
 # Trust the gateway with my credentials
 
-As an administrator, I want a plugin to reach only its own service's credential and the gateway's
-security checked by someone outside the project, so that I trust it with every account I connect.
+As a team lead, or the security reviewer who answers for the team, I want to read plainly what the
+gateway protects and what it does not, a plugin to reach only its own service's credential, and the
+gateway checked by someone outside the project, so that I trust it with every account I connect.
+
+## Read what the project does not protect
+
+status: implemented
+requires: trust-center
+anchors: apps/website/src/content/trust.ts, apps/website/src/app/trust/page.tsx, apps/website/tests/unit/site/units.test.ts
+relieves: marketing-before-facts
+delivers: what-is-not-covered-written-plainly, deciding-without-installing
+spec: ../spec/website.md#25-trust-center--trust
 
 ## Run each plugin outside the gateway's process
 
 status: proposed
 requires: plugin, account
+relieves: third-party-code-beside-decrypted-credentials
 spec: ../spec/vaubaan-gateway.md#6-security
 acceptance:
 
@@ -26,6 +37,8 @@ acceptance:
 
 status: proposed
 requires: gateway
+relieves: no-outside-proof, my-security-reviewer-says-no
+delivers: my-security-said-yes
 spec: ../spec/vaubaan-gateway.md#6-security
 acceptance:
 

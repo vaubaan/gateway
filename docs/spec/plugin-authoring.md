@@ -73,6 +73,9 @@ and their agent can do most of it.
 - The SDK's first stable version, so a plugin survives the gateway's minor versions; planned before
   the kit is opened to the public.
 - Domain, Security and Tests sections, to write with the first build of the kit.
+- Which comes first, the private plugin or the public catalog (research Q5, 2026-11-19)? The
+  private one has an obvious payer, a company that wants its internal service connected; the public
+  one turns the wheel where trust comes from use (§1, [vaubaan-gateway](./vaubaan-gateway.md) §1).
 - The catalog's check (vaubaan/gateway-plugins, `report.sh`) reports the declaration, the risk ids
   and the archive's files; each tool's classification, the dependencies added and the execution
   code's diff (§2) are still to add.

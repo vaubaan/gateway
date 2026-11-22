@@ -1,9 +1,9 @@
 ---
 title: Ship a plugin
 status: proposed
-actors: [author, agent]
+actors: [plugin-author]
 spec: ../spec/plugin-authoring.md
-last_reviewed: 2026-11-19
+last_reviewed: 2026-11-22
 ---
 
 # Ship a plugin
@@ -16,6 +16,7 @@ run it on my gateway or publish it to the catalog, without learning the gateway'
 ### Start a plugin project
 
 status: implemented
+relieves: having-to-read-the-gateway-s-code
 requires: kit
 creates: scaffold
 anchors: packages/plugin-cli/src/init.ts, packages/plugin-cli/scaffold/, packages/plugin-cli/tests/unit/init-and-try.test.ts, scripts/plugin-kit-smoke.sh
@@ -24,6 +25,7 @@ spec: ../spec/plugin-authoring.md#1-vision
 ### Try a call without a gateway
 
 status: proposed
+relieves: no-way-to-try-or-submit-in-one-command
 requires: scaffold
 spec: ../spec/plugin-authoring.md#1-vision
 acceptance:
@@ -34,6 +36,8 @@ acceptance:
 ### Run my plugin on a local gateway
 
 status: proposed
+relieves: no-way-to-try-or-submit-in-one-command
+delivers: my-plugin-runs-on-a-real-instance
 requires: scaffold
 spec: ../spec/plugin-authoring.md#1-vision
 acceptance:
@@ -45,6 +49,8 @@ acceptance:
 ### Let my agent build the plugin
 
 status: proposed
+relieves: having-to-read-the-gateway-s-code
+delivers: a-service-plugged-in-an-afternoon
 requires: skill, scaffold
 spec: ../spec/plugin-authoring.md#1-vision
 acceptance:
@@ -57,6 +63,7 @@ acceptance:
 ### Sign a private plugin
 
 status: proposed
+delivers: private-for-my-company-or-public-in-the-catalog
 requires: archive
 creates: signer
 spec: ../spec/plugin-authoring.md#1-vision
@@ -68,6 +75,7 @@ acceptance:
 ### Deploy a plugin to a gateway
 
 status: implemented
+delivers: my-plugin-runs-on-a-real-instance
 requires: archive
 anchors: packages/plugin-cli/src/deploy.ts, apps/gateway/tests/integration/plugins/deploy-from-cli.test.ts
 spec: ../spec/plugin-authoring.md#1-vision
@@ -87,6 +95,8 @@ acceptance:
 ### Submit a plugin to the catalog
 
 status: proposed
+relieves: no-way-to-try-or-submit-in-one-command
+delivers: private-for-my-company-or-public-in-the-catalog
 requires: scaffold
 creates: submission
 spec: ../spec/plugin-authoring.md#2-submission
