@@ -227,3 +227,53 @@ repositories; the owner prefers one key per repository.
 
 The page still lists what the token cannot act on, and a public repository in the grant must be
 shown by hand.
+
+## Amendment 2026-11-22: several accounts of one service in a mission
+
+### Context
+
+With one repository per GitHub account (2026-11-16) and one account per service per mission, an
+agent working on two repositories needed two missions, two tokens in its configuration and two
+budgets. The same held for a narrow Vercel key per project (2026-11-14). The rule was not a choice
+of the product but of the routing: the gateway found a call's account by its service alone.
+
+### Decision
+
+The owner (Renaud Pelissier) lets **a mission carry several accounts of one service**. A call runs
+with the account holding the resource it names; the gateway never picks one for the agent: a call
+that names no resource, or resources of two accounts, is refused `account-ambiguous`, naming the
+candidate accounts and their resources. Tools are listed once per service; a tool that can name no
+resource is refused the same way, the refusal being the listing. The git remote needs nothing: its
+path names the repository.
+
+### Consequences
+
+- One key per repository and one mission per piece of work hold together: the 2026-11-16
+  consequence "an agent working on two repositories needs two missions" no longer holds.
+- Each account keeps its own resources, sets and counters; nothing is shared between two accounts
+  of one service.
+- A new refusal code, `account-ambiguous`, documented for agents like every other.
+- The store keys a mission's policy lines, counters and gate openings by set, whose account is
+  known; what found an account by its service (the resource stage, the attribution of old lines by
+  the risk's service prefix) finds it by resource.
+
+### Rejected alternatives
+
+#### Several repositories per GitHub account
+
+The quicker fix, rejected on 2026-11-16 already: one token over several repositories.
+
+#### Tools named per account (`github_<account>__…`)
+
+Routing is explicit, but the list grows with every account and a tool's name changes when an
+account is reconnected; an agent's instructions would name accounts instead of resources.
+
+#### A tool that names no resource runs on every account, results merged
+
+Each account would be judged, charged, gated and audited apart for one call, with a partial answer
+when one of them waits for an approval. The refusal already names every account's resources; the
+merge stays a proposed intent.
+
+#### The first account of the service by default
+
+An agent would act on the wrong repository without being told.
