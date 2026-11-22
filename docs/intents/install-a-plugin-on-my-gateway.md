@@ -3,7 +3,7 @@ title: Install a plugin on my gateway
 status: proposed
 actors: [administrator, agent]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-19
+last_reviewed: 2026-11-22
 ---
 
 # Install a plugin on my gateway
@@ -46,6 +46,13 @@ acceptance:
 - A plugin the catalog published after this release is offered by its service's name, never its id
 - The versions feed names each catalog plugin with its service's name, and an older gateway still reads the feed
 
+### Browse the catalog apart from what runs
+
+status: implemented
+requires: plugin
+anchors: apps/gateway/src/app/admin/(guarded)/plugins/catalog/page.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/e2e/admin-plugins.spec.ts
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+
 ### Install a catalog plugin in one click
 
 status: implemented
@@ -67,6 +74,13 @@ spec: ../spec/vaubaan-gateway.md#42-human-surface
 status: implemented
 requires: plugin, administrator
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/plugins/call-gate.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/integration/plugins/swap-during-call.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+
+### Update my installed plugins in a few clicks
+
+status: implemented
+requires: plugin, administrator
+anchors: apps/gateway/src/app/admin/(guarded)/plugins/plugins-view.tsx, apps/gateway/src/app/admin/(guarded)/plugins/update/route.ts, apps/gateway/src/server/plugins/install-service.ts, apps/gateway/tests/integration/plugins/install-from-catalog.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
 spec: ../spec/vaubaan-gateway.md#42-human-surface
 
 ### Roll back a plugin to a kept version

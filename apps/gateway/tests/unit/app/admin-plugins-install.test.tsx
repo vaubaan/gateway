@@ -1,18 +1,17 @@
 /**
- * The installing part of Administration › Plugins rendered to static markup over
- * invented views (ADR plugins-activated-by-an-administrator-on-trial): the upload form,
- * or why there is none; one row per installed version with its state and trust; what an
- * activation would change, with the id to type; the restart once a trial is marked; and
+ * The installing parts of Administration › Plugins and its Catalog page rendered to static
+ * markup over invented views (ADR plugins-activated-by-an-administrator-on-trial): the
+ * upload form, or why there is none; the versions waiting for an administrator with their
+ * state and trust; what an activation would change, with the id to type for a version not
+ * signed by Vaubaan and a dialog for one that is; the restart once a trial is marked; and
  * what the last act said. What the forms do is `tests/integration/plugins/`.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import {
-  flashOf,
-  InstallSection,
-  type InstallView,
-} from '@/app/admin/(guarded)/plugins/install-view';
+import { CatalogPage } from '@/app/admin/(guarded)/plugins/catalog/catalog-view';
+import { flashOf, type InstallView } from '@/app/admin/(guarded)/plugins/install-view';
+import { PluginsPage } from '@/app/admin/(guarded)/plugins/plugins-view';
 import { INSTALL_WORDS } from '@/lib/vocabulary';
 import { PLUGIN_ACTIONS } from '@/server/plugins/handlers';
 import type { PluginVersionRecord } from '@/server/store/repositories/plugin-versions';
@@ -49,11 +48,29 @@ function version(
   };
 }
 
+/** Both pages over the same install view: Plugins, then its Catalog. */
 function render(view: Partial<InstallView>): string {
+  const install: InstallView = {
+    canInstall: true,
+    versions: [],
+    activations: {},
+    flash: null,
+    ...view,
+  };
   return renderToStaticMarkup(
-    <InstallSection
-      view={{ canInstall: true, versions: [], activations: {}, flash: null, ...view }}
-    />,
+    <>
+      <PluginsPage
+        view={{
+          lines: [],
+          check: false,
+          feedUrl: 'https://x',
+          report: null,
+          failure: null,
+          install,
+        }}
+      />
+      <CatalogPage view={{ offer: [], install }} />
+    </>,
   );
 }
 
@@ -117,7 +134,29 @@ describe('Administration › Plugins, installing', () => {
     expect(page).toContain('crm.contact-merge');
     // The missions its permissions apply to, each a link to its page.
     expect(page).toContain('1 active mission uses this service: Release bot.');
-    expect(page).toContain(INSTALL_WORDS.followImage);
+  });
+
+  it('confirms a version signed by Vaubaan in a dialog, with nothing to type', () => {
+    const pending = version('f', 'pending', { trust: 'vaubaan' });
+    const html = render({
+      versions: [pending],
+      activations: {
+        [pending.digest]: {
+          version: pending,
+          running: { version: '0.9.0', origin: 'installed' },
+          added: [],
+          deprecated: [],
+          unknownToIt: [],
+          accounts: 1,
+          missions: [],
+          sdkProblem: null,
+        },
+      },
+    });
+    expect(html).toContain('data-testid="activate"');
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.activate}"`);
+    expect(text(html)).not.toContain(INSTALL_WORDS.typeToConfirm('crm'));
+    expect(text(html)).not.toContain(INSTALL_WORDS.notVaubaan);
   });
 
   it('greys a kept version this gateway cannot run, with the reason', () => {

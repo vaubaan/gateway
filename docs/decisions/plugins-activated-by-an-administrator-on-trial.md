@@ -86,3 +86,34 @@ start keep the trial at the next start.
 
 A call already classified by the old version would run on the new one, whose classifier never
 saw it.
+
+## Amendment 2026-11-22: a Vaubaan-signed version is confirmed in a dialog, an update in one act
+
+### Context
+
+Every service is a plugin release, so an instance with ten connected services meets ten updates
+at once. Each one took two acts (download, then activate) and typing the plugin's id: twenty
+clicks and ten typed ids for versions the catalog built from reviewed source and signed.
+
+### Decision
+
+Updating a plugin from the catalog is one act: a dialog names the plugin, the version it runs
+and the version it gets, and on confirmation the gateway downloads it, verifies the catalog's
+signature and activates it on trial, as the activation above. Several plugins are updated by one
+confirmation. Activating any version signed by Vaubaan (a pending one, or going back to a kept
+one) is confirmed in the same dialog, without typing. A version not signed by Vaubaan still asks
+for the plugin's id typed. Stopping an installed version is behind the same dialog.
+
+### Consequences
+
+- The permissions a catalog update adds are not shown before it runs; they are in the audit,
+  and a mission never gains one it was not granted.
+- The trial still guards the update: a version that does not load leaves the previous one
+  serving.
+
+### Rejected alternatives
+
+#### Keep the typed id for every version
+
+It guards against a slip of the hand, which the dialog already guards against; the signature
+is what makes a Vaubaan version safe to run, not the typing.

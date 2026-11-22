@@ -2,8 +2,9 @@
  * Administration › Plugins, in a browser, against the ephemeral instance: every plugin
  * the image ships, bundled and enabled, with its version; no notice from the versions
  * feed, since the instance reads none (`VAUBAAN_UPDATES_CHECK=false` in
- * `ephemeral-instance.ts`), and the page says the check is off. A row leads to the
- * plugin's Reference page, which names the same version.
+ * `ephemeral-instance.ts`), and the page says the check is off. The catalog is its own
+ * page, reached by a button and left by the path bar. A row leads to the plugin's
+ * Reference page, which names the same version.
  */
 import { expect, test } from '@playwright/test';
 
@@ -46,6 +47,19 @@ test('Administration › Plugins lists every shipped plugin, bundled and enabled
   await expect(page.getByTestId('updates-notices')).toHaveCount(0);
   await expect(page.getByTestId('updates-footer')).toContainText('versions check is off');
   await expect(page.getByTestId('updates-check-now')).toHaveCount(0);
+
+  // No plugin is behind a feed this instance does not read: nothing to update.
+  await expect(page.getByTestId('update-all')).toHaveCount(0);
+
+  // The catalog is its own page, one click away, and the path bar leads back.
+  await page.getByTestId('browse-catalog').click();
+  await expect(page).toHaveURL(/\/admin\/plugins\/catalog$/);
+  await expect(page.getByRole('heading', { name: 'Catalog', level: 1 })).toBeVisible();
+  await expect(page.getByTestId('install-upload')).toBeVisible();
+  const path = page.getByRole('navigation', { name: 'Path' });
+  await expect(path.getByText('Catalog')).toHaveAttribute('aria-current', 'page');
+  await path.getByRole('link', { name: 'Plugins' }).click();
+  await expect(page).toHaveURL(/\/admin\/plugins$/);
 
   // A row leads to the plugin's Reference page, which names the same version, not pinned.
   const github = REPOSITORY_PLUGINS.find((plugin) => plugin.id === 'github');

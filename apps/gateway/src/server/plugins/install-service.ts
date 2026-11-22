@@ -195,8 +195,20 @@ export interface PluginInstallService {
    */
   installForConnection(pluginId: string, actor: PluginActor): Promise<ConnectionInstallResult>;
   activationView(digest: string): Promise<ActivationView | null>;
-  /** Marks a version for a trial at the next start; `typedId` must be the plugin's id. */
+  /**
+   * Starts a version on trial, now or at the next start. `typedId` must be the plugin's id
+   * for a version not signed by Vaubaan; a Vaubaan-signed one is confirmed by a dialog.
+   */
   activate(digest: string, typedId: string, actor: PluginActor): Promise<PluginActResult>;
+  /**
+   * Updates a plugin from the catalog in one act: downloads the version, keeps it only
+   * signed by the catalog, and activates it on trial as `activate` would.
+   */
+  updateFromCatalog(
+    pluginId: string,
+    version: string,
+    actor: PluginActor,
+  ): Promise<UploadResult | PluginActResult>;
   refuse(digest: string, actor: PluginActor): Promise<PluginActResult>;
   /** The plugin goes back to the image's (or the operator's) version, or leaves. */
   followImage(pluginId: string, actor: PluginActor): Promise<PluginActResult>;
@@ -360,6 +372,66 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     return admit(fetched.bytes, actor, { pluginId, version, source: fetched.url });
   }
 
+  /** The trial of a version the caller already confirmed. */
+  async function activateVersion(
+    version: PluginVersionRecord,
+    actor: PluginActor,
+  ): Promise<PluginActResult> {
+    const { digest } = version;
+    const sdkProblem = sdkProblemOf(version);
+    if (sdkProblem !== null) return { ok: false, code: 'sdk-out-of-range', message: sdkProblem };
+    const marked = await deps.versions.markTrial(digest, actor.userId);
+    if (!marked.ok) {
+      return {
+        ok: false,
+        code: marked.state === null ? 'not-found' : 'wrong-state',
+        message: `a version ${marked.state ?? 'unknown'} cannot be activated`,
+      };
+    }
+    const live: LiveActivation = deps.activateNow
+      ? await deps.activateNow(version)
+      : { kind: 'next-start' };
+    if (live.kind === 'failed') {
+      await deps.versions.recordStart(
+        [{ digest, outcome: 'failed', failure: live.failure }],
+        actor.userId,
+      );
+      await audit(
+        actor,
+        'plugin-trial-ended',
+        digest,
+        { ...summary(version), state: 'trial' },
+        {
+          ...summary(version),
+          state: 'failed',
+          failure: live.failure,
+        },
+      );
+      deps.logger.error(`plugin ${version.pluginId} ${version.version} failed its trial`, {
+        digest,
+        failure: live.failure,
+      });
+      return { ok: false, code: 'did-not-load', message: live.failure };
+    }
+    if (live.kind === 'activated') {
+      await deps.versions.recordStart(
+        [{ digest, outcome: 'activated', replaced: live.replaced }],
+        actor.userId,
+      );
+      await audit(actor, 'plugin-activated', digest, summary(version), {
+        ...summary(version),
+        state: 'active',
+        at: 'activation',
+      });
+      return { ok: true, live: true };
+    }
+    await audit(actor, 'plugin-activated', digest, summary(version), {
+      ...summary(version),
+      state: 'trial',
+    });
+    return { ok: true, live: false };
+  }
+
   return {
     upload: (bytes, actor) => admit(bytes, actor, null),
 
@@ -454,65 +526,20 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
     async activate(digest, typedId, actor) {
       const version = await deps.versions.get(digest);
       if (version === null) return { ok: false, code: 'not-found', message: 'no such version' };
-      if (typedId.trim() !== version.pluginId) {
+      if (version.trust !== 'vaubaan' && typedId.trim() !== version.pluginId) {
         return {
           ok: false,
           code: 'confirmation-mismatch',
           message: `type '${version.pluginId}' to activate it`,
         };
       }
-      const sdkProblem = sdkProblemOf(version);
-      if (sdkProblem !== null) return { ok: false, code: 'sdk-out-of-range', message: sdkProblem };
-      const marked = await deps.versions.markTrial(digest, actor.userId);
-      if (!marked.ok) {
-        return {
-          ok: false,
-          code: marked.state === null ? 'not-found' : 'wrong-state',
-          message: `a version ${marked.state ?? 'unknown'} cannot be activated`,
-        };
-      }
-      const live: LiveActivation = deps.activateNow
-        ? await deps.activateNow(version)
-        : { kind: 'next-start' };
-      if (live.kind === 'failed') {
-        await deps.versions.recordStart(
-          [{ digest, outcome: 'failed', failure: live.failure }],
-          actor.userId,
-        );
-        await audit(
-          actor,
-          'plugin-trial-ended',
-          digest,
-          { ...summary(version), state: 'trial' },
-          {
-            ...summary(version),
-            state: 'failed',
-            failure: live.failure,
-          },
-        );
-        deps.logger.error(`plugin ${version.pluginId} ${version.version} failed its trial`, {
-          digest,
-          failure: live.failure,
-        });
-        return { ok: false, code: 'did-not-load', message: live.failure };
-      }
-      if (live.kind === 'activated') {
-        await deps.versions.recordStart(
-          [{ digest, outcome: 'activated', replaced: live.replaced }],
-          actor.userId,
-        );
-        await audit(actor, 'plugin-activated', digest, summary(version), {
-          ...summary(version),
-          state: 'active',
-          at: 'activation',
-        });
-        return { ok: true, live: true };
-      }
-      await audit(actor, 'plugin-activated', digest, summary(version), {
-        ...summary(version),
-        state: 'trial',
-      });
-      return { ok: true, live: false };
+      return activateVersion(version, actor);
+    },
+
+    async updateFromCatalog(pluginId, version, actor) {
+      const installed = await fromCatalog(pluginId, version, actor);
+      if (!installed.ok) return installed;
+      return activateVersion(installed.version, actor);
     },
 
     async refuse(digest, actor) {

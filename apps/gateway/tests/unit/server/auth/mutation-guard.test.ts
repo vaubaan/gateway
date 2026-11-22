@@ -488,6 +488,11 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  'pluginInstall.handlers.update': form('operator', 303, (rig, headers) =>
+    rig.root.pluginInstall.handlers.update(
+      post('/admin/plugins/update', headers, { update: 'notion@0.2.0' }),
+    ),
+  ),
   'pluginInstall.handlers.activate': form('operator', 303, (rig, headers) =>
     rig.root.pluginInstall.handlers.activate(
       post('/admin/plugins/activate', headers, { digest: 'a'.repeat(64), confirm: 'acme' }),

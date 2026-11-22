@@ -1186,9 +1186,9 @@ service's error and says so; nothing is counted against the budget. The mission'
 Activity that the calls fail at the service, not at the policy, and has nothing to change. The
 plugin's author publishes a new version through the catalog; an advisory names it when the fix is
 a security one. The administrator learns it in Administration › Plugins from the versions feed and
-chooses the moment: they install it in one click, read what it adds against the active version and
-activate it. The instance restarts with it on trial and returns to the previous version by itself
-if it does not load; a plugin opted into automatic security patches does the same alone and
+chooses the moment: Update on the plugin's row, or Update all when several are behind, and one
+confirmation (nothing to type for a version Vaubaan signed). The version starts on trial and the
+previous one keeps serving by itself if it does not load; a plugin opted into automatic security patches does the same alone and
 notifies the administrators, and a pinned plugin changes when the operator changes the directory.
 Missions, accounts, policies and the audit are untouched. The agent replays the call. Either it
 runs, or the new version classifies it under a permission the mission does not hold and the call

@@ -1,20 +1,23 @@
 /**
- * Administration › Plugins rendered to static markup over invented views (no browser,
- * no store): one row per plugin of the inventory with where it comes from, each kind
- * of feed notice only when the report holds one, and the line that says when and
- * where the feed was read — or that the check is off. What the comparison computes is
- * `server/updates/compare.test.ts`.
+ * Administration › Plugins and its Catalog page rendered to static markup over invented
+ * views (no browser, no store): one row per plugin this gateway runs with where it comes
+ * from and the acts it allows (Update, Stop, each behind a dialog; Update all), what the
+ * feed reports only when it reports it, the catalog's other plugins on their own page, and
+ * the line that says when and where the feed was read — or that the check is off. What the
+ * comparison computes is `server/updates/compare.test.ts`.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { CatalogPage } from '@/app/admin/(guarded)/plugins/catalog/catalog-view';
+import type { InstallView } from '@/app/admin/(guarded)/plugins/install-view';
 import {
   PluginsPage,
-  reportsSomething,
   type PluginLine,
   type PluginsView,
 } from '@/app/admin/(guarded)/plugins/plugins-view';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
+import { PLUGIN_ACTIONS } from '@/server/plugins/handlers';
 import type { PluginInventoryEntry } from '@/server/plugins';
 import type { UpdatesReport } from '@/server/updates';
 
@@ -63,6 +66,7 @@ const LINES: readonly PluginLine[] = [
     path: '/plugins/acme',
   }),
   line({ id: 'stripe', name: 'Stripe', enabled: false }),
+  line({ id: 'linear', name: 'Linear', version: '2.0.0', origin: 'installed' }, 2),
 ];
 
 const QUIET: UpdatesReport = {
@@ -79,6 +83,8 @@ const QUIET: UpdatesReport = {
   olderPins: [],
 };
 
+const INSTALL: InstallView = { canInstall: true, versions: [], activations: {}, flash: null };
+
 function view(overrides: Partial<PluginsView> = {}): PluginsView {
   return {
     lines: LINES,
@@ -86,34 +92,76 @@ function view(overrides: Partial<PluginsView> = {}): PluginsView {
     feedUrl: 'https://vaubaan.example.com/versions.json',
     report: QUIET,
     failure: null,
+    install: INSTALL,
     ...overrides,
   };
 }
 
 const render = (v: PluginsView) => renderToStaticMarkup(<PluginsPage view={v} />);
 
+const BEHIND: UpdatesReport = {
+  ...QUIET,
+  pluginsBehind: [
+    { id: 'github', loaded: '5.0.0', released: '5.1.0' },
+    { id: 'linear', loaded: '2.0.0', released: '2.1.0' },
+  ],
+};
+
 describe('Administration › Plugins', () => {
-  it('lists every plugin with its id, version, origin, accounts, and a Reference link when registered', () => {
+  it('lists only the plugins this gateway runs, with id, version, origin, accounts and a Reference link', () => {
     const html = render(view());
     const page = text(html);
     expect(page).toContain('GitHub');
-    expect(page).toContain('github · 5.0.0 · bundled with the image');
-    expect(page).toContain('3 accounts');
+    expect(page).toContain('github · 5.0.0 · bundled with the image · 3 accounts');
     expect(page).toContain('pinned from /plugins/vercel, replaces bundled 4.1.0');
     expect(page).toContain('acme · 0.1.0 · pinned from /plugins/acme');
     expect(page).not.toContain('/plugins/acme, replaces');
-    expect(page).toContain('disabled by plugins.enabled');
     expect(html).toContain('href="/reference/github"');
-    expect(html).not.toContain('href="/reference/stripe"');
-    // Nothing on the page installs anything; it says how a plugin changes, and links the guide.
-    expect(html).toContain(PIN_A_PLUGIN_DOC);
-    expect(page).toContain('A plugin installed here runs as soon as it is activated, on trial');
+    // A plugin plugins.enabled leaves out has no row, only a quiet line naming it.
+    expect(html).not.toContain('data-testid="plugin-stripe"');
+    expect(page).toContain('1 more plugin is left out by plugins.enabled: stripe.');
+    // Neither the upload nor the signers are here; the catalog page is one link away.
+    expect(html).not.toContain(`action="${PLUGIN_ACTIONS.upload}"`);
+    expect(html).not.toContain(`action="${PLUGIN_ACTIONS.addSigner}"`);
+    expect(html).toContain('href="/admin/plugins/catalog"');
   });
 
-  it('shows no notice when the feed reports nothing, and says when and where it was read', () => {
-    expect(reportsSomething(QUIET)).toBe(false);
+  it('offers Update behind a dialog on a plugin behind the catalog, and Stop on one installed here', () => {
+    const html = render(view({ report: BEHIND }));
+    expect(html).toContain('data-testid="update-plugin-github"');
+    expect(html).toContain('value="github@5.1.0"');
+    expect(text(html)).toContain('Update to 5.1.0');
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.update}"`);
+    // Nothing to type: the confirmation is a dialog, opened by a button that is not a submit.
+    expect(html).not.toContain('name="confirm"');
+    expect(html).toMatch(/<button[^>]*type="button"[^>]*data-testid="update-plugin-github"/);
+    // Stop is on the row of a version installed here, never on a bundled one.
+    expect(html).toContain('data-testid="stop-plugin-linear"');
+    expect(html).not.toContain('data-testid="stop-plugin-github"');
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.followImage}"`);
+  });
+
+  it('offers Update all once two plugins or more are behind, and no Update where nothing installs', () => {
+    const html = render(view({ report: BEHIND }));
+    expect(html).toContain('data-testid="update-all"');
+    expect(html).toContain('value="github@5.1.0,linear@2.1.0"');
+    expect(text(html)).toContain('Update all (2)');
+    const one = render(
+      view({
+        report: { ...QUIET, pluginsBehind: [{ id: 'github', loaded: '5.0.0', released: '5.1.0' }] },
+      }),
+    );
+    expect(one).not.toContain('data-testid="update-all"');
+    expect(one).toContain('data-testid="update-plugin-github"');
+    const inMemory = render(view({ report: BEHIND, install: { ...INSTALL, canInstall: false } }));
+    expect(inMemory).not.toContain('update-plugin-');
+    expect(inMemory).not.toContain('data-testid="update-all"');
+  });
+
+  it('says when and where the feed was read, and nothing more when it reports nothing', () => {
     const html = render(view());
-    expect(html).not.toContain('data-testid="updates-notices"');
+    expect(html).not.toContain('data-testid="updates-advisories"');
+    expect(html).not.toContain('data-testid="update-gateway"');
     const footer = text(html);
     expect(footer).toContain('Versions feed read');
     expect(footer).toContain('from https://vaubaan.example.com/versions.json');
@@ -126,11 +174,10 @@ describe('Administration › Plugins', () => {
     expect(html).not.toContain('data-testid="updates-check-now"');
   });
 
-  it('shows each kind the feed reports, an advisory in the one filled box', () => {
+  it('shows an advisory in the one filled box, the gateway behind, and an older pin on its row', () => {
     const report: UpdatesReport = {
       ...QUIET,
       gateway: { current: '2.0.0', latest: '2.1.0-rc.1', latestIsPrerelease: true, behind: true },
-      pluginsBehind: [{ id: 'github', loaded: '5.0.0', released: '5.1.0' }],
       advisories: [
         {
           id: 'VBN-2026-001',
@@ -145,39 +192,16 @@ describe('Administration › Plugins', () => {
       ],
       olderPins: [{ id: 'vercel', pinned: '4.0.0', bundled: '4.1.0', path: '/plugins/vercel' }],
     };
-    expect(reportsSomething(report)).toBe(true);
     const html = render(view({ report }));
     const page = text(html);
-    expect(html).toContain('data-testid="updates-notices"');
     expect(page).toContain('2.0.0 → 2.1.0-rc.1');
     expect(page).toContain('pre-release');
-    expect(page).toContain('GitHub: behind the released version');
-    expect(page).toContain('5.0.0 → 5.1.0');
-    expect(page).toContain('Vercel: pinned at an older version than the image bundles');
-    expect(page).toContain('4.0.0 → 4.1.0');
+    expect(html).toContain('data-testid="older-pin-vercel"');
+    expect(page).toContain('pinned at an older version than the image bundles (4.1.0)');
     expect(html).toContain('href="https://vaubaan.example.com/advisories/VBN-2026-001"');
     expect(page).toContain('An advisory names a version this gateway runs');
     expect(page).toContain('fixed in 5.0.1');
-    expect(html.match(/role="note"/g)).toHaveLength(1);
     expect(html).toContain('data-tone="bad"');
-  });
-
-  it('offers a catalog version in one click where the instance can install, never otherwise', () => {
-    const report: UpdatesReport = {
-      ...QUIET,
-      pluginsBehind: [{ id: 'github', loaded: '5.0.0', released: '5.1.0' }],
-      pluginsAvailable: [{ id: 'linear', released: '1.2.0' }],
-    };
-    const install = { canInstall: true, versions: [], activations: {}, flash: null };
-    const html = render(view({ report, install }));
-    expect(html).toContain('data-testid="install-catalog-github"');
-    expect(html).toContain('data-testid="available-plugin-linear"');
-    expect(html).toContain('data-testid="install-catalog-linear"');
-    expect(html).toContain('action="/admin/plugins/install-catalog"');
-    expect(html).toContain('value="5.1.0"');
-    const inMemory = render(view({ report, install: { ...install, canInstall: false } }));
-    expect(inMemory).toContain('data-testid="available-plugin-linear"');
-    expect(inMemory).not.toContain('install-catalog-');
   });
 
   it('names the last failed read, and keeps the report it had', () => {
@@ -188,5 +212,34 @@ describe('Administration › Plugins', () => {
     expect(failure).toContain('The last read failed');
     expect(failure).toContain('the feed answered with an error status (HTTP 503)');
     expect(failure).toContain('what is shown is from the last read that succeeded');
+  });
+});
+
+describe('Administration › Plugins › Catalog', () => {
+  const offer = [
+    { id: 'notion', released: '1.0.0', name: 'Notion' },
+    { id: 'asana', released: '3.2.0', name: 'Asana' },
+  ];
+
+  it('lists the catalog plugins this gateway does not run, each installed in one click', () => {
+    const html = renderToStaticMarkup(<CatalogPage view={{ offer, install: INSTALL }} />);
+    const page = text(html);
+    expect(page.indexOf('Asana')).toBeLessThan(page.indexOf('Notion'));
+    expect(html).toContain('data-testid="install-catalog-notion"');
+    expect(html).toContain('value="notion@1.0.0"');
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.update}"`);
+    // The catalog page holds the upload and the signers, and the guide to pinning.
+    expect(html).toContain(`action="${PLUGIN_ACTIONS.upload}"`);
+    expect(html).toContain(PIN_A_PLUGIN_DOC);
+    const inMemory = renderToStaticMarkup(
+      <CatalogPage view={{ offer, install: { ...INSTALL, canInstall: false } }} />,
+    );
+    expect(inMemory).toContain('data-testid="available-plugin-notion"');
+    expect(inMemory).not.toContain('install-catalog-');
+  });
+
+  it('says when the gateway already runs the whole catalog', () => {
+    const html = renderToStaticMarkup(<CatalogPage view={{ offer: [], install: INSTALL }} />);
+    expect(text(html)).toContain('This gateway already runs every plugin of the catalog it read.');
   });
 });

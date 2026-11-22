@@ -21,10 +21,15 @@ import { toIso, type Clock } from '../store/clock';
 import type { PluginInstallService } from './install-service';
 
 export const PLUGINS_PAGE = '/admin/plugins';
+/** The catalog page: what the instance does not run yet, the upload and the signers. */
+export const PLUGINS_CATALOG_PAGE = `${PLUGINS_PAGE}/catalog`;
+/** `catalog` on a form of the catalog page: the answer goes back there. */
+export const FROM_FIELD = 'from';
 /** The forms of the page, one route each (`app/admin/(guarded)/plugins/<act>/route.ts`). */
 export const PLUGIN_ACTIONS = {
   upload: `${PLUGINS_PAGE}/upload`,
   installCatalog: `${PLUGINS_PAGE}/install-catalog`,
+  update: `${PLUGINS_PAGE}/update`,
   activate: `${PLUGINS_PAGE}/activate`,
   refuse: `${PLUGINS_PAGE}/refuse`,
   followImage: `${PLUGINS_PAGE}/follow-image`,
@@ -40,6 +45,8 @@ export const DIGEST_FIELD = 'digest';
 export const PLUGIN_FIELD = 'plugin';
 export const PLUGIN_VERSION_FIELD = 'plugin_version';
 export const CONFIRM_FIELD = 'confirm';
+/** `<plugin id>@<version>`, comma-separated for several (`PLUGIN_ACTIONS.update`). */
+export const UPDATE_FIELD = 'update';
 /** Query parameters the page reads back. */
 export const DONE_PARAM = 'done';
 export const PROBLEM_PARAM = 'problem';
@@ -72,6 +79,11 @@ export interface PluginHandlers {
   installForConnection(request: Request, serviceId: string): Promise<Response>;
   /** Downloads a catalog version and keeps it pending (form: `plugin`, `plugin_version`). */
   installCatalog(request: Request): Promise<Response>;
+  /**
+   * Updates or installs one or more plugins from the catalog, each downloaded, verified and
+   * activated on trial in one act (form: `update`, `<id>@<version>` comma-separated).
+   */
+  update(request: Request): Promise<Response>;
   activate(request: Request): Promise<Response>;
   refuse(request: Request): Promise<Response>;
   followImage(request: Request): Promise<Response>;
@@ -132,7 +144,12 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
     if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
     const form = await readForm(request);
     if (!form) return notAFormResponse();
-    return act(form, { userId: auditActorId(guard.principal) });
+    const answer = await act(form, { userId: auditActorId(guard.principal) });
+    const location = answer.headers.get('Location');
+    if (form.get(FROM_FIELD) === 'catalog' && location?.startsWith(PLUGINS_PAGE) === true) {
+      answer.headers.set('Location', PLUGINS_CATALOG_PAGE + location.slice(PLUGINS_PAGE.length));
+    }
+    return answer;
   }
 
   return {
@@ -187,6 +204,39 @@ export function createPluginHandlers(deps: PluginHandlerDeps): PluginHandlers {
           digest: result.version.digest,
         });
         return back({ [DONE_PARAM]: 'catalog-installed', [VERSION_PARAM]: result.version.digest });
+      }),
+
+    update: (request) =>
+      guarded(request, async (form, actor) => {
+        const asked = form
+          .getAll(UPDATE_FIELD)
+          .filter((value): value is string => typeof value === 'string')
+          .flatMap((value) => value.split(','))
+          .map((value) => value.trim())
+          .filter((value) => value !== '')
+          .map((value) => {
+            const at = value.lastIndexOf('@');
+            return at > 0 ? { id: value.slice(0, at), version: value.slice(at + 1) } : null;
+          });
+        if (asked.length === 0 || asked.some((one) => one === null || one.version === '')) {
+          return problem('not-in-catalog');
+        }
+        const failures: string[] = [];
+        let live = true;
+        for (const one of asked as { id: string; version: string }[]) {
+          const result = await deps.install.updateFromCatalog(one.id, one.version, actor);
+          if (!result.ok) {
+            failures.push(`${one.id} ${one.version}: ${result.message}`);
+            continue;
+          }
+          if (!('live' in result) || result.live !== true) live = false;
+          deps.logger.info('plugin updated from the catalog', {
+            plugin: one.id,
+            version: one.version,
+          });
+        }
+        if (failures.length > 0) return problem('update-failed', failures.join('; '));
+        return back({ [DONE_PARAM]: live ? 'updated-live' : 'updated' });
       }),
 
     activate: (request) =>

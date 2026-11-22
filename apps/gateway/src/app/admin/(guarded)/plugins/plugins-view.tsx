@@ -1,19 +1,21 @@
 /**
- * What Administration › Plugins shows, from a view the page assembles (`page.tsx`):
- * every plugin of the inventory on one quiet row, what the versions feed reports above
- * them — each kind only when present, an advisory in the page's one filled box — and a
- * last line saying when and where the feed was read. Pure: no root, no request, so a
- * unit test renders it over invented views.
- *
- * Installing is `install-view.tsx` (ADR plugins-activated-by-an-administrator-on-trial);
- * the form of this part re-reads the feed.
+ * Administration › Plugins, from a view the page assembles (`page.tsx`): only the plugins
+ * this gateway runs, each on one row with the acts it allows — Update when the catalog has
+ * a newer version, Stop when it runs a version installed here — each behind one dialog,
+ * and Update all when several are behind (intent "Update my installed plugins in a few
+ * clicks"). Above them, only what asks for attention: an advisory, the gateway behind, a
+ * version waiting for activation, a restart. What the gateway does not run is on the
+ * catalog page (`catalog/`). Pure: no root, no request, so a unit test renders it over
+ * invented views.
  */
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/settings/settings.module.css';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import {
   Button,
+  ButtonLink,
   Callout,
+  ConfirmSubmit,
   Hint,
   Mono,
   PageHeader,
@@ -25,12 +27,14 @@ import {
   type ServiceMarkIcon,
 } from '@/components/ui';
 import { servicePath } from '@/lib/services/links';
-import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
-import { DOC_PAGES, INSTALL_WORDS, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import type { PluginInventoryEntry } from '@/server/plugins';
-import { PLUGIN_ACTIONS, PLUGIN_FIELD, PLUGIN_VERSION_FIELD } from '@/server/plugins/handlers';
-
-import { InstallSection, type InstallView } from './install-view';
+import {
+  PLUGIN_ACTIONS,
+  PLUGIN_FIELD,
+  PLUGINS_CATALOG_PAGE,
+  UPDATE_FIELD,
+} from '@/server/plugins/handlers';
 import type { ValidationStatus } from '@/server/telemetry';
 import {
   UPDATES_CHECK_ACTION,
@@ -38,6 +42,8 @@ import {
   type UpdatesFailure,
   type UpdatesReport,
 } from '@/server/updates';
+
+import { Flash, InstallNotices, VersionRow, type InstallView } from './install-view';
 
 /** One plugin of the inventory, with what the page reads beside it. */
 export interface PluginLine {
@@ -58,8 +64,7 @@ export interface PluginsView {
   readonly feedUrl: string;
   readonly report: UpdatesReport | null;
   readonly failure: UpdatesFailure | null;
-  /** Installing plugins here; absent in views of earlier tests. */
-  readonly install?: InstallView;
+  readonly install: InstallView;
 }
 
 /** The plugin's display name, or its id when the inventory does not know it. */
@@ -97,129 +102,44 @@ function subjectOf(advisory: AdvisoryHit, lines: readonly PluginLine[]): string 
   return advisory.subject === 'gateway' ? 'the gateway' : nameOf(lines, advisory.subject.plugin);
 }
 
-/** Whether the feed reports anything about this gateway. */
-export function reportsSomething(report: UpdatesReport | null): report is UpdatesReport {
-  if (!report) return false;
-  const { gateway, pluginsBehind, advisories, olderPins } = report;
-  const available = report.pluginsAvailable;
-  return (
-    gateway.behind ||
-    pluginsBehind.length + available.length + advisories.length + olderPins.length > 0
+/** The newer catalog version of each running plugin, by id. */
+function behindOf(
+  report: UpdatesReport | null,
+  lines: readonly PluginLine[],
+): ReadonlyMap<string, string> {
+  const running = new Set(lines.filter((l) => l.entry.enabled).map((l) => l.entry.id));
+  return new Map(
+    (report?.pluginsBehind ?? [])
+      .filter((behind) => running.has(behind.id))
+      .map((behind) => [behind.id, behind.released]),
   );
 }
 
-/** The one-click install of a catalog version: downloaded, verified, left pending. */
-function InstallFromCatalog({ id, version }: { id: string; version: string }) {
-  return (
-    <form method="post" action={PLUGIN_ACTIONS.installCatalog} className={styles.inlineForm}>
-      <input type="hidden" name={PLUGIN_FIELD} value={id} />
-      <input type="hidden" name={PLUGIN_VERSION_FIELD} value={version} />
-      <Button type="submit" size="sm" data-testid={`install-catalog-${id}`}>
-        {INSTALL_WORDS.installFromCatalog(version)}
-      </Button>
-    </form>
-  );
-}
-
-/** What the feed reports, each kind only when present. */
-function FeedNotices({
-  report,
+/** An advisory names a version this gateway runs: the page's one filled box. */
+function Advisories({
+  advisories,
   lines,
-  canInstall,
 }: {
-  report: UpdatesReport;
+  advisories: readonly AdvisoryHit[];
   lines: readonly PluginLine[];
-  /** Whether the instance can install (a store on disk): the catalog's buttons show. */
-  canInstall: boolean;
 }) {
-  const { gateway, pluginsBehind, advisories, olderPins } = report;
-  const available = report.pluginsAvailable;
-  const markOf = (id: string) => {
-    const line = lines.find((l) => l.entry.id === id);
-    return <ServiceMark name={line?.entry.name ?? id} icon={line?.icon ?? null} />;
-  };
+  if (advisories.length === 0) return null;
   return (
-    <Section title={PLUGIN_WORDS.feedSection} first testId="updates-notices">
-      {advisories.length > 0 && (
-        <div className={styles.notes}>
-          <Callout
-            tone="bad"
-            title={PLUGIN_WORDS.advisoriesTitle(advisories.length)}
-            testId="updates-advisories"
-          >
-            {advisories.map((advisory) => (
-              <p key={advisory.id} data-testid={`advisory-${advisory.id}`}>
-                <a href={advisory.url} rel="noreferrer noopener" target="_blank">
-                  {advisory.id}
-                </a>{' '}
-                · {subjectOf(advisory, lines)} <Mono>{advisory.loaded}</Mono>: {advisory.summary}{' '}
-                {PLUGIN_WORDS.fixedIn} <Mono>{advisory.fixed}</Mono>.
-              </p>
-            ))}
-          </Callout>
-        </div>
-      )}
-      <Rows>
-        {gateway.behind && (
-          <Row
-            testId="update-gateway"
-            title={PLUGIN_WORDS.gatewayBehind}
-            description={
-              <span className={styles.inline}>
-                <Mono>{gateway.current}</Mono> → <Mono>{gateway.latest}</Mono>
-                {gateway.latestIsPrerelease && <Tag>{PLUGIN_WORDS.preRelease}</Tag>}
-              </span>
-            }
-          />
-        )}
-        {pluginsBehind.map((behind) => (
-          <Row
-            key={`behind-${behind.id}`}
-            testId={`update-plugin-${behind.id}`}
-            lead={markOf(behind.id)}
-            title={`${nameOf(lines, behind.id)}: ${PLUGIN_WORDS.pluginBehind}`}
-            description={
-              <span className={styles.inline}>
-                <Mono>{behind.loaded}</Mono> → <Mono>{behind.released}</Mono>
-              </span>
-            }
-            {...(canInstall
-              ? { end: <InstallFromCatalog id={behind.id} version={behind.released} /> }
-              : {})}
-          />
-        ))}
-        {available.map((plugin) => (
-          <Row
-            key={`available-${plugin.id}`}
-            testId={`available-plugin-${plugin.id}`}
-            lead={markOf(plugin.id)}
-            title={`${plugin.id}: ${INSTALL_WORDS.availableTitle.toLowerCase()}`}
-            description={<Mono>{plugin.released}</Mono>}
-            {...(canInstall
-              ? { end: <InstallFromCatalog id={plugin.id} version={plugin.released} /> }
-              : {})}
-          />
-        ))}
-        {olderPins.map((pin) => (
-          <Row
-            key={`pin-${pin.id}`}
-            testId={`older-pin-${pin.id}`}
-            lead={markOf(pin.id)}
-            title={`${nameOf(lines, pin.id)}: ${PLUGIN_WORDS.olderPin}`}
-            description={
-              <span className={styles.inline}>
-                <Mono>{pin.pinned}</Mono> → <Mono>{pin.bundled}</Mono>
-                {pin.path && (
-                  <>
-                    · {PLUGIN_WORDS.pinnedFrom} <Mono>{pin.path}</Mono>
-                  </>
-                )}
-              </span>
-            }
-          />
-        ))}
-      </Rows>
-    </Section>
+    <Callout
+      tone="bad"
+      title={PLUGIN_WORDS.advisoriesTitle(advisories.length)}
+      testId="updates-advisories"
+    >
+      {advisories.map((advisory) => (
+        <p key={advisory.id} data-testid={`advisory-${advisory.id}`}>
+          <a href={advisory.url} rel="noreferrer noopener" target="_blank">
+            {advisory.id}
+          </a>{' '}
+          · {subjectOf(advisory, lines)} <Mono>{advisory.loaded}</Mono>: {advisory.summary}{' '}
+          {PLUGIN_WORDS.fixedIn} <Mono>{advisory.fixed}</Mono>.
+        </p>
+      ))}
+    </Callout>
   );
 }
 
@@ -264,8 +184,19 @@ function FeedFooter({ view }: { view: PluginsView }) {
   );
 }
 
-function PluginRow({ line }: { line: PluginLine }) {
+function PluginRow({
+  line,
+  released,
+  olderPin,
+}: {
+  line: PluginLine;
+  /** The catalog's newer version, when this gateway can install it. */
+  released: string | null;
+  /** The image bundles a newer version than this pin. */
+  olderPin: string | null;
+}) {
   const { entry } = line;
+  const stoppable = entry.origin === 'installed';
   return (
     <Row
       testId={`plugin-${entry.id}`}
@@ -273,71 +204,196 @@ function PluginRow({ line }: { line: PluginLine }) {
       title={
         <span className={styles.inline}>
           {entry.name}
-          {entry.enabled && <ValidationBadge status={line.validation} />}
+          <ValidationBadge status={line.validation} />
         </span>
       }
-      href={entry.enabled ? servicePath(entry.id) : undefined}
-      muted={!entry.enabled}
+      href={servicePath(entry.id)}
       description={
         <>
           <Mono>{entry.id}</Mono> · <Mono>{entry.version}</Mono> ·{' '}
           <span data-testid="plugin-origin">
             <Origin entry={entry} />
+          </span>{' '}
+          ·{' '}
+          <span data-testid="plugin-accounts">
+            {line.accounts > 0 ? PLUGIN_WORDS.serves(line.accounts) : PLUGIN_WORDS.servesNone}
           </span>
-          {!entry.enabled && (
-            <>
-              {' '}
-              · <span data-testid="plugin-disabled">{PLUGIN_WORDS.disabled}</span>
-            </>
+          {olderPin !== null && (
+            <span className={styles.sub} data-testid={`older-pin-${entry.id}`}>
+              {PLUGIN_WORDS.olderPin} (<Mono>{olderPin}</Mono>)
+            </span>
           )}
         </>
       }
-      end={
-        <span data-testid="plugin-accounts">
-          {line.accounts > 0 ? PLUGIN_WORDS.serves(line.accounts) : PLUGIN_WORDS.servesNone}
-        </span>
-      }
+      {...(released !== null || stoppable
+        ? {
+            end: (
+              <span className={styles.inline}>
+                {released !== null && (
+                  <ConfirmSubmit
+                    action={PLUGIN_ACTIONS.update}
+                    fields={{ [UPDATE_FIELD]: `${entry.id}@${released}` }}
+                    label={PLUGIN_WORDS.update(released)}
+                    variant="primary"
+                    title={PLUGIN_WORDS.updateTitle(entry.name)}
+                    consequence={PLUGIN_WORDS.updateConsequence(
+                      entry.name,
+                      entry.version,
+                      released,
+                    )}
+                    confirmLabel={PLUGIN_WORDS.updateConfirm}
+                    hint={PLUGIN_WORDS.recorded}
+                    testId={`update-plugin-${entry.id}`}
+                  />
+                )}
+                {stoppable && (
+                  <ConfirmSubmit
+                    action={PLUGIN_ACTIONS.followImage}
+                    fields={{ [PLUGIN_FIELD]: entry.id }}
+                    label={PLUGIN_WORDS.stop}
+                    ariaLabel={PLUGIN_WORDS.stopTitle(entry.name)}
+                    title={PLUGIN_WORDS.stopTitle(entry.name)}
+                    consequence={PLUGIN_WORDS.stopConsequence(entry.name, line.accounts)}
+                    confirmLabel={PLUGIN_WORDS.stopConfirm}
+                    tone="danger"
+                    hint={PLUGIN_WORDS.recorded}
+                    testId={`stop-plugin-${entry.id}`}
+                  />
+                )}
+              </span>
+            ),
+          }
+        : {})}
     />
   );
 }
 
 export function PluginsPage({ view }: { view: PluginsView }) {
-  const notices = reportsSomething(view.report);
+  const { install, report, lines } = view;
+  const running = lines.filter((line) => line.entry.enabled);
+  const leftOut = lines.filter((line) => !line.entry.enabled);
+  const behind = install.canInstall ? behindOf(report, lines) : new Map<string, string>();
+  const olderPins = new Map((report?.olderPins ?? []).map((pin) => [pin.id, pin.bundled]));
+  const waiting = install.versions.filter((v) => v.state === 'pending' || v.state === 'failed');
+  const kept = install.versions.filter((v) => v.state === 'previous');
+  const restart =
+    install.versions.some((v) => v.state === 'trial') ||
+    (install.flash?.kind === 'done' && install.flash.code === 'followed-image');
+  const all = [...behind].map(([id, version]) => `${id}@${version}`).join(',');
   return (
     <>
       <PageHeader
         doc={DOC_PAGES.plugins}
         title={SETTINGS_PAGES.plugins.title}
         lede={SETTINGS_PAGES.plugins.lede}
+        {...(behind.size >= 2
+          ? {
+              primary: (
+                <ConfirmSubmit
+                  action={PLUGIN_ACTIONS.update}
+                  fields={{ [UPDATE_FIELD]: all }}
+                  label={PLUGIN_WORDS.updateAll(behind.size)}
+                  variant="primary"
+                  size="md"
+                  title={PLUGIN_WORDS.updateAllTitle(behind.size)}
+                  consequence={PLUGIN_WORDS.updateAllConsequence}
+                  confirmLabel={PLUGIN_WORDS.updateAll(behind.size)}
+                  hint={PLUGIN_WORDS.recorded}
+                  testId="update-all"
+                >
+                  <ul data-testid="update-all-list">
+                    {[...behind].map(([id, version]) => (
+                      <li key={id}>
+                        {nameOf(lines, id)}{' '}
+                        <Mono>{running.find((l) => l.entry.id === id)?.entry.version}</Mono> →{' '}
+                        <Mono>{version}</Mono>
+                      </li>
+                    ))}
+                  </ul>
+                </ConfirmSubmit>
+              ),
+            }
+          : {})}
+        secondary={[
+          <ButtonLink key="catalog" href={PLUGINS_CATALOG_PAGE} data-testid="browse-catalog">
+            {PLUGIN_WORDS.browseCatalog}
+          </ButtonLink>,
+        ]}
       />
-      {view.install && <InstallSection view={view.install} />}
-      {reportsSomething(view.report) && (
-        <FeedNotices
-          report={view.report}
-          lines={view.lines}
-          canInstall={view.install?.canInstall ?? false}
-        />
+      <Flash flash={install.flash} />
+      <InstallNotices view={install} restart={restart} />
+      {report && <Advisories advisories={report.advisories} lines={lines} />}
+      {report?.gateway.behind === true && (
+        <Callout tone="info" title={PLUGIN_WORDS.gatewayBehind} testId="update-gateway">
+          <span className={styles.inline}>
+            <Mono>{report.gateway.current}</Mono> → <Mono>{report.gateway.latest}</Mono>
+            {report.gateway.latestIsPrerelease && <Tag>{PLUGIN_WORDS.preRelease}</Tag>}
+          </span>
+        </Callout>
+      )}
+      {waiting.length > 0 && (
+        <Section
+          title={PLUGIN_WORDS.waitingTitle}
+          count={waiting.length}
+          first
+          testId="install-versions"
+        >
+          <Rows>
+            {waiting.map((version) => (
+              <VersionRow
+                key={version.digest}
+                version={version}
+                view={install.activations[version.digest]}
+              />
+            ))}
+          </Rows>
+        </Section>
       )}
       <Section
         title={PLUGIN_WORDS.listTitle}
-        count={view.lines.length}
-        first={!notices}
+        count={running.length}
+        first={waiting.length === 0}
         testId="plugins"
       >
         <Rows>
-          {view.lines.map((line) => (
-            <PluginRow key={line.entry.id} line={line} />
+          {running.map((line) => (
+            <PluginRow
+              key={line.entry.id}
+              line={line}
+              released={behind.get(line.entry.id) ?? null}
+              olderPin={olderPins.get(line.entry.id) ?? null}
+            />
           ))}
         </Rows>
-        <Hint>
-          {PLUGIN_WORDS.changes}{' '}
-          <a href={PIN_A_PLUGIN_DOC} rel="noreferrer noopener" target="_blank">
-            {PLUGIN_WORDS.howToPin}
-          </a>
-          .
-        </Hint>
+        {leftOut.length > 0 && (
+          <Hint>
+            <span data-testid="plugins-left-out">
+              {PLUGIN_WORDS.leftOut(leftOut.length)}{' '}
+              {leftOut.map((line, index) => (
+                <span key={line.entry.id}>
+                  {index > 0 && ', '}
+                  <Mono>{line.entry.id}</Mono>
+                </span>
+              ))}
+              .
+            </span>
+          </Hint>
+        )}
         <FeedFooter view={view} />
       </Section>
+      {kept.length > 0 && (
+        <Section title={PLUGIN_WORDS.keptTitle} count={kept.length} testId="kept-versions">
+          <Rows>
+            {kept.map((version) => (
+              <VersionRow
+                key={version.digest}
+                version={version}
+                view={install.activations[version.digest]}
+              />
+            ))}
+          </Rows>
+        </Section>
+      )}
     </>
   );
 }

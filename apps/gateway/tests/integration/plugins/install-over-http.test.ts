@@ -2,7 +2,8 @@
  * Administration › Plugins over HTTP (spec §4.2; ADR
  * plugins-activated-by-an-administrator-on-trial): the forms of the page driven with
  * real requests and web sessions on a store file. An administrator uploads, activates
- * with the plugin's id typed, refuses and restarts; a person who is not an
+ * with the plugin's id typed (the archive is not Vaubaan's), refuses, updates from the
+ * catalog and restarts, and a form of the catalog page is answered there; a person who is not an
  * administrator, or a request from another origin, changes nothing; every act is audited.
  */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -22,7 +23,9 @@ import {
   ARCHIVE_FIELD,
   CONFIRM_FIELD,
   DIGEST_FIELD,
+  FROM_FIELD,
   PLUGIN_ACTIONS,
+  UPDATE_FIELD,
 } from '../../../src/server/plugins/handlers';
 import { validEnv } from '../../support/config/testing';
 import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
@@ -78,6 +81,8 @@ describe('Administration › Plugins over HTTP', () => {
       requestRestart: () => {
         restarts += 1;
       },
+      // A catalog that has published nothing: no test here reaches the network.
+      catalogFetch: async () => new Response('Not Found', { status: 404 }),
     });
   });
 
@@ -121,6 +126,8 @@ describe('Administration › Plugins over HTTP', () => {
     const handler = {
       [PLUGIN_ACTIONS.upload]: handlers.upload,
       [PLUGIN_ACTIONS.activate]: handlers.activate,
+      [PLUGIN_ACTIONS.update]: handlers.update,
+      [PLUGIN_ACTIONS.addSigner]: handlers.addSigner,
       [PLUGIN_ACTIONS.refuse]: handlers.refuse,
       [PLUGIN_ACTIONS.followImage]: handlers.followImage,
       [PLUGIN_ACTIONS.restart]: handlers.restart,
@@ -190,6 +197,31 @@ describe('Administration › Plugins over HTTP', () => {
       'refused',
     );
     expect((await root.store.pluginVersions.get(digest))?.state).toBe('refused');
+  });
+
+  it('answers a form of the catalog page back on the catalog page', async () => {
+    const form = uploadForm(encode('not a tgz'));
+    form.set(FROM_FIELD, 'catalog');
+    const back = location(await post(PLUGIN_ACTIONS.upload, form));
+    expect(back.pathname).toBe('/admin/plugins/catalog');
+    expect(back.searchParams.get('problem')).toBe('archive-invalid');
+  });
+
+  it('updates several plugins from one form, and names each one that failed', async () => {
+    const empty = new FormData();
+    empty.set(UPDATE_FIELD, 'notion');
+    expect(location(await post(PLUGIN_ACTIONS.update, empty)).searchParams.get('problem')).toBe(
+      'not-in-catalog',
+    );
+    // The catalog published neither: each update fails, and the page says which.
+    const form = new FormData();
+    form.set(UPDATE_FIELD, 'notion@0.2.0,linear@1.0.0');
+    const back = location(await post(PLUGIN_ACTIONS.update, form));
+    expect(back.pathname).toBe('/admin/plugins');
+    expect(back.searchParams.get('problem')).toBe('update-failed');
+    expect(back.searchParams.get('detail')).toMatch(/notion 0\.2\.0: .*; linear 1\.0\.0: /);
+    const asUser = await post(PLUGIN_ACTIONS.update, form, { as: 'user' });
+    expect(asUser.status).toBeGreaterThanOrEqual(400);
   });
 
   it('says what is wrong with an archive that is not one', async () => {

@@ -919,7 +919,11 @@ export const SETTINGS_PAGES = {
   },
   plugins: {
     title: 'Plugins',
-    lede: 'Every plugin this gateway knows, where it comes from, and what the published versions say is behind.',
+    lede: 'The plugins this gateway runs, and their updates.',
+  },
+  pluginsCatalog: {
+    title: 'Catalog',
+    lede: 'The plugins this gateway can run and does not yet, and your own plugins.',
   },
 } as const;
 
@@ -1082,7 +1086,32 @@ export const CONFIG_WORDS = {
  * version and a path are printed with `Mono` by the page, never inside these words.
  */
 export const PLUGIN_WORDS = {
-  listTitle: 'Bundled and pinned',
+  listTitle: 'Installed',
+  browseCatalog: 'Browse the catalog',
+  update: (version: string) => `Update to ${version}`,
+  updateTitle: (name: string) => `Update ${name}?`,
+  updateConsequence: (name: string, from: string, to: string) =>
+    `${name} goes from ${from} to ${to}, the version the Vaubaan catalog built and signed. It starts on trial: if it does not load, ${from} keeps serving.`,
+  updateConfirm: 'Update',
+  updateAll: (n: number) => `Update all (${formatNumber(n)})`,
+  updateAllTitle: (n: number) => `Update ${formatNumber(n)} plugins?`,
+  updateAllConsequence:
+    'Each one gets the version the Vaubaan catalog built and signed, and starts on trial: one that does not load keeps its current version.',
+  stop: 'Stop',
+  stopTitle: (name: string) => `Stop ${name}?`,
+  stopConsequence: (name: string, accounts: number) =>
+    accounts > 0
+      ? `From the next start, the version installed here no longer runs: the image’s version of ${name} serves its ${formatNumber(accounts)} ${accounts === 1 ? 'account' : 'accounts'} if it has one. Accounts with no plugin to serve them must be disconnected first.`
+      : `From the next start, the version installed here no longer runs; ${name} stays in the catalog, to install again.`,
+  stopConfirm: 'Stop',
+  recorded: 'Recorded in the activity, like every change.',
+  leftOut: (n: number) =>
+    `${formatNumber(n)} more ${n === 1 ? 'plugin is' : 'plugins are'} left out by plugins.enabled:`,
+  catalogTitle: 'In the catalog',
+  catalogEmpty: 'This gateway already runs every plugin of the catalog it read.',
+  install: 'Install',
+  waitingTitle: 'Waiting for you',
+  keptTitle: 'Kept versions',
   bundled: 'bundled with the image',
   pinnedFrom: 'pinned from',
   replacesBundled: 'replaces bundled',
@@ -1187,6 +1216,8 @@ export const INSTALL_WORDS = {
       'Downloaded from the catalog, signature verified. It runs nothing until it is activated.',
     activated: 'Marked to start on trial at the next start.',
     'activated-live': 'Active: the next call of this service runs this version.',
+    updated: 'Done: the new versions start on trial at the next start.',
+    'updated-live': 'Done: the next call of each service runs its new version.',
     refused: 'Refused and deleted.',
     'followed-image': 'The installed version is no longer used from the next start.',
     restarting: 'Restarting: this page answers again once the instance is back.',
@@ -1218,8 +1249,13 @@ export const INSTALL_WORDS = {
     'not-the-catalog-version': 'The catalog served another plugin or version; nothing was kept',
     'not-enabled': 'This instance runs only the plugins its configuration names',
     'did-not-load': 'The version did not pass its trial; what ran before keeps running',
+    'update-failed': 'Not everything was updated',
   },
   installFromCatalog: (version: string) => `Install ${version}`,
+  activateTitle: (id: string) => `Activate ${id}?`,
+  activateConsequence:
+    'This version, signed by Vaubaan, starts on trial: if it does not load, what runs now keeps serving.',
+  goBackTitle: (id: string) => `Go back to this version of ${id}?`,
   firstInstallTitle: (service: string) => `Connect ${service}`,
   firstInstallLede:
     'This instance has no plugin for this service yet. Installing it adds the plugin the Vaubaan catalog built from reviewed source and signed: its signature is checked before anything runs. It is installed for everyone on this instance, then you connect your account.',
@@ -2025,7 +2061,7 @@ export const DOC_PAGES = {
   plugins: {
     label: SETTINGS_PAGES.plugins.title,
     path: 'administration#plugins',
-    hint: 'Every plugin this gateway runs, bundled with the image or pinned by the operator, how many accounts each serves, and whether a newer version is published. Read-only here.',
+    hint: 'Every plugin this gateway runs, how many accounts each serves, and the updates the Vaubaan catalog published: each one applied in a click, started on trial. The catalog page installs the others.',
   },
   // Concepts that trip people, explained from inside a form (a few, no more).
   trustLevels: {

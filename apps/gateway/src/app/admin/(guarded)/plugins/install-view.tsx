@@ -1,18 +1,20 @@
 /**
- * The installing part of Administration › Plugins (ADR
- * plugins-activated-by-an-administrator-on-trial; spec §4.2): the upload form, every
- * installed version with what it would change, the forms that activate, refuse or go
- * back, and the restart that applies a trial. Pure: the page (`page.tsx`) reads the
- * root; a unit test renders this over invented views.
+ * The installing parts of Administration › Plugins (ADR
+ * plugins-activated-by-an-administrator-on-trial; spec §4.2), shared by the two pages:
+ * the versions waiting for an administrator with what each would change, the acts that
+ * activate, refuse or go back, the restart that applies a trial (`page.tsx`), and the
+ * upload form and the signers (`catalog/page.tsx`). Pure: the pages read the root; a unit
+ * test renders these over invented views.
  *
- * Every form posts to its route (`PLUGIN_ACTIONS`); the server checks the typed id again,
- * so a form submitted without its script still confirms nothing it should not.
+ * Every form posts to its route (`PLUGIN_ACTIONS`). A version signed by Vaubaan is
+ * confirmed in a dialog; any other asks for its id typed, which the server checks again.
  */
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/settings/settings.module.css';
 import {
   Button,
   Callout,
+  ConfirmSubmit,
   Field,
   Hint,
   Input,
@@ -29,8 +31,8 @@ import {
   ARCHIVE_FIELD,
   CONFIRM_FIELD,
   DIGEST_FIELD,
+  FROM_FIELD,
   PLUGIN_ACTIONS,
-  PLUGIN_FIELD,
   SIGNER_ID_FIELD,
   SIGNER_KEY_FIELD,
   SIGNER_NAME_FIELD,
@@ -140,33 +142,60 @@ function Activation({ version, view }: { version: PluginVersionRecord; view: Act
           {INSTALL_WORDS.cannotRun}: {view.sdkProblem}.
         </p>
       )}
-      <form method="post" action={PLUGIN_ACTIONS.activate} className={styles.lineForm}>
-        <input type="hidden" name={DIGEST_FIELD} value={version.digest} />
-        <Field label={INSTALL_WORDS.typeToConfirm(version.pluginId)} htmlFor={fieldId}>
-          <Input
-            id={fieldId}
-            name={CONFIRM_FIELD}
-            mono
-            autoComplete="off"
-            required
-            disabled={view.sdkProblem !== null}
-            pattern={version.pluginId.replace(/[-]/g, '\\-')}
+      {version.trust === 'vaubaan' ? (
+        view.sdkProblem === null && (
+          <ConfirmSubmit
+            action={PLUGIN_ACTIONS.activate}
+            fields={{ [DIGEST_FIELD]: version.digest }}
+            label={version.state === 'pending' ? INSTALL_WORDS.activate : INSTALL_WORDS.goBack}
+            variant="primary"
+            title={
+              version.state === 'pending'
+                ? INSTALL_WORDS.activateTitle(version.pluginId)
+                : INSTALL_WORDS.goBackTitle(version.pluginId)
+            }
+            consequence={INSTALL_WORDS.activateConsequence}
+            confirmLabel={
+              version.state === 'pending' ? INSTALL_WORDS.activate : INSTALL_WORDS.goBack
+            }
+            testId="activate"
           />
-        </Field>
-        <Button
-          type="submit"
-          variant="primary"
-          data-testid="activate"
-          disabled={view.sdkProblem !== null}
-        >
-          {version.state === 'pending' ? INSTALL_WORDS.activate : INSTALL_WORDS.goBack}
-        </Button>
-      </form>
+        )
+      ) : (
+        <form method="post" action={PLUGIN_ACTIONS.activate} className={styles.lineForm}>
+          <input type="hidden" name={DIGEST_FIELD} value={version.digest} />
+          <Field label={INSTALL_WORDS.typeToConfirm(version.pluginId)} htmlFor={fieldId}>
+            <Input
+              id={fieldId}
+              name={CONFIRM_FIELD}
+              mono
+              autoComplete="off"
+              required
+              disabled={view.sdkProblem !== null}
+              pattern={version.pluginId.replace(/[-]/g, '\\-')}
+            />
+          </Field>
+          <Button
+            type="submit"
+            variant="primary"
+            data-testid="activate"
+            disabled={view.sdkProblem !== null}
+          >
+            {version.state === 'pending' ? INSTALL_WORDS.activate : INSTALL_WORDS.goBack}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }
 
-function VersionRow({ version, view }: { version: PluginVersionRecord; view?: ActivationView }) {
+export function VersionRow({
+  version,
+  view,
+}: {
+  version: PluginVersionRecord;
+  view?: ActivationView;
+}) {
   return (
     <Row
       testId={`version-${version.digest}`}
@@ -204,21 +233,13 @@ function VersionRow({ version, view }: { version: PluginVersionRecord; view?: Ac
               </Button>
             </form>
           )}
-          {version.state === 'active' && (
-            <form method="post" action={PLUGIN_ACTIONS.followImage} className={styles.inlineForm}>
-              <input type="hidden" name={PLUGIN_FIELD} value={version.pluginId} />
-              <Button type="submit" size="sm" data-testid="follow-image">
-                {INSTALL_WORDS.followImage}
-              </Button>
-            </form>
-          )}
         </span>
       }
     />
   );
 }
 
-function Flash({ flash }: { flash: InstallView['flash'] }) {
+export function Flash({ flash }: { flash: InstallView['flash'] }) {
   if (flash === null) return null;
   if (flash.kind === 'done') {
     return (
@@ -235,7 +256,7 @@ function Flash({ flash }: { flash: InstallView['flash'] }) {
   );
 }
 
-function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) {
+export function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) {
   return (
     <Section title={INSTALL_WORDS.signersTitle} count={signers.length} testId="install-signers">
       {signers.length > 0 ? (
@@ -259,6 +280,7 @@ function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) 
                   className={styles.lineForm}
                 >
                   <input type="hidden" name={SIGNER_ID_FIELD} value={signer.keyId} />
+                  <input type="hidden" name={FROM_FIELD} value="catalog" />
                   <Input
                     name={CONFIRM_FIELD}
                     aria-label={INSTALL_WORDS.typeToConfirm(signer.name)}
@@ -279,6 +301,7 @@ function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) 
         <Hint>{INSTALL_WORDS.noSigner}</Hint>
       )}
       <form method="post" action={PLUGIN_ACTIONS.addSigner} className={styles.form}>
+        <input type="hidden" name={FROM_FIELD} value="catalog" />
         <Field label={INSTALL_WORDS.signerName} htmlFor="signer-name">
           <Input id="signer-name" name={SIGNER_NAME_FIELD} maxLength={80} required />
         </Field>
@@ -297,18 +320,16 @@ function Signers({ signers }: { signers: NonNullable<InstallView['signers']> }) 
   );
 }
 
-export function InstallSection({ view }: { view: InstallView }) {
-  const trial = view.versions.some((v) => v.state === 'trial');
-  const shown = view.versions.filter((v) => v.state !== 'removed' && v.state !== 'refused');
+/** Safe mode, and the restart that applies a trial, when either holds. */
+export function InstallNotices({ view, restart }: { view: InstallView; restart: boolean }) {
   return (
     <>
-      <Flash flash={view.flash} />
       {view.safeMode === true && (
         <Callout tone="warn" title={INSTALL_WORDS.safeModeTitle} testId="safe-mode">
           {INSTALL_WORDS.safeModeLede}
         </Callout>
       )}
-      {trial && (
+      {restart && (
         <Callout
           tone="info"
           title={INSTALL_WORDS.restartTitle}
@@ -324,45 +345,38 @@ export function InstallSection({ view }: { view: InstallView }) {
           {INSTALL_WORDS.restartLede}
         </Callout>
       )}
-      <Section title={INSTALL_WORDS.uploadTitle} testId="install-upload">
-        {view.canInstall ? (
-          <form
-            method="post"
-            action={PLUGIN_ACTIONS.upload}
-            encType="multipart/form-data"
-            className={styles.lineForm}
-          >
-            <Field label={INSTALL_WORDS.archiveLabel} htmlFor="plugin-archive">
-              <Input
-                id="plugin-archive"
-                name={ARCHIVE_FIELD}
-                type="file"
-                accept=".tgz,application/gzip"
-                required
-              />
-            </Field>
-            <Button type="submit" data-testid="upload">
-              {INSTALL_WORDS.upload}
-            </Button>
-          </form>
-        ) : null}
-        <Hint>{view.canInstall ? INSTALL_WORDS.uploadLede : INSTALL_WORDS.noDataDirectory}</Hint>
-      </Section>
-      {view.signers && <Signers signers={view.signers} />}
-      {shown.length > 0 && (
-        <Section title={INSTALL_WORDS.versionsTitle} count={shown.length} testId="install-versions">
-          <Rows>
-            {shown.map((version) => (
-              <VersionRow
-                key={version.digest}
-                version={version}
-                view={view.activations[version.digest]}
-              />
-            ))}
-          </Rows>
-        </Section>
-      )}
     </>
+  );
+}
+
+/** Uploading an archive: the catalog page's, for an administrator's own plugins. */
+export function UploadSection({ canInstall }: { canInstall: boolean }) {
+  return (
+    <Section title={INSTALL_WORDS.uploadTitle} testId="install-upload">
+      {canInstall ? (
+        <form
+          method="post"
+          action={PLUGIN_ACTIONS.upload}
+          encType="multipart/form-data"
+          className={styles.lineForm}
+        >
+          <input type="hidden" name={FROM_FIELD} value="catalog" />
+          <Field label={INSTALL_WORDS.archiveLabel} htmlFor="plugin-archive">
+            <Input
+              id="plugin-archive"
+              name={ARCHIVE_FIELD}
+              type="file"
+              accept=".tgz,application/gzip"
+              required
+            />
+          </Field>
+          <Button type="submit" data-testid="upload">
+            {INSTALL_WORDS.upload}
+          </Button>
+        </form>
+      ) : null}
+      <Hint>{canInstall ? INSTALL_WORDS.uploadLede : INSTALL_WORDS.noDataDirectory}</Hint>
+    </Section>
   );
 }
 

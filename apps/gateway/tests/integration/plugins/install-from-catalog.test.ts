@@ -7,6 +7,8 @@
  *   - an archive without the catalog's signature, or of another version than asked, is
  *     refused and nothing is kept, even for an id the configuration allows unsigned;
  *   - a version the catalog has not published is said so;
+ *   - an update downloads, verifies and activates in one act, with no id typed, and
+ *     activates nothing when the download is refused;
  *   - once the versions feed names a catalog id, an archive of that id the catalog did not
  *     sign is refused at upload, even one the configuration allows unsigned.
  */
@@ -189,6 +191,31 @@ describe('installing a catalog version in one click', () => {
       code: 'sdk-out-of-range',
     });
     await root!.pluginInstall.service.refuse(digest, ADMIN);
+  });
+
+  it('updates a plugin in one act: downloaded, verified and activated, with nothing typed', async () => {
+    served.set('notion-v0.2.0/notion-v0.2.0.tgz', NOTION);
+    const result = await root!.pluginInstall.service.updateFromCatalog('notion', '0.2.0', ADMIN);
+    expect(result).toMatchObject({ ok: true });
+    const notion = (await root!.pluginInstall.service.list()).find(
+      (v) => v.pluginId === 'notion' && v.version === '0.2.0',
+    );
+    expect(notion).toMatchObject({ trust: 'vaubaan' });
+    expect(['active', 'trial']).toContain(notion?.state);
+    const acts = (await root!.store.audit.list({ kind: 'admin' })).map((e) =>
+      e.kind === 'admin' ? e.act : null,
+    );
+    expect(acts).toContain('plugin-activated');
+  });
+
+  it('activates nothing when the catalog download is refused', async () => {
+    served.set('notion-v0.2.2/notion-v0.2.2.tgz', unsignedNotion('0.2.2'));
+    expect(
+      await root!.pluginInstall.service.updateFromCatalog('notion', '0.2.2', ADMIN),
+    ).toMatchObject({ ok: false, code: 'signature-invalid' });
+    expect((await root!.pluginInstall.service.list()).some((v) => v.version === '0.2.2')).toBe(
+      false,
+    );
   });
 
   it('says a version the catalog has not published', async () => {

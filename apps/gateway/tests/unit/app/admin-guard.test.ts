@@ -141,6 +141,7 @@ describe('the Administration surface authorizes in every page and route', () => 
         'identity-provider/[id]/test/page.tsx',
         'page.tsx',
         'plugins/page.tsx',
+        'plugins/catalog/page.tsx',
         'telemetry/page.tsx',
         'users/page.tsx',
       ].sort(),
