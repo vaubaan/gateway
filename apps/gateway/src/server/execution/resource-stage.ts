@@ -317,9 +317,13 @@ export function createResourceStage(deps: ResourceStageDeps): ResourceStage {
           reason: `the call names '${ref}', held by the ${plugin.displayName} account '${elsewhere.account.display_name}', while ${ACCOUNT_ARGUMENT} names '${asked.display_name}'. One call runs with one account: drop ${ACCOUNT_ARGUMENT}, or name the account that holds the resource.`,
         };
       }
-      const named = readings.flatMap(({ account, reading }) =>
+      const naming = readings.flatMap(({ account, reading }) =>
         reading.kind === 'named' ? [{ account, resource: reading.resource }] : [],
       );
+      // A lost account gives way to a serving one naming the same resource: the
+      // account that replaced a disconnected one on a repository takes its calls.
+      const servingNaming = naming.filter(({ account }) => account.lost === undefined);
+      const named = servingNaming.length > 0 ? servingNaming : naming;
       const foreign = readings.flatMap(({ account, reading }) =>
         reading.kind === 'foreign' ? [{ account, ref: reading.ref }] : [],
       );

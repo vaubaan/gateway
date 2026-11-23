@@ -372,6 +372,26 @@ describe('several accounts of one service in a mission', () => {
     expect(resolved).toMatchObject({ ok: true, target: { account: { id: 'c-b' } } });
   });
 
+  it('runs a call naming a resource with the serving account, when a lost one holds it too', async () => {
+    // A disconnected account and the one connected in its place, on one repository.
+    const replaced = {
+      ...context([
+        account('c-a', 'Depot A', { lost: 'account-revoked' }),
+        account('c-n', 'Depot N'),
+      ]),
+      resources: [resource('c-a', 'alpha'), resource('c-n', 'alpha')],
+    } as unknown as MissionContext;
+    const replacing = createResourceStage({
+      registry,
+      accounts: { listResources: async () => [record('alpha')] } as never,
+    });
+    const resolved = await replacing.resolve(replaced, call('read_item', { space: 'alpha' }));
+    expect(resolved).toMatchObject({
+      ok: true,
+      target: { account: { id: 'c-n' }, resource: { ref: 'alpha' } },
+    });
+  });
+
   it('gives each tool the optional vaubaan_account argument, only with several accounts', () => {
     for (const tool of callableTools(two, registry)) {
       const property = tool.inputSchema.properties?.['vaubaan_account'] as { description: string };

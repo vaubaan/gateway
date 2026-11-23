@@ -58,15 +58,16 @@ export function pushCall(scope: Scope, args: Record<string, unknown>): CallReque
 export function targetOf(scope: Scope): GitTarget {
   const { plugin } = scope.registered;
   const accounts = scope.ctx.accounts.filter((c) => c.service === plugin.id);
+  const holders = accounts.filter((c) =>
+    scope.ctx.resources.some(
+      // Repository names are case-blind at the services that serve git.
+      (r) => r.account_id === c.id && r.ref.toLowerCase() === scope.repository.toLowerCase(),
+    ),
+  );
+  // A lost account gives way to a serving one holding the same repository, as
+  // in the resource stage.
   const account =
-    accounts.length === 1
-      ? accounts[0]
-      : accounts.find((c) =>
-          scope.ctx.resources.some(
-            // Repository names are case-blind at the services that serve git.
-            (r) => r.account_id === c.id && r.ref.toLowerCase() === scope.repository.toLowerCase(),
-          ),
-        );
+    accounts.length === 1 ? accounts[0] : (holders.find((c) => c.lost === undefined) ?? holders[0]);
   // The precheck's resource stage refuses a mission without this account, and a
   // repository no account of the mission reaches.
   if (!account) throw new Error('git door: a prechecked call without its account');

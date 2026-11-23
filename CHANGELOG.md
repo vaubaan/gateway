@@ -27,6 +27,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Fixed
 
+- **The account connected in place of a disconnected one takes the repository's calls.** In a
+  mission that still carries the disconnected account, both held the same repository and every
+  call naming it, git included, was refused `account-ambiguous`; the account that still serves
+  the mission now takes them.
 - **Administration › Plugins no longer offers "Update to" the version a plugin already runs**, as
   it did after an update made since the last read of the versions feed, nor a downloaded version
   older than the running one.

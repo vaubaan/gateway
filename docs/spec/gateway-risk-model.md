@@ -234,7 +234,9 @@ What a creator ticks per account, in the connector's words
   is one, else the first of the candidate sets: never a set the call was not judged against.
 - **The account of a call** comes before its set, when the mission carries several accounts of the
   call's service: the account the agent names (`vaubaan_account`), else the one holding the
-  resources the call names (same reading). A call naming neither, or resources of two accounts
+  resources the call names (same reading). An account that no longer serves the mission gives
+  way to a serving one holding the same resource: the account connected in place of a
+  disconnected one on a repository takes its calls. A call naming neither, or resources of two accounts
   (or of an account other than the one named), is refused `account-ambiguous` before any risk is evaluated:
   one call runs with one credential, and the gateway never picks one for the agent.
 - **The set of a call.** A call goes to the sets of the resources each slice names: every identifier
