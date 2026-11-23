@@ -33,8 +33,8 @@
     },
     "github": {
       "name": "GitHub",
-      "version": "5.4.0",
-      "sha256": "2344f809723d90202dfcc4bf42d819a51e2fa21334c359ca1e59a7a7b764a211"
+      "version": "5.4.1",
+      "sha256": "532de59de82662bafd49d3eedd2083010da58f31b371549d8f162d5bc4457ab7"
     },
     "github-projects": {
       "name": "GitHub Projects",

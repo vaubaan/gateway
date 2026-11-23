@@ -9,6 +9,39 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.30] - 2026-11-23
+
+### Highlights
+
+What an operator or a plugin author reads first; every point is detailed below.
+
+- **The interface wears Trace, Vaubaan's design system**: the bastion mark, one blue accent, the
+  four rows of risk as pills from green to plum, input errors in ink, red kept for what was
+  refused or stopped.
+- **A mission carries several accounts of one service**, each call run with the account holding
+  the resource it names.
+- **Roll back a plugin from its row**, to the version it ran before.
+
+### Changed
+
+- **The web interface is drawn on Trace, the design system shared with the site**
+  (ADR design-system-on-shadcn-shared-by-the-app-and-the-site). Every colour, size and radius
+  comes from one token sheet; the components are rebuilt on shadcn/ui primitives (Radix for the
+  dialog and the menu) behind the same names. What a person sees:
+  - the Trace mark (a bastion seen from above, a V) in the side navigation, the sign-in and
+    refusal pages, the browser icon, the home-screen icon and the notifications;
+  - one accent, blue `#2F55C7`, for the primary action, links and what waits for an answer; the
+    sky blue and the amber are gone, and no orange or yellow is left anywhere;
+  - the four rows of risk as pills of one shape, from green to plum, with no gauge; trust levels
+    in ink;
+  - an input error, a dialog's error, a draft's problems and a failure are said in ink with an
+    alert glyph, the field outlined in ink; red stays for stopped, refused and limit reached, and
+    for danger words;
+  - while a dialog is open the page behind it is hidden from assistive technology, and the "···"
+    menu no longer blocks the page.
+- **The demo sign-in page** used by the walkthrough loses its orange banner for the palette's
+  quiet accent band.
+
 ### Added
 
 - **A mission carries several accounts of one service.** Two GitHub repositories, each with its
@@ -3296,7 +3329,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.29...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.30...HEAD
+[2.0.0-alpha.30]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.29...v2.0.0-alpha.30
 [2.0.0-alpha.29]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.28...v2.0.0-alpha.29
 [2.0.0-alpha.28]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.27...v2.0.0-alpha.28
 [2.0.0-alpha.27]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.26...v2.0.0-alpha.27
