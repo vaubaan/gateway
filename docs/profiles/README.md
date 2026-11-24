@@ -27,7 +27,7 @@ Intents: [Believe what the site says](../intents/believe-what-the-site-says.md),
 
 Pains, most severe first:
 
-- **A lost evening on pre-release software** (`a-lost-evening-on-pre-release-software`) — [Install Vaubaan on my Mac](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on Windows](../intents/run-vaubaan-on-my-computer.md), [Run a local instance with one docker command](../intents/run-vaubaan-on-my-computer.md), [Reach my agent's first call in one path](../intents/run-vaubaan-on-my-computer.md)
+- **A lost evening on pre-release software** (`a-lost-evening-on-pre-release-software`) — [Run a local instance with one docker command](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on my Mac](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on Windows](../intents/run-vaubaan-on-my-computer.md), [Reach my agent's first call in one path](../intents/run-vaubaan-on-my-computer.md)
 - **A token that can do anything** (`a-token-that-can-do-anything`) — [Create a mission by ticking what my agent may do](../intents/let-my-agent-work-alone-on-a-mission.md)
 - **Interrupted all the time, or not when it mattered** (`interrupted-all-the-time-or-not-when-it-mattered`) — [Let my agent call within its mission's limits](../intents/let-my-agent-work-alone-on-a-mission.md), [Hear on my phone that a yes waits for me](../intents/let-my-agent-work-alone-on-a-mission.md)
 - **Relaying my yes by hand** (`relaying-my-yes-by-hand`) — [Let my agent know my answer](../intents/bring-my-agent-into-a-mission.md)
@@ -40,7 +40,7 @@ Gains:
 - **My agent works alone on real things** (`my-agent-works-alone-on-real-things`) — [Issue a mission in my name from an agent](../intents/let-an-agent-prepare-missions-for-me.md), [Let my agent call within its mission's limits](../intents/let-my-agent-work-alone-on-a-mission.md), [Read what my agent did](../intents/let-my-agent-work-alone-on-a-mission.md)
 - **Stopped at the right place** (`stopped-at-the-right-place`) — [Approve or refuse the exact call](../intents/let-my-agent-work-alone-on-a-mission.md)
 - **See it refuse before I install** (`see-it-refuse-before-i-install`) — [See an agent refused before I install anything](../intents/believe-what-the-site-says.md)
-- **My first governed call in minutes** (`my-first-governed-call-in-minutes`) — [Install Vaubaan on my Mac](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on Windows](../intents/run-vaubaan-on-my-computer.md), [Run a local instance with one docker command](../intents/run-vaubaan-on-my-computer.md), [Reach my agent's first call in one path](../intents/run-vaubaan-on-my-computer.md)
+- **My first governed call in minutes** (`my-first-governed-call-in-minutes`) — [Run a local instance with one docker command](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on my Mac](../intents/run-vaubaan-on-my-computer.md), [Install Vaubaan on Windows](../intents/run-vaubaan-on-my-computer.md), [Reach my agent's first call in one path](../intents/run-vaubaan-on-my-computer.md)
 - **Never handing over a credential** (`never-handing-over-a-credential`) — [Create a mission by ticking what my agent may do](../intents/let-my-agent-work-alone-on-a-mission.md)
 - **Bringing my team later without starting over** (`bringing-my-team-later-without-starting-over`) — [Move my missions from my computer to a team server](../intents/bring-my-team-onto-vaubaan.md)
 
