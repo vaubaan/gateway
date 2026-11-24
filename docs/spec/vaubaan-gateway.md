@@ -47,35 +47,6 @@ in the interface, the code, the store and the protocol:
   of them until it installs one; a plugin's **trust level** is what its verified signature says of
   who built it (§5).
 
-For the other words, tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration
-keys spell the protocol's words, and so does this spec where it states a rule. The interface speaks
-its own words; §4.2, §4.4 and §7 use them:
-
-| The interface says                               | The protocol and this spec say                                                     |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                  |
-| "Shared with you"                                | shares received; missions one is a member of                                       |
-| permission (its id stays visible, in mono)       | risk, `RiskId`                                                                     |
-| limits, per period and per minute                | budget: quota and rate limit                                                       |
-| runs freely / ask me first                       | gate `auto` / `approval`                                                           |
-| key, your key                                    | mission token, member token                                                        |
-| machine key                                      | named token                                                                        |
-| Replace key                                      | rotate                                                                             |
-| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                |
-| Vaubaan account                                  | the account of the `vaubaan` plugin, a host account                                |
-| Activity                                         | audit; the session of a mission                                                    |
-| teammate                                         | mission member                                                                     |
-| team                                             | group                                                                              |
-| administrator                                    | operator                                                                           |
-| OAuth client; Reference                          | the OAuth client the instance registers at a service; the reference of each plugin |
-| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of an account)                        |
-| setup kit                                        | bootstrap kit                                                                      |
-| mission, macro-action, resource, environment     | the same                                                                           |
-
-Page paths follow the interface's words (`/accounts`, `/waiting`, `/activity`, `/reference`,
-`/settings`); protocol paths do not move (the MCP door, the git remote, the request URL a refusal
-carries, a callback registered at a service).
-
 **Deployment**
 
 - **Instance** — one deployment, owned and operated by one company on its own network. A single
@@ -216,6 +187,37 @@ carries, a callback registered at a service).
   digests of its files and its signature; what an administrator uploads or installs (§4.2, §5).
 - **Signer** — who signed an archive: the catalog (trust level "Vaubaan"), or a key the instance's
   administrators named as trusted (§5).
+
+## 0 bis. Interface words
+
+For the other words, tool names, refusal codes, `RiskId`s, catalogs, API fields and configuration
+keys spell the protocol's words, and so does this spec where it states a rule. The interface speaks
+its own words; §4.2, §4.4 and §7 use them:
+
+| The interface says                               | The protocol and this spec say                                                     |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                  |
+| "Shared with you"                                | shares received; missions one is a member of                                       |
+| permission (its id stays visible, in mono)       | risk, `RiskId`                                                                     |
+| limits, per period and per minute                | budget: quota and rate limit                                                       |
+| runs freely / ask me first                       | gate `auto` / `approval`                                                           |
+| key, your key                                    | mission token, member token                                                        |
+| machine key                                      | named token                                                                        |
+| Replace key                                      | rotate                                                                             |
+| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                |
+| Vaubaan account                                  | the account of the `vaubaan` plugin, a host account                                |
+| Activity                                         | audit; the session of a mission                                                    |
+| teammate                                         | mission member                                                                     |
+| team                                             | group                                                                              |
+| administrator                                    | operator                                                                           |
+| OAuth client; Reference                          | the OAuth client the instance registers at a service; the reference of each plugin |
+| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of an account)                        |
+| setup kit                                        | bootstrap kit                                                                      |
+| mission, macro-action, resource, environment     | the same                                                                           |
+
+Page paths follow the interface's words (`/accounts`, `/waiting`, `/activity`, `/reference`,
+`/settings`); protocol paths do not move (the MCP door, the git remote, the request URL a refusal
+carries, a callback registered at a service).
 
 ## 1. Vision
 

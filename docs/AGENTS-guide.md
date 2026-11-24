@@ -54,7 +54,7 @@ Checked by tests or review; the reasons are in the linked documents.
 - **Never an "everything"**: accepted risks, share restrictions and presets are explicit `RiskId`
   lists; nothing stored holds a wildcard, a sentinel or a preset reference.
 - **Two sets of words**: the protocol (spec, code, API, catalogs, store) and the interface
-  ([spec](spec/vaubaan-gateway.md) §0). `apps/gateway/src/lib/vocabulary.ts` is the one bridge;
+  ([spec](spec/vaubaan-gateway.md) §0 bis). `apps/gateway/src/lib/vocabulary.ts` is the one bridge;
   never rename a protocol name or print one as prose on a page.
 - **Nothing hard-coded**: configuration comes through the configuration module; a missing key stops
   startup, naming it ([configuration](handbook/configuration.md)).
@@ -71,7 +71,7 @@ Checked by tests or review; the reasons are in the linked documents.
 
 | Task                                   | Start with                                                                                                                                                                                               |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anything                               | [spec](spec/vaubaan-gateway.md) §0 (vocabulary), then the [handbook index](handbook/README.md)                                                                                                           |
+| Anything                               | [spec](spec/vaubaan-gateway.md) §0 (vocabulary) and §0 bis (interface words), then the [handbook index](handbook/README.md)                                                                              |
 | A change to how a call is decided      | [risk model](spec/gateway-risk-model.md), handbooks [policy-engine](handbook/policy-engine.md) and [gateway-core](handbook/gateway-core.md)                                                              |
 | A new service, or a change to a plugin | the site's [author guide](https://vaubaan.com/docs/plugins-guide), [`plugins/README.md`](../plugins/README.md) (this repository's plugins), [plugin-sdk](handbook/plugin-sdk.md), the service's handbook |
 | A page of the interface                | [web-app](handbook/web-app.md), [style guide](spec/style-guide.md)                                                                                                                                       |

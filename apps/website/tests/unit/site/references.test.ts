@@ -91,7 +91,7 @@ describe('the refusals reference', () => {
 });
 
 describe('the words reference', () => {
-  it("is the gateway spec's vocabulary table, every pair of it", () => {
+  it("is the gateway spec's interface words table, every pair of it", () => {
     const { same, pairs } = parseVocabulary(spec);
     expect(same).toEqual(['account', 'service', 'plugin']);
     expect(pairs.length).toBeGreaterThan(10);
@@ -101,7 +101,20 @@ describe('the words reference', () => {
   });
 
   it('fails when the vocabulary changes shape', () => {
-    expect(() => parseVocabulary('# Spec\n\n## 0. Vocabulary\n\nNo table.\n')).toThrow(/shape/);
+    const words = '## 0. Vocabulary\n\n- **account** — yours.\n';
+    const table = '| A | B |\n| - | - |\n| a | b |\n';
+    expect(
+      parseVocabulary(`# Spec\n\n${words}\n## 0 bis. Interface words\n\n${table}`).pairs,
+    ).toEqual([['a', 'b']]);
+    expect(() =>
+      parseVocabulary(`# Spec\n\n${words}\n## 0 bis. Interface words\n\nNo table.\n`),
+    ).toThrow(/interface words changed shape/);
+    expect(() => parseVocabulary(`# Spec\n\n${words}`)).toThrow(/Interface words/);
+    expect(() =>
+      parseVocabulary(
+        `# Spec\n\n## 0. Vocabulary\n\nNo list.\n\n## 0 bis. Interface words\n\n${table}`,
+      ),
+    ).toThrow(/vocabulary changed shape/);
     expect(() => parseVocabulary('# Spec\n')).toThrow(/Vocabulary/);
   });
 });

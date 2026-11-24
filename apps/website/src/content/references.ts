@@ -12,7 +12,7 @@
  *   policy engine (`TRUST_LEVEL_GATES`, `ROW_WORDS`, the reasons and the
  *   budget factors);
  * - `/docs/reference/words` — the interface's words and the protocol's, from
- *   the vocabulary table of the gateway spec (§0), its normative home;
+ *   the vocabulary of the gateway spec (§0 and §0 bis), its normative home;
  * - `/docs/reference/for-agents` — the agent bootstrap itself, as every
  *   instance serves it at `/agent-bootstrap.md`.
  *
@@ -55,7 +55,10 @@ export const AGENT_BOOTSTRAP = 'apps/gateway/src/app/agent-bootstrap.md/content.
 export const BOOTSTRAP_REFUSALS_SECTION = '5. When a call is refused';
 export const ERRORS_SOURCE = 'packages/gateway-core/src/errors.ts';
 export const GATEWAY_SPEC = 'docs/spec/vaubaan-gateway.md';
+/** Its shared words, the `- **word** —` list. */
 export const VOCABULARY_SECTION = '0. Vocabulary';
+/** Its two-column table, interface word → protocol word. */
+export const INTERFACE_WORDS_SECTION = '0 bis. Interface words';
 const RISK_MODEL = 'docs/spec/gateway-risk-model.md';
 
 /** A generated docs page before it is framed (`build-site.ts` adds the title and the MDX file). */
@@ -362,18 +365,32 @@ export function trustLevelsMarkdown(): string {
 export interface Vocabulary {
   /** The words the interface, the code and the protocol share. */
   readonly same: readonly string[];
-  /** Interface word → protocol word, as spec §0 pairs them. */
+  /** Interface word → protocol word, as spec §0 bis pairs them. */
   readonly pairs: readonly (readonly [string, string])[];
 }
 
-/** The vocabulary of the gateway spec, §0: its shared words and its two-column table. */
+/**
+ * The vocabulary of the gateway spec: its shared words (§0) and its two-column table (§0 bis,
+ * out of §0 so the harness does not read each row as a term).
+ */
 export function parseVocabulary(spec: string): Vocabulary {
-  const section = sectionsOf(spec).find((s) => s.heading === VOCABULARY_SECTION);
-  if (!section) throw new Error(`${GATEWAY_SPEC}: no "## ${VOCABULARY_SECTION}"`);
-  const same = [...section.text.matchAll(/^- \*\*([a-z]+)\*\* — /gm)].map((m) => m[1] ?? '');
-  const [table] = tablesOf(section.text);
-  if (same.length === 0 || !table || table.some((row) => row.length !== 2)) {
+  const sections = sectionsOf(spec);
+  const sectionText = (heading: string): string => {
+    const section = sections.find((s) => s.heading === heading);
+    if (!section) throw new Error(`${GATEWAY_SPEC}: no "## ${heading}"`);
+    return section.text;
+  };
+  const same = [...sectionText(VOCABULARY_SECTION).matchAll(/^- \*\*([a-z]+)\*\* — /gm)].map(
+    (m) => m[1] ?? '',
+  );
+  if (same.length === 0) {
     throw new Error(`${GATEWAY_SPEC} §0: the vocabulary changed shape; update the site's reader`);
+  }
+  const [table] = tablesOf(sectionText(INTERFACE_WORDS_SECTION));
+  if (!table || table.some((row) => row.length !== 2)) {
+    throw new Error(
+      `${GATEWAY_SPEC} §0 bis: the interface words changed shape; update the site's reader`,
+    );
   }
   return { same, pairs: table.map(([a = '', b = '']) => [a, b] as const) };
 }
@@ -387,7 +404,7 @@ export function wordsMarkdown(spec: string): string {
     '',
     markdownTable(['In the interface', 'In the protocol, the code and the spec'], pairs),
     '',
-    `Generated from the vocabulary of the [gateway spec](https://github.com/vaubaan/gateway/blob/main/${GATEWAY_SPEC}#0-vocabulary), its normative home.`,
+    `Generated from the vocabulary of the [gateway spec](https://github.com/vaubaan/gateway/blob/main/${GATEWAY_SPEC}#0-bis-interface-words), its normative home.`,
   ].join('\n');
 }
 
