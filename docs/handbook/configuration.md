@@ -54,7 +54,11 @@ How the process starts from configuration alone and wires its modules. Spec:
   `Network: http://0.0.0.0:3000`): only `-p 127.0.0.1:3000:3000` keeps the
   instance on this computer, and the process cannot check it. The setup link
   is printed on standard output, not through the logger (which redacts the
-  token); it changes at each start.
+  token); it changes at each start. A local instance whose store is new hands
+  its key over in the setup even when it did not write it: the desktop app
+  makes the key, keeps it in the system's credential store and passes it with
+  `VAUBAAN_MASTER_KEY_FILE=/dev/stdin` (read once, at the start; nothing else
+  reads standard input).
 
 - **The file wins over the environment**, key by key, silently: the example
   YAML ships with every key commented out.

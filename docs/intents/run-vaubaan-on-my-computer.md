@@ -42,8 +42,8 @@ spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
 - A signed, notarized `.dmg` opens without a Gatekeeper warning, on Apple silicon and on Intel
-- The first launch opens the interface on `localhost` and asks only for my name and a password: no domain name, no sign-in provider, no command
-- The master key lives in the macOS Keychain, never in a file next to the store
+- The first launch opens the setup on `localhost` with no link to copy: I keep my encryption key and create my sign-in account (password and second factor); no domain name, no sign-in provider, no command
+- The master key lives in the macOS Keychain, never in a file next to the store; the instance reads it on its standard input
 - The setup still asks me to download a copy of the key: the only way to open a backup on another computer
 - Quitting the app stops the instance; reopening it finds my accounts and missions unchanged
 
@@ -57,7 +57,7 @@ spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
 - A signed installer runs without a SmartScreen warning, with no administrator rights
-- The first launch opens the interface on `localhost` and asks only for my name and a password
+- The first launch opens the setup on `localhost` with no link to copy: I keep my encryption key and create my sign-in account
 - The master key lives in the Windows credential store, never in a file next to the store
 - The setup still asks me to download a copy of the key: the only way to open a backup on another computer
 - Quitting the app stops the instance; reopening it finds my accounts and missions unchanged

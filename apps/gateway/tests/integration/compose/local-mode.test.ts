@@ -3,7 +3,8 @@
  * the switch alone starts an instance, which makes its bootstrap token, prints the setup
  * link while the setup is open, and writes cookies a browser keeps on http://localhost.
  */
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +13,7 @@ import { BOOTSTRAP_REVOKED_KEY } from '../../../src/server/auth/bootstrap';
 import { startInstance } from '../../../src/server/compose/boot';
 import { getRoot, resetRoot } from '../../../src/server/compose/root';
 import { publishedLocalMode } from '../../../src/server/http/local-mode';
+import { MASTER_KEY_GENERATED_KEY } from '../../../src/server/master-key';
 import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const LINK = /http:\/\/localhost:3000\/admin\/bootstrap#token=([A-Za-z0-9_-]{43})/;
@@ -89,5 +91,17 @@ describe('local mode', () => {
     );
     const [pair] = setCookie.split(';');
     expect(await root.auth.sessions.read(new Headers({ cookie: pair ?? '' }))).not.toBeNull();
+  });
+
+  it('hands over a key it did not write on its first start, as the desktop app gives it', async () => {
+    // The desktop app makes the key and passes it on standard input (`/dev/stdin`);
+    // a file the instance did not write stands for it here.
+    const given = join(dir, 'given.key');
+    writeFileSync(given, `${randomBytes(32).toString('base64')}\n`);
+    env.VAUBAAN_MASTER_KEY_FILE = given;
+    delete env.VAUBAAN_MASTER_KEY_GENERATE;
+    const { root } = await start();
+    expect(existsSync(join(dir, 'master.key'))).toBe(false);
+    expect(await root.store.config.get(MASTER_KEY_GENERATED_KEY)).not.toBeNull();
   });
 });

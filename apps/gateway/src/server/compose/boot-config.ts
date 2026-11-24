@@ -98,9 +98,18 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
   const options: LoadOptions = { env, readFile: deps.readFile };
   const outcome = loadInstanceConfigOrSetup(options);
   if (outcome.kind === 'ready') {
+    const { config } = outcome.loaded;
+    // A local instance's first start hands its key over even when it did not write it:
+    // the desktop app makes the key and passes it on standard input (ADR
+    // desktop-app-tauri-shell-over-the-node-standalone-server). A restore brings a
+    // store sealed with a key its operator already holds.
+    const handOver =
+      config.local &&
+      config.restore.from === null &&
+      !(deps.storeHasContent ?? storeHasContent)(config.store.path);
     return {
       kind: 'ready',
-      loaded: finish(outcome.loaded, env, deps.scrub ?? true, false, deps.localBootstrapToken),
+      loaded: finish(outcome.loaded, env, deps.scrub ?? true, handOver, deps.localBootstrapToken),
     };
   }
 
