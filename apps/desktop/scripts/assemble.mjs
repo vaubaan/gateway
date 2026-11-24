@@ -18,13 +18,16 @@ import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -74,6 +77,52 @@ export function checksumOf(shasums, file) {
   throw new Error(`SHASUMS256.txt lists no ${file}`);
 }
 
+/** Turbopack's alias of an external package: `<package>-<16 hex>`, a link to the package. */
+const EXTERNAL_ALIAS = /^(.+)-[0-9a-f]{16}$/;
+
+/**
+ * Replaces every symbolic link of the copied tree: the app bundler does not carry links
+ * into the app. Turbopack's aliases of external packages (`.next/node_modules/<package>-<hash>`
+ * → `node_modules/<package>`) become a package that re-exports the real one, found by
+ * Node's resolution further up; any other link becomes a copy of what it points at.
+ * @param {string} dir
+ * @returns {string[]} the paths replaced, relative to `dir`
+ */
+export function replaceLinks(dir) {
+  /** @type {string[]} */
+  const replaced = [];
+  /** @param {string} at */
+  const walk = (at) => {
+    for (const name of readdirSync(at)) {
+      const path = join(at, name);
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) {
+        const target = resolve(dirname(path), readlinkSync(path));
+        const alias = EXTERNAL_ALIAS.exec(name);
+        rmSync(path);
+        if (alias && basename(target) === alias[1]) {
+          mkdirSync(path);
+          writeFileSync(
+            join(path, 'package.json'),
+            `${JSON.stringify({ name, private: true, main: 'index.js' })}\n`,
+          );
+          writeFileSync(
+            join(path, 'index.js'),
+            `module.exports = require(${JSON.stringify(alias[1])});\n`,
+          );
+        } else {
+          cpSync(target, path, { recursive: true, dereference: true });
+        }
+        replaced.push(path.slice(dir.length + 1));
+      } else if (stat.isDirectory()) {
+        walk(path);
+      }
+    }
+  };
+  walk(dir);
+  return replaced;
+}
+
 async function download(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
@@ -94,6 +143,7 @@ function copyGateway(target) {
     recursive: true,
   });
   cpSync(join(GATEWAY, 'public'), join(out, 'apps/gateway/public'), { recursive: true });
+  for (const path of replaceLinks(out)) console.log(`replaced the link ${path}`);
   // The native addons this target loads must be in the tree: a build made elsewhere
   // would start and then fail at the first store access.
   const sqlite = join(
