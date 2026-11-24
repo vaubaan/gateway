@@ -117,11 +117,22 @@ jobs:
       - name: Build the app
         working-directory: apps/desktop/src-tauri
         env:
-          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.signed == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ steps.signing.outputs.api_key_path }}
-        run: npx --yes "$TAURI_CLI" build --target ${{ matrix.target }} --bundles app,dmg
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_KEY_PATH: ${{ steps.signing.outputs.api_key_path }}
+        run: |
+          # Signed and notarized with the secrets; otherwise signed ad hoc ("-"), which
+          # Apple silicon requires to run any binary. The bundler notarizes only when it
+          # sees the API variables, so they are set only for a signed build.
+          if [ "$SIGNED" = "true" ]; then
+            export APPLE_SIGNING_IDENTITY="$IDENTITY" APPLE_API_ISSUER="$API_ISSUER" \
+              APPLE_API_KEY="$API_KEY" APPLE_API_KEY_PATH="$API_KEY_PATH"
+          else
+            export APPLE_SIGNING_IDENTITY="-"
+          fi
+          npx --yes "$TAURI_CLI" build --target ${{ matrix.target }} --bundles app,dmg
 
       - name: Start the app, then quit it
         run: |
