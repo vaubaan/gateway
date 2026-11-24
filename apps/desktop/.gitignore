@@ -1,0 +1,6 @@
+# Assembled or generated for a build, never committed (scripts/assemble.mjs, tauri icon, cargo).
+src-tauri/resources/
+src-tauri/binaries/
+src-tauri/gen/
+src-tauri/target/
+src-tauri/icons/

@@ -186,6 +186,9 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/*': [
       '../../node_modules/argon2/prebuilds/**',
+      // Where argon2 lands when npm compiled it, for a platform it ships no prebuild for
+      // (macOS on Intel, the desktop app: apps/desktop/scripts/assemble.mjs).
+      '../../node_modules/argon2/build/Release/argon2.node',
       '../../node_modules/better-sqlite3/package.json',
       '../../node_modules/better-sqlite3/lib/**',
       `../../node_modules/better-sqlite3/prebuilds/${process.platform}*-${process.arch}.node`,

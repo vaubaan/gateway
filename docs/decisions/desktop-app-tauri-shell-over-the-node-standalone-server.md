@@ -20,7 +20,7 @@ signed and notarized.
 The desktop app is a Tauri 2 shell that starts the official Node 26 binary as a sidecar on the
 unchanged standalone output of the image build, bound to `localhost`, and shows the interface in the
 system webview. The shell holds the master key in the system credential store and hands it to the
-Node process at start through an inherited descriptor, never a file or an environment variable.
+Node process at start on its standard input, never a file or an environment variable.
 
 ## Consequences
 

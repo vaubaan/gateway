@@ -1,0 +1,13 @@
+{
+  "//": "Type-aware linting of the desktop app's plain-Node scripts (eslint.config.js), as scripts/tsconfig.json. Not type-checked: tested by their *.test.mjs.",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"]
+  },
+  "include": ["*.mjs"]
+}

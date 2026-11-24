@@ -1,0 +1,154 @@
+name: desktop
+
+# Builds the desktop app for macOS (ADR desktop-app-tauri-shell-over-the-node-standalone-server):
+# the gateway's standalone output and the official Node binary of the image's version
+# (apps/desktop/scripts/assemble.mjs), under the Tauri shell of apps/desktop/src-tauri.
+#
+#   push to main touching apps/desktop or this file, or a run by hand   one .dmg per
+#   architecture, uploaded as an artifact. With the Apple secrets set, every Mach-O is
+#   signed under the hardened runtime and the app is notarized; without them the .dmg
+#   is unsigned (Gatekeeper warns), for testing only.
+#
+# Before the upload, the built app is opened: it must answer /healthz on 127.0.0.1:3100,
+# and stop its server when it is quit as a person quits it.
+#
+# Secrets (Settings > Secrets > Actions), all or none:
+#   APPLE_CERTIFICATE           the "Developer ID Application" certificate, .p12, base64
+#   APPLE_CERTIFICATE_PASSWORD  its password
+#   APPLE_SIGNING_IDENTITY      "Developer ID Application: <name> (<team id>)"
+#   APPLE_API_ISSUER            App Store Connect API: issuer id
+#   APPLE_API_KEY               App Store Connect API: key id
+#   APPLE_API_PRIVATE_KEY       App Store Connect API: the .p8 file's content
+#
+# Actions are pinned by commit; the comment gives the version. Bump both together.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+env:
+  TAURI_CLI: '@tauri-apps/cli@2.12.4'
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - name: Build the gateway
+        run: npm run build --workspace @vaubaan/gateway-app
+
+      - name: Assemble the gateway and Node for ${{ matrix.target }}
+        run: node apps/desktop/scripts/assemble.mjs --target ${{ matrix.target }}
+
+      - name: Rust for ${{ matrix.target }}
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Icons
+        working-directory: apps/desktop/src-tauri
+        run: npx --yes "$TAURI_CLI" icon ../../gateway/src/app/icon.svg --output icons
+
+      - name: Signing keychain
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unsigned build::The Apple secrets are not set: the .dmg is unsigned and Gatekeeper will warn."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -hex 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          existing=()
+          while IFS= read -r line; do existing+=("$(echo "$line" | tr -d '" ')"); done < <(security list-keychains -d user)
+          security list-keychains -d user -s "$keychain" "${existing[@]}"
+          rm "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$APPLE_API_PRIVATE_KEY" > "$RUNNER_TEMP/api-key.p8"
+          echo "api_key_path=$RUNNER_TEMP/api-key.p8" >> "$GITHUB_OUTPUT"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      # Notarization refuses an app holding an unsigned Mach-O: the native addons in the
+      # resources are signed here, the Node binary and the shell by the Tauri bundler.
+      - name: Sign the native addons
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          find apps/desktop/src-tauri/resources -type f -name '*.node' -print0 |
+            xargs -0 -n1 codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY"
+          codesign --force --options runtime --timestamp \
+            --entitlements apps/desktop/src-tauri/entitlements.plist \
+            --sign "$APPLE_SIGNING_IDENTITY" apps/desktop/src-tauri/binaries/node-${{ matrix.target }}
+
+      - name: Build the app
+        working-directory: apps/desktop/src-tauri
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.signed == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ steps.signing.outputs.api_key_path }}
+        run: npx --yes "$TAURI_CLI" build --target ${{ matrix.target }} --bundles app,dmg
+
+      - name: Start the app, then quit it
+        run: |
+          app="$(find "$PWD/apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          open -n "$app"
+          for _ in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:3100/healthz > "$RUNNER_TEMP/healthz.json"; then break; fi
+            sleep 1
+          done
+          if ! grep -q '"status":"ok"' "$RUNNER_TEMP/healthz.json" 2>/dev/null; then
+            echo "::error title=The app did not start its gateway::no /healthz on 127.0.0.1:3100 within 90 s"
+            cat "$HOME/Library/Application Support/com.vaubaan.desktop/gateway.log" || true
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/healthz.json"; echo
+          # As a person quits it (Cmd-Q): the shell stops its server on the way out.
+          osascript -e 'tell application "Vaubaan" to quit'
+          for _ in $(seq 1 20); do
+            if ! curl -sf http://127.0.0.1:3100/healthz > /dev/null; then echo "stopped with the app"; exit 0; fi
+            sleep 1
+          done
+          echo "::error title=The gateway outlived the app::/healthz still answers 20 s after the app quit"
+          exit 1
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vaubaan-desktop-${{ matrix.target }}
+          path: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14

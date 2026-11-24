@@ -127,7 +127,7 @@ export default tseslint.config(
   },
   // CLI-ish ops scripts log to stdout by design; console is OK.
   {
-    files: ['scripts/**/*.ts', 'scripts/**/*.mjs'],
+    files: ['scripts/**/*.ts', 'scripts/**/*.mjs', 'apps/desktop/scripts/*.mjs'],
     rules: {
       'no-console': 'off',
       // .mjs files run via tsconfig allowDefaultProject without strict
@@ -148,6 +148,16 @@ export default tseslint.config(
     languageOptions: {
       ...tseslint.configs.disableTypeChecked.languageOptions,
       globals: { ...globals.serviceworker },
+    },
+  },
+  // The desktop app's start page (`apps/desktop/ui/`), bundled into the shell: plain browser
+  // JavaScript outside every tsconfig, linted without type information.
+  {
+    files: ['apps/desktop/ui/**/*.js'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: { ...globals.browser },
     },
   },
   prettier,

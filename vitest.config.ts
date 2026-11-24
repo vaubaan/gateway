@@ -26,6 +26,8 @@ const INCLUDE = [
   'apps/*/src/**/*.test.ts',
   // Release helpers (plain Node scripts, no workspace of their own).
   'scripts/*.test.mjs',
+  // The desktop app's assembly script (apps/desktop has no npm workspace).
+  'apps/desktop/scripts/*.test.mjs',
 ];
 const EXCLUDE = ['node_modules', 'dist', '.next', 'apps/*/tests/e2e/**'];
 

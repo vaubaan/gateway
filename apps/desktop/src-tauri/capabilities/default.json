@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Nothing: the window shows the bundled start page, then the gateway on localhost. Neither calls the shell; no command is exposed to any page.",
+  "windows": ["main"],
+  "permissions": []
+}

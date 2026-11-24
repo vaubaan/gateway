@@ -1,0 +1,26 @@
+[package]
+name = "vaubaan-desktop"
+version = "0.0.0"
+description = "Vaubaan on your computer: a Tauri shell over the gateway's standalone server"
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+base64 = "0.22"
+getrandom = "0.2"
+serde_json = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
