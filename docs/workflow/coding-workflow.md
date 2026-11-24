@@ -126,7 +126,8 @@ owner doing anything:
 
 1. Refresh the base images, then `npm run release:prepare -- <version>` on a branch (it also writes
    `apps/website/src/content/releases.json`, the released gateway and plugin versions of the
-   versions feed), pull request `chore(release): <version>`, merge once green.
+   versions feed, and the image version in the site's "on your computer" page, whose `docker run`
+   names it: a pre-release has no alias), pull request `chore(release): <version>`, merge once green.
 2. Only a maintainer tags, by hand: `git tag -a v<version> -m "Vaubaan Gateway <version>" <commit>`,
    `git push origin v<version>` publishes. A failed job is re-run; a version tag never moves.
 3. Rollback: no downgrade (an older image refuses a newer database): fix forward, or restore a

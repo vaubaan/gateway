@@ -467,6 +467,22 @@ export function bumpLockfile(lockfile, versionText) {
   return `${JSON.stringify(lock, null, 2)}\n`;
 }
 
+/** The released image's reference, as a page writes it in a command. */
+const GATEWAY_IMAGE_TAG = /(ghcr\.io\/vaubaan\/gateway:)\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/g;
+
+/**
+ * Names `versionText` in every `ghcr.io/vaubaan/gateway:<version>` of a page whose
+ * commands run the release itself (the site's "on your computer" page): a
+ * pre-release has no alias to point at, so the page names the version.
+ * @param {string} page
+ * @param {string} versionText
+ * @returns {string}
+ */
+export function bumpImageReferences(page, versionText) {
+  const version = parseVersion(versionText);
+  return page.replace(GATEWAY_IMAGE_TAG, `$1${version.raw}`);
+}
+
 /**
  * A release version must come after the one `package.json` carries.
  * @param {string} current

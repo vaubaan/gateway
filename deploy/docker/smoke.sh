@@ -39,6 +39,8 @@
 #                                 mounts it) boots without the key-beside-store warning, mode 0600;
 #                                 a key generated on /data, beside the store, boots with it once
 #                                 (ADR master-key-generated-and-handed-over-by-the-instance)
+#   15. local mode                VAUBAAN_LOCAL=true and one volume: a key, a setup link, a
+#                                 session cookie without Secure
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -63,12 +65,15 @@ RESTORE_VOLUME="vaubaan-smoke-restore-data-$$"
 KEY_NAME="vaubaan-smoke-key-$$"
 KEY_DATA_VOLUME="vaubaan-smoke-key-data-$$"
 KEY_VOLUME="vaubaan-smoke-key-keys-$$"
+LOCAL_NAME="vaubaan-smoke-local-$$"
+LOCAL_VOLUME="vaubaan-smoke-local-data-$$"
 MASTER_KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 cleanup() {
-  docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" "$KEY_NAME" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" "$DATA_VOLUME" "$KEY_DATA_VOLUME" "$KEY_VOLUME" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" "$KEY_NAME" "$LOCAL_NAME" >/dev/null 2>&1 || true
+  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" "$DATA_VOLUME" "$KEY_DATA_VOLUME" "$KEY_VOLUME" \
+    "$LOCAL_VOLUME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -419,5 +424,25 @@ logs="$(key_boot /data/master.key)"
 [ "$(grep -cF "$BESIDE" <<<"$logs" || true)" = "1" ] || fail "a key beside the store was not reported once:\n$logs"
 grep -qF 'VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1' <<<"$logs" || fail "the warning does not name the variable that accepts it"
 pass "a key on its own volume boots quietly; a key beside the store is reported once"
+
+# 15. Local mode (ADR local-mode-for-an-instance-on-this-computer): the switch and one volume
+#     start an instance, which generates its key and prints a setup link that opens a
+#     session whose cookie has no Secure attribute.
+docker run -d --name "$LOCAL_NAME" -v "$LOCAL_VOLUME:/data" -e VAUBAAN_LOCAL=true "$IMAGE" >/dev/null
+wait_healthy "$LOCAL_NAME" "the local instance stopped before /healthz answered"
+logs="$(docker logs "$LOCAL_NAME" 2>&1)"
+token="$(grep -oE 'http://localhost:3000/admin/bootstrap#token=[A-Za-z0-9_-]{43}' <<<"$logs" | tail -1 | cut -d= -f2)"
+[ -n "$token" ] || fail "the local instance printed no setup link:\n$logs"
+mode="$(docker exec "$LOCAL_NAME" stat -c '%a %u' /data/master.key)"
+[ "$mode" = "600 10001" ] || fail "the local instance's key is '$mode', expected '600 10001'"
+cookie="$(docker exec "$LOCAL_NAME" node -e "
+  fetch('http://127.0.0.1:3000/api/auth/bootstrap', {
+    method: 'POST', redirect: 'manual',
+    headers: { origin: 'http://localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'token=$token',
+  }).then((r) => console.log(r.headers.get('set-cookie') ?? ''))")"
+grep -qE '^vbn_session=[A-Za-z0-9_-]+; Path=/; Max-Age=[0-9]+; HttpOnly; SameSite=Lax$' <<<"$cookie" ||
+  fail "the setup link did not open a loopback session: '$cookie'"
+pass "local mode starts with one volume, prints its setup link, and its session cookie works on http"
 
 echo "SMOKE PASSED"

@@ -13,6 +13,8 @@
 //                       { gateway, prerelease, date, plugins: { <id>: <version> } },
 //                       the catalog index's versions, and plugins/*/package.json for
 //                       the plugins the catalog does not publish (vaubaan, ssh)
+//   apps/website/content/docs/install/on-your-computer.mdx
+//                       the image version its commands run
 //   apps/gateway/src/server/plugins/catalog-versions.json
 //                       the catalog versions this release knows, read from the
 //                       catalog's index (--catalog-index <file or https URL>, by
@@ -31,6 +33,7 @@ import {
   ReleaseError,
   assertMovesForward,
   bumpLockfile,
+  bumpImageReferences,
   bumpManifest,
   catalogVersionsFrom,
   parseVersion,
@@ -45,6 +48,8 @@ const USAGE =
   'usage: npm run release:prepare -- <version> [--date YYYY-MM-DD] [--catalog-index <file or https URL>]';
 const RELEASES = 'apps/website/src/content/releases.json';
 const CATALOG_VERSIONS = 'apps/gateway/src/server/plugins/catalog-versions.json';
+/** The page whose commands run the image of the release (`bumpImageReferences`). */
+const RUN_LOCALLY_PAGE = 'apps/website/content/docs/install/on-your-computer.mdx';
 const CATALOG_INDEX_URL = 'https://vaubaan.github.io/gateway-plugins/index.json';
 /** The plugins compiled into the server: never in the catalog. */
 const COMPILED = ['vaubaan', 'ssh'];
@@ -133,6 +138,7 @@ async function main() {
     changelog: resolve(ROOT, 'CHANGELOG.md'),
     manifest: resolve(ROOT, 'package.json'),
     lockfile: resolve(ROOT, 'package-lock.json'),
+    runLocally: resolve(ROOT, RUN_LOCALLY_PAGE),
   };
   const manifest = readFileSync(paths.manifest, 'utf8');
   const current = JSON.parse(manifest).version;
@@ -143,6 +149,9 @@ async function main() {
   const changelog = prepareChangelog(readFileSync(paths.changelog, 'utf8'), next.raw, date);
   const bumpedManifest = bumpManifest(manifest, next.raw);
   const bumpedLockfile = bumpLockfile(readFileSync(paths.lockfile, 'utf8'), next.raw);
+  const runLocally = existsSync(paths.runLocally)
+    ? bumpImageReferences(readFileSync(paths.runLocally, 'utf8'), next.raw)
+    : null;
   const known = catalogVersionsFrom(
     await readCatalogIndex(catalogIndex),
     CATALOG_VERSIONS_COMMENT,
@@ -159,6 +168,7 @@ async function main() {
   writeFileSync(paths.changelog, changelog);
   writeFileSync(paths.manifest, bumpedManifest);
   writeFileSync(paths.lockfile, bumpedLockfile);
+  if (runLocally !== null) writeFileSync(paths.runLocally, runLocally);
   writeReleases(releases);
   const catalogVersionsPath = resolve(ROOT, CATALOG_VERSIONS);
   mkdirSync(dirname(catalogVersionsPath), { recursive: true });
@@ -175,10 +185,11 @@ async function main() {
       `  package-lock.json   ${current} -> ${next.raw}`,
       `  ${RELEASES}   gateway ${next.raw}, ${Object.keys(releases.plugins).length} plugins`,
       `  ${CATALOG_VERSIONS}   ${Object.keys(known.plugins).length} catalog plugins, from ${catalogIndex}`,
+      ...(runLocally !== null ? [`  ${RUN_LOCALLY_PAGE}   image ${next.raw}`] : []),
       '',
       'Next, by hand:',
       '  1. Review the diff, then commit:',
-      `       git add CHANGELOG.md package.json package-lock.json ${RELEASES} ${CATALOG_VERSIONS}`,
+      `       git add CHANGELOG.md package.json package-lock.json ${RELEASES} ${CATALOG_VERSIONS}${runLocally !== null ? ` ${RUN_LOCALLY_PAGE}` : ''}`,
       `       git commit -m "chore(release): ${next.raw}"`,
       `  2. Bring that commit to ${branch} through a pull request and wait for CI.`,
       '  3. Rehearse (optional): run the "release" workflow by hand on that branch.',

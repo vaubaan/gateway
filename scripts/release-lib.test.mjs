@@ -15,6 +15,7 @@ import {
   assertMovesForward,
   assertReleasableTag,
   bumpLockfile,
+  bumpImageReferences,
   bumpManifest,
   compareVersions,
   extractReleaseNotes,
@@ -597,5 +598,26 @@ describe('the catalog versions a gateway release knows, from the catalog index',
         [],
       ),
     ).toThrow(/vercel/);
+  });
+});
+
+describe('bumpImageReferences', () => {
+  it('names the release in every reference to the gateway image, and nothing else', () => {
+    const page = [
+      'docker run -e VAUBAAN_LOCAL=true ghcr.io/vaubaan/gateway:2.0.0-alpha.31',
+      'docker pull ghcr.io/vaubaan/gateway:2.0.0',
+      'ghcr.io/vaubaan/oauth-broker:2.0.0-alpha.31 stays',
+    ].join('\n');
+    expect(bumpImageReferences(page, '2.0.0-alpha.32')).toBe(
+      [
+        'docker run -e VAUBAAN_LOCAL=true ghcr.io/vaubaan/gateway:2.0.0-alpha.32',
+        'docker pull ghcr.io/vaubaan/gateway:2.0.0-alpha.32',
+        'ghcr.io/vaubaan/oauth-broker:2.0.0-alpha.31 stays',
+      ].join('\n'),
+    );
+  });
+
+  it('refuses a version that is not one', () => {
+    expect(() => bumpImageReferences('x', 'two')).toThrow(ReleaseError);
   });
 });
