@@ -26,6 +26,44 @@ status: stable
 > (owner decision, recorded in the amendment of
 > [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 
+## Vocabulary
+
+Unnumbered: the sections below keep the numbers the code cites. Mission, mission policy, RiskId,
+macro-action, trust level and environment are defined in [vaubaan-gateway](./vaubaan-gateway.md) §0.
+
+- **Risk** — a consequence a human may accept for a service, named by a risk entry; accepted, never
+  granted (§0).
+- **Risk catalog** — per service, static and versioned, reviewed like code: the risk entries, one
+  fallback entry and the macro-actions (§4).
+- **Risk entry** — one business intent of a service that fits in a sentence: its `RiskId`, the
+  slice patterns it matches, its vector and where it is acceptable (§4.1).
+- **Plane** — one domain of a service's data model (a repository, a database, a mailbox), declaring
+  its entities and how they nest (§2).
+- **Virtual leaf** — a slice segment naming an act rather than an entity (`merge-into`) (§2.1).
+- **Environment carrier** — the one entity of a service's data model that carries the environment,
+  if any (§2.3).
+- **Slice** — a path over the data model plus an action, read or write: emitted by the plugin,
+  matched by the catalog, recorded by the audit, never written by a person (§3).
+- **Classifier** — the plugin's function `(tool, arguments, resources) → slices` (§1, §7).
+- **Vector** — the five facts of a risk (reversibility, blast, data, cost, visibility), each on a
+  closed scale; the catalog author's method to sort a risk into a row, never a score (§4.2).
+- **Vector override** — the axes of an entry's vector that differ in one environment
+  ([per-env vector](./risk-entry-per-env-vector.md)).
+- **Fallback entry** — the one entry of a catalog that takes the writes nothing else matched; its
+  presence in the audit means an entry is missing (§4.3).
+- **Env-scoped entry** — an entry listing the environments where it is acceptable, offered, accepted
+  and compared qualified (`railway[staging].deploy`); without the list, an **account-scoped** entry
+  (§4.4).
+- **Row** — one of four classes, from Harmless to Cannot be repaired, read from the vector by a
+  decision tree; pre-fills a gate and orders the lists of the interface (§4.6).
+- **Reason** — the branch of that tree which put a permission in its row (§4.6).
+- **Base budget** — the quota and rate limit an entry carries in its macro-action, multiplied by
+  the trust level (§4.6).
+- **Resource set** — a part of a mission's account: its resources, of one environment, its
+  macro-actions at their trust levels, its explicit policy and its own budget counters (§4.7).
+- **Trust-raise proposal** — the offer to raise a macro-action's trust level by one, after 10
+  approvals with no refusal (§4.7).
+
 ## 0. The idea — accepted risks, not granted capabilities
 
 The delegating human states **which consequences they accept**, from a short list of named risks per

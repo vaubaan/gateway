@@ -20,7 +20,9 @@ multiplies one decision). Who it comes _from_ is the mission's scope, not a risk
 
 ## 1. Vocabulary
 
-- **Account** — what an API key authenticates; one account.
+An account ([vaubaan-gateway](./vaubaan-gateway.md) §0) is here what an API key authenticates: one
+Resend account.
+
 - **Sending domain** — a domain of the account to send from; a resource.
 - **Segment** — a named contact list broadcasts target; a resource.
 - **Contact** — a subscriber; personal data; in zero or more segments. **Member** — a contact as a

@@ -44,8 +44,8 @@ in the interface, the code, the store and the protocol:
   explicit (IdP).
 - **plugin** — only the code package: installed, pinned, built with the SDK, with its reference
   page. The **catalog** is the public list every published plugin comes from; an instance has none
-  of them until it installs one; a plugin's **trust level** is what its verified signature says of
-  who built it (§5).
+  of them until it installs one; a plugin is shown with its **signer**, what its verified signature says
+  of who built it: signed by Vaubaan, by a signer the instance trusts, or not signed (§5).
 
 **Deployment**
 
@@ -121,6 +121,10 @@ in the interface, the code, the store and the protocol:
   likely cannot act on it (a public repository outside a token's grant); once the owner hides or
   shows it, the owner's choice stays. "Every resource known" excludes hidden and stale ones; selecting a
   stale one is refused at issuance.
+- **Environment** — a label the owner gives a resource (`prod`, `staging`…), a lowercase slug, or
+  the account's default environment for resources without their own. An env-scoped risk is
+  accepted per environment and resolved, per slice, from the call or the resources it names
+  ([gateway-risk-model](./gateway-risk-model.md) §4.4, §6).
 - **Share** — the owner grants a target (user or group) a **restriction** on the account.
 - **Restriction** — an explicit enumeration of `RiskId`s of the service's catalog: the upper bound
   of what the target may accept in their missions. Never a wildcard; empty authorizes nothing.
@@ -154,6 +158,11 @@ in the interface, the code, the store and the protocol:
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
   the token. Every account also offers the built-in expansion **"Everything I hold on this
   account"** (`everything-i-hold`, §3.2).
+- **Trust level** — how far a creator trusts an agent with one ticked macro-action: **Careful**
+  (the default), **Trusting** or **Autonomous**. It pre-fills the gate of each of its risks from
+  the risk's row and multiplies their base budget ×1, ×3, ×10
+  ([gateway-risk-model](./gateway-risk-model.md) §4.6). It grants nothing; the mission keeps it
+  only to redraw the form. Only a macro-action has a trust level: a plugin has a **signer**.
 - **Gate** — `auto` (passes within budget, the default) or `approval` (each action approved by the
   mission creator before it runs).
 - **Period** — for a recurring mission, the interval after which quotas restart from zero. A one-off
@@ -185,8 +194,8 @@ in the interface, the code, the store and the protocol:
   (§9).
 - **Archive** — the one file a plugin version ships as: the built plugin, its risk catalog, the
   digests of its files and its signature; what an administrator uploads or installs (§4.2, §5).
-- **Signer** — who signed an archive: the catalog (trust level "Vaubaan"), or a key the instance's
-  administrators named as trusted (§5).
+- **Signer** — who signed an archive: the catalog (shown "signed by Vaubaan"), or a key the instance's
+  administrators named as trusted, such as a company's own key for its private plugins (§5).
 
 ## 0 bis. Interface words
 
@@ -649,7 +658,7 @@ other; the tools then act **in the name of the mission's creator**, within their
 - **Plugins** (`vaubaan__upload_plugin`, `vaubaan__plugin_status`), only when the creator is an
   administrator of the instance: upload a plugin archive, which stays inert until an administrator
   activates it in the interface (§4.2, Administration › Plugins); read each plugin's versions,
-  trust level, pending activation and the updates available.
+  signer, pending activation and the updates available.
 - **Rotate** (`vaubaan__rotate_mission_token`) the token of a mission the calling mission issued
   (another is refused `mission-not-issued-here`); **revoke** (`vaubaan__revoke_mission`) any of the
   creator's missions.
@@ -851,7 +860,7 @@ the (i) itself never leaves the page.
     runs a sign-in in another window and connects nobody. Changing the source of a service leaves
     the accounts connected through the former one working and is confirmed with that consequence;
     a changed public URL marks an own client as to re-register at the service;
-  - **plugins**: every plugin the instance knows, with its active version, its **trust level**
+  - **plugins**: every plugin the instance knows, with its active version, its **signer**
     (signed by Vaubaan; signed by a signer this instance trusts, named; unsigned, allowed by the
     configuration — a modified or invalid archive never gets this far), where it comes from
     (installed here, compiled into the server for the management plugin and `ssh`, or pinned by
@@ -865,7 +874,7 @@ the (i) itself never leaves the page.
     ([ADR](../decisions/plugins-installed-when-first-needed.md)). Every other version — a newer
     version of a loaded plugin, a private or unsigned one — an administrator **uploads** or
     **installs** from the catalog; it stays **pending**, inert, until an administrator
-    **activates** it, shown its trust level and digest,
+    **activates** it, shown its signer and digest,
     what it replaces, the permissions it adds or deprecates against the active version, the
     missions using the service and the permissions none of them holds — and for an older version,
     the accounts connected a way it does not offer and the permissions it does not know, which stay

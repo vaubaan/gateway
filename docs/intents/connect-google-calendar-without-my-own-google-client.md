@@ -2,7 +2,7 @@
 title: Connect Google Calendar without my own Google client
 status: proposed
 actors: [consultant, team-lead]
-spec: ../spec/oauth-broker.md
+spec: [../spec/oauth-broker.md, ../spec/vaubaan-gateway.md]
 last_reviewed: 2026-11-22
 ---
 

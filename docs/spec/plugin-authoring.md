@@ -18,12 +18,11 @@ status: draft
   a simulator of the service, a build that signs, and the agent skills.
 - **Skill** — instructions an author's coding agent loads to do one step of the work (model the
   service, classify, connect, check, ship, submit, upgrade), each ending on a check a machine runs.
-- **Archive** — the one file a plugin ships as: the built plugin, its risk catalog, its manifest of
-  file digests, and its signature.
-- **Signer** — who signed an archive: the catalog (level "Vaubaan"), or a key an instance trusts by
-  name (a company's own key for its private plugins).
 - **Submission** — a reviewed change to the catalog declaring a plugin's source and exact revision;
   the catalog rebuilds and signs it, never the author's own archive.
+
+A plugin ships as an **archive** and is signed by a **signer**, both defined in
+[vaubaan-gateway](./vaubaan-gateway.md) §0.
 
 ## 1. Vision
 

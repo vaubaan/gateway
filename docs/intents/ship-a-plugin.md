@@ -2,7 +2,7 @@
 title: Ship a plugin
 status: proposed
 actors: [plugin-author]
-spec: ../spec/plugin-authoring.md
+spec: [../spec/plugin-authoring.md, ../spec/vaubaan-gateway.md]
 last_reviewed: 2026-11-22
 ---
 

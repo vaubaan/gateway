@@ -13,9 +13,7 @@ status: draft
 
 - **Broker** — a service that owns one OAuth client at a provider (client id, client secret, one
   redirect URI) and runs the authorization-code flow for the instances enrolled with it.
-- **Instance** — a gateway enrolled with a broker, known by the digest of its broker key and of the
-  return URLs on record for it.
-- **Operator** — whoever runs the broker's machine, network and configuration; not trusted with
+- **Broker operator** — whoever runs the broker's machine, network and configuration; not trusted with
   tokens.
 - **Flow** — one sign-in in progress, from the instance's start to its redeem; ten minutes at most.
 - **Grant** — a one-time value the browser carries back to the instance, redeemed for its tokens.
@@ -26,12 +24,15 @@ status: draft
 - **Platform adapter** — the one part of the broker that knows the enclave platform: it produces
   the evidence and unseals the secrets.
 
+An instance ([vaubaan-gateway](./vaubaan-gateway.md) §0) is _enrolled_ with a broker when the
+broker knows it by the digest of its broker key and of the return URLs on record for it.
+
 ## 1. Vision
 
 The broker lets an instance connect a provider that offers no key a person can make and no dynamic
 client registration, through one verified OAuth client, **without anyone who operates the broker
 being able to use a person's tokens** — and lets anyone check that claim without trusting the
-operator.
+broker operator.
 
 ## 2. What it does
 
@@ -48,7 +49,7 @@ operator.
 - **Attest**: one evidence for everyone, recent, bound to the key of the TLS connection the instance
   is on, renewed every few minutes; no key or body needed to ask, and rate-limited.
 - An instance may have at most 500 flows in progress, beside a bound for the whole broker, and a
-  number of refreshes per hour set by the operator: the instances share one client and its quota.
+  number of refreshes per hour set by the broker operator: the instances share one client and its quota.
 
 ## 3. What it keeps, and never keeps
 
@@ -74,7 +75,7 @@ operator.
   key. A broker its own administrator declares unattested is the only exception, and says so.
 - **The public front sees a code it cannot use**: the broker's own verifier never leaves the
   enclave.
-- **What the operator decides is harmless**: enrollment is configuration; provider endpoints and
+- **What the broker operator decides is harmless**: enrollment is configuration; provider endpoints and
   allowed scopes are measured code, from the provider table the gateway and the broker share
   ([ADR](../decisions/oauth-brokers-managed-in-settings-with-two-client-sources.md)): a gateway
   running its own client at a provider reads the same table. The configuration is readable by anyone (it is measured into
@@ -105,7 +106,7 @@ release naming it; no data moves. A development adapter's evidence says "no encl
 2. A provider that rotates refresh tokens on refresh: the refresh answer carries none.
 3. After a client-secret rotation, a provider refusal that is not `invalid_grant` reads as a broker
    failure, not an expiry.
-4. Whether the enclave may send its non-sensitive logs to the operator (today: yes).
+4. Whether the enclave may send its non-sensitive logs to the broker operator (today: yes).
 5. Rotating the sealing key (tokens carry a key id) without disconnecting every instance.
 6. Whether the provider's verification of the shared client accepts a broker that keeps no token.
 7. Whether the client secret can be created inside the enclave, so no person ever sees one.
