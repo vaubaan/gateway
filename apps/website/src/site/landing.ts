@@ -80,7 +80,11 @@ export const TODAY_STEPS: readonly {
     status: 'built',
   },
   {
-    text: 'A desktop app for macOS and Windows, without a server or a DNS name.',
+    text: 'Run it on your computer with one docker run, without a server or a DNS name.',
+    status: 'built',
+  },
+  {
+    text: 'A desktop app for macOS and Windows, without Docker.',
     status: 'planned',
   },
   { text: 'Add a mission to your agent in one step.', status: 'planned' },
@@ -177,7 +181,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Can I run it on my laptop?',
       answer:
-        'The demo runs on a laptop, with simulated services. A real instance runs on a server you reach over HTTPS, for you alone or for your team. A desktop app for macOS and Windows is planned, not built.',
+        'Yes: one docker run starts a real instance on your computer, for you alone, with no server and no DNS name. The demo also runs on a laptop, with simulated services. For a team, an instance runs on a server you reach over HTTPS. A desktop app for macOS and Windows, without Docker, is planned, not built.',
     },
     {
       question: 'Which services does it support?',

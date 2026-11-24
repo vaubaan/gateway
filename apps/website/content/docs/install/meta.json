@@ -1,6 +1,7 @@
 {
   "title": "Install",
   "pages": [
+    "on-your-computer",
     "docker-compose",
     "railway",
     "own-proxy",

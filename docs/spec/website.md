@@ -103,13 +103,13 @@ that says what it shows; a reader without images or styles reads the same facts 
 Each page opens with a defining sentence, has one primary call to action and a Markdown twin
 (§2.6), and promises nothing that is not built.
 
-| Path              | For whom, and its job                                                                                                                                                                                                       | Primary action                 |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `/how-it-works`   | Anyone at three minutes: the path of a call, the repair question, a service modelled then folded into verbs, the trust levels, ask me first, and what the agent sees                                                        | Try it                         |
-| `/consultants`    | The landing with the consultant's project shown first, its own title and description                                                                                                                                        | Try it                         |
-| `/try`            | The honest choice of how to start today: the demo on a laptop, an instance for a team, the install with a coding agent; what each needs, how long, what one sees; the desktop app named planned, without a download         | Run the demo                   |
-| `/teams`          | The team lead: the same missions on a server, sign-in, accounts shared permission by permission, one key per person, the yes from a phone, who did what; what one process means; a link to forward to the security reviewer | Install with your coding agent |
-| `/write-a-plugin` | The plugin author: five questions per permission, the kit (what is built and what is planned), a real catalog to read; the author guide holds the procedure                                                                 | Start a plugin project         |
+| Path              | For whom, and its job                                                                                                                                                                                                                                  | Primary action                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| `/how-it-works`   | Anyone at three minutes: the path of a call, the repair question, a service modelled then folded into verbs, the trust levels, ask me first, and what the agent sees                                                                                   | Try it                         |
+| `/consultants`    | The landing with the consultant's project shown first, its own title and description                                                                                                                                                                   | Try it                         |
+| `/try`            | The honest choice of how to start today: one `docker run` on your computer, the demo on a laptop, an instance for a team, the install with a coding agent; what each needs, how long, what one sees; the desktop app named planned, without a download | Run the demo                   |
+| `/teams`          | The team lead: the same missions on a server, sign-in, accounts shared permission by permission, one key per person, the yes from a phone, who did what; what one process means; a link to forward to the security reviewer                            | Install with your coding agent |
+| `/write-a-plugin` | The plugin author: five questions per permission, the kit (what is built and what is planned), a real catalog to read; the author guide holds the procedure                                                                                            | Start a plugin project         |
 
 The navigation names five destinations — How it works, Services, Teams, Security, Docs — and one
 button, **Try it**. The foot of every page holds the long tail in four groups (product, docs, trust,
@@ -119,7 +119,7 @@ tracker.
 ### 2.2 User docs — `/docs`
 
 In English; every command works on the released image. Concepts in the interface's words, quick look
-(the demo), the interface page by page, install, configuration (every key of gateway §4.3), connecting a service (the three
+(the demo), the interface page by page, install (on a server, and on one's own computer in local mode), configuration (every key of gateway §4.3), connecting a service (the three
 ways; each service's guide is on its plugin page, §2.3 item 9, and the former per-service pages
 redirect there), missions and agents (clients, platform management, git remote), operations (backup, key rotation,
 upgrade, retention, telemetry), accounts, administration, known limitations. Every page of the

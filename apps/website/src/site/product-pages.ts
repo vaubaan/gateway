@@ -226,12 +226,19 @@ export const TRY_PAGE: ProductPage = {
   path: '/try',
   title: 'Try it',
   description:
-    'How to start with Vaubaan today: the demo on a laptop, your own instance on a server, or an install by your coding agent; what each needs and what you will see. A desktop app is planned.',
+    'How to start with Vaubaan today: one docker run on your computer, the demo on a laptop, your own instance on a server, or an install by your coding agent; what each needs and what you will see. A desktop app is planned.',
   heading: 'Try Vaubaan',
-  lede: 'Three ways to start today, from a demo on your laptop to your own instance behind your sign-in; a desktop app for macOS and Windows is planned, and this page will offer it first the day it ships.',
+  lede: 'Four ways to start today, from one command on your computer to your own instance behind your sign-in; a desktop app for macOS and Windows is planned, and this page will offer it first the day it ships.',
   primary: { label: 'Run the demo', href: '/docs/quick-look' },
   secondary: { label: 'Install for a team', href: '/teams' },
   sections: [
+    {
+      id: 'with-docker',
+      heading: 'On your computer: one docker run',
+      status: 'built',
+      body: 'Vaubaan for you alone, on your own machine: one `docker run` with Docker Desktop, no domain name, no certificate, no sign-in provider. It prints a setup link; you keep your encryption key, create your account and give a mission to the agent on the same computer. Count ten minutes.',
+      link: { label: 'Run it on your computer', href: '/docs/install/on-your-computer' },
+    },
     {
       id: 'the-demo',
       heading: 'See it work: the demo',
@@ -255,10 +262,10 @@ export const TRY_PAGE: ProductPage = {
     },
     {
       id: 'on-your-computer',
-      heading: 'On your computer, without a server',
+      heading: 'A desktop app, without Docker',
       status: 'planned',
       drawing: 'alone-then-team',
-      body: `A desktop app for macOS and Windows: Vaubaan on your own machine, without a DNS name or an identity provider. It is not built; there is nothing to download yet. What it will do is written down as [proposed intents](${githubBlob('docs/intents/run-vaubaan-on-my-computer.md')}).`,
+      body: `A desktop app for macOS and Windows: Vaubaan installed like any other app, with no Docker. It is not built; there is nothing to download yet. What it will do is written down as [proposed intents](${githubBlob('docs/intents/run-vaubaan-on-my-computer.md')}).`,
     },
   ],
 };

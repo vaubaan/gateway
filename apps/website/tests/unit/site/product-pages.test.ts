@@ -110,7 +110,7 @@ describe('the product pages', () => {
 
   it('offer nothing planned as a button: the desktop app is named planned, without a download', () => {
     const planned = TRY_PAGE.sections.filter((s) => s.status === 'planned');
-    expect(planned.map((s) => s.heading)).toEqual(['On your computer, without a server']);
+    expect(planned.map((s) => s.heading)).toEqual(['A desktop app, without Docker']);
     const all = [
       ...PRODUCT_PAGES.map(productPageMarkdown),
       landingMarkdown([{ id: 'github', name: 'GitHub' }]),

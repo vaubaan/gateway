@@ -30,8 +30,9 @@ npm run demo
 ```
 
 It prints a URL, three people to sign in as and a guided tour ([quick look](https://vaubaan.com/docs/quick-look)).
-The demo is a development tool, never an instance. **On your computer without a server: a desktop
-app for macOS and Windows is planned, not built** ([every way to start](https://vaubaan.com/try)).
+The demo is a development tool, never an instance. **A real instance on your computer, for you
+alone: one `docker run`** ([on your computer](https://vaubaan.com/docs/install/on-your-computer));
+a desktop app for macOS and Windows is planned, not built ([every way to start](https://vaubaan.com/try)).
 
 ## What a mission is
 
