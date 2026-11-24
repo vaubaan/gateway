@@ -9,6 +9,39 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.31] - 2026-11-24
+
+### Highlights
+
+- **One `docker run` for an instance on your computer**: no domain name, no certificate, no
+  sign-in provider, no key to generate.
+
+### Added
+
+- **Local mode** (ADR local-mode-for-an-instance-on-this-computer): `VAUBAAN_LOCAL=true` (`local`)
+  runs an instance for the computer it runs on.
+  `docker run -p 127.0.0.1:3000:3000 -v vaubaan:/data -e VAUBAAN_LOCAL=true ghcr.io/vaubaan/gateway:<version>`
+  starts one on `http://localhost:3000`:
+  - it supplies the public URL `http://localhost:3000`, the store `/data/gateway.db`, the master
+    key `/data/master.key` generated at the first start (the setup still hands it over: keep the
+    copy, it is the only one off the volume), and address windows shared by every caller; a key
+    set by hand is kept and overrides them;
+  - without a bootstrap token it makes one at each start and prints the setup link on the
+    container's output until the setup is finished;
+  - an `http` public URL is accepted in this mode only, on `localhost`, `127.0.0.1` or `[::1]`;
+    any other host is a configuration error (exit 78);
+  - its cookies are `vbn_session`, `vbn_login`, `vbn_recover` and `vbn_recovery`, without
+    `Secure` nor the `__Host-` prefix (Safari refuses a `Secure` cookie on `http://localhost`),
+    still `HttpOnly` and `SameSite=Lax`;
+  - the footer of every page says the instance answers on this computer only.
+
+  Nothing changes for an instance without the key.
+
+### Changed
+
+- **Base image**: `node:26.13.1-bookworm-slim` pinned to its rebuilt digest (Debian updates), for
+  the gateway and the OAuth broker.
+
 ## [2.0.0-alpha.30] - 2026-11-23
 
 ### Highlights
@@ -3329,7 +3362,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.30...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.31...HEAD
+[2.0.0-alpha.31]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.30...v2.0.0-alpha.31
 [2.0.0-alpha.30]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.29...v2.0.0-alpha.30
 [2.0.0-alpha.29]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.28...v2.0.0-alpha.29
 [2.0.0-alpha.28]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.27...v2.0.0-alpha.28
