@@ -13,15 +13,17 @@ sign-in provider, so that I give my agents missions today and bring my team late
 
 ## Run a local instance with one docker command
 
-status: proposed
+status: implemented
+anchors: apps/gateway/src/server/config/sources.ts, apps/gateway/src/server/compose/boot.ts, apps/gateway/tests/integration/compose/local-mode.test.ts
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
 creates: instance
 spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
-- `docker run` with one volume and one published port starts an instance reachable on `localhost`, on amd64 and arm64
-- No domain name, certificate or sign-in provider is asked; the first person signs in with a local account
+- `docker run -p 127.0.0.1:3000:3000 -v vaubaan:/data -e VAUBAAN_LOCAL=true` with the image starts an instance on `http://localhost:3000`, on amd64 and arm64
+- No domain name, certificate or sign-in provider is asked; the command's output prints the setup link, and the first person signs in with a sign-in account it creates
+- Safari, Chrome and Firefox keep the session on `http://localhost`
 - The page says the instance answers on this computer only
 
 ## Install the desktop app

@@ -934,7 +934,9 @@ committed:
   generated over a store that holds data
   ([master-key-generated-and-handed-over-by-the-instance](../decisions/master-key-generated-and-handed-over-by-the-instance.md)).
   An administrator can download it again after a fresh sign-in, audited;
-- the **public URL** (sign-in and service callbacks, request URLs, the kit), HTTPS;
+- the **public URL** (sign-in and service callbacks, request URLs, the kit), HTTPS, except an
+  instance in **local mode**, meant for the computer it runs on, whose public URL may be `http` on a
+  loopback host only ([ADR](../decisions/local-mode-for-an-instance-on-this-computer.md));
 - the **sign-in providers**: zero or more, each with id, name, kind, issuer, client id and secret,
   claim mapping for OpenID Connect, allowed email domains and whether invited-only. An open
   sign-in provider with neither allowed domains nor invited-only is refused at startup and in the interface;
@@ -954,7 +956,8 @@ committed:
   read-only seeds of that page;
 - the **bootstrap token**, the setup link's secret, required while no sign-in provider is
   configured; an instance whose store names no administrator, with neither a token nor an admin
-  rule, refuses to start;
+  rule, refuses to start — in local mode, made by the instance at each start when not
+  given, its setup link printed on the instance's own output until the setup is finished;
 - optionally, the **admin rule**: a group of a named sign-in provider and/or a list of emails — a
   seed, applied once at the start where the store names no administrator, never again by itself
   ([administrators-live-in-the-instance](../decisions/administrators-live-in-the-instance.md)). A
@@ -1178,7 +1181,8 @@ values.
 
 ### 7.1 Install an instance
 
-The operator deploys the image with its configuration (§4.3), opens setup with the bootstrap token
+The operator deploys the image with its configuration (§4.3) — one person on their computer runs it
+in local mode with one command and no other key — opens setup with the bootstrap token
 (typed, or in a setup link's fragment so it reaches no log), keeps the master key when the instance
 generated it, names the first administrator (setup creates a sign-in account, or the admin rule or a
 passed sign-in provider test names them), switches a tested sign-in provider on, and **finishes the setup**:

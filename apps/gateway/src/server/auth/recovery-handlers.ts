@@ -17,10 +17,9 @@ import { readForm } from '../http/form';
 import { AUTH_LIMITS } from './handlers';
 import type { SignInAccountsService } from './sign-in-accounts';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
-import { CHALLENGE_COOKIE, type NameRequest, type RecoveryService } from './recovery';
+import type { NameRequest, RecoveryService } from './recovery';
 import type { SignInProvidersService } from './sign-in-providers';
 import { createThrottle, type ThrottleDeps } from './throttle';
-import { clearCookie } from './cookies';
 
 export const RECOVER_PAGE = '/admin/recover';
 /** `?done=<id>`: what the naming did, read once by the page. */
@@ -104,7 +103,7 @@ export function createRecoveryHandlers(deps: RecoveryHandlerDeps): RecoveryHandl
         return json(400, { error: 'invalid-request' });
       }
       const opened = await deps.recovery.prove(request.headers, proof);
-      const clear = clearCookie(CHALLENGE_COOKIE);
+      const clear = deps.recovery.clearChallengeCookie();
       if (!opened) return json(403, { ok: false }, [clear]);
       return json(200, { ok: true }, [clear, opened.setCookie]);
     },
@@ -156,7 +155,7 @@ export function createRecoveryHandlers(deps: RecoveryHandlerDeps): RecoveryHandl
         deps.logger.warn('recovery naming refused', {
           detail: err instanceof Error ? err.message : String(err),
         });
-        return done({ named: {}, problem }, [clearCookie(CHALLENGE_COOKIE)]);
+        return done({ named: {}, problem }, [deps.recovery.clearChallengeCookie()]);
       }
     },
   };

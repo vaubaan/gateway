@@ -13,11 +13,12 @@
  * completes the boot (`server/setup/`).
  */
 import { buildInfoFromEnv, ConfigError, secretValues, type LoadOptions } from '../config';
+import { publishLocalMode } from '../http/local-mode';
 import { createLogger, createRedactor, guardConsole } from '../logging';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { setupMissesFile } from '../setup/misses';
 import { currentSetup, publishSetup } from '../setup/state';
-import { loadBootConfig, loadBootConfigOrSetup } from './boot-config';
+import { loadBootConfig, loadBootConfigOrSetup, localBootstrapToken } from './boot-config';
 import { getRoot, rootStarted, type RootDeps } from './root';
 
 /**
@@ -52,7 +53,48 @@ export const EXIT_BOOT_ERROR = 1;
 export interface BootDeps extends RootDeps {
   readonly env?: LoadOptions['env'];
   readonly readFile?: LoadOptions['readFile'];
+  /** Where a local instance prints its setup link (the process: standard output). */
+  readonly stdout?: (text: string) => void;
 }
+
+/**
+ * The lines a local instance prints while its setup is not finished: the link that
+ * opens it, token in the fragment (ADR local-mode-for-an-instance-on-this-computer).
+ * Printed on standard output, never through the logger, which redacts the token.
+ */
+export function localSetupAnnouncement(publicUrl: URL, token: string): string {
+  const link = `${publicUrl.href.replace(/\/+$/, '')}/admin/bootstrap#token=${token}`;
+  return [
+    '',
+    'Vaubaan runs on this computer. Open this link to set it up:',
+    '',
+    `  ${link}`,
+    '',
+    'The link changes at each start and stops working once the setup is finished.',
+    '',
+    '',
+  ].join('\n');
+}
+
+/** Prints the setup link of a local instance whose bootstrap is still open. */
+async function announceLocalSetup(
+  config: {
+    readonly local: boolean;
+    readonly publicUrl: URL;
+    readonly bootstrapToken: string | null;
+  },
+  open: () => Promise<boolean>,
+  token: string,
+  stdout: (text: string) => void,
+): Promise<void> {
+  if (!config.local || config.bootstrapToken !== token) return;
+  if (!(await open())) return;
+  stdout(localSetupAnnouncement(config.publicUrl, token));
+}
+
+const defaultStdout = (text: string): void => {
+  process.stdout.write(text);
+};
 
 export type BootState = 'ready' | 'setup';
 
@@ -63,15 +105,23 @@ export type BootState = 'ready' | 'setup';
  * never applies.
  */
 export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
-  const { env, readFile, ...rootDeps } = deps;
+  const { env, readFile, stdout = defaultStdout, ...rootDeps } = deps;
   if (rootDeps.loadConfig || rootStarted()) {
     await getRoot(rootDeps);
     return 'ready';
   }
-  const outcome = loadBootConfigOrSetup({ env, readFile });
+  // Used only by a local instance that sets no token; the same for this whole start.
+  const token = localBootstrapToken();
+  const outcome = loadBootConfigOrSetup({ env, readFile, localBootstrapToken: token });
   if (outcome.kind === 'ready') {
     const { loaded } = outcome;
-    await getRoot({ ...rootDeps, loadConfig: () => loaded });
+    const root = await getRoot({ ...rootDeps, loadConfig: () => loaded });
+    await announceLocalSetup(
+      loaded.config,
+      async () => (await root.auth.bootstrap.state()).status === 'active',
+      token,
+      stdout,
+    );
     return 'ready';
   }
   const { setup, env: snapshot } = outcome;
@@ -91,6 +141,7 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     bootstrap_configured: bootstrapConfigured,
     remedy: 'open /admin/bootstrap and hand the gateway the key file of the copy',
   });
+  publishLocalMode(setup.config.local);
   const missesFile = setupMissesFile(setup.masterKeyFile, logger);
   publishSetup({
     config: setup.config,
@@ -106,10 +157,13 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     complete: async () => {
       await getRoot({
         ...rootDeps,
-        loadConfig: () => loadBootConfig({ env: snapshot, readFile, scrub: false }),
+        loadConfig: () =>
+          loadBootConfig({ env: snapshot, readFile, scrub: false, localBootstrapToken: token }),
       });
     },
   });
+  // Setup mode is before any store: its bootstrap cannot have been revoked yet.
+  await announceLocalSetup(setup.config, async () => true, token, stdout);
   return 'setup';
 }
 

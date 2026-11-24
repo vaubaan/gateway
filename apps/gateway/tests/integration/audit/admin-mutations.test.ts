@@ -1405,6 +1405,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SignInAccountsService.pendingLinks': READ,
   'RecoveryService.banner': READ,
   'RecoveryService.isOpen': READ,
+  // Builds a Set-Cookie header; writes nothing.
+  'RecoveryService.clearChallengeCookie': READ,
   'RecoveryService.challenge': exempt(
     'anonymous: a challenge record bound to a cookie, session state of the recovery page (spec §8 names a human actor)',
   ),
@@ -1578,6 +1580,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SessionService.takeLocalStep': exempt(SESSION_STATE),
   'SessionService.create': exempt(SESSION_STATE),
   'SessionService.read': READ,
+  'SessionService.readById': READ,
   'SessionService.destroyById': exempt(SESSION_STATE),
   'SessionService.destroy': exempt(SESSION_STATE),
   'SessionService.createPending': exempt(SESSION_STATE),

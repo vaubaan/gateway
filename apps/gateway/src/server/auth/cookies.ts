@@ -13,6 +13,12 @@
  * cannot plant a session cookie of its own in a visitor's browser (session
  * fixation by cookie tossing). `serializeCookie` refuses to write a prefixed
  * cookie that would break one of the three conditions.
+ *
+ * An instance in local mode (ADR local-mode-for-an-instance-on-this-computer)
+ * answers on `http://localhost`, where Safari and WKWebView refuse a `Secure`
+ * cookie: its jar (`cookieJar('loopback')`) drops `Secure` and the prefix,
+ * which needs it, and keeps the rest. Loopback has no network attacker and no
+ * sibling subdomain. The constants below are the names of the `host` jar.
  */
 
 /** The prefix whose guarantees the browser enforces (Secure, Path=/, no Domain, host-only). */
@@ -61,28 +67,71 @@ export interface CookieOptions {
   readonly path?: string;
 }
 
-export function serializeCookie(name: string, value: string, options: CookieOptions): string {
+export function serializeCookie(
+  name: string,
+  value: string,
+  options: CookieOptions,
+  secure = true,
+): string {
   if (!COOKIE_VALUE.test(value)) throw new RangeError('cookie value must be base64url');
   const path = options.path ?? '/';
-  assertHostPrefixHolds(name, path);
+  assertHostPrefixHolds(name, path, secure);
   return [
     `${name}=${value}`,
     `Path=${path}`,
     `Max-Age=${Math.max(0, Math.floor(options.maxAgeSeconds))}`,
     'HttpOnly',
-    'Secure',
+    ...(secure ? ['Secure'] : []),
     'SameSite=Lax',
   ].join('; ');
 }
 
-export function clearCookie(name: string, path = '/'): string {
-  assertHostPrefixHolds(name, path);
-  return `${name}=; Path=${path}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+export function clearCookie(name: string, path = '/', secure = true): string {
+  assertHostPrefixHolds(name, path, secure);
+  return `${name}=; Path=${path}; Max-Age=0; HttpOnly; ${secure ? 'Secure; ' : ''}SameSite=Lax`;
 }
 
-/** A `__Host-` cookie on another path is dropped by the browser: fail here, not silently there. */
-function assertHostPrefixHolds(name: string, path: string): void {
-  if (name.startsWith(HOST_PREFIX) && path !== '/') {
+/** The cookies the instance sets, by their name without prefix. */
+export type CookieBase = 'vbn_session' | 'vbn_login' | 'vbn_recover' | 'vbn_recovery';
+
+/**
+ * `host`: `__Host-` names, `Secure` (an https public URL). `loopback`: plain names,
+ * no `Secure` (local mode, `http://localhost`). Both `HttpOnly`, `SameSite=Lax`.
+ */
+export type CookieMode = 'host' | 'loopback';
+
+/** How the instance names, writes, reads and clears its cookies in one mode. */
+export interface CookieJar {
+  readonly mode: CookieMode;
+  name(base: CookieBase): string;
+  read(headers: Headers, base: CookieBase): string | null;
+  serialize(base: CookieBase, value: string, options: CookieOptions): string;
+  clear(base: CookieBase, path?: string): string;
+}
+
+export function cookieJar(mode: CookieMode): CookieJar {
+  const secure = mode === 'host';
+  const name = (base: CookieBase): string => (secure ? `${HOST_PREFIX}${base}` : base);
+  return {
+    mode,
+    name,
+    read: (headers, base) => readCookie(headers, name(base)),
+    serialize: (base, value, options) => serializeCookie(name(base), value, options, secure),
+    clear: (base, path) => clearCookie(name(base), path, secure),
+  };
+}
+
+/** The jar of an instance with an https public URL: every instance but one in local mode. */
+export const HOST_COOKIES: CookieJar = cookieJar('host');
+
+/**
+ * A `__Host-` cookie on another path, or without `Secure`, is dropped by the browser:
+ * fail here, not silently there.
+ */
+function assertHostPrefixHolds(name: string, path: string, secure: boolean): void {
+  if (!name.startsWith(HOST_PREFIX)) return;
+  if (path !== '/') {
     throw new RangeError(`a ${HOST_PREFIX} cookie must be set on Path=/ (got ${path})`);
   }
+  if (!secure) throw new RangeError(`a ${HOST_PREFIX} cookie must be Secure`);
 }

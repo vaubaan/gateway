@@ -282,7 +282,15 @@ export interface OpsConfig {
 }
 
 export interface InstanceConfig {
-  /** Public origin of the instance, always https, no trailing slash. */
+  /**
+   * Local mode (`local`, ADR local-mode-for-an-instance-on-this-computer): an instance for
+   * the computer it runs on. Code that depends on the mode reads this, never the scheme.
+   */
+  readonly local: boolean;
+  /**
+   * Public origin of the instance, no trailing slash: https, or on a loopback host in
+   * local mode (where it may be http).
+   */
   readonly publicUrl: URL;
   /**
    * The instance's name (`instance_name`), trimmed and checked

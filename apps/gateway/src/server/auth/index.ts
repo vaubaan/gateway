@@ -4,6 +4,7 @@
  * claims, admin rule. Built once by the composition root as `root.auth`.
  * Handbook: docs/handbook/authentication.md. ADR: oidc-relying-party-and-web-session.
  */
+import { cookieJar } from './cookies';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import { clientIpResolver } from '../http/client-ip';
 import type { InstanceConfig } from '../config/types';
@@ -86,7 +87,9 @@ export interface AuthModule {
 export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'auth' });
-  const sessions = new SessionService(deps.sessions, clock);
+  // Local mode answers on http://localhost: cookies without Secure (cookies.ts).
+  const cookies = cookieJar(deps.config.local ? 'loopback' : 'host');
+  const sessions = new SessionService(deps.sessions, clock, cookies);
   const bootstrap = new BootstrapService(deps.config.bootstrapToken, deps.store.config, clock);
   const relyingParties = createRelyingPartyFactory({
     publicUrl: deps.config.publicUrl,
@@ -201,6 +204,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     logger: logger.child({ component: 'recovery' }),
     mailer: deps.mailer,
     notifications: deps.notifications,
+    cookies,
   });
   const recoveryHandlers = createRecoveryHandlers({
     publicUrl: deps.config.publicUrl,
@@ -312,7 +316,16 @@ export {
   type IdentityClaims,
   type RawClaims,
 } from './claims';
-export { clearCookie, LOGIN_COOKIE, readCookie, serializeCookie, SESSION_COOKIE } from './cookies';
+export {
+  clearCookie,
+  cookieJar,
+  HOST_COOKIES,
+  LOGIN_COOKIE,
+  readCookie,
+  serializeCookie,
+  SESSION_COOKIE,
+  type CookieJar,
+} from './cookies';
 export {
   IdpSettingsError,
   isLoginErrorCode,

@@ -54,6 +54,7 @@ import {
   isKeyRequired,
   isPlainObject,
   keySpec,
+  localModeAsked,
   mergeTrees,
   readEnvSource,
   readFileSource,
@@ -65,6 +66,7 @@ import {
   OAUTH_BROKER_BLOCK,
   OAUTH_BROKER_ENV_PREFIX,
   SIGN_IN_ENV_PREFIX,
+  withLocalPresets,
 } from './sources';
 import {
   type AbsentMasterKeyReason,
@@ -190,12 +192,20 @@ export function loadInstanceConfigOrSetup(options: LoadOptions = {}): ConfigLoad
   const envTrace = newSourceTrace();
   const fileTrace = newSourceTrace();
 
-  const fromEnv = readEnvSource(env, issues, readFile, envTrace);
   const fromFile = readFileSource(env, issues, readFile, fileTrace);
-  const deprecatedKeys = applyDeprecatedAliases(fromEnv, fromFile?.tree ?? null, env, issues);
+  // Local mode supplies its keys as the variables a person would have set (sources.ts).
+  const local = localModeAsked(env, fromFile?.tree ?? null);
+  const effectiveEnv = local ? withLocalPresets(env, fromFile?.tree ?? null) : env;
+  const fromEnv = readEnvSource(effectiveEnv, issues, readFile, envTrace);
+  const deprecatedKeys = applyDeprecatedAliases(
+    fromEnv,
+    fromFile?.tree ?? null,
+    effectiveEnv,
+    issues,
+  );
   const raw = fromFile ? mergeTrees(fromEnv, fromFile.tree) : fromEnv;
   const masterKey = masterKeySource(raw, fromFile?.tree ?? null, envTrace, fileTrace, issues);
-  const validated = validate(raw, issues, env, masterKey);
+  const validated = validate(raw, issues, effectiveEnv, masterKey);
   const config = validated ? { ...validated, deprecatedKeys } : null;
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
@@ -437,7 +447,8 @@ function validate(
   const r = new Reader(raw, issues);
   const before = issues.items.length;
 
-  const publicUrl = readPublicUrl(r);
+  const local = r.bool(keySpec('local'));
+  const publicUrl = readPublicUrl(r, local);
   const instanceName = readInstanceName(r);
   const trustedProxies = readTrustedProxies(r);
   const selfResources = readSelfResources(r.stringList('self_resources'), env, (message) =>
@@ -452,7 +463,7 @@ function validate(
   const signIn = readSignIn(r);
   const signInProviders = checkSignInProviders(r, signIn);
   const admin = readAdmin(r, signInProviders);
-  const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
+  const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0, local);
   const limits = readLimits(r);
   const opsToken = readOpsToken(r);
   const plugins = readPlugins(r);
@@ -489,6 +500,7 @@ function validate(
   // itself, which the caller takes out again (`SetupOutcome`).
 
   return {
+    local,
     publicUrl,
     instanceName,
     trustedProxies,
@@ -555,11 +567,29 @@ function readRefreshInterval(r: Reader, raw: RawTree): number {
   return seconds;
 }
 
-/** https, no query or fragment, trailing slash stripped (a sub-path is kept). */
-function readPublicUrl(r: Reader): URL | undefined {
+/** The hosts a local instance's public URL may name: this computer only. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * https, no query or fragment, trailing slash stripped (a sub-path is kept). In local
+ * mode, a loopback host, over http or https (ADR local-mode-for-an-instance-on-this-computer).
+ */
+function readPublicUrl(r: Reader, local: boolean): URL | undefined {
   const key = keySpec('public_url');
-  const publicUrl = r.url(key.path, { required: isKeyRequired(key), https: key.https });
+  const publicUrl = r.url(key.path, { required: isKeyRequired(key), https: !local && key.https });
   if (!publicUrl) return undefined;
+  if (local && !LOOPBACK_HOSTS.has(publicUrl.hostname)) {
+    r.issues.add(
+      'public_url',
+      `local mode answers on this computer only: expected localhost, 127.0.0.1 or [::1], got "${publicUrl.hostname}" (unset local to serve a domain name)`,
+      envNamesFor('public_url'),
+    );
+    return undefined;
+  }
+  if (local && publicUrl.protocol !== 'http:' && publicUrl.protocol !== 'https:') {
+    r.issues.add('public_url', 'must use http or https', envNamesFor('public_url'));
+    return undefined;
+  }
   if (publicUrl.search || publicUrl.hash) {
     r.issues.add(
       'public_url',
@@ -698,9 +728,13 @@ function readRestore(r: Reader): RestoreConfig {
   return { from, sha256, maxBytes };
 }
 
-/** Required while the configuration sets no sign-in provider; long enough to resist guessing. */
-function readBootstrapToken(r: Reader, hasSignInProvider: boolean): string | null {
-  const required = isKeyRequired(keySpec('bootstrap_token'), hasSignInProvider);
+/**
+ * Required while the configuration sets no sign-in provider, but in local mode; long enough
+ * to resist guessing.
+ */
+function readBootstrapToken(r: Reader, hasSignInProvider: boolean, local: boolean): string | null {
+  // Local mode makes one at each start when none is set (compose/boot-config.ts).
+  const required = !local && isKeyRequired(keySpec('bootstrap_token'), hasSignInProvider);
   const bootstrapToken = r.string('bootstrap_token', { required }) ?? null;
   if (bootstrapToken !== null && bootstrapToken.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {
     r.issues.add(

@@ -17,6 +17,7 @@
  * The operator commands (`reseal`, `restore`, `backup`, `import-v4`) keep
  * `loadProcessConfig()`: they never generate anything.
  */
+import { randomBytes } from 'node:crypto';
 import {
   ConfigError,
   envNamesFor,
@@ -44,6 +45,28 @@ export interface BootConfigDeps extends LoadOptions {
   readonly generateKey?: () => string;
   /** Whether to delete the secret variables from `env` once loaded (the process: yes). */
   readonly scrub?: boolean;
+  /**
+   * The bootstrap token a local instance uses when its configuration sets none: made
+   * once per start by the caller (`localBootstrapToken()`), so the load that ends setup
+   * mode keeps the token of the link already printed.
+   */
+  readonly localBootstrapToken?: string;
+}
+
+/** A new bootstrap token: 32 random bytes, base64url (43 characters). */
+export function localBootstrapToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+/**
+ * Local mode without a configured token takes the one made for this start
+ * (ADR local-mode-for-an-instance-on-this-computer); any other configuration is kept.
+ */
+function withLocalBootstrap<
+  C extends { readonly local: boolean; readonly bootstrapToken: string | null },
+>(config: C, token: string | undefined): C {
+  if (!config.local || config.bootstrapToken !== null || token === undefined) return config;
+  return { ...config, bootstrapToken: token };
 }
 
 const MASTER_KEY_PATH = 'encryption.master_key';
@@ -75,7 +98,10 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
   const options: LoadOptions = { env, readFile: deps.readFile };
   const outcome = loadInstanceConfigOrSetup(options);
   if (outcome.kind === 'ready') {
-    return { kind: 'ready', loaded: finish(outcome.loaded, env, deps.scrub ?? true, false) };
+    return {
+      kind: 'ready',
+      loaded: finish(outcome.loaded, env, deps.scrub ?? true, false, deps.localBootstrapToken),
+    };
   }
 
   const envNames = envNamesFor(MASTER_KEY_PATH).slice(1);
@@ -93,7 +119,11 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
     // process's own can be scrubbed now (docs/handbook/configuration.md).
     const snapshot: Record<string, string | undefined> = { ...env };
     if (deps.scrub ?? true) scrubSecretEnv(env, outcome.secretEnvNames);
-    return { kind: 'setup', setup: outcome, env: snapshot };
+    return {
+      kind: 'setup',
+      setup: { ...outcome, config: withLocalBootstrap(outcome.config, deps.localBootstrapToken) },
+      env: snapshot,
+    };
   }
   const { masterKeyFile: path } = outcome;
   const storePath = outcome.config.store.path;
@@ -133,7 +163,10 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
       },
     ]);
   }
-  return { kind: 'ready', loaded: finish(again.loaded, env, deps.scrub ?? true, true) };
+  return {
+    kind: 'ready',
+    loaded: finish(again.loaded, env, deps.scrub ?? true, true, deps.localBootstrapToken),
+  };
 }
 
 function finish(
@@ -141,7 +174,9 @@ function finish(
   env: Record<string, string | undefined>,
   scrub: boolean,
   generated: boolean,
+  bootstrapToken: string | undefined,
 ): LoadedConfig {
   if (scrub) scrubSecretEnv(env, loaded.secretEnvNames);
-  return generated ? { ...loaded, masterKeyGenerated: true } : loaded;
+  const config = withLocalBootstrap(loaded.config, bootstrapToken);
+  return { ...loaded, config, masterKeyGenerated: generated || loaded.masterKeyGenerated };
 }

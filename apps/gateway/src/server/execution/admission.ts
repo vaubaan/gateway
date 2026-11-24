@@ -33,7 +33,7 @@ import {
   type ResolvedCredential,
 } from '@vaubaan/gateway-core';
 
-import { SESSION_COOKIE, type SessionService as WebSessionService } from '../auth';
+import type { SessionService as WebSessionService } from '../auth';
 import type { MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
@@ -65,7 +65,7 @@ export interface MissionAdmissionDeps {
   readonly tokens: TokenVerifier;
   readonly tokenUse: TokenUseRecorder;
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
-  readonly webSessions: Pick<WebSessionService, 'read'>;
+  readonly webSessions: Pick<WebSessionService, 'read' | 'readById'>;
   readonly rateLimiter: RateLimiter;
   readonly logger: Logger;
 }
@@ -248,8 +248,7 @@ export class MissionAdmission {
 
         // A bearer of mission-token shape is never used as a session-store key.
         if (!prefixOfBearer(bearer) && SESSION_ID_SHAPE.test(bearer)) {
-          const asCookie = new Headers({ cookie: `${SESSION_COOKIE}=${bearer}` });
-          const session = await this.deps.webSessions.read(asCookie);
+          const session = await this.deps.webSessions.readById(bearer);
           if (session) {
             const { record } = session;
             return {

@@ -20,7 +20,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { SessionStore } from '../compose/ports';
 import { systemClock, toIso, type Clock } from '../store/clock';
-import { clearCookie, LOGIN_COOKIE, readCookie, serializeCookie, SESSION_COOKIE } from './cookies';
+import { HOST_COOKIES, type CookieJar } from './cookies';
 
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
@@ -184,6 +184,7 @@ export class SessionService {
   constructor(
     private readonly store: SessionStore,
     clock: Clock = systemClock,
+    private readonly cookies: CookieJar = HOST_COOKIES,
   ) {
     this.clock = clock;
   }
@@ -196,13 +197,20 @@ export class SessionService {
     await this.store.set(sessionKey(id), full, SESSION_TTL_MS);
     return {
       id,
-      setCookie: serializeCookie(SESSION_COOKIE, id, { maxAgeSeconds: SESSION_TTL_MS / 1000 }),
+      setCookie: this.cookies.serialize('vbn_session', id, {
+        maxAgeSeconds: SESSION_TTL_MS / 1000,
+      }),
     };
   }
 
   async read(headers: Headers): Promise<ReadSession | null> {
-    const id = readCookie(headers, SESSION_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_session');
     if (!id) return null;
+    return this.readById(id);
+  }
+
+  /** The session of this id, as `read` finds it through the cookie (idle end, touch). */
+  async readById(id: string): Promise<ReadSession | null> {
     const record = await this.readGuarded(sessionKey(id), isWebSessionRecord);
     if (!record) return null;
     const now = this.clock.now().getTime();
@@ -229,9 +237,9 @@ export class SessionService {
 
   /** Deletes the session named by the cookie (if any) and returns the clearing `Set-Cookie`. */
   async destroy(headers: Headers): Promise<string> {
-    const id = readCookie(headers, SESSION_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_session');
     if (id) await this.destroyById(id);
-    return clearCookie(SESSION_COOKIE);
+    return this.cookies.clear('vbn_session');
   }
 
   async createPending(pending: Omit<PendingLogin, 'createdAt'>): Promise<IssuedCookie> {
@@ -240,13 +248,13 @@ export class SessionService {
     await this.store.set(loginKey(id), full, LOGIN_TTL_MS);
     return {
       id,
-      setCookie: serializeCookie(LOGIN_COOKIE, id, { maxAgeSeconds: LOGIN_TTL_MS / 1000 }),
+      setCookie: this.cookies.serialize('vbn_login', id, { maxAgeSeconds: LOGIN_TTL_MS / 1000 }),
     };
   }
 
   /** Reads and consumes the pending login of the request (single use). */
   async takePending(headers: Headers): Promise<PendingLogin | null> {
-    const id = readCookie(headers, LOGIN_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_login');
     if (!id) return null;
     const pending = await this.readGuarded(loginKey(id), isPendingLogin);
     if (pending) await this.store.delete(loginKey(id));
@@ -254,7 +262,7 @@ export class SessionService {
   }
 
   clearPendingCookie(): string {
-    return clearCookie(LOGIN_COOKIE);
+    return this.cookies.clear('vbn_login');
   }
 
   /** The step between a sign-in account's password and its session; same cookie, same lifetime. */
@@ -268,7 +276,7 @@ export class SessionService {
     await this.store.set(loginKey(id), full, LOGIN_TTL_MS);
     return {
       id,
-      setCookie: serializeCookie(LOGIN_COOKIE, id, { maxAgeSeconds: LOGIN_TTL_MS / 1000 }),
+      setCookie: this.cookies.serialize('vbn_login', id, { maxAgeSeconds: LOGIN_TTL_MS / 1000 }),
     };
   }
 
@@ -283,13 +291,13 @@ export class SessionService {
     await this.store.set(loginKey(id), step, left);
     return {
       id,
-      setCookie: serializeCookie(LOGIN_COOKIE, id, { maxAgeSeconds: Math.ceil(left / 1000) }),
+      setCookie: this.cookies.serialize('vbn_login', id, { maxAgeSeconds: Math.ceil(left / 1000) }),
     };
   }
 
   /** Reads the step without consuming it (the page that asks for the code). */
   async peekLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
-    const id = readCookie(headers, LOGIN_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_login');
     if (!id) return null;
     const step = await this.readGuarded(loginKey(id), isPendingLocalStep);
     return step && this.localStepTimeLeft(step) > 0 ? step : null;
@@ -297,7 +305,7 @@ export class SessionService {
 
   /** Reads and consumes the step (the form that answers it); an outlived one reads as none. */
   async takeLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
-    const id = readCookie(headers, LOGIN_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_login');
     if (!id) return null;
     const step = await this.readGuarded(loginKey(id), isPendingLocalStep);
     if (!step) return null;

@@ -27,6 +27,13 @@
 # env: VAUBAAN_PUBLIC_URL
 # public_url: https://gateway.example.com
 
+# Optional. Local mode: an instance for the computer it runs on (one person,
+# no domain name). It supplies every key a server sets here, accepts an http
+# public_url on a loopback host only, and prints the setup link at each start
+# until the setup is finished. Default: false.
+# env: VAUBAAN_LOCAL
+# local: false
+
 # Optional. The name the interface shows at the top of the navigation and in
 # the browser tab, to tell this instance from your others (1 to 64
 # characters, no control characters). Set here, it is read-only on the

@@ -23,7 +23,7 @@ import { recoveryProof } from '../crypto';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
-import { clearCookie, HOST_PREFIX, readCookie, serializeCookie } from './cookies';
+import { HOST_COOKIES, HOST_PREFIX, type CookieJar } from './cookies';
 import {
   ADMINISTRATORS_OBJECT_ID,
   designationView,
@@ -32,6 +32,7 @@ import {
 import type { LinkMailer } from './local-handlers';
 import type { NotificationEvents } from '../notifications/events';
 
+/** The names in the `host` jar; the service writes through its own (`RecoveryDeps.cookies`). */
 export const CHALLENGE_COOKIE = `${HOST_PREFIX}vbn_recover`;
 export const RECOVERY_COOKIE = `${HOST_PREFIX}vbn_recovery`;
 export const CHALLENGE_TTL_MS = 5 * 60_000;
@@ -75,10 +76,21 @@ export interface RecoveryDeps {
   readonly mailer?: LinkMailer;
   /** Told once the naming is recorded: every administrator's devices hear of it. */
   readonly notifications?: Pick<NotificationEvents, 'masterKeyRecovered'>;
+  /** How the cookies are written: `host` unless the instance is in local mode. */
+  readonly cookies?: CookieJar;
 }
 
 export class RecoveryService {
-  constructor(private readonly deps: RecoveryDeps) {}
+  private readonly cookies: CookieJar;
+
+  constructor(private readonly deps: RecoveryDeps) {
+    this.cookies = deps.cookies ?? HOST_COOKIES;
+  }
+
+  /** The `Set-Cookie` that ends this browser's challenge. */
+  clearChallengeCookie(): string {
+    return this.cookies.clear('vbn_recover');
+  }
 
   /** A fresh challenge and the cookie that binds it to this browser. */
   async challenge(): Promise<{ challenge: string; setCookie: string }> {
@@ -92,7 +104,9 @@ export class RecoveryService {
     await this.deps.sessions.set(`recover:${id}`, record, CHALLENGE_TTL_MS);
     return {
       challenge,
-      setCookie: serializeCookie(CHALLENGE_COOKIE, id, { maxAgeSeconds: CHALLENGE_TTL_MS / 1000 }),
+      setCookie: this.cookies.serialize('vbn_recover', id, {
+        maxAgeSeconds: CHALLENGE_TTL_MS / 1000,
+      }),
     };
   }
 
@@ -101,7 +115,7 @@ export class RecoveryService {
    * outcome). A passed proof opens a recovery session; its cookie is returned.
    */
   async prove(headers: Headers, proof: string): Promise<{ setCookie: string } | null> {
-    const id = readCookie(headers, CHALLENGE_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_recover');
     if (!id) return null;
     const record = (await this.deps.sessions.get(`recover:${id}`)) as ChallengeRecord | null;
     await this.deps.sessions.delete(`recover:${id}`);
@@ -122,7 +136,7 @@ export class RecoveryService {
     await this.deps.sessions.set(`recovery:${sessionId}`, session, RECOVERY_SESSION_TTL_MS);
     this.deps.logger.warn('recovery by the master key: a recovery session is open');
     return {
-      setCookie: serializeCookie(RECOVERY_COOKIE, sessionId, {
+      setCookie: this.cookies.serialize('vbn_recovery', sessionId, {
         maxAgeSeconds: RECOVERY_SESSION_TTL_MS / 1000,
       }),
     };
@@ -130,7 +144,7 @@ export class RecoveryService {
 
   /** Whether this browser holds an open recovery session. */
   async isOpen(headers: Headers): Promise<boolean> {
-    const id = readCookie(headers, RECOVERY_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_recovery');
     if (!id) return false;
     const record = (await this.deps.sessions.get(`recovery:${id}`)) as RecoverySessionRecord | null;
     return record?.kind === 'recovery-session';
@@ -144,7 +158,7 @@ export class RecoveryService {
     headers: Headers,
     request: NameRequest,
   ): Promise<{ named: Record<string, unknown>; clearCookie: string }> {
-    const id = readCookie(headers, RECOVERY_COOKIE);
+    const id = this.cookies.read(headers, 'vbn_recovery');
     if (!id || !(await this.isOpen(headers))) throw new Error('no recovery session');
     await this.deps.sessions.delete(`recovery:${id}`);
     const administrators = this.deps.administrators;
@@ -194,7 +208,7 @@ export class RecoveryService {
     });
     await this.tellAdministrators(record);
     this.deps.notifications?.masterKeyRecovered();
-    return { named, clearCookie: clearCookie(RECOVERY_COOKIE) };
+    return { named, clearCookie: this.cookies.clear('vbn_recovery') };
   }
 
   /** The last recovery, while every page says so (thirty days); `null` otherwise. */

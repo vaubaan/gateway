@@ -78,6 +78,12 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 
 ## Traps
 
+- **Cookie names depend on the mode**: `__Host-vbn_*` and `Secure` on an https
+  instance, plain `vbn_*` without `Secure` in local mode (`cookieJar` in
+  `auth/cookies.ts`; Safari and WKWebView drop a `Secure` cookie on
+  `http://localhost`). Write and read them through the service's jar, never
+  the `SESSION_COOKIE` constants, which name the `host` jar only.
+
 - The callback URL is rebuilt from `public_url` plus the query string, never
   `request.url` (the internal host behind the TLS terminator).
 - `groups` is requested only when `scopes_supported` lists it (Google refuses

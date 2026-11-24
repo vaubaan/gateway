@@ -45,6 +45,7 @@ import { collectOpsStats, createInstanceLimits, type InstanceLimits } from '../l
 import { createMasterKeyModule, type MasterKeyModule } from '../master-key';
 import type { OpsStatsDeps } from '../http/ops-stats';
 import type { Resolver } from '../http/public-address';
+import { publishLocalMode } from '../http/local-mode';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { createMissionsModule, type MissionsModule } from '../missions';
@@ -280,6 +281,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   warnKeyBesideStore(logger, config, deps.mountFacts);
   // The proxy sends HSTS when the public URL is https (`server/http/security-headers.ts`).
   publishHttps(config.publicUrl.protocol === 'https:');
+  publishLocalMode(config.local);
 
   const encryptor = await createEncryptor(config.encryption);
 
