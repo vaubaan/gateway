@@ -4,8 +4,11 @@
 //
 //   src-tauri/resources/gateway/      the gateway's standalone output, as the image copies it
 //                                     (server, traced node_modules, .next/static, public)
-//   src-tauri/binaries/node-<target>  the official Node binary of the image's version,
-//                                     checked against nodejs.org's SHASUMS256.txt
+//   src-tauri/resources/runtime/node  the official Node binary of the image's version,
+//                                     checked against nodejs.org's SHASUMS256.txt; a
+//                                     resource, not an executable of the bundle
+//                                     (Contents/MacOS), where macOS would give it its
+//                                     own icon in the Dock
 //
 //   node apps/desktop/scripts/assemble.mjs --target aarch64-apple-darwin
 //
@@ -167,7 +170,7 @@ function copyGateway(target) {
   return out;
 }
 
-async function fetchNode(version, target, triple) {
+async function fetchNode(version, target) {
   const base = `https://nodejs.org/dist/v${version}`;
   const archive = `node-v${version}-${target.node}.tar.gz`;
   const expected = checksumOf((await download(`${base}/SHASUMS256.txt`)).toString('utf8'), archive);
@@ -181,7 +184,7 @@ async function fetchNode(version, target, triple) {
   writeFileSync(tarball, bytes);
   const member = `node-v${version}-${target.node}/bin/node`;
   execFileSync('tar', ['-xzf', tarball, '-C', work, member]);
-  const binary = join(DESKTOP, `binaries/node-${triple}`);
+  const binary = join(DESKTOP, 'resources/runtime/node');
   mkdirSync(dirname(binary), { recursive: true });
   cpSync(join(work, member), binary);
   chmodSync(binary, 0o755);
@@ -195,7 +198,7 @@ async function main() {
   if (!target) fail(`--target must be one of ${Object.keys(TARGETS).join(', ')}`);
   const version = nodeVersionOf(readFileSync(DOCKERFILE, 'utf8'));
   const gateway = copyGateway(target);
-  const node = await fetchNode(version, target, triple);
+  const node = await fetchNode(version, target);
   console.log(`assembled for ${triple}: Node ${version} at ${node}, the gateway at ${gateway}`);
 }
 

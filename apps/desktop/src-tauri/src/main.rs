@@ -93,11 +93,15 @@ fn main() {
                 })
                 .build()?;
             let data_dir = app.path().app_data_dir()?;
-            let resources = app.path().resource_dir()?.join("gateway");
+            let resource_dir = app.path().resource_dir()?;
+            let resources = resource_dir.join("gateway");
+            // A resource, not an executable of the bundle: in Contents/MacOS macOS gives the
+            // server its own icon in the Dock.
+            let node = resource_dir.join("runtime").join("node");
             let gateway = Arc::new(Gateway { child: Mutex::new(None) });
             app.manage(gateway.clone());
             thread::spawn(move || {
-                if let Err(problem) = start(&gateway, &window, &data_dir, &resources) {
+                if let Err(problem) = start(&gateway, &window, &data_dir, &resources, &node) {
                     show_problem(&window, &problem);
                 }
             });
@@ -125,6 +129,7 @@ fn start(
     window: &WebviewWindow,
     data_dir: &Path,
     resources: &Path,
+    node: &Path,
 ) -> Result<(), String> {
     fs::create_dir_all(data_dir).map_err(|e| format!("Cannot create {}: {e}", data_dir.display()))?;
     let store = data_dir.join(STORE_FILE);
@@ -141,9 +146,11 @@ fn start(
         .append(true)
         .open(&log_path)
         .map_err(|e| format!("Cannot write {}: {e}", log_path.display()))?;
-    let node = sidecar("node")?;
+    if !node.exists() {
+        return Err(format!("The bundled Node is missing ({})", node.display()));
+    }
     let server = resources.join("apps").join("gateway").join("server.js");
-    let mut child = Command::new(&node)
+    let mut child = Command::new(node)
         .arg(&server)
         .current_dir(resources)
         .env_clear()
@@ -208,19 +215,6 @@ fn master_key(store: &Path) -> Result<String, String> {
             Ok(key)
         }
         Err(e) => Err(format!("Cannot read the encryption key from the Keychain: {e}")),
-    }
-}
-
-/// A binary bundled beside the app's executable (`bundle.externalBin`).
-fn sidecar(name: &str) -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let dir = exe.parent().ok_or("the app has no directory")?;
-    let file = if cfg!(windows) { format!("{name}.exe") } else { name.to_string() };
-    let path = dir.join(file);
-    if path.exists() {
-        Ok(path)
-    } else {
-        Err(format!("The bundled {name} is missing ({})", path.display()))
     }
 }
 

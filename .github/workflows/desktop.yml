@@ -133,8 +133,8 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       # Notarization refuses an app holding an unsigned Mach-O: every one in the resources
-      # (the native addons and any library they carry) is signed here, the Node binary
-      # with the JIT entitlements; the bundler then signs the shell and the app.
+      # (Node, the native addons and any library they carry) is signed here, Node with the
+      # JIT entitlements; the bundler then signs the shell and the app.
       - name: Sign the native code
         if: steps.signing.outputs.signed == 'true'
         env:
@@ -148,9 +148,10 @@ jobs:
             fi
           done < <(find apps/desktop/src-tauri/resources -type f -print0)
           echo "signed $count Mach-O files of the resources"
+          # Node again, with the JIT entitlements V8 needs under the hardened runtime.
           codesign --force --options runtime --timestamp \
             --entitlements apps/desktop/src-tauri/entitlements.plist \
-            --sign "$APPLE_SIGNING_IDENTITY" apps/desktop/src-tauri/binaries/node-${{ matrix.target }}
+            --sign "$APPLE_SIGNING_IDENTITY" apps/desktop/src-tauri/resources/runtime/node
 
       - name: Build the app
         working-directory: apps/desktop/src-tauri
