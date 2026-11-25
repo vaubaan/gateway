@@ -8,8 +8,8 @@ name: desktop
 #   architecture, Vaubaan-<version>-<arm64|x64>.dmg, uploaded as an artifact.
 #   called by release.yml at a tag v2.x.y   the same; release.yml attaches the .dmg
 #   files to the GitHub release when they are signed (output `signed`).
-#   With the Apple secrets set, every Mach-O is signed under the hardened runtime and
-#   the app is notarized; without them the app is signed ad hoc (Gatekeeper warns), for
+#   With the Apple secrets set, every Mach-O is signed under the hardened runtime, and
+#   the app and the disk image around it are notarized and stapled; without them the app is signed ad hoc (Gatekeeper warns), for
 #   testing only, and never attached to a release.
 #
 # Before the upload, the built app is opened: it must answer /healthz on 127.0.0.1:3100,
@@ -176,6 +176,22 @@ jobs:
             --config "{\"version\":\"$CORE_VERSION\"}"
           mkdir -p "$RUNNER_TEMP/dist"
           cp target/${{ matrix.target }}/release/bundle/dmg/*.dmg "$RUNNER_TEMP/dist/$DMG"
+
+      # The bundler notarizes the app inside, not the disk image around it: macOS checks
+      # a downloaded .dmg when it is opened, so the image is notarized and stapled too.
+      - name: Notarize the disk image
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_KEY_PATH: ${{ steps.signing.outputs.api_key_path }}
+          DMG: ${{ runner.temp }}/dist/${{ steps.version.outputs.file }}
+        run: |
+          xcrun notarytool submit "$DMG" --key "$API_KEY_PATH" --key-id "$API_KEY" \
+            --issuer "$API_ISSUER" --wait --timeout 30m
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          spctl -a -vv -t open --context context:primary-signature "$DMG"
 
       - name: Start the app, then quit it
         run: |
