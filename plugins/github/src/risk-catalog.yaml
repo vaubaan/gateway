@@ -38,9 +38,13 @@
 # catalog_version 16 (2026-11-19) : `github.search-global` leaves `read` for a
 # macro-action of its own, `search` : a mission on one repository that ticks Read
 # reads that repository only.
+# catalog_version 17 (2026-11-25) : the reviews and code comments of a pull request
+# (`pull_request[N].review`, `pull_request[N].review-comment`) : read under
+# `github.read-meta` ; a reply in a code-comment thread is a comment (`issue[N].comment.W`,
+# `github.comment-write`), never a slice beneath `pull_request[N]`, which `create-pr` spans.
 service: github
-catalog_version: 16
-catalog_date: 2026-11-19
+catalog_version: 17
+catalog_date: 2026-11-25
 
 risks:
   # ---------------------------------------------------------------
@@ -66,13 +70,16 @@ risks:
       cost: free
       visibility: internal
   - id: github.read-meta
-    label: 'Read PRs, issues, releases, workflows, runs and job logs, branch-protection'
+    label: 'Read PRs, reviews, issues, comments, releases, workflows, runs and job logs, branch-protection'
     reason: >-
-      Repository metadata. Issue/PR bodies are attacker-controlled (OWASP
-      LLM01) — handle with care on the agent side. Reading branch
-      protection rules is diagnostic only, never dangerous in itself.
+      Repository metadata. Issue/PR bodies, comments and reviews are
+      attacker-controlled (OWASP LLM01) — handle with care on the agent
+      side. Reading branch protection rules is diagnostic only, never
+      dangerous in itself.
     matches:
       - 'github.repo[**].pull_request[**].R'
+      - 'github.repo[**].pull_request[**].review[**].R'
+      - 'github.repo[**].pull_request[**].review-comment[**].R'
       - 'github.repo[**].issue[**].R'
       - 'github.repo[**].issue[**].comment[**].R'
       - 'github.repo[**].release[**].R'
@@ -206,9 +213,10 @@ risks:
       cost: free
       visibility: team
   - id: github.comment-write
-    label: 'Comment on an issue or PR'
+    label: 'Comment on an issue or PR, or reply to a code comment'
     reason: >-
-      A comment on a PR notifies reviewers ; on an issue, subscribers.
+      A comment on a PR notifies reviewers ; on an issue, subscribers ; a
+      reply in a code-comment thread, the people of the thread.
       Low risk but pollution / spam potential if abused.
     matches:
       - 'github.repo[**].issue[**].comment[**].W'
@@ -441,9 +449,10 @@ macro_actions:
     label: 'Read'
     description: "Code and metadata of the mission's repositories."
     narrative: >-
-      Reading the code, issues, pull requests, releases, workflow runs and job logs of the
-      mission's repositories. Nothing here changes a repository, but what is read lands in the
-      agent's context: a README or an issue body can carry instructions someone else wrote.
+      Reading the code, issues, pull requests and their reviews, comments, releases, workflow runs
+      and job logs of the mission's repositories. Nothing here changes a repository, but what is
+      read lands in the agent's context: a README, an issue body or a review comment can carry
+      instructions someone else wrote.
     entries:
       - risk_id: github.read-code
         quota: 5000

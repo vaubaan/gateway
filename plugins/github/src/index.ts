@@ -38,7 +38,7 @@ export const githubPlugin = definePlugin({
   icon: GITHUB_ICON,
   iconColor: GITHUB_ICON_COLOR,
   resourceNoun: { one: 'repository', other: 'repositories' },
-  version: '5.4.1',
+  version: '5.5.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows a fine-grained token reaches.',
   summary:

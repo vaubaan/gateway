@@ -116,6 +116,25 @@ export const githubDataModel: DataModel = {
             '`branch[<base>].merge-into.W`.',
         },
         {
+          name: 'review',
+          parent: 'pull_request',
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A review of a pull request : its verdict (approved, changes requested, commented) ' +
+            'and its summary (`get_pull_request_reviews`, slice `pull_request[N].review.R`).',
+        },
+        {
+          name: 'review-comment',
+          parent: 'pull_request',
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A comment on a line of the diff of a pull request, in a thread ' +
+            '(`get_pull_request_comments`, slice `pull_request[N].review-comment.R`). ' +
+            'Not an issue comment : GitHub keeps them apart. A reply in a thread ' +
+            '(`reply_to_pull_request_comment`) is written `issue[N].comment.W`, as any ' +
+            'comment : a write beneath `pull_request[N]` would be a pull-request write.',
+        },
+        {
           name: 'issue',
           parent: 'repo',
           cardinalities: ['one', 'bounded'],

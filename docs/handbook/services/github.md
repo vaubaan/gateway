@@ -3,7 +3,7 @@ title: GitHub plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-11-17
+last_reviewed: 2026-11-25
 ---
 
 # GitHub plugin — handbook
@@ -77,6 +77,18 @@ env-scoped. Rules common to every plugin: [services README](README.md).
   issue edit too. `type: null` removes the type (an omitted `type` leaves it), `body: ''` clears
   the description. GitHub **drops a type change silently** when the token's user lacks push
   access: the answer carries the type the issue really has, read it.
+- **A review lives in three places at GitHub**, one tool each: the conversation is the issue's
+  comments (`get_issue_comments`, the pull request's number is an issue number), the verdicts and
+  summaries are the reviews (`get_pull_request_reviews`), the comments on lines are the review
+  comments (`get_pull_request_comments`). Reading only one misses the others.
+- `reply_to_pull_request_comment` is classified `issue[N].comment.W`, like `add_issue_comment`,
+  not under `pull_request[N]`: `create-pr` matches `pull_request[**].W`, which spans every write
+  beneath a pull request (the `update_issue` trap again). GitHub takes no reply to a reply: the
+  `comment_id` is the thread's first comment (the `in_reply_to_id` of a reply).
+- **Whether a thread is resolved is not in the REST API** (GraphQL `reviewThreads` only): the
+  answer of `get_pull_request_comments` cannot say it, and no tool resolves a thread. A comment
+  whose `line` is `null` is on a line no longer in the diff (outdated); `original_line` says where
+  it was.
 - `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run` are retired (risk model §7.2): the plugin's `excludedTools` (`EXCLUDED_TOOLS`, `identity.ts`), refused by name.
 
 ## Outside the repo

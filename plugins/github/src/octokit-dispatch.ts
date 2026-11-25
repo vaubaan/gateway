@@ -94,6 +94,42 @@ export async function dispatchGithubTool(
       const { data } = await octokit.rest.issues.get({ ...repo, issue_number: call.issueNumber });
       return data;
     }
+    case TOOL.getIssueComments: {
+      const { data } = await octokit.rest.issues.listComments({
+        ...repo,
+        issue_number: call.issueNumber,
+        per_page: call.perPage,
+        page: call.page,
+      });
+      return recordsOf(data).map(issueComment);
+    }
+    case TOOL.getPullRequestReviews: {
+      const { data } = await octokit.rest.pulls.listReviews({
+        ...repo,
+        pull_number: call.pullNumber,
+        per_page: call.perPage,
+        page: call.page,
+      });
+      return recordsOf(data).map(review);
+    }
+    case TOOL.getPullRequestComments: {
+      const { data } = await octokit.rest.pulls.listReviewComments({
+        ...repo,
+        pull_number: call.pullNumber,
+        per_page: call.perPage,
+        page: call.page,
+      });
+      return recordsOf(data).map(reviewComment);
+    }
+    case TOOL.getPullRequestFiles: {
+      const { data } = await octokit.rest.pulls.listFiles({
+        ...repo,
+        pull_number: call.pullNumber,
+        per_page: call.perPage,
+        page: call.page,
+      });
+      return recordsOf(data).map(changedFile);
+    }
     case TOOL.getCommit: {
       const { data } = await octokit.rest.repos.getCommit({ ...repo, ref: call.sha });
       return data;
@@ -176,6 +212,15 @@ export async function dispatchGithubTool(
         body: args.body as string,
       });
       return data;
+    }
+    case TOOL.replyToPullRequestComment: {
+      const { data } = await octokit.rest.pulls.createReplyForReviewComment({
+        ...repo,
+        pull_number: call.pullNumber,
+        comment_id: call.commentId,
+        body: call.body,
+      });
+      return isRecord(data) ? reviewComment(data) : data;
     }
     case TOOL.addLabels: {
       const { data } = await octokit.rest.issues.addLabels({
@@ -407,6 +452,80 @@ function issueSummary(data: unknown): unknown {
   const { number, title, body, state, html_url, updated_at } = data;
   const type = isRecord(data.type) && typeof data.type.name === 'string' ? data.type.name : null;
   return { number, title, body, type, state, html_url, updated_at };
+}
+
+/*
+ * Comments, reviews and changed files, cut down to what an agent answering a
+ * review reads : who, what, where, when, and the link. GitHub's payloads carry
+ * the author's whole profile, reactions and a dozen URLs per item, which only
+ * cost the agent's context. Read field by field : Octokit types the answer,
+ * it does not check it.
+ */
+
+/** The login of a payload's `user`, or `null` (a deleted account is `ghost` or absent). */
+function loginOf(item: Record<string, unknown>): unknown {
+  return isRecord(item.user) ? item.user.login : null;
+}
+
+/** A comment of an issue or of a pull request's conversation. */
+function issueComment(c: Record<string, unknown>): unknown {
+  return {
+    id: c.id,
+    author: loginOf(c),
+    author_association: c.author_association,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+    body: c.body,
+    html_url: c.html_url,
+  };
+}
+
+/** A review : its verdict and its summary ; the comments on lines are read apart. */
+function review(r: Record<string, unknown>): unknown {
+  return {
+    id: r.id,
+    author: loginOf(r),
+    state: r.state,
+    body: r.body,
+    commit_id: r.commit_id,
+    submitted_at: r.submitted_at,
+    html_url: r.html_url,
+  };
+}
+
+/** A comment on a line of a pull request's diff, with what places it in its thread. */
+function reviewComment(c: Record<string, unknown>): unknown {
+  return {
+    id: c.id,
+    in_reply_to_id: c.in_reply_to_id ?? null,
+    pull_request_review_id: c.pull_request_review_id,
+    author: loginOf(c),
+    author_association: c.author_association,
+    path: c.path,
+    line: c.line ?? null,
+    start_line: c.start_line ?? null,
+    side: c.side,
+    original_line: c.original_line ?? null,
+    commit_id: c.commit_id,
+    diff_hunk: c.diff_hunk,
+    body: c.body,
+    created_at: c.created_at,
+    updated_at: c.updated_at,
+    html_url: c.html_url,
+  };
+}
+
+/** A file a pull request changes, its patch as GitHub gives it (absent when too large). */
+function changedFile(f: Record<string, unknown>): unknown {
+  return {
+    filename: f.filename,
+    status: f.status,
+    previous_filename: f.previous_filename,
+    additions: f.additions,
+    deletions: f.deletions,
+    changes: f.changes,
+    patch: f.patch,
+  };
 }
 
 /** The objects of a list, or none when `value` is not a list. */

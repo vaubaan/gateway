@@ -402,6 +402,53 @@ describe('classifyGithub — PRs, comments, releases', () => {
     ]);
   });
 
+  test.each([
+    ['github__get_issue_comments', { issue_number: 75 }, 'issue[75].comment.R'],
+    ['github__get_pull_request_reviews', { pull_number: 75 }, 'pull_request[75].review.R'],
+    [
+      'github__get_pull_request_comments',
+      { pull_number: 75, per_page: 100, page: 2 },
+      'pull_request[75].review-comment.R',
+    ],
+    ['github__get_pull_request_files', { pull_number: 75 }, 'pull_request[75].R'],
+    [
+      'github__reply_to_pull_request_comment',
+      { pull_number: 75, comment_id: 9001, body: 'Fixed in abc123.' },
+      'issue[75].comment.W',
+    ],
+  ])('%s → %s', (tool, args, slice) => {
+    const r = classifyGithub(tool, { ...baseArgs, ...args }, resources);
+    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].${slice}`]);
+  });
+
+  test.each([
+    ['get_pull_request_comments without a number', 'github__get_pull_request_comments', {}],
+    ['a page size over 100', 'github__get_issue_comments', { issue_number: 1, per_page: 101 }],
+    ['page 0', 'github__get_pull_request_reviews', { pull_number: 1, page: 0 }],
+    [
+      'a page that is not a number',
+      'github__get_pull_request_files',
+      { pull_number: 1, page: '2' },
+    ],
+    [
+      'a reply without comment_id',
+      'github__reply_to_pull_request_comment',
+      { pull_number: 1, body: 'b' },
+    ],
+    [
+      'a blank reply',
+      'github__reply_to_pull_request_comment',
+      { pull_number: 1, comment_id: 2, body: '  ' },
+    ],
+    [
+      'a reply over 65536 characters',
+      'github__reply_to_pull_request_comment',
+      { pull_number: 1, comment_id: 2, body: 'x'.repeat(65537) },
+    ],
+  ])('refuses %s', (_label, tool, args) => {
+    expect(classifyGithub(tool, { ...baseArgs, ...args }, resources)).toHaveProperty('denied');
+  });
+
   test('update_issue → issue[N].edit.W, for a title, a body, a type or several', () => {
     for (const fields of [
       { title: 'New' },

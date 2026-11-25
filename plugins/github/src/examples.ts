@@ -50,6 +50,14 @@ export const githubExamples: ToolSamples = samplesOn([EXAMPLE_REPOSITORY], {
   [TOOL.getPullRequest]: [{ args: { ...repo, pull_number: 1 } }],
   [TOOL.getIssue]: [{ args: { ...repo, issue_number: 1 } }],
   [TOOL.getCommit]: [{ args: { ...repo, sha: 'deadbeef' } }],
+  [TOOL.getIssueComments]: [
+    { args: { ...repo, issue_number: 1 } },
+    { args: { ...repo, issue_number: 1, per_page: 100, page: 2 } },
+    { args: { ...repo, issue_number: 1, per_page: 101 }, expectDenied: true },
+  ],
+  [TOOL.getPullRequestReviews]: [{ args: { ...repo, pull_number: 1 } }],
+  [TOOL.getPullRequestComments]: [{ args: { ...repo, pull_number: 1, per_page: 50 } }],
+  [TOOL.getPullRequestFiles]: [{ args: { ...repo, pull_number: 1 } }],
   [TOOL.searchCode]: [{ args: { q: 'foo' } }],
   [TOOL.searchIssues]: [{ args: { q: 'foo' } }],
   [TOOL.createBranch]: [
@@ -84,6 +92,10 @@ export const githubExamples: ToolSamples = samplesOn([EXAMPLE_REPOSITORY], {
   ],
   [TOOL.createPullRequest]: [{ args: { ...repo, title: 't', head: feature, base: 'main' } }],
   [TOOL.addIssueComment]: [{ args: { ...repo, issue_number: 1, body: 'b' } }],
+  [TOOL.replyToPullRequestComment]: [
+    { args: { ...repo, pull_number: 1, comment_id: 42, body: 'Done.' } },
+    { args: { ...repo, pull_number: 1, comment_id: 42, body: ' ' }, expectDenied: true },
+  ],
   [TOOL.addLabels]: [
     { args: { ...repo, issue_number: 1, labels: ['e2e'] } },
     { args: { ...repo, issue_number: 1, labels: ['bug', 'needs review'] } },

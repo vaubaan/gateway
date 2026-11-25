@@ -165,6 +165,16 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
       return [build(`${repo}.issue.R`)];
     case TOOL.getIssue:
       return [build(`${repo}.issue[${call.issueNumber}].R`)];
+    // A pull request's conversation is its issue's comments : one number space.
+    case TOOL.getIssueComments:
+      return [build(`${repo}.issue[${call.issueNumber}].comment.R`)];
+    case TOOL.getPullRequestReviews:
+      return [build(`${repo}.pull_request[${call.pullNumber}].review.R`)];
+    case TOOL.getPullRequestComments:
+      return [build(`${repo}.pull_request[${call.pullNumber}].review-comment.R`)];
+    // The changed files are the pull request's diff : a read of the pull request.
+    case TOOL.getPullRequestFiles:
+      return [build(`${repo}.pull_request[${call.pullNumber}].R`)];
     case TOOL.listReleases:
       return [build(`${repo}.release.R`)];
     case TOOL.listWorkflows:
@@ -216,6 +226,11 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
     case TOOL.addIssueComment:
       // Trailing `comment` name — no leaf id (unknown before posting).
       return [build(`${repo}.issue[${call.issueNumber}].comment.W`)];
+    case TOOL.replyToPullRequestComment:
+      // A comment on the pull request's number, as `add_issue_comment` : any
+      // write slice beneath `pull_request[N]` would also touch `create-pr`
+      // (its pattern `pull_request[**].W` spans the subtree).
+      return [build(`${repo}.issue[${call.pullNumber}].comment.W`)];
     case TOOL.addLabels:
       // One slice per label, named : a mission can be narrowed to `label[e2e]`.
       return dedup(

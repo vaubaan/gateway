@@ -251,6 +251,208 @@ describe('execute — update_issue', () => {
   });
 });
 
+describe('execute — reading and answering a review', () => {
+  const repo = { owner: 'acme', repo: 'app' };
+  const R = 'https://api.github.com/repos/acme/app';
+  const user = { login: 'xavier', id: 1, avatar_url: 'https://avatars/x', type: 'User' };
+
+  test('get_issue_comments reads the conversation of a pull request, page by page, cut down', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${R}/issues/75/comments?per_page=100&page=2`,
+        body: [
+          {
+            id: 11,
+            user,
+            author_association: 'MEMBER',
+            body: 'Looks good overall.',
+            created_at: '2026-11-24T10:00:00Z',
+            updated_at: '2026-11-24T10:00:00Z',
+            html_url: 'https://github.com/acme/app/pull/75#issuecomment-11',
+            reactions: { total_count: 0 },
+            node_id: 'IC_x',
+          },
+        ],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), TOOL.getIssueComments, {
+      ...repo,
+      issue_number: 75,
+      per_page: 100,
+      page: 2,
+    });
+    expect(JSON.parse(text(result))).toEqual([
+      {
+        id: 11,
+        author: 'xavier',
+        author_association: 'MEMBER',
+        created_at: '2026-11-24T10:00:00Z',
+        updated_at: '2026-11-24T10:00:00Z',
+        body: 'Looks good overall.',
+        html_url: 'https://github.com/acme/app/pull/75#issuecomment-11',
+      },
+    ]);
+  });
+
+  test('get_pull_request_reviews answers each verdict and its summary', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${R}/pulls/75/reviews`,
+        body: [
+          {
+            id: 5,
+            user,
+            state: 'CHANGES_REQUESTED',
+            body: 'Two points below.',
+            commit_id: 'c'.repeat(40),
+            submitted_at: '2026-11-24T10:05:00Z',
+            html_url: 'https://github.com/acme/app/pull/75#pullrequestreview-5',
+            _links: {},
+          },
+        ],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), TOOL.getPullRequestReviews, {
+      ...repo,
+      pull_number: 75,
+    });
+    expect(JSON.parse(text(result))).toEqual([
+      {
+        id: 5,
+        author: 'xavier',
+        state: 'CHANGES_REQUESTED',
+        body: 'Two points below.',
+        commit_id: 'c'.repeat(40),
+        submitted_at: '2026-11-24T10:05:00Z',
+        html_url: 'https://github.com/acme/app/pull/75#pullrequestreview-5',
+      },
+    ]);
+  });
+
+  test('get_pull_request_comments answers each code comment where it sits and which thread it is in', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${R}/pulls/75/comments`,
+        body: [
+          {
+            id: 21,
+            pull_request_review_id: 5,
+            user,
+            author_association: 'MEMBER',
+            path: 'src/a.ts',
+            line: 12,
+            side: 'RIGHT',
+            original_line: 12,
+            commit_id: 'c'.repeat(40),
+            diff_hunk: '@@ -10,3 +10,4 @@',
+            body: 'Name this constant.',
+            created_at: '2026-11-24T10:05:00Z',
+            updated_at: '2026-11-24T10:05:00Z',
+            html_url: 'https://github.com/acme/app/pull/75#discussion_r21',
+          },
+          // A reply, on a line no longer in the diff (outdated).
+          { id: 22, in_reply_to_id: 21, user: null, path: 'src/a.ts', line: null, body: 'Done.' },
+        ],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), TOOL.getPullRequestComments, {
+      ...repo,
+      pull_number: 75,
+    });
+    const comments = JSON.parse(text(result)) as Record<string, unknown>[];
+    expect(comments[0]).toEqual({
+      id: 21,
+      in_reply_to_id: null,
+      pull_request_review_id: 5,
+      author: 'xavier',
+      author_association: 'MEMBER',
+      path: 'src/a.ts',
+      line: 12,
+      start_line: null,
+      side: 'RIGHT',
+      original_line: 12,
+      commit_id: 'c'.repeat(40),
+      diff_hunk: '@@ -10,3 +10,4 @@',
+      body: 'Name this constant.',
+      created_at: '2026-11-24T10:05:00Z',
+      updated_at: '2026-11-24T10:05:00Z',
+      html_url: 'https://github.com/acme/app/pull/75#discussion_r21',
+    });
+    expect(comments[1]).toMatchObject({ id: 22, in_reply_to_id: 21, author: null, line: null });
+  });
+
+  test('get_pull_request_files lists the changed files with their patch', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${R}/pulls/75/files`,
+        body: [
+          {
+            sha: 'f'.repeat(40),
+            filename: 'src/b.ts',
+            previous_filename: 'src/a.ts',
+            status: 'renamed',
+            additions: 1,
+            deletions: 0,
+            changes: 1,
+            patch: '@@ -1 +1,2 @@\n+x',
+            blob_url: 'https://github.com/…',
+          },
+        ],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), TOOL.getPullRequestFiles, {
+      ...repo,
+      pull_number: 75,
+    });
+    expect(JSON.parse(text(result))).toEqual([
+      {
+        filename: 'src/b.ts',
+        status: 'renamed',
+        previous_filename: 'src/a.ts',
+        additions: 1,
+        deletions: 0,
+        changes: 1,
+        patch: '@@ -1 +1,2 @@\n+x',
+      },
+    ]);
+  });
+
+  test('reply_to_pull_request_comment posts the reply in the thread of the comment named', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: `${R}/pulls/75/comments/21/replies`,
+        status: 201,
+        respond: (c) => ({
+          id: 23,
+          in_reply_to_id: 21,
+          user,
+          path: 'src/a.ts',
+          line: 12,
+          body: (c.json as { body: string }).body,
+        }),
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), TOOL.replyToPullRequestComment, {
+      ...repo,
+      pull_number: 75,
+      comment_id: 21,
+      body: 'Renamed in abc123.',
+    });
+    expect(fetch.calls[0]!.json).toEqual({ body: 'Renamed in abc123.' });
+    expect(JSON.parse(text(result))).toMatchObject({
+      id: 23,
+      in_reply_to_id: 21,
+      author: 'xavier',
+      body: 'Renamed in abc123.',
+    });
+  });
+});
+
 describe('execute — merge_pull_request is bound to the declared base', () => {
   const repo = { owner: 'acme', repo: 'app' };
   const pullUrl = 'https://api.github.com/repos/acme/app/pulls/7';

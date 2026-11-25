@@ -9,6 +9,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub (plugin 5.5.0): an agent reads the review of its pull request and answers it.** Until
+  now it could open a pull request and comment on it, never read what the reviewers wrote. Five
+  tools:
+  - `get_issue_comments`: the conversation of a pull request (or the comments of an issue);
+  - `get_pull_request_reviews`: each review's verdict (approved, changes requested…) and summary;
+  - `get_pull_request_comments`: the comments made on lines of code, with the file, the line,
+    the diff hunk and the thread each belongs to;
+  - `get_pull_request_files`: the files a pull request changes, with their patch;
+  - `reply_to_pull_request_comment`: a reply in the thread of a code comment.
+
+  The three listings take `per_page` (at most 100) and `page`; their answers keep who, what,
+  where, when and the link. The reads are under `github.read-meta`, the reply under
+  `github.comment-write` (catalog version 17): a mission that ticks Read and Propose has them
+  without being edited. Token permissions: Issues and Pull requests, already asked.
+
 ## [2.0.0-alpha.31] - 2026-11-24
 
 ### Highlights

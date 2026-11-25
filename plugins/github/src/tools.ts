@@ -14,17 +14,30 @@
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 import {
+  MAX_COMMENT_BODY_LENGTH,
   MAX_ISSUE_BODY_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
   MAX_ISSUE_TYPE_LENGTH,
   MAX_LABEL_LENGTH,
   MAX_LABELS_PER_CALL,
+  MAX_PER_PAGE,
 } from './call.ts';
 import { TOOL } from './identity.ts';
 
 const repoArgs = {
   owner: { type: 'string', description: 'Repository owner (user or org).' },
   repo: { type: 'string', description: 'Repository name.' },
+};
+
+/** `per_page` and `page` of a listing GitHub paginates. */
+const pageArgs = {
+  per_page: {
+    type: 'number',
+    minimum: 1,
+    maximum: MAX_PER_PAGE,
+    description: `Items per page (default 30, at most ${MAX_PER_PAGE}).`,
+  },
+  page: { type: 'number', minimum: 1, description: 'Page number, from 1 (default 1).' },
 };
 
 export const githubTools: readonly McpToolDeclaration[] = [
@@ -96,6 +109,47 @@ export const githubTools: readonly McpToolDeclaration[] = [
       type: 'object',
       properties: { ...repoArgs, sha: { type: 'string' } },
       required: ['owner', 'repo', 'sha'],
+    },
+  },
+  // Read - a review : the conversation, the reviews, the code comments, the diff
+  {
+    name: TOOL.getIssueComments,
+    description:
+      "Read the comments of an issue, or the conversation of a pull request (a pull request's number is an issue number), oldest first: id, author, date, body, link. The comments on lines of code are read with `get_pull_request_comments`, the verdicts with `get_pull_request_reviews`.",
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, issue_number: { type: 'number' }, ...pageArgs },
+      required: ['owner', 'repo', 'issue_number'],
+    },
+  },
+  {
+    name: TOOL.getPullRequestReviews,
+    description:
+      'Read the reviews of a pull request, oldest first: reviewer, verdict (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING), summary body, the commit reviewed, date, link.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, pull_number: { type: 'number' }, ...pageArgs },
+      required: ['owner', 'repo', 'pull_number'],
+    },
+  },
+  {
+    name: TOOL.getPullRequestComments,
+    description:
+      'Read the comments made on lines of code of a pull request (review comments), oldest first: id, author, file path, line (null when the line is no longer in the diff: see original_line), the diff hunk commented, body, `in_reply_to_id` when the comment answers another in its thread, the review it belongs to, date, link. Answer one with `reply_to_pull_request_comment`.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, pull_number: { type: 'number' }, ...pageArgs },
+      required: ['owner', 'repo', 'pull_number'],
+    },
+  },
+  {
+    name: TOOL.getPullRequestFiles,
+    description:
+      'List the files a pull request changes: path, status (added, modified, removed, renamed), former path, lines added and deleted, and the patch (GitHub leaves it out for a large or binary file).',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, pull_number: { type: 'number' }, ...pageArgs },
+      required: ['owner', 'repo', 'pull_number'],
     },
   },
   // Search — account-shaped : not bounded to the mission resources (risk `github.search-global`).
@@ -189,6 +243,29 @@ export const githubTools: readonly McpToolDeclaration[] = [
         body: { type: 'string' },
       },
       required: ['owner', 'repo', 'issue_number', 'body'],
+    },
+  },
+  {
+    name: TOOL.replyToPullRequestComment,
+    description:
+      'Reply to a comment made on a line of code of a pull request: the reply lands in its thread. `comment_id` is the id of the first comment of the thread, from `get_pull_request_comments`: GitHub takes no reply to a reply, so for a comment that has an `in_reply_to_id`, pass that id. Returns the reply posted.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        pull_number: { type: 'number' },
+        comment_id: {
+          type: 'number',
+          description: 'The id of the first comment of the thread answered.',
+        },
+        body: {
+          type: 'string',
+          minLength: 1,
+          maxLength: MAX_COMMENT_BODY_LENGTH,
+          description: 'The reply (Markdown).',
+        },
+      },
+      required: ['owner', 'repo', 'pull_number', 'comment_id', 'body'],
     },
   },
   {

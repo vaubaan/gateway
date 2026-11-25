@@ -234,7 +234,7 @@ describe('1 · the model', () => {
   it('draws the planes and entities of the data model, the resource highlighted', () => {
     const github = byId('github');
     const model = section(html('github'), 'model');
-    expect(words(model)).toContain('1 plane, 23 things.');
+    expect(words(model)).toContain('1 plane, 25 things.');
     for (const entity of github.dataModel.planes.flatMap((p) => p.entities)) {
       expect(model, entity.name).toContain(`${entity.name}`);
     }

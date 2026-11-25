@@ -41,12 +41,12 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('29 tools declared, all prefixed ; the names are those of identity.ts', () => {
+  test('34 tools declared, all prefixed ; the names are those of identity.ts', () => {
     expect(TOOL_PREFIX).toBe(toolPrefixFor(SERVICE_ID));
     expect(githubPlugin.id).toBe(SERVICE_ID);
-    expect(githubPlugin.tools).toHaveLength(29);
+    expect(githubPlugin.tools).toHaveLength(34);
     for (const t of githubPlugin.tools) expect(t.name.startsWith(TOOL_PREFIX)).toBe(true);
-    // The 29 MCP tools, then the git remote's two.
+    // The 34 MCP tools, then the git remote's two.
     expect([
       ...githubPlugin.tools.map((t) => t.name),
       githubPlugin.gitRemote.fetchTool,
@@ -62,8 +62,8 @@ describe('github plugin — structural kit', () => {
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin);
-    // The 29 MCP tools and the git remote's two.
-    expect(report.toolsChecked).toBe(31);
+    // The 34 MCP tools and the git remote's two.
+    expect(report.toolsChecked).toBe(36);
     // The 17 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
@@ -101,7 +101,7 @@ describe('github plugin — structural kit', () => {
       resources,
       context: (fetch, missionResources) => executeCtx(fetch, missionResources),
     });
-    expect(report.toolsChecked).toBe(29);
+    expect(report.toolsChecked).toBe(34);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'branch',
@@ -163,7 +163,7 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, search, propose, ship, administer ; catalog version 16', () => {
+  test('read, search, propose, ship, administer ; catalog version 17', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
       'search',
@@ -171,7 +171,7 @@ describe('github catalog — macro-actions at a trust level', () => {
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(16);
+    expect(githubCatalog.catalog.catalog_version).toBe(17);
   });
 
   test('read at Careful reads the mission repositories only ; the global search is a macro-action of its own', () => {

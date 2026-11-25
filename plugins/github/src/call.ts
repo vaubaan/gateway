@@ -274,6 +274,36 @@ function issueTypeName(value: unknown): string | null {
   return UNPRINTABLE.test(name) ? null : name;
 }
 
+/** Most items GitHub answers per page (`per_page`). */
+export const MAX_PER_PAGE = 100;
+
+/** A page of a listing GitHub paginates : `per_page` 1 to 100 and `page` from 1, each optional. */
+export interface PageRequest {
+  readonly perPage: number | undefined;
+  readonly page: number | undefined;
+}
+
+/** `per_page` and `page` of a paginated read, or the refusal's wording. */
+function readPage(args: Readonly<Record<string, unknown>>): PageRequest | string {
+  const perPage = optional(args.per_page, (v) => {
+    const n = positiveInteger(v);
+    return n !== null && n <= MAX_PER_PAGE ? n : null;
+  });
+  if (perPage === null) return `'per_page' must be an integer from 1 to ${MAX_PER_PAGE}`;
+  const page = optional(args.page, positiveInteger);
+  if (page === null) return "'page' must be a positive integer";
+  return { perPage, page };
+}
+
+/** Longest comment body GitHub accepts (characters). */
+export const MAX_COMMENT_BODY_LENGTH = 65536;
+
+/** A comment body : non-blank text up to `MAX_COMMENT_BODY_LENGTH` characters, sent as given. */
+function commentBody(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  return value.length <= MAX_COMMENT_BODY_LENGTH ? value : null;
+}
+
 /** Default of `max_bytes` on `get_job_logs` : 64 KiB, enough for the end of a failed step. */
 export const JOB_LOG_DEFAULT_BYTES = 64 * 1024;
 /** Most bytes of a job log one call returns (1 MiB). */
@@ -352,6 +382,24 @@ export type RepoCall = { readonly target: RepoTarget } & (
   | {
       readonly tool: typeof TOOL.getIssue | typeof TOOL.addIssueComment;
       readonly issueNumber: number;
+    }
+  | ({
+      readonly tool: typeof TOOL.getIssueComments;
+      readonly issueNumber: number;
+    } & PageRequest)
+  | ({
+      readonly tool:
+        | typeof TOOL.getPullRequestReviews
+        | typeof TOOL.getPullRequestComments
+        | typeof TOOL.getPullRequestFiles;
+      readonly pullNumber: number;
+    } & PageRequest)
+  | {
+      readonly tool: typeof TOOL.replyToPullRequestComment;
+      readonly pullNumber: number;
+      /** The review comment answered : its thread gets the reply. */
+      readonly commentId: number;
+      readonly body: string;
     }
   | {
       readonly tool: typeof TOOL.addLabels;
@@ -516,6 +564,38 @@ export function readGithubCall(
       const issueNumber = positiveInteger(args.issue_number);
       if (issueNumber === null) return denied(tool, "requires 'issue_number'");
       return { tool, target, issueNumber };
+    }
+    case TOOL.getIssueComments: {
+      const issueNumber = positiveInteger(args.issue_number);
+      if (issueNumber === null) return denied(tool, "requires 'issue_number'");
+      const page = readPage(args);
+      if (typeof page === 'string') return denied(tool, page);
+      return { tool, target, issueNumber, ...page };
+    }
+    case TOOL.getPullRequestReviews:
+    case TOOL.getPullRequestComments:
+    case TOOL.getPullRequestFiles: {
+      const pullNumber = positiveInteger(args.pull_number);
+      if (pullNumber === null) return denied(tool, "requires 'pull_number'");
+      const page = readPage(args);
+      if (typeof page === 'string') return denied(tool, page);
+      return { tool, target, pullNumber, ...page };
+    }
+    case TOOL.replyToPullRequestComment: {
+      const pullNumber = positiveInteger(args.pull_number);
+      if (pullNumber === null) return denied(tool, "requires 'pull_number'");
+      const commentId = positiveInteger(args.comment_id);
+      if (commentId === null) {
+        return denied(tool, "requires 'comment_id', the id of a code comment of the pull request");
+      }
+      const body = commentBody(args.body);
+      if (body === null) {
+        return denied(
+          tool,
+          `requires 'body', non-blank text of at most ${MAX_COMMENT_BODY_LENGTH} characters`,
+        );
+      }
+      return { tool, target, pullNumber, commentId, body };
     }
     case TOOL.addLabels: {
       const issueNumber = positiveInteger(args.issue_number);

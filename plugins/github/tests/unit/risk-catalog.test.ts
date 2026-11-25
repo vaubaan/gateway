@@ -56,6 +56,11 @@ const READS: readonly Row[] = [
   ['get_pull_request', 'one', { ...repo, pull_number: 1 }, ['read-meta']],
   ['list_issues', 'all', repo, ['read-meta']],
   ['get_issue', 'one', { ...repo, issue_number: 1 }, ['read-meta']],
+  // The conversation, the reviews, the code comments and the diff of a pull request.
+  ['get_issue_comments', 'of a pull request', { ...repo, issue_number: 1 }, ['read-meta']],
+  ['get_pull_request_reviews', 'one', { ...repo, pull_number: 1 }, ['read-meta']],
+  ['get_pull_request_comments', 'one', { ...repo, pull_number: 1 }, ['read-meta']],
+  ['get_pull_request_files', 'one', { ...repo, pull_number: 1 }, ['read-meta']],
   ['list_releases', 'all', repo, ['read-meta']],
   ['list_workflows', 'all', repo, ['read-meta']],
   ['list_workflow_runs', 'of the repository', repo, ['read-meta']],
@@ -198,6 +203,13 @@ const OTHER_WRITES: readonly Row[] = [
     ['create-pr', FALLBACK],
   ],
   ['add_issue_comment', 'on an issue', { ...repo, issue_number: 1, body: 'b' }, ['comment-write']],
+  // A reply in a code-comment thread is a comment : not a pull-request write.
+  [
+    'reply_to_pull_request_comment',
+    'in a thread',
+    { ...repo, pull_number: 1, comment_id: 42, body: 'Done.' },
+    ['comment-write'],
+  ],
   ['add_labels', 'one label', { ...repo, issue_number: 1, labels: ['e2e'] }, ['label-write']],
   // A label is not a comment : neither risk covers the other's slice.
   [

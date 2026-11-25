@@ -320,6 +320,12 @@ const POSITIONS: readonly Position[] = [
       ['github__add_issue_comment', 'issue_number', { body: 'hi' }],
       ['github__add_labels', 'issue_number', { labels: ['e2e'] }],
       ['github__update_issue', 'issue_number', { title: 't' }],
+      ['github__get_issue_comments', 'issue_number', {}],
+      ['github__get_pull_request_reviews', 'pull_number', {}],
+      ['github__get_pull_request_comments', 'pull_number', {}],
+      ['github__get_pull_request_files', 'pull_number', {}],
+      ['github__reply_to_pull_request_comment', 'pull_number', { comment_id: 2, body: 'b' }],
+      ['github__reply_to_pull_request_comment', 'comment_id', { pull_number: 1, body: 'b' }],
       ['github__delete_release', 'release_id', {}],
     ] as const
   ).map(([tool, key, extra]): Position => ({

@@ -50,6 +50,7 @@ export const GITHUB_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     tools: [
       TOOL.listIssues,
       TOOL.getIssue,
+      TOOL.getIssueComments,
       TOOL.searchIssues,
       TOOL.addIssueComment,
       TOOL.addLabels,
@@ -64,7 +65,11 @@ export const GITHUB_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
     tools: [
       TOOL.listPullRequests,
       TOOL.getPullRequest,
+      TOOL.getPullRequestReviews,
+      TOOL.getPullRequestComments,
+      TOOL.getPullRequestFiles,
       TOOL.createPullRequest,
+      TOOL.replyToPullRequestComment,
       TOOL.mergePullRequest,
     ],
   },

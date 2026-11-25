@@ -23,7 +23,7 @@ export const SERVICE_ID = 'github';
 export const TOOL_PREFIX = `${SERVICE_ID}__` as const;
 
 /**
- * The tool names : the 29 MCP tools in the order `tools.ts` declares them,
+ * The tool names : the 34 MCP tools in the order `tools.ts` declares them,
  * then the git remote's two, which are never in `tools/list` (the host's git
  * door calls them, spec §4.1 ter).
  */
@@ -36,6 +36,10 @@ export const TOOL = {
   getPullRequest: `${TOOL_PREFIX}get_pull_request`,
   getIssue: `${TOOL_PREFIX}get_issue`,
   getCommit: `${TOOL_PREFIX}get_commit`,
+  getIssueComments: `${TOOL_PREFIX}get_issue_comments`,
+  getPullRequestReviews: `${TOOL_PREFIX}get_pull_request_reviews`,
+  getPullRequestComments: `${TOOL_PREFIX}get_pull_request_comments`,
+  getPullRequestFiles: `${TOOL_PREFIX}get_pull_request_files`,
   searchCode: `${TOOL_PREFIX}search_code`,
   searchIssues: `${TOOL_PREFIX}search_issues`,
   createBranch: `${TOOL_PREFIX}create_branch`,
@@ -43,6 +47,7 @@ export const TOOL = {
   pushFiles: `${TOOL_PREFIX}push_files`,
   createPullRequest: `${TOOL_PREFIX}create_pull_request`,
   addIssueComment: `${TOOL_PREFIX}add_issue_comment`,
+  replyToPullRequestComment: `${TOOL_PREFIX}reply_to_pull_request_comment`,
   addLabels: `${TOOL_PREFIX}add_labels`,
   updateIssue: `${TOOL_PREFIX}update_issue`,
   listWorkflows: `${TOOL_PREFIX}list_workflows`,
