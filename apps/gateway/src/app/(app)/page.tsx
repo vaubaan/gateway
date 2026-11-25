@@ -33,7 +33,9 @@ export default async function HomePage() {
 
   // Something waiting is answered first, whoever the person is.
   if (view.first_run && view.waiting.length === 0) {
-    const setup = principal.isOperator ? await readSetup(setupDepsOf(root)) : null;
+    // A local instance's setup ended on `/welcome`: its one person reads no server checklist.
+    const setup =
+      principal.isOperator && !root.config.local ? await readSetup(setupDepsOf(root)) : null;
     return <FirstRun view={view} name={firstName(user.displayName)} setup={setup} />;
   }
   // The proposal to receive notifications needs the key a browser subscribes with.

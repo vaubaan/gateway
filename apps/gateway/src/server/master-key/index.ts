@@ -27,6 +27,7 @@ export {
   MASTER_KEY_HANDOVER_ACTION,
   SETUP_PAGE,
   signedInFreshly,
+  WELCOME_PAGE,
   type DownloadOrigin,
   type MasterKeyProblem,
 } from './handlers';

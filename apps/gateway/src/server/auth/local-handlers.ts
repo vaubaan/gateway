@@ -124,6 +124,11 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
   readonly logger: Logger;
   readonly clock: Clock;
   readonly mailer?: LinkMailer;
+  /**
+   * Local mode: a sign-in account without a second factor signs in with its password,
+   * administrators included (ADR local-accounts-sign-in-provider, amendment 2026-11-25).
+   */
+  readonly local?: boolean;
 }
 
 export interface LocalAuthHandlers {
@@ -286,7 +291,10 @@ export function createLocalAuthHandlers(
       return redirect(SECOND_FACTOR_PAGE, { 'Set-Cookie': step.setCookie });
     }
     const { waiver } = await deps.signInProviders.state(signInProvider.id);
-    if (!waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr })) {
+    const enrolNow =
+      !(deps.local === true && signInProvider.kind === 'local') &&
+      !waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr });
+    if (enrolNow) {
       const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, identity.email);
       const step = await deps.sessions.createLocalStep({
         ...base,

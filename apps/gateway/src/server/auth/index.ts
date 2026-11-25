@@ -167,6 +167,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     rateLimiter: deps.rateLimiter,
     clientIp,
     mailer: deps.mailer,
+    local: deps.config.local,
   });
   const handlers = createAuthHandlers({
     publicUrl: deps.config.publicUrl,

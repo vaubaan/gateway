@@ -389,6 +389,10 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/admin/users/administrators/apply-configuration', headers, {}),
     ),
   ),
+  // Absent outside local mode, once the guard let the operator through (the rig is not local).
+  'users.handlers.localSetup': form('operator', 404, (rig, headers) =>
+    rig.root.users.handlers.localSetup(post('/api/admin/setup/local', headers, {})),
+  ),
   'users.handlers.finishSetup': form('operator', 303, (rig, headers) =>
     rig.root.users.handlers.finishSetup(post('/api/admin/setup/finish', headers, {})),
   ),

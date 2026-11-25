@@ -38,7 +38,13 @@ import type { Logger } from '../logging';
 import { UserAdminError } from './errors';
 import type { SignInAccountsService } from '../auth/sign-in-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
-import type { SignInProvidersService } from '../auth/sign-in-providers';
+import {
+  signInAuditObjectId,
+  signInProviderAuditView,
+  type SignInProvidersService,
+} from '../auth/sign-in-providers';
+import { DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID } from '../config/sign-in';
+import { WELCOME_PAGE } from '../master-key/handlers';
 import { SignInAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
 import type { AuditWriter } from '@vaubaan/gateway-core';
@@ -59,12 +65,15 @@ export const FINISH_SETUP_ACTION = '/api/admin/setup/finish';
 export interface UserAdminHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
-  /** Clears the cookie of the browser that signs out everywhere. */
-  readonly sessions: Pick<SessionService, 'destroy'>;
+  /**
+   * Clears the cookie of the browser that signs out everywhere; opens the session of a
+   * local instance's first person (`localSetup`).
+   */
+  readonly sessions: Pick<SessionService, 'destroy' | 'create'>;
   readonly users: UserAdminService;
   readonly invitations: InvitationService;
   readonly signInAccounts: SignInAccountsService;
-  readonly signInProviders: Pick<SignInProvidersService, 'views'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'views' | 'save'>;
   /** The designations of the administrators (ADR administrators-live-in-the-instance). */
   readonly administrators: AdministratorsService;
   readonly bootstrap: Pick<BootstrapService, 'state' | 'revoke'>;
@@ -75,6 +84,8 @@ export interface UserAdminHandlerDeps {
   readonly mailer?: LinkMailer;
   readonly notices: NoticeStore;
   readonly logger: Logger;
+  /** Local mode (ADR local-mode-for-an-instance-on-this-computer): `localSetup` answers. */
+  readonly local?: boolean;
 }
 
 export interface UserAdminHandlers {
@@ -109,6 +120,13 @@ export interface UserAdminHandlers {
    * administrator has a way in (ADR administrators-live-in-the-instance, §8).
    */
   finishSetup(request: Request): Promise<Response>;
+  /**
+   * The second screen of a local instance's setup (fields `email`, `password`,
+   * `password_again`), once the key is handed over: turns sign-in accounts on, creates the
+   * person's account, makes them the administrator, finishes the setup and opens their
+   * session — one form instead of Setup's steps (spec §7.1).
+   */
+  localSetup(request: Request): Promise<Response>;
 }
 
 /** Why the setup cannot end yet, or `null`. */
@@ -129,6 +147,50 @@ const plural = (count: number, one: string, many: string): string => (count === 
 
 export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHandlers {
   const redirectWithNotice = createNoticeRedirect(deps, USERS_PAGE);
+
+  /** Revokes the install token and records the end of the setup. */
+  async function endSetup(actor: string): Promise<void> {
+    const revoked = await deps.bootstrap.revoke();
+    await deps.audit.write({
+      kind: 'admin',
+      ts: revoked.status === 'revoked' ? revoked.revokedAt : toIso(deps.clock.now()),
+      user_id: actor,
+      act: 'setup-finished',
+      object: { type: 'instance-config', id: 'bootstrap' },
+      before: { status: 'active' },
+      after: { status: revoked.status },
+    });
+    deps.logger.info('setup finished: the install token is revoked');
+  }
+
+  /** The local sign-in provider, created (switched on) when the instance has none. */
+  async function ensureLocalSignInProvider(actor: string): Promise<{ id: string; issuer: URL }> {
+    const existing = await localSignInProvider();
+    if (existing) return existing;
+    const { saved } = await deps.signInProviders.save(
+      {
+        id: DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID,
+        kind: 'local',
+        name: '',
+        issuer: '',
+        clientId: '',
+        clientSecret: null,
+        allowedEmailDomains: [],
+        invitationOnly: true,
+      },
+      'create',
+    );
+    await deps.audit.write({
+      kind: 'admin',
+      ts: toIso(deps.clock.now()),
+      user_id: actor,
+      act: 'config-changed',
+      object: { type: 'instance-config', id: signInAuditObjectId(saved.id) },
+      before: null,
+      after: signInProviderAuditView(saved),
+    });
+    return { id: saved.id, issuer: saved.issuer };
+  }
 
   /** The one local sign-in provider of the instance, or `null`. */
   async function localSignInProvider(): Promise<{ id: string; issuer: URL } | null> {
@@ -474,17 +536,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           if (problem) {
             notice = { tone: 'danger', title: 'The setup is not finished', lines: [problem] };
           } else {
-            const revoked = await deps.bootstrap.revoke();
-            await deps.audit.write({
-              kind: 'admin',
-              ts: revoked.status === 'revoked' ? revoked.revokedAt : toIso(deps.clock.now()),
-              user_id: auditActorId(principal),
-              act: 'setup-finished',
-              object: { type: 'instance-config', id: 'bootstrap' },
-              before: { status: 'active' },
-              after: { status: revoked.status },
-            });
-            deps.logger.info('setup finished: the install token is revoked');
+            await endSetup(auditActorId(principal));
             notice = {
               tone: 'success',
               title: 'The setup is finished',
@@ -498,6 +550,66 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
         notice = failure(err, 'The setup is not finished');
       }
       return redirectWithNotice(principal.sessionId, ADMIN_SETUP_PAGE, notice);
+    },
+
+    async localSetup(request) {
+      // The guard first, like every mutation; then nothing outside local mode.
+      const principal = await operatorOf(request);
+      if (principal instanceof Response) return principal;
+      if (deps.local !== true) return new Response(null, { status: 404 });
+      const seeOther = (location: string, cookies: readonly string[] = []): Response => {
+        const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
+        for (const cookie of cookies) headers.append('Set-Cookie', cookie);
+        return new Response(null, { status: 303, headers });
+      };
+      // Only the holder of the setup link, while the setup is open, and after the key.
+      if (principal.kind !== 'bootstrap' || (await deps.bootstrap.state()).status !== 'active') {
+        return seeOther('/');
+      }
+      if ((await deps.masterKey.state()).handoverPending) return seeOther(WELCOME_PAGE);
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const field = (name: string): string => {
+        const value = form.get(name);
+        return typeof value === 'string' ? value : '';
+      };
+      try {
+        if (field('password') !== field('password_again')) {
+          throw new SignInAccountError(
+            'password-weak',
+            'The two passwords differ. Type the same one twice.',
+          );
+        }
+        const actor = auditActorId(principal);
+        const local = await ensureLocalSignInProvider(actor);
+        await deps.users.refuseNewUser();
+        const signInAccount = await deps.signInAccounts.createSignInAccount({
+          signInProviderId: local.id,
+          email: field('email'),
+          password: field('password'),
+          actor,
+        });
+        const user = await deps.users.ensureIdentity({
+          issuer: local.issuer.href,
+          subject: signInAccount.id,
+          email: signInAccount.email,
+        });
+        await deps.administrators.grantUser(user.id, actor, 'setup');
+        const problem = await setupCannotFinish(deps);
+        if (problem) throw new Error(problem);
+        await endSetup(actor);
+        // The person is signed in at once: the setup's session ends, theirs begins.
+        const ended = await deps.sessions.destroy(request.headers);
+        const session = await deps.sessions.create({
+          kind: 'user',
+          userId: user.id,
+          login: { email: signInAccount.email, groups: [], signInProvider: local.id },
+        });
+        deps.logger.info('local setup finished: the first person is signed in');
+        return seeOther('/', [ended, session.setCookie]);
+      } catch (err) {
+        return redirectWithNotice(principal.sessionId, WELCOME_PAGE, failure(err, 'Not created'));
+      }
     },
 
     async applyConfigurationRule(request) {

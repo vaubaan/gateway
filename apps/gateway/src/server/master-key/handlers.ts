@@ -2,9 +2,10 @@
  * Host-agnostic HTTP handlers of the master key (`Request → Response`, never
  * `next`), on Administration → Setup and Administration → Encryption:
  *
- *   POST /api/admin/master-key/download     `confirmed=on&from=setup|settings`
+ *   POST /api/admin/master-key/download     `confirmed=on&from=setup|settings|welcome`
  *                                            — the key file, as an attachment
- *   POST /api/admin/master-key/handed-over  `confirmed=on` — "I kept it in a safe place"
+ *   POST /api/admin/master-key/handed-over  `confirmed=on[&from=welcome]` — "I kept it in a
+ *                                            safe place"
  *
  * Operator only, origin-checked (spec §6). The download needs a **fresh
  * sign-in**: a session opened less than `FRESH_SIGN_IN_MS` ago (there was no
@@ -32,6 +33,8 @@ export const MASTER_KEY_HANDOVER_ACTION = '/api/admin/master-key/handed-over';
 /** Where each form lives, and where its refusal lands. */
 export const SETUP_PAGE = '/admin';
 export const ENCRYPTION_PAGE = '/admin/encryption';
+/** The setup of an instance in local mode: the key, then the person's account. */
+export const WELCOME_PAGE = '/welcome';
 /** The section of Setup that holds the handover step. */
 export const HANDOVER_ANCHOR = 'encryption-key';
 /** Form fields. */
@@ -41,7 +44,7 @@ export const FROM_FIELD = 'from';
 export const KEY_PROBLEM_PARAM = 'key-problem';
 export type MasterKeyProblem = 'sign-in-again' | 'not-confirmed';
 /** Where a download was asked from; written in the audit entry. */
-export type DownloadOrigin = 'setup' | 'settings';
+export type DownloadOrigin = 'setup' | 'settings' | 'welcome';
 /** How recent the sign-in behind a download must be. */
 export const FRESH_SIGN_IN_MS = 10 * 60_000;
 
@@ -70,17 +73,20 @@ function redirect(location: string): Response {
 }
 
 function pageOf(from: DownloadOrigin): string {
+  if (from === 'welcome') return WELCOME_PAGE;
   return from === 'setup' ? `${SETUP_PAGE}#${HANDOVER_ANCHOR}` : ENCRYPTION_PAGE;
 }
 
 function problem(from: DownloadOrigin, code: MasterKeyProblem): Response {
+  if (from === 'welcome') return redirect(`${WELCOME_PAGE}?${KEY_PROBLEM_PARAM}=${code}`);
   const page = from === 'setup' ? SETUP_PAGE : ENCRYPTION_PAGE;
   const anchor = from === 'setup' ? `#${HANDOVER_ANCHOR}` : '';
   return redirect(`${page}?${KEY_PROBLEM_PARAM}=${code}${anchor}`);
 }
 
 function originOf(form: FormData): DownloadOrigin {
-  return form.get(FROM_FIELD) === 'setup' ? 'setup' : 'settings';
+  const from = form.get(FROM_FIELD);
+  return from === 'setup' || from === 'welcome' ? from : 'settings';
 }
 
 function confirmed(form: FormData): boolean {
@@ -147,9 +153,11 @@ export function createMasterKeyHandlers(deps: MasterKeyHandlerDeps): MasterKeyHa
       if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      if (!confirmed(form)) return problem('setup', 'not-confirmed');
+      // Setup's handover step, or the first screen of a local instance's setup.
+      const from: DownloadOrigin = form.get(FROM_FIELD) === 'welcome' ? 'welcome' : 'setup';
+      if (!confirmed(form)) return problem(from, 'not-confirmed');
       const { handedOverAt, already } = await deps.service.confirmHandover();
-      if (already) return redirect(pageOf('setup'));
+      if (already) return redirect(pageOf(from));
       const actor = auditActorId(guard.principal);
       try {
         await deps.audit.write({
@@ -170,7 +178,7 @@ export function createMasterKeyHandlers(deps: MasterKeyHandlerDeps): MasterKeyHa
         });
       }
       deps.logger.info('master key handover confirmed by an administrator');
-      return redirect(SETUP_PAGE);
+      return redirect(from === 'welcome' ? WELCOME_PAGE : SETUP_PAGE);
     },
   };
 }

@@ -25,7 +25,7 @@ import { InvitationService } from './invitations';
 import { UserAdminService } from './service';
 
 export interface UsersModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'local'>;
   /** The designations of the administrators. */
   readonly administrators: AdministratorsService;
   /** The second factor of every person: an administrator resets one from People. */
@@ -40,10 +40,10 @@ export interface UsersModuleDeps {
   readonly accounts: Pick<AccountsModule, 'notices'>;
   readonly authenticator: Authenticator;
   /** The web sessions: "sign out everywhere" clears the cookie of the browser it comes from. */
-  readonly sessions: Pick<SessionService, 'destroy'>;
+  readonly sessions: Pick<SessionService, 'destroy' | 'create'>;
   /** The sign-in accounts and their links: an invitation also creates the account's link. */
   readonly signInAccounts: SignInAccountsService;
-  readonly signInProviders: Pick<SignInProvidersService, 'views'>;
+  readonly signInProviders: Pick<SignInProvidersService, 'views' | 'save'>;
   /** Sends the mails of the links; absent when the instance sends no mail. */
   readonly mailer?: LinkMailer;
   readonly logger: Logger;
@@ -94,6 +94,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     mailer: deps.mailer,
     notices: deps.accounts.notices,
     logger,
+    local: deps.config.local,
   });
   return { service, invitations, handlers };
 }

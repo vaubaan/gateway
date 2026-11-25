@@ -78,6 +78,12 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 
 ## Traps
 
+- **Local mode has its own setup** (`/welcome`, `localSetup` in `users/handlers.ts`): the key,
+  then one form that creates the `local` sign-in provider if absent, the account, the
+  administrator designation, ends the setup and opens the session. `/admin` sends the bootstrap
+  session there; the server checklist never shows. Its sign-ins enrol no second factor by force
+  (`local` in `LocalAuthHandlerDeps`); a factor someone enrolled is still asked.
+
 - **Cookie names depend on the mode**: `__Host-vbn_*` and `Secure` on an https
   instance, plain `vbn_*` without `Secure` in local mode (`cookieJar` in
   `auth/cookies.ts`; Safari and WKWebView drop a `Secure` cookie on

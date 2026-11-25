@@ -22,7 +22,7 @@ spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
 - `docker run -p 127.0.0.1:3000:3000 -v vaubaan:/data -e VAUBAAN_LOCAL=true` with the image starts an instance on `http://localhost:3000`, on amd64 and arm64
-- No domain name, certificate or sign-in provider is asked; the command's output prints the setup link, and the first person signs in with a sign-in account it creates
+- No domain name, certificate or sign-in provider is asked; the command's output prints the setup link, which opens the same two screens (the key, then an email and a password)
 - Safari, Chrome and Firefox keep the session on `http://localhost`
 - The page says the instance answers on this computer only
 
@@ -42,7 +42,7 @@ spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
 - A signed, notarized `.dmg` opens without a Gatekeeper warning, on Apple silicon and on Intel
-- The first launch opens the setup on `localhost` with no link to copy: I keep my encryption key and create my sign-in account (password and second factor); no domain name, no sign-in provider, no command
+- The first launch opens the setup on `localhost` with no link to copy and two screens: I keep my encryption key, then I type an email and a password and land on Vaubaan's home; no token shown, no second factor asked, no domain name, no sign-in provider, no command
 - The master key lives in the macOS Keychain, never in a file next to the store; the instance reads it on its standard input
 - The setup still asks me to download a copy of the key: the only way to open a backup on another computer
 - Quitting the app stops the instance; reopening it finds my accounts and missions unchanged
@@ -57,7 +57,7 @@ spec: ../spec/vaubaan-gateway.md#71-install-an-instance
 acceptance:
 
 - A signed installer runs without a SmartScreen warning, with no administrator rights
-- The first launch opens the setup on `localhost` with no link to copy: I keep my encryption key and create my sign-in account
+- The first launch opens the setup on `localhost` with no link to copy and two screens: I keep my encryption key, then I type an email and a password
 - The master key lives in the Windows credential store, never in a file next to the store
 - The setup still asks me to download a copy of the key: the only way to open a backup on another computer
 - Quitting the app stops the instance; reopening it finds my accounts and missions unchanged

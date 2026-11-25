@@ -15,6 +15,7 @@
  * configuration sets `instance_name` (the file wins).
  */
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/settings/settings.styles';
@@ -170,6 +171,8 @@ function ruleWords(admin: InstanceConfig['admin']): React.ReactNode {
 
 export default async function SetupPage({ searchParams }: Props) {
   const { root, principal } = await requireOperator();
+  // A local instance's setup is two screens of its own (`/welcome`), not this checklist.
+  if (root.config.local && principal.kind === 'bootstrap') redirect('/welcome');
   const params = await searchParams;
   // What the act the administrator just made did (the first administrator's account, for one).
   const notice = await takeNotice(root, principal.sessionId, params);

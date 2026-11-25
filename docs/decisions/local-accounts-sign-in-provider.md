@@ -56,3 +56,11 @@ The gateway's own mail must not depend on a connection somebody may revoke.
 - 2026-10-31: passwords are hashed by the native `argon2` binding instead of libsodium's
   synchronous WebAssembly build, which held the event loop for every anonymous password post
   (security audit M2). Same limits and string format: the stored hashes verify unchanged.
+
+## Amendment 2026-11-25 — local mode enrols no second factor by force
+
+An instance in local mode ([ADR](./local-mode-for-an-instance-on-this-computer.md)) answers on
+the loopback of one computer: whoever reaches its sign-in page already sits at that computer, and a
+mandatory authenticator app was the step its one person stumbled on. There, a sign-in account
+without a second factor signs in with its password, administrators included; one that enrolled a
+factor (Settings › Security) is still asked for it. Every other instance keeps D4 unchanged.

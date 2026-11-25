@@ -1146,7 +1146,10 @@ values.
   stored as digests. Password hashes, second-factor secrets and recovery codes are sealed under the
   master key and never reach a log, the audit or the telemetry.
 - **Second factor** before the session exists (a time-based code never accepted twice, or a recovery
-  code used once), unless waived for that sign-in provider, never for an administrator.
+  code used once), unless waived for that sign-in provider, never for an administrator. An instance
+  in local mode, reached from its own computer only, asks it of the people who enrolled one and
+  enrols nobody by force
+  ([amendment](../decisions/local-accounts-sign-in-provider.md#amendment-2026-11-25--local-mode-enrols-no-second-factor-by-force)).
 - **Recovery by the master key**: a page reachable without a session lets the key's holder name one
   administrator and nothing else; the key never leaves the browser (it proves holding it against a
   single-use challenge); the naming is audited, mailed to the administrators when the instance sends
@@ -1199,7 +1202,9 @@ values.
 ### 7.1 Install an instance
 
 The operator deploys the image with its configuration (§4.3) — one person on their computer runs it
-in local mode with one command and no other key — opens setup with the bootstrap token
+in local mode with one command and no other key, and their setup is two screens: keep the key,
+then create their account (email and password), which turns sign-in accounts on, makes them the
+administrator and finishes the setup — opens setup with the bootstrap token
 (typed, or in a setup link's fragment so it reaches no log), keeps the master key when the instance
 generated it, names the first administrator (setup creates a sign-in account, or the admin rule or a
 passed sign-in provider test names them), switches a tested sign-in provider on, and **finishes the setup**:
