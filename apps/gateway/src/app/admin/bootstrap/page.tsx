@@ -12,6 +12,7 @@ import { redirect } from 'next/navigation';
 import { LocalDate } from '@/components/LocalDate';
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import { BootstrapTokenInput } from '@/components/auth/BootstrapTokenInput';
+import { LocalSetupStart } from '@/components/auth/LocalSetupStart';
 import styles from '@/components/auth/auth.styles';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, ButtonLink, Callout, Field, Input, Mono } from '@/components/ui';
@@ -45,6 +46,26 @@ export default async function BootstrapPage({ searchParams }: Props) {
   const { root, principal } = await currentPrincipal();
   if (principal?.kind === 'bootstrap') redirect('/admin');
   const state = await root.auth.bootstrap.state();
+
+  // Local mode: the app or the docker command handed over a setup link; the token is
+  // not the person's business (ADR local-mode-for-an-instance-on-this-computer).
+  if (root.config.local && state.status === 'active') {
+    return (
+      <AuthPage instance={await root.instance.name.identity()} footer={<BuildFooter />}>
+        <AuthHeading title="Set up Vaubaan">
+          Two steps: keep your encryption key, then create your account.
+        </AuthHeading>
+        {error && isLoginErrorCode(error) && (
+          <div className={styles.block}>
+            <Callout tone="bad" title="Refused" testId="bootstrap-error">
+              {LOGIN_ERROR_MESSAGES[error]}
+            </Callout>
+          </div>
+        )}
+        <LocalSetupStart />
+      </AuthPage>
+    );
+  }
 
   return (
     // Outside every layout: the page carries the build line itself.
