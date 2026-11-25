@@ -26,7 +26,9 @@ call; a catalog may declare only the keys in `ENFORCED_CAP_KEYS` / `ENFORCED_INF
 - Today only `infra_limits.calls_per_minute_max` is enforced (the ceiling of a mission's rate);
   per-call size and time window are bounded by nothing but quota, rate and gate.
 - A new key joins the enforced list in the change that enforces and tests it.
-- Stateful amplitude (rate, quota) is the mission budget, not a second mechanism.
+- Stateful amplitude (rate, quota) is the mission budget, not a second mechanism: no cap counts
+  over a mission's life (`calls_per_session_max` was removed on 2026-11-25; a catalog that still
+  writes it loads, the key dropped).
 - The catalog types (`caps`, `infra_limits`) stay while unenforced. The plugin hook
   `normalizeForCaps` was removed on 2026-10-31 (ADR plugin-contract-and-credential-spec, amendment):
   the cap stage that enforces a cap adds it back as an optional member, a non-breaking change.

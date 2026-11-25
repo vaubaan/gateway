@@ -33,8 +33,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `session_counters` to `mission_logs` and `mission_log_counters`, and every `session_id` column
   to `mission_log_id`, in place: no row changes, nothing to do at upgrade. `web_sessions` and the
   MCP transport's sessions keep their names; no tool answer changes.
-- **Plugin SDK: the scope cap `calls_per_session_max` is now `calls_per_mission_log_max`.** A
-  catalog that still writes the former name is read as the new one; writing both is refused.
+- **Plugin SDK: the scope cap `calls_per_session_max` is removed.** It capped the calls of a
+  mission's whole life, which the mission's budget already bounds, and nothing enforced it. A
+  catalog that still writes it loads; the key is dropped.
 
 ## [2.0.0-alpha.31] - 2026-11-24
 

@@ -217,9 +217,6 @@ export interface ScopeCaps {
   /** Stateful : calls per rolling minute on the scope holding the cap.
    *  Counted by the gateway behind a rate-limit interface. */
   readonly calls_per_minute_max?: number;
-  /** Stateful : cumulative calls over the lifetime of one mission log. A catalog may still
-   *  write it `calls_per_session_max`, its former name: the loader reads that as this key. */
-  readonly calls_per_mission_log_max?: number;
 }
 
 /**
@@ -233,7 +230,6 @@ export interface InfraLimits {
   readonly items_per_call_max?: number;
   readonly bytes_per_call_max?: number;
   readonly calls_per_minute_max?: number;
-  readonly calls_per_mission_log_max?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
