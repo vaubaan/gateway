@@ -25,6 +25,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
+use tauri::webview::DownloadEvent;
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 /// The port the gateway answers on. Fixed: it is in every agent's configuration and
@@ -49,6 +50,40 @@ fn main() {
                 .title("Vaubaan")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 600.0)
+                // The system webview saves nothing by itself: a download (the encryption key)
+                // goes to ~/Downloads under a name not taken, then shows in the Finder.
+                .on_download({
+                    let saved: Arc<Mutex<Option<PathBuf>>> = Arc::new(Mutex::new(None));
+                    move |webview, event| {
+                        match event {
+                            DownloadEvent::Requested { destination, .. } => {
+                                let dir = webview
+                                    .app_handle()
+                                    .path()
+                                    .download_dir()
+                                    .unwrap_or_else(|_| std::env::temp_dir());
+                                let name = destination
+                                    .file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .filter(|n| !n.is_empty())
+                                    .unwrap_or_else(|| "vaubaan-download".to_string());
+                                let path = free_path(&dir, &name);
+                                *destination = path.clone();
+                                if let Ok(mut slot) = saved.lock() {
+                                    *slot = Some(path);
+                                }
+                            }
+                            DownloadEvent::Finished { success, .. } => {
+                                let path = saved.lock().ok().and_then(|mut slot| slot.take());
+                                if let (true, Some(path)) = (success, path) {
+                                    reveal(&path);
+                                }
+                            }
+                            _ => {}
+                        }
+                        true
+                    }
+                })
                 .on_navigation(|url| {
                     if is_inside(url) {
                         return true;
@@ -279,6 +314,32 @@ fn is_inside(url: &Url) -> bool {
         },
         _ => false,
     }
+}
+
+/// `name`, or `name (2)`, `name (3)`… in `dir`: a download never replaces a file.
+fn free_path(dir: &Path, name: &str) -> PathBuf {
+    let first = dir.join(name);
+    if !first.exists() {
+        return first;
+    }
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => (stem.to_string(), format!(".{ext}")),
+        _ => (name.to_string(), String::new()),
+    };
+    (2..1000)
+        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
+        .find(|p| !p.exists())
+        .unwrap_or(first)
+}
+
+/// Shows a saved file in the Finder (Explorer on Windows).
+fn reveal(path: &Path) {
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").arg("-R").arg(path).spawn();
+    #[cfg(target_os = "windows")]
+    let _ = Command::new("explorer").arg(format!("/select,{}", path.display())).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = path;
 }
 
 fn open_in_browser(url: &str) {

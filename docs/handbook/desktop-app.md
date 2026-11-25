@@ -26,6 +26,7 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 - **One Node version**: `assemble.mjs` reads it from `deploy/docker/Dockerfile` and checks the archive against nodejs.org's `SHASUMS256.txt`.
 - **The key never exists as a file**: Keychain item service `com.vaubaan.desktop`, account `master-key`. The shell makes one only when there is neither a key nor a store with data; a store without its key is a refusal shown in the window.
 - **The setup link never reaches the log**: the shell keeps it from the gateway's output and writes a placeholder line.
+- **The webview saves no download by itself**: WKWebView drops a response with `Content-Disposition: attachment` (the key on `/welcome` and in Settings) unless the shell takes it. `on_download` saves it in `~/Downloads` under a free name and reveals it in the Finder.
 - **Only the gateway stays in the window**: any other address (a service's sign-in page, the docs) opens in the default browser (`is_inside`).
 
 ## Traps
