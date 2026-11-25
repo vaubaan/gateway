@@ -77,6 +77,9 @@ export function checksumOf(shasums, file) {
   throw new Error(`SHASUMS256.txt lists no ${file}`);
 }
 
+/** Traced by Next but never loaded by the gateway (see `copyGateway`). */
+const NEVER_LOADED = ['node_modules/sharp', 'node_modules/@img'];
+
 /** Turbopack's alias of an external package: `<package>-<16 hex>`, a link to the package. */
 const EXTERNAL_ALIAS = /^(.+)-[0-9a-f]{16}$/;
 
@@ -144,6 +147,10 @@ function copyGateway(target) {
   });
   cpSync(join(GATEWAY, 'public'), join(out, 'apps/gateway/public'), { recursive: true });
   for (const path of replaceLinks(out)) console.log(`replaced the link ${path}`);
+  // sharp and its libvips are Next's image optimizer, which the gateway turns off
+  // (`images.unoptimized`): Next traces them anyway. Left out, they are native code the
+  // app neither runs nor has to sign.
+  for (const unused of NEVER_LOADED) rmSync(join(out, unused), { recursive: true, force: true });
   // The native addons this target loads must be in the tree: a build made elsewhere
   // would start and then fail at the first store access.
   const sqlite = join(

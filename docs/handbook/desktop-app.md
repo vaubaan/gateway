@@ -35,7 +35,8 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 - **The crate does not compile on Linux without a macOS SDK** (`objc2-exception-helper` needs Apple's headers): the macOS job is the compiler. Run it by hand (Actions › desktop › Run workflow) before pushing a change to `main.rs`.
 - **argon2 ships no darwin-x64 prebuild**: on an Intel Mac npm compiles it into `build/Release/`, which `next.config.ts` traces; `assemble.mjs` fails when neither binary is in the tree.
 - **The app bundler drops symbolic links**: Next's standalone output links `apps/gateway/.next/node_modules/<package>-<hash>` to each external package (better-sqlite3, argon2, ssh2). `assemble.mjs` (`replaceLinks`) turns each into a package re-exporting the real one; without it the gateway stops at boot with `Cannot find module 'better-sqlite3-<hash>'`.
-- **Notarization refuses any unsigned Mach-O**: the job signs every `.node` of the resources and the Node binary (with `entitlements.plist`: JIT) before the bundler signs the app.
+- **Notarization refuses any unsigned Mach-O**: the job signs every Mach-O file of the resources (found with `file`, not by extension: a `.dylib` beside an addon counts) and the Node binary (with `entitlements.plist`: JIT) before the bundler signs the app.
+- **sharp is left out** (`NEVER_LOADED` in `assemble.mjs`): Next traces its image optimizer and libvips although the gateway turns it off (`images.unoptimized`); in the app it was only unsigned native code.
 - **Tauri CLI and crate move together** (`TAURI_CLI` in the workflow, `tauri` in `Cargo.lock`, same minor).
 
 ## Procedures
