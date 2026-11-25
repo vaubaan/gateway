@@ -33,7 +33,7 @@ macro-action, trust level and environment are defined in [vaubaan-gateway](./vau
 
 - **Risk** — a consequence a human may accept for a service, named by a risk entry; accepted, never
   granted (§0).
-- **Risk catalog** — per service, static and versioned, reviewed like code: the risk entries, one
+- **Risk catalog** — "the catalog" in this spec; per service, static and versioned, reviewed like code: the risk entries, one
   fallback entry and the macro-actions (§4).
 - **Risk entry** — one business intent of a service that fits in a sentence: its `RiskId`, the
   slice patterns it matches, its vector and where it is acceptable (§4.1).

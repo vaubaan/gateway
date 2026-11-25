@@ -104,7 +104,7 @@ export const INVARIANTS: readonly Invariant[] = [
     statement:
       'For every risk of every mission, the session counters equal the number of allowed touches in the audit, under random concurrent load.',
     source: 'spec §3.3, §6 "authoritative, atomic counting", §10; ADR atomic-budget-accounting',
-    specBullet: 'session counters agree with the audit',
+    specBullet: 'mission log counters agree with the audit',
     proofs: [
       {
         file: `${INTEGRATION}/execution/counters-vs-audit.test.ts`,
@@ -273,7 +273,7 @@ export const INVARIANTS: readonly Invariant[] = [
       'Every shipped catalog groups each of its live risks but the fallback in exactly one macro-action of its own explicit risks, never a wildcard; no catalog ships presets or declares a macro-action named "anything-else" or "everything-i-hold".',
     source: 'spec §10, §3.2; ADR macro-actions-and-trust-levels-prefill-the-policy',
     specBullet:
-      'every catalog groups each of its risks but the fallback in exactly one macro-action, and no catalog ships presets',
+      'every risk catalog groups each of its risks but the fallback in exactly one macro-action, and no risk catalog ships presets',
     proofs: [
       {
         file: `${STRUCTURAL}/shipped-macro-actions.test.ts`,
