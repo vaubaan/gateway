@@ -717,13 +717,13 @@ describe('missions: issue, rotate, revoke', () => {
     expect(acts.filter((a) => a === 'mission-revoked')).toHaveLength(1);
   });
 
-  it('records rotation and revocation in the session once it exists', async () => {
+  it('records rotation and revocation in the mission log once it exists', async () => {
     const { mission } = await issued();
-    await missions.rotate(seeded.ada, mission.id); // no session yet: nothing to record
-    const session = await root.store.sessions.getOrCreate(mission.id);
+    await missions.rotate(seeded.ada, mission.id); // no mission log yet: nothing to record
+    const missionLog = await root.store.missionLogs.getOrCreate(mission.id);
     await missions.rotate(seeded.ada, mission.id);
     await missions.revoke(seeded.ada, mission.id);
-    const events = await root.store.sessions.listEvents(session.id);
+    const events = await root.store.missionLogs.listEvents(missionLog.id);
     expect(events.map((e) => e.kind)).toEqual(['rotation', 'revocation']);
     expect(events.every((e) => e.actorUserId === seeded.ada.id)).toBe(true);
     const acts = (await root.store.audit.list({ kind: 'admin' })).map((e) =>

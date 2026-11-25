@@ -2,7 +2,7 @@
  * v5 domain types — the instance, its identities, accounts, missions.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 (vocabulary), §2 (domain), §3
- *        (authority, budget, session, requests, approvals).
+ *        (authority, budget, mission log, requests, approvals).
  * ADR  : docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md.
  *
  * These are domain values, not storage rows : the store maps them to
@@ -257,7 +257,7 @@ export function isMissionTokenKind(value: unknown): value is MissionTokenKind {
 }
 
 /**
- * Who a mission token belongs to, as the audit and the session keep it: the
+ * Who a mission token belongs to, as the audit and the mission log keep it: the
  * kind of the token and its holder — the user id of the member for a `member`
  * token, the name the creator gave for a `named` one. Authenticated: it comes
  * from the token the call presented, never from what the caller declares.
@@ -287,17 +287,17 @@ export interface MissionToken {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Session, events, requests, approvals
+// Mission log, events, requests, approvals
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface Session {
+export interface MissionLog {
   readonly id: string;
   readonly mission_id: string;
   /** First call received with the mission's token. */
   readonly started_at: Iso8601;
 }
 
-export type SessionEventKind =
+export type MissionLogEventKind =
   | 'call-allowed'
   | 'call-refused'
   | 'request'
@@ -317,10 +317,10 @@ export type SessionEventKind =
   | 'rotation'
   | 'revocation';
 
-export interface SessionEvent {
+export interface MissionLogEvent {
   readonly id: string;
-  readonly session_id: string;
-  readonly kind: SessionEventKind;
+  readonly mission_log_id: string;
+  readonly kind: MissionLogEventKind;
   readonly at: Iso8601;
   /** Risks the event concerns (touched by a call, extended, reset, approved). */
   readonly risk_ids: readonly RiskId[];
@@ -333,8 +333,8 @@ export interface SessionEvent {
 }
 
 /** Consumed actions for one risk of one resource set in one period. */
-export interface SessionCounter {
-  readonly session_id: string;
+export interface MissionLogCounter {
+  readonly mission_log_id: string;
   readonly resource_set_id: string;
   readonly risk_id: RiskId;
   readonly period_start: Iso8601;

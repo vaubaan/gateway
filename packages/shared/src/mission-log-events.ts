@@ -1,15 +1,15 @@
 /**
- * Session event details — the one contract between the writers of a session
- * event and its readers (spec §3.3 "the session and the remaining budget",
- * §3.4 "the creator sees the session history").
+ * Mission log event details — the one contract between the writers of a mission log
+ * event and its readers (spec §3.3 "the mission log and the remaining budget",
+ * §3.4 "the creator sees the mission log history").
  *
  * An event is stored as a `kind` column and a JSON `details` object. The key
  * names below are the stored ones: renaming one is a data migration, not a
- * refactor. Writers build `{ kind, details }` through `SessionEventDetails`;
+ * refactor. Writers build `{ kind, details }` through `MissionLogEventDetails`;
  * readers get it back from `parseEventDetails`, the only place that reads
  * stored details.
  *
- * Every kind of `SessionEventKind` has a details shape here; `parseEventDetails`
+ * Every kind of `MissionLogEventKind` has a details shape here; `parseEventDetails`
  * answers `null` for a kind it does not know (a later version's).
  */
 import {
@@ -19,7 +19,7 @@ import {
   type Iso8601,
   type MissionTokenKind,
   type RequestKind,
-  type SessionEventKind,
+  type MissionLogEventKind,
 } from './domain.ts';
 import { isRefusalCode, type RefusalCode } from './refusal.ts';
 import type { RiskId } from './risk.ts';
@@ -155,7 +155,7 @@ export interface GateOpenedEventDetails {
 
 /**
  * The creator edited the gate of one risk on the mission itself. Recorded on
- * the session because it ends an opening granted earlier in the period: the
+ * the mission log because it ends an opening granted earlier in the period: the
  * latest of the two events decides.
  */
 export interface GateChangedEventDetails {
@@ -286,7 +286,7 @@ export interface ResourcesCreatedEventDetails {
 }
 
 /** The details of each event kind that has a writer. */
-export interface SessionEventDetailsByKind {
+export interface MissionLogEventDetailsByKind {
   readonly 'call-allowed': CallAllowedEventDetails;
   readonly 'call-refused': CallRefusedEventDetails;
   readonly request: RequestEventDetails;
@@ -304,15 +304,15 @@ export interface SessionEventDetailsByKind {
   readonly revocation: RevocationEventDetails;
 }
 
-export type DetailedSessionEventKind = keyof SessionEventDetailsByKind & SessionEventKind;
+export type DetailedMissionLogEventKind = keyof MissionLogEventDetailsByKind & MissionLogEventKind;
 
 /** A kind and the details that go with it: what a writer builds and a reader parses. */
-export type SessionEventDetails = {
-  readonly [K in DetailedSessionEventKind]: {
+export type MissionLogEventDetails = {
+  readonly [K in DetailedMissionLogEventKind]: {
     readonly kind: K;
-    readonly details: SessionEventDetailsByKind[K];
+    readonly details: MissionLogEventDetailsByKind[K];
   };
-}[DetailedSessionEventKind];
+}[DetailedMissionLogEventKind];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Guards — stored JSON is untrusted input
@@ -528,7 +528,7 @@ function isRevocation(d: Fields): d is Fields & RevocationEventDetails {
  * shape does not name are ignored. Never throws: a reader shows a `null` event
  * without detail and a check skips it.
  */
-export function parseEventDetails(kind: string, details: unknown): SessionEventDetails | null {
+export function parseEventDetails(kind: string, details: unknown): MissionLogEventDetails | null {
   if (!isFields(details)) return null;
   switch (kind) {
     case 'call-allowed':

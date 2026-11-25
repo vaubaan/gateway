@@ -1,18 +1,18 @@
 /**
  * `ActivityTimelineService` — what the Activity's Timeline reads (spec §4.2
- * "Activity"): the session events of every mission the viewer may read,
+ * "Activity"): the mission log events of every mission the viewer may read,
  * newest first, in pages, filtered by mission, key holder and agent label.
  * The same events, worded by the same `eventWords`, as the activity of one
  * mission used to list on its own page.
  *
- * Who reads what: the sessions of the missions the viewer created or is a
- * current member of, and every session for an operator — scoped in SQL before
- * the filters and the keyset (`SessionsRepo.searchEvents`), so a filter only
+ * Who reads what: the mission logs of the missions the viewer created or is a
+ * current member of, and every mission log for an operator — scoped in SQL before
+ * the filters and the keyset (`MissionLogsRepo.searchEvents`), so a filter only
  * narrows. The owner of an account reads the calls through it in the Record,
- * not the sessions of the missions that carry it: a session mixes every
+ * not the mission logs of the missions that carry it: a mission log mixes every
  * account of its mission and its budget, and an owner reads "only this
  * account's part" of a mission (spec §4.2 "Accounts"). The bootstrap operator
- * reads no call, so no session.
+ * reads no call, so no mission log.
  *
  * An event shows what `eventView` exposes and nothing else of its details;
  * arguments are never stored in an event, and their fingerprint is never
@@ -25,7 +25,12 @@ import type { AuditCursor, EventSearch, MissionEventRecord, Store } from '../sto
 import type { Clock } from '../store/clock';
 import { keysetOf, pageOf, type PagePosition } from './paging';
 import { holdersOf, type AuditViewer } from './query-service';
-import { eventView, HolderNames, holderRefOfEvent, type SessionEventView } from './session-view';
+import {
+  eventView,
+  HolderNames,
+  holderRefOfEvent,
+  type MissionLogEventView,
+} from './mission-log-view';
 
 export const TIMELINE_PAGE_SIZE = 50;
 
@@ -111,7 +116,7 @@ export interface TimelineMissionRef {
   readonly name: string | null;
 }
 
-export interface TimelineEventView extends SessionEventView {
+export interface TimelineEventView extends MissionLogEventView {
   readonly mission: TimelineMissionRef;
 }
 
@@ -133,7 +138,7 @@ export interface TimelinePage {
 }
 
 export interface ActivityTimelineDeps {
-  readonly store: Pick<Store, 'sessions' | 'missions' | 'requests' | 'users'>;
+  readonly store: Pick<Store, 'missionLogs' | 'missions' | 'requests' | 'users'>;
   readonly clock: Clock;
 }
 
@@ -149,7 +154,7 @@ export class ActivityTimelineService {
     const { store } = this.deps;
     const calls = await this.callsOf(filters);
     // One more than the page: its presence says there is a further page that way.
-    const rows = await store.sessions.searchEvents({
+    const rows = await store.missionLogs.searchEvents({
       scope: eventScopeOf(viewer),
       limit: pageSize + 1,
       ...(filters.missionId ? { missionId: filters.missionId } : {}),
@@ -235,7 +240,7 @@ interface MissionFacts {
   readonly creator: string;
 }
 
-/** The sessions a viewer reads: those of the missions they created or are a member of; all for an operator. */
+/** The mission logs a viewer reads: those of the missions they created or are a member of; all for an operator. */
 export function eventScopeOf(viewer: AuditViewer): EventSearch['scope'] {
   if (viewer.kind === 'bootstrap') {
     return { missionCreatorUserId: null, missionMemberUserId: null, allMissions: false };

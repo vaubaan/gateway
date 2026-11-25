@@ -1,6 +1,6 @@
 /**
  * The budget stage inside gateway-core's `CallPipeline`, with the store's audit writer:
- * the structural check "session counters agree with the audit" (spec §3.3, §10) and the
+ * the structural check "mission log counters agree with the audit" (spec §3.3, §10) and the
  * decision on upstream failure (credit consumed, not refunded; ADR
  * atomic-budget-accounting).
  */
@@ -70,7 +70,7 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
       (id, i) => ({ id, account_id: f.accountId, position: i + 1, resource_ids: [] }),
     ),
     policy: mission.policy,
-    session: null,
+    missionLog: null,
   };
 }
 
@@ -122,7 +122,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
   });
   afterEach(() => f.store.close());
 
-  it('after a mixed run, SUM(session_counters) == COUNT(audit allowed) per risk', async () => {
+  it('after a mixed run, SUM(mission_log_counters) == COUNT(audit allowed) per risk', async () => {
     const pipeline = buildPipeline(f, () => f.clock.now());
     const ctx = contextOf(f, f.mission);
     const outcomes: string[] = [];
@@ -156,17 +156,17 @@ describe('budget stage in the pipeline — counters vs audit', () => {
   it('skips a credit event whose details are malformed, and does not throw', async () => {
     const pipeline = buildPipeline(f, () => f.clock.now());
     await pipeline.execute(contextOf(f, f.mission), request([READ]));
-    const session = await f.store.sessions.getByMission(f.mission.id);
-    if (!session) throw new Error('the first call creates the session');
+    const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+    if (!missionLog) throw new Error('the first call creates the mission log');
     const { period } = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
 
     // Rows no writer of the gateway produces: a reset without its request and period
     // end, a quota extension whose credit is text, a reset with no details at all.
-    await f.store.sessions.recordEvent(session.id, {
+    await f.store.missionLogs.recordEvent(missionLog.id, {
       kind: 'reset',
       details: { period_start: period.start, credits: { [READ]: 5 } },
     });
-    await f.store.sessions.recordEvent(session.id, {
+    await f.store.missionLogs.recordEvent(missionLog.id, {
       kind: 'extension',
       details: {
         request_id: 'r-1',
@@ -177,7 +177,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
         credits: { [READ]: '2' },
       },
     });
-    await f.store.sessions.recordEvent(session.id, { kind: 'reset' });
+    await f.store.missionLogs.recordEvent(missionLog.id, { kind: 'reset' });
 
     const report = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
     expect(report.risks.find((r) => r.risk_id === READ)).toMatchObject({
@@ -289,7 +289,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     });
   });
 
-  it('a mission with no session yet reports zero everywhere and no mismatch', async () => {
+  it('a mission with no mission log yet reports zero everywhere and no mismatch', async () => {
     const report = await countersAgreeWithAudit(f.store, f.mission, at('2026-10-13T09:00:00.000Z'));
     expect(report.mismatches).toEqual([]);
     expect(report.risks.every((r) => r.counted === 0 && r.audited === 0)).toBe(true);

@@ -48,7 +48,7 @@ spec: ../spec/vaubaan-gateway.md#74-ter-restore-a-version
 status: implemented
 requires: mission-token
 creates: event, mission-log
-anchors: apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/budget/decide.ts, apps/gateway/tests/integration/execution/pipeline.test.ts, apps/gateway/tests/integration/budget/session-service.test.ts
+anchors: apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/budget/decide.ts, apps/gateway/tests/integration/execution/pipeline.test.ts, apps/gateway/tests/integration/budget/mission-log-service.test.ts
 relieves: interrupted-all-the-time-or-not-when-it-mattered
 delivers: my-agent-works-alone-on-real-things, the-recap-prepared-while-i-do-something-else
 spec: ../spec/vaubaan-gateway.md#75-execute
@@ -57,7 +57,7 @@ spec: ../spec/vaubaan-gateway.md#75-execute
 
 status: implemented
 requires: mission-log
-anchors: apps/gateway/src/server/audit/session-view.ts, apps/gateway/tests/integration/audit/mission-session.test.ts
+anchors: apps/gateway/src/server/audit/mission-log-view.ts, apps/gateway/tests/integration/audit/mission-log.test.ts
 delivers: my-agent-works-alone-on-real-things
 spec: ../spec/vaubaan-gateway.md#8-audit
 

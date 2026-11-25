@@ -1,5 +1,5 @@
 /**
- * `retention_days` also purges the session history (spec §6, §8; product owner's
+ * `retention_days` also purges the mission log history (spec §6, §8; product owner's
  * decision of 2026-10-13): the timeline events older than N days and the counters of
  * periods that ended more than N days ago leave with the audit entries of the same
  * age. What the budget still reads never leaves: the counters of the current period,
@@ -13,7 +13,7 @@ import {
   GATE_EVENT_KINDS,
   openedGatesOf,
   PERIOD_STATE_EVENT_KINDS,
-  SessionHistoryRetention,
+  MissionLogRetention,
 } from '../../../src/server/budget';
 import { silentLogger, type Logger } from '../../../src/server/logging';
 import { openTestStore, type TestStore } from '../../support/store/testing';
@@ -30,7 +30,7 @@ const SHIPPED_RISK = 'github.read-code';
 const daysAgo = (days: number, extraMs = 0): string =>
   new Date(Date.parse(NOW) - days * DAY_MS + extraMs).toISOString();
 
-describe('retention of the session history', () => {
+describe('retention of the mission log history', () => {
   let t: TestStore;
   let userId: string;
   let accountId: string;
@@ -57,7 +57,7 @@ describe('retention of the session history', () => {
   afterEach(() => t.store.close());
 
   /** A mission issued 100 days ago; `periodSeconds: null` is a one-off mission. */
-  /** The one resource set of each session's mission. */
+  /** The one resource set of each mission log's mission. */
   const setOf = new Map<string, string>();
 
   async function mission(periodSeconds: number | null) {
@@ -73,14 +73,14 @@ describe('retention of the session history', () => {
         { riskId: MERGE, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'approval' },
       ],
     });
-    const session = await t.store.sessions.getOrCreate(record.id);
-    setOf.set(session.id, record.accounts[0]?.resourceSets[0]?.id ?? '');
-    return { record, sessionId: session.id };
+    const missionLog = await t.store.missionLogs.getOrCreate(record.id);
+    setOf.set(missionLog.id, record.accounts[0]?.resourceSets[0]?.id ?? '');
+    return { record, missionLogId: missionLog.id };
   }
 
   /** One event written `days` ago. */
   async function event(
-    sessionId: string,
+    missionLogId: string,
     days: number,
     kind: string,
     riskId: string = READ,
@@ -88,10 +88,10 @@ describe('retention of the session history', () => {
   ) {
     t.clock.set(daysAgo(days));
     // About one line: the risk in the mission's one set (risk model §4.7).
-    return t.store.sessions.recordEvent(sessionId, {
+    return t.store.missionLogs.recordEvent(missionLogId, {
       kind,
       riskId,
-      resourceSetId: setOf.get(sessionId) ?? null,
+      resourceSetId: setOf.get(missionLogId) ?? null,
       details,
     });
   }
@@ -103,7 +103,7 @@ describe('retention of the session history', () => {
       { anchor_at: m.record.periodAnchor, length_seconds: m.record.periodSeconds },
       t.clock.now(),
     );
-    await t.store.sessions.decideAndDecrement(
+    await t.store.missionLogs.decideAndDecrement(
       { missionId: m.record.id, riskIds: [READ], periodStart: period.start },
       () => ({ allow: true }),
     );
@@ -112,33 +112,33 @@ describe('retention of the session history', () => {
 
   function purge(retentionDays: number) {
     t.clock.set(NOW);
-    return new SessionHistoryRetention({
-      sessions: t.store.sessions,
+    return new MissionLogRetention({
+      missionLogs: t.store.missionLogs,
       missions: t.store.missions,
       clock: t.clock,
     }).purge(retentionDays);
   }
 
-  const eventIds = async (sessionId: string) =>
-    (await t.store.sessions.listEvents(sessionId, { limit: 1000 })).map((e) => e.id);
-  const periodStarts = async (sessionId: string) =>
-    (await t.store.sessions.counters(sessionId)).map((c) => c.periodStart);
+  const eventIds = async (missionLogId: string) =>
+    (await t.store.missionLogs.listEvents(missionLogId, { limit: 1000 })).map((e) => e.id);
+  const periodStarts = async (missionLogId: string) =>
+    (await t.store.missionLogs.counters(missionLogId)).map((c) => c.periodStart);
 
   it('removes the events older than N days and no other', async () => {
     const m = await mission(DAY_S);
-    const tooOld = await event(m.sessionId, 31, 'call-allowed');
-    const justTooOld = await event(m.sessionId, 30, 'call-refused');
+    const tooOld = await event(m.missionLogId, 31, 'call-allowed');
+    const justTooOld = await event(m.missionLogId, 30, 'call-refused');
     t.clock.set(daysAgo(30, -1));
-    const oneMsTooOld = await t.store.sessions.recordEvent(m.sessionId, {
+    const oneMsTooOld = await t.store.missionLogs.recordEvent(m.missionLogId, {
       kind: 'request',
       riskId: READ,
     });
-    const recent = await event(m.sessionId, 29, 'call-allowed');
-    const today = await event(m.sessionId, 0, 'call-allowed');
+    const recent = await event(m.missionLogId, 29, 'call-allowed');
+    const today = await event(m.missionLogId, 0, 'call-allowed');
 
     expect(await purge(30)).toEqual({ events: 2, counters: 0 });
 
-    const left = await eventIds(m.sessionId);
+    const left = await eventIds(m.missionLogId);
     expect(left).not.toContain(tooOld.id);
     expect(left).not.toContain(oneMsTooOld.id);
     // Exactly N days old is not "older than N days".
@@ -155,7 +155,7 @@ describe('retention of the session history', () => {
 
     expect(await purge(30)).toEqual({ events: 0, counters: 2 });
 
-    const left = await periodStarts(m.sessionId);
+    const left = await periodStarts(m.missionLogId);
     expect(left).not.toContain(longGone);
     expect(left).not.toContain(gone);
     // A period that ended exactly N days ago did not end "more than N days ago".
@@ -165,26 +165,26 @@ describe('retention of the session history', () => {
   it('keeps what the budget still reads in a period longer than the retention', async () => {
     // One period of a year, started 100 days ago: everything below is "this period".
     const m = await mission(365 * DAY_S);
-    const call = await event(m.sessionId, 90, 'call-allowed');
+    const call = await event(m.missionLogId, 90, 'call-allowed');
     const yearStart = m.record.periodAnchor;
-    const gate = await event(m.sessionId, 90, 'gate-opened', MERGE, {
+    const gate = await event(m.missionLogId, 90, 'gate-opened', MERGE, {
       request_id: 'r',
       period_start: yearStart,
       period_end: new Date(Date.parse(yearStart) + 365 * DAY_MS).toISOString(),
     });
-    const extension = await event(m.sessionId, 80, 'extension', READ, {
+    const extension = await event(m.missionLogId, 80, 'extension', READ, {
       credits: { [READ]: 3 },
     });
-    const reset = await event(m.sessionId, 70, 'reset', READ, { credits: { [READ]: 1 } });
+    const reset = await event(m.missionLogId, 70, 'reset', READ, { credits: { [READ]: 1 } });
     const start = await consume(m, 95);
 
     expect(await purge(30)).toEqual({ events: 1, counters: 0 });
 
-    const left = await eventIds(m.sessionId);
+    const left = await eventIds(m.missionLogId);
     expect(left).not.toContain(call.id);
     expect(left).toEqual([gate.id, extension.id, reset.id]);
     // The counters of the current period are the budget: untouched, whatever their age.
-    expect(await t.store.sessions.counters(m.sessionId, start)).toMatchObject([
+    expect(await t.store.missionLogs.counters(m.missionLogId, start)).toMatchObject([
       { riskId: READ, consumed: 1 },
     ]);
     // The gate opened 90 days ago "until the period ends" is still read as open.
@@ -192,24 +192,24 @@ describe('retention of the session history', () => {
       { anchor_at: m.record.periodAnchor, length_seconds: m.record.periodSeconds },
       new Date(NOW),
     );
-    const gateEvents = await t.store.sessions.listEvents(m.sessionId, {
+    const gateEvents = await t.store.missionLogs.listEvents(m.missionLogId, {
       kinds: GATE_EVENT_KINDS,
       since: period.start,
     });
-    expect(openedGatesOf(gateEvents, period).has(`${setOf.get(m.sessionId) ?? ''}::${MERGE}`)).toBe(
-      true,
-    );
+    expect(
+      openedGatesOf(gateEvents, period).has(`${setOf.get(m.missionLogId) ?? ''}::${MERGE}`),
+    ).toBe(true);
   });
 
   it('removes a gate or a credit event once its period is over', async () => {
     const m = await mission(DAY_S);
-    const oldGate = await event(m.sessionId, 40, 'gate-opened', MERGE, { request_id: 'r' });
-    const oldCredit = await event(m.sessionId, 40, 'reset', READ, { credits: { [READ]: 1 } });
+    const oldGate = await event(m.missionLogId, 40, 'gate-opened', MERGE, { request_id: 'r' });
+    const oldCredit = await event(m.missionLogId, 40, 'reset', READ, { credits: { [READ]: 1 } });
     // Over, but younger than the retention: history that is still kept.
-    const lastWeek = await event(m.sessionId, 7, 'gate-opened', MERGE, { request_id: 'r' });
+    const lastWeek = await event(m.missionLogId, 7, 'gate-opened', MERGE, { request_id: 'r' });
 
     expect(await purge(30)).toEqual({ events: 2, counters: 0 });
-    const left = await eventIds(m.sessionId);
+    const left = await eventIds(m.missionLogId);
     expect(left).not.toContain(oldGate.id);
     expect(left).not.toContain(oldCredit.id);
     expect(left).toEqual([lastWeek.id]);
@@ -217,52 +217,52 @@ describe('retention of the session history', () => {
 
   it('on a one-off mission: the old calls leave, the counters and the credits of its only period stay', async () => {
     const m = await mission(null);
-    const call = await event(m.sessionId, 90, 'call-allowed');
-    const credit = await event(m.sessionId, 90, 'extension', READ, { credits: { [READ]: 2 } });
-    const recent = await event(m.sessionId, 2, 'call-allowed');
+    const call = await event(m.missionLogId, 90, 'call-allowed');
+    const credit = await event(m.missionLogId, 90, 'extension', READ, { credits: { [READ]: 2 } });
+    const recent = await event(m.missionLogId, 2, 'call-allowed');
     const only = await consume(m, 95);
 
     expect(await purge(30)).toEqual({ events: 1, counters: 0 });
-    const left = await eventIds(m.sessionId);
+    const left = await eventIds(m.missionLogId);
     expect(left).not.toContain(call.id);
     expect(left).toEqual([credit.id, recent.id]);
-    expect(await periodStarts(m.sessionId)).toEqual([only]);
+    expect(await periodStarts(m.missionLogId)).toEqual([only]);
   });
 
-  it('purges each session by its own mission period, and is idempotent', async () => {
+  it('purges each mission log by its own mission period, and is idempotent', async () => {
     const daily = await mission(DAY_S);
     const yearly = await mission(365 * DAY_S);
-    await event(daily.sessionId, 50, 'gate-opened', MERGE);
-    const kept = await event(yearly.sessionId, 50, 'gate-opened', MERGE);
+    await event(daily.missionLogId, 50, 'gate-opened', MERGE);
+    const kept = await event(yearly.missionLogId, 50, 'gate-opened', MERGE);
     await consume(daily, 50);
     await consume(yearly, 50);
 
     expect(await purge(30)).toEqual({ events: 1, counters: 1 });
     expect(await purge(30)).toEqual({ events: 0, counters: 0 });
-    expect(await eventIds(daily.sessionId)).toEqual([]);
-    expect(await eventIds(yearly.sessionId)).toEqual([kept.id]);
-    expect((await periodStarts(yearly.sessionId)).length).toBe(1);
+    expect(await eventIds(daily.missionLogId)).toEqual([]);
+    expect(await eventIds(yearly.missionLogId)).toEqual([kept.id]);
+    expect((await periodStarts(yearly.missionLogId)).length).toBe(1);
     // Later, what aged past the retention leaves in its turn.
-    await event(daily.sessionId, 20, 'call-allowed');
+    await event(daily.missionLogId, 20, 'call-allowed');
     expect(await purge(30)).toEqual({ events: 0, counters: 0 });
     expect(await purge(15)).toEqual({ events: 1, counters: 0 });
   });
 
   it('touches nothing but events and counters, and refuses a retention that is not a number of days', async () => {
     const m = await mission(DAY_S);
-    await event(m.sessionId, 60, 'call-allowed');
+    await event(m.missionLogId, 60, 'call-allowed');
     await consume(m, 60);
     t.clock.set(daysAgo(60));
     await t.store.requests.create({
       missionId: m.record.id,
-      sessionId: m.sessionId,
+      missionLogId: m.missionLogId,
       kind: 'claim',
       riskId: READ,
       expiresAt: daysAgo(59),
     });
     const count = (table: string): number =>
       t.store.db.prepare<[], { n: number }>(`SELECT COUNT(*) AS n FROM ${table}`).get()?.n ?? 0;
-    const tables = ['users', 'accounts', 'missions', 'mission_policy', 'sessions', 'requests'];
+    const tables = ['users', 'accounts', 'missions', 'mission_policy', 'mission_logs', 'requests'];
     const before = tables.map(count);
 
     expect(await purge(30)).toEqual({ events: 1, counters: 1 });
@@ -279,7 +279,7 @@ describe('retention of the session history', () => {
   });
 });
 
-describe('the retention sweeper purges the session history with the audit', () => {
+describe('the retention sweeper purges the mission log history with the audit', () => {
   function recordingLogger() {
     const lines: { level: string; message: string; fields: unknown }[] = [];
     const logger: Logger = {
@@ -297,7 +297,7 @@ describe('the retention sweeper purges the session history with the audit', () =
     const { lines, logger } = recordingLogger();
     const s = new AuditRetentionSweeper({
       audit: { purgeByRetention: async () => 0 },
-      sessionHistory: {
+      missionLogHistory: {
         purge: async (days) => {
           asked.push(days);
           return { events: 4, counters: 2 };
@@ -311,7 +311,7 @@ describe('the retention sweeper purges the session history with the audit', () =
     expect(lines).toEqual([
       {
         level: 'info',
-        message: 'audit retention: session history purged',
+        message: 'audit retention: mission log history purged',
         fields: { events: 4, counters: 2, retention_days: 45 },
       },
     ]);
@@ -326,7 +326,7 @@ describe('the retention sweeper purges the session history with the audit', () =
           throw new Error('audit locked');
         },
       },
-      sessionHistory: {
+      missionLogHistory: {
         purge: async () => {
           historyRuns += 1;
           return { events: 0, counters: 0 };
@@ -340,7 +340,7 @@ describe('the retention sweeper purges the session history with the audit', () =
 
     const failingHistory = new AuditRetentionSweeper({
       audit: { purgeByRetention: async () => 5 },
-      sessionHistory: {
+      missionLogHistory: {
         purge: async () => {
           throw new Error('events locked');
         },
@@ -352,7 +352,7 @@ describe('the retention sweeper purges the session history with the audit', () =
     expect(lines.map((line) => line.message)).toEqual(['audit retention: purge failed']);
   });
 
-  it('is wired by the composition root: one `retention_days` for the audit and the sessions', async () => {
+  it('is wired by the composition root: one `retention_days` for the audit and the mission logs', async () => {
     const root = await buildTestRoot({ env: { VAUBAAN_RETENTION_DAYS: '7' } });
     try {
       const user = await root.store.users.upsertFromIdp({
@@ -376,12 +376,12 @@ describe('the retention sweeper purges the session history with the audit', () =
           { riskId: SHIPPED_RISK, quota: 5, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
         ],
       });
-      const session = await root.store.sessions.getOrCreate(created.id);
-      const recent = await root.store.sessions.recordEvent(session.id, {
+      const missionLog = await root.store.missionLogs.getOrCreate(created.id);
+      const recent = await root.store.missionLogs.recordEvent(missionLog.id, {
         kind: 'call-allowed',
         riskId: SHIPPED_RISK,
       });
-      const old = await root.store.sessions.recordEvent(session.id, {
+      const old = await root.store.missionLogs.recordEvent(missionLog.id, {
         kind: 'call-allowed',
         riskId: SHIPPED_RISK,
       });
@@ -392,7 +392,7 @@ describe('the retention sweeper purges the session history with the audit', () =
 
       await root.audit.retention.sweep();
 
-      const left = await root.store.sessions.listEvents(session.id);
+      const left = await root.store.missionLogs.listEvents(missionLog.id);
       expect(left.map((e) => e.id)).toEqual([recent.id]);
     } finally {
       await root.close();

@@ -1,10 +1,10 @@
 /**
- * `MissionSessionService` — what the Mission session page reads (spec §4.2
- * "Mission session — event timeline, counters per risk and per period, gate
- * per risk, open requests"; §3.3 the session and the remaining budget).
+ * `MissionLogViewService` — what the Mission log page reads (spec §4.2
+ * "Mission log — event timeline, counters per risk and per period, gate
+ * per risk, open requests"; §3.3 the mission log and the remaining budget).
  *
  * Read-only. The mission's creator, and its members (spec §11.2 "What a member
- * sees": the whole session; arguments are never shown, and requests stay the
+ * sees": the whole mission log; arguments are never shown, and requests stay the
  * creator's): "does not exist" and "not yours" are the same answer, as on the
  * mission detail page. Open requests are listed by link to the creator's view
  * of the request (`/waiting/<id>`): their arguments stay there, and a
@@ -23,7 +23,7 @@
  * quota extension) lowers them, so "counted" can go down during a period. The
  * `reset` / `extension` events of the timeline say how much was given back.
  *
- * Agent labels (spec §7.9 "the session and the audit tell who did what"). A
+ * Agent labels (spec §7.9 "the mission log and the audit tell who did what"). A
  * label is what a caller declared about itself: attribution, never an
  * identity, with no effect on what is allowed or counted (spec §0). Two reads
  * are built on it, both informational:
@@ -60,7 +60,7 @@ import {
   type RequestClosedState,
   type RequestKind,
   type RiskId,
-  type SessionEventDetails,
+  type MissionLogEventDetails,
 } from '@vaubaan/shared';
 
 import type { Subject } from '../authority';
@@ -71,7 +71,7 @@ import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
 import type { AgentLabelActivity, AgentLabelSeen, Store, TokenHolderActivity } from '../store';
 import type { Clock } from '../store/clock';
-import type { EventRecord, RequestRecord, SessionCounterRecord } from '../store/types';
+import type { EventRecord, RequestRecord, MissionLogCounterRecord } from '../store/types';
 
 /**
  * How many of the latest events the view holds: the mission page shows a few of
@@ -82,25 +82,25 @@ export const LATEST_EVENTS = 100;
 export const PAST_PERIODS_SHOWN = 7;
 
 /** A token holder as the store keeps it: the kind, and the user id or the token name. */
-export interface SessionHolderRef {
+export interface MissionLogHolderRef {
   readonly kind: MissionTokenKind;
   readonly key: string;
 }
 
 /** A holder with what a page shows: the member's email, or the token's name. */
-export interface SessionHolderView extends SessionHolderRef {
+export interface MissionLogHolderView extends MissionLogHolderRef {
   readonly label: string;
 }
 
 const HOLDER_PARAM_SEPARATOR = ':';
 
 /** `member:<user id>` / `named:<name>`: a holder in a query string. */
-export function holderParam(holder: SessionHolderRef): string {
+export function holderParam(holder: MissionLogHolderRef): string {
   return `${holder.kind}${HOLDER_PARAM_SEPARATOR}${holder.key}`;
 }
 
 /** The holder a query-string value names; `null` when it names none. */
-export function parseHolderParam(value: string): SessionHolderRef | null {
+export function parseHolderParam(value: string): MissionLogHolderRef | null {
   const at = value.indexOf(HOLDER_PARAM_SEPARATOR);
   if (at <= 0) return null;
   const kind = value.slice(0, at);
@@ -110,7 +110,7 @@ export function parseHolderParam(value: string): SessionHolderRef | null {
 
 const MS_PER_SECOND = 1000;
 
-export interface SessionRiskRow extends MissionPolicyEntry {
+export interface MissionLogRiskRow extends MissionPolicyEntry {
   readonly label: string;
   readonly row: Row | null;
   /** Actions counted this period, net of what granted claims gave back; `null`
@@ -126,7 +126,7 @@ export interface SessionRiskRow extends MissionPolicyEntry {
   readonly gate_open_until: string | null;
 }
 
-export interface SessionPeriodRow {
+export interface MissionLogPeriodRow {
   readonly start: string;
   /** `null` for a one-off mission (its single period never ends). */
   readonly end: string | null;
@@ -135,7 +135,7 @@ export interface SessionPeriodRow {
   readonly consumed: Readonly<Record<PolicyLineKey, number>>;
 }
 
-export interface SessionEventView {
+export interface MissionLogEventView {
   readonly id: string;
   readonly ts: string;
   readonly kind: string;
@@ -150,7 +150,7 @@ export interface SessionEventView {
    * token a `rotation` / `revocation` is about. `null` for the other kinds, for
    * a mission-wide revocation, and for a call stored before tokens had a holder.
    */
-  readonly holder: SessionHolderView | null;
+  readonly holder: MissionLogHolderView | null;
   /** Remaining quota per touched risk after an allowed call. */
   readonly remaining: Readonly<Record<RiskId, number>> | null;
   readonly request_id: string | null;
@@ -211,7 +211,7 @@ export interface SessionEventView {
   readonly expires_at: string | null;
 }
 
-export interface SessionOpenRequest {
+export interface MissionLogOpenRequest {
   readonly id: string;
   readonly kind: RequestRecord['kind'];
   readonly risk_id: RiskId;
@@ -233,7 +233,7 @@ export interface SessionOpenRequest {
 }
 
 /** The calls of the current period under one label (`null`: no label). Not a budget. */
-export interface SessionLabelActivity {
+export interface MissionLogLabelActivity {
   readonly label: string | null;
   readonly allowed: number;
   readonly refused: number;
@@ -244,58 +244,58 @@ export interface SessionLabelActivity {
  * The calls of the current period made with the tokens of one holder; `holder:
  * null` gathers the calls stored before tokens had a holder. Not a budget.
  */
-export interface SessionHolderActivity {
-  readonly holder: SessionHolderView | null;
+export interface MissionLogHolderActivity {
+  readonly holder: MissionLogHolderView | null;
   readonly allowed: number;
   readonly refused: number;
   readonly last_seen_at: string;
 }
 
-export interface MissionSessionView {
+export interface MissionLogView {
   readonly mission: { readonly id: string; readonly name: string };
   /** What the reader is to the mission; a member answers no request. */
   readonly viewer_role: MissionRole;
   readonly state: MissionState;
-  /** `null` until the first call: the session is born with it (spec §3.3). */
-  readonly session: { readonly id: string; readonly created_at: string } | null;
-  readonly risks: readonly SessionRiskRow[];
+  /** `null` until the first call: the mission log is born with it (spec §3.3). */
+  readonly missionLog: { readonly id: string; readonly created_at: string } | null;
+  readonly risks: readonly MissionLogRiskRow[];
   /** The current period first (when the mission is active), then the past ones. */
-  readonly periods: readonly SessionPeriodRow[];
+  readonly periods: readonly MissionLogPeriodRow[];
   /** The latest `LATEST_EVENTS` events, newest first; the rest is the Activity's Timeline. */
-  readonly events: readonly SessionEventView[];
-  readonly open_requests: readonly SessionOpenRequest[];
+  readonly events: readonly MissionLogEventView[];
+  readonly open_requests: readonly MissionLogOpenRequest[];
   /** Every label seen on the mission's calls still in the audit, most recent first. */
   readonly agent_labels: readonly AgentLabelSeen[];
   /**
    * Calls of the current period per label, busiest first; empty when the
    * mission is not active (it has no current period). Informational.
    */
-  readonly label_activity: readonly SessionLabelActivity[];
+  readonly label_activity: readonly MissionLogLabelActivity[];
   /**
    * Calls of the current period per token holder, busiest first; empty when the
    * mission is not active. Informational: one budget per mission, however many
    * tokens (spec §3.2).
    */
-  readonly holder_activity: readonly SessionHolderActivity[];
+  readonly holder_activity: readonly MissionLogHolderActivity[];
 }
 
-export interface MissionSessionDeps {
-  readonly store: Pick<Store, 'sessions' | 'requests' | 'audit' | 'users'>;
+export interface MissionLogViewDeps {
+  readonly store: Pick<Store, 'missionLogs' | 'requests' | 'audit' | 'users'>;
   readonly missions: Pick<MissionService, 'get'>;
   readonly clock: Clock;
 }
 
-export class MissionSessionService {
-  constructor(private readonly deps: MissionSessionDeps) {}
+export class MissionLogViewService {
+  constructor(private readonly deps: MissionLogViewDeps) {}
 
-  async get(user: Subject, missionId: string): Promise<MissionSessionView | null> {
+  async get(user: Subject, missionId: string): Promise<MissionLogView | null> {
     const detail = await this.deps.missions.get(user, missionId);
     if (!detail) return null;
     const { store } = this.deps;
-    const session = await store.sessions.getByMission(missionId);
-    const counters = session ? await store.sessions.counters(session.id) : [];
-    const latest = session
-      ? await store.sessions.listRecentEvents(session.id, { limit: LATEST_EVENTS })
+    const missionLog = await store.missionLogs.getByMission(missionId);
+    const counters = missionLog ? await store.missionLogs.counters(missionLog.id) : [];
+    const latest = missionLog
+      ? await store.missionLogs.listRecentEvents(missionLog.id, { limit: LATEST_EVENTS })
       : [];
     const now = this.deps.clock.now();
     const requests = await store.requests.listForMission(missionId);
@@ -307,7 +307,7 @@ export class MissionSessionService {
       ? await store.audit.tokenHolderActivity(missionId, { since: period.start, until: period.end })
       : [];
     const names = new HolderNames(store.users);
-    const holderActivity: SessionHolderActivity[] = [];
+    const holderActivity: MissionLogHolderActivity[] = [];
     for (const row of byHolder) holderActivity.push(await holderActivityView(row, names));
     holderActivity.sort(byActivityThenLabel);
     const answers = detail.role === 'creator';
@@ -316,7 +316,7 @@ export class MissionSessionService {
       mission: { id: detail.mission.id, name: detail.mission.name },
       viewer_role: detail.role,
       state: detail.state,
-      session: session ? { id: session.id, created_at: session.createdAt } : null,
+      missionLog: missionLog ? { id: missionLog.id, created_at: missionLog.createdAt } : null,
       risks: riskRows(detail, counters),
       periods: periodRows(detail, counters),
       events: await this.eventViews(latest, names),
@@ -353,8 +353,8 @@ export class MissionSessionService {
   private async eventViews(
     events: readonly EventRecord[],
     names: HolderNames,
-  ): Promise<SessionEventView[]> {
-    const views: SessionEventView[] = [];
+  ): Promise<MissionLogEventView[]> {
+    const views: MissionLogEventView[] = [];
     for (const event of events) {
       const actorEmail = event.actorUserId ? await names.email(event.actorUserId) : null;
       const ref = holderRefOfEvent(event);
@@ -378,18 +378,18 @@ export class HolderNames {
   }
 
   /** A member is shown by their email (their id when the user row is gone); a named token by its name. */
-  async view(ref: SessionHolderRef): Promise<SessionHolderView> {
+  async view(ref: MissionLogHolderRef): Promise<MissionLogHolderView> {
     if (ref.kind === 'named') return { ...ref, label: ref.key };
     return { ...ref, label: (await this.email(ref.key)) ?? ref.key };
   }
 }
 
 /** The holder an event names, from its stored details. */
-export function holderRefOfEvent(event: EventRecord): SessionHolderRef | null {
+export function holderRefOfEvent(event: EventRecord): MissionLogHolderRef | null {
   return holderRefOf(parseEventDetails(event.kind, event.details));
 }
 
-function holderRefOf(parsed: SessionEventDetails | null): SessionHolderRef | null {
+function holderRefOf(parsed: MissionLogEventDetails | null): MissionLogHolderRef | null {
   if (!parsed) return null;
   switch (parsed.kind) {
     case 'call-allowed':
@@ -405,7 +405,7 @@ function holderRefOf(parsed: SessionEventDetails | null): SessionHolderRef | nul
 }
 
 /** Busiest first; then by the name a reader sees, the unattributed calls last. */
-function byActivityThenLabel(a: SessionHolderActivity, b: SessionHolderActivity): number {
+function byActivityThenLabel(a: MissionLogHolderActivity, b: MissionLogHolderActivity): number {
   const busier = b.allowed + b.refused - (a.allowed + a.refused);
   if (busier !== 0) return busier;
   if (a.holder === null || b.holder === null) return a.holder === null ? 1 : -1;
@@ -415,7 +415,7 @@ function byActivityThenLabel(a: SessionHolderActivity, b: SessionHolderActivity)
 async function holderActivityView(
   activity: TokenHolderActivity,
   names: HolderNames,
-): Promise<SessionHolderActivity> {
+): Promise<MissionLogHolderActivity> {
   return {
     holder:
       activity.kind !== null && activity.holder !== null
@@ -427,7 +427,7 @@ async function holderActivityView(
   };
 }
 
-function labelActivityView(activity: AgentLabelActivity): SessionLabelActivity {
+function labelActivityView(activity: AgentLabelActivity): MissionLogLabelActivity {
   return {
     label: activity.label,
     allowed: activity.allowed,
@@ -438,8 +438,8 @@ function labelActivityView(activity: AgentLabelActivity): SessionLabelActivity {
 
 function riskRows(
   detail: MissionDetail,
-  counters: readonly SessionCounterRecord[],
-): SessionRiskRow[] {
+  counters: readonly MissionLogCounterRecord[],
+): MissionLogRiskRow[] {
   const { state } = detail;
   const active = state.kind === 'active' ? state : null;
   const consumed = new Map(
@@ -464,8 +464,8 @@ function riskRows(
 
 function periodRows(
   detail: MissionDetail,
-  counters: readonly SessionCounterRecord[],
-): SessionPeriodRow[] {
+  counters: readonly MissionLogCounterRecord[],
+): MissionLogPeriodRow[] {
   const lengthSeconds = detail.mission.periodSeconds;
   const currentStart = detail.state.kind === 'active' ? detail.state.period.start : null;
   const byStart = new Map<string, Record<PolicyLineKey, number>>();
@@ -514,16 +514,16 @@ const NO_DETAIL = {
   credits: null,
   dimension: null,
   expires_at: null,
-} satisfies Partial<SessionEventView>;
+} satisfies Partial<MissionLogEventView>;
 
-type EventDetailFields = Pick<SessionEventView, keyof typeof NO_DETAIL>;
+type EventDetailFields = Pick<MissionLogEventView, keyof typeof NO_DETAIL>;
 
 /** `null` for a table with no entry: the page shows nothing rather than an empty list. */
 function countsOrNull(counts: Readonly<Record<RiskId, number>>): Record<RiskId, number> | null {
   return Object.keys(counts).length > 0 ? { ...counts } : null;
 }
 
-function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
+function detailFields(parsed: MissionLogEventDetails | null): EventDetailFields {
   if (!parsed) return NO_DETAIL;
   switch (parsed.kind) {
     case 'call-allowed':
@@ -626,7 +626,7 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
 /**
  * The kind of request a refused call points to. The budget drops a claim on
  * `budget-exhausted` and an approval request on `approval-required`
- * (`SessionService.requestFor`, `server/budget`); no other refusal carries a request.
+ * (`MissionLogService.requestFor`, `server/budget`); no other refusal carries a request.
  */
 function requestKindOfRefusal(code: string): RequestKind | null {
   if (code === 'budget-exhausted') return 'claim';
@@ -635,7 +635,7 @@ function requestKindOfRefusal(code: string): RequestKind | null {
 }
 
 /** The risk of the event's own column, then those a call event lists. */
-function riskIdsOf(event: EventRecord, parsed: SessionEventDetails | null): RiskId[] {
+function riskIdsOf(event: EventRecord, parsed: MissionLogEventDetails | null): RiskId[] {
   const ids =
     parsed && (parsed.kind === 'call-allowed' || parsed.kind === 'call-refused')
       ? [...parsed.details.risk_ids]
@@ -652,8 +652,8 @@ function riskIdsOf(event: EventRecord, parsed: SessionEventDetails | null): Risk
 export function eventView(
   event: EventRecord,
   actorEmail: string | null,
-  holder: SessionHolderView | null = null,
-): SessionEventView {
+  holder: MissionLogHolderView | null = null,
+): MissionLogEventView {
   const parsed = parseEventDetails(event.kind, event.details);
   return {
     id: event.id,

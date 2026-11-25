@@ -1,6 +1,6 @@
 /**
- * Structural test (spec §3.3 "the session is the source of truth for the
- * budget, the audit for what happened; the two must agree", §10 "session
+ * Structural test (spec §3.3 "the mission log is the source of truth for the
+ * budget, the audit for what happened; the two must agree", §10 "mission log
  * counters agree with the audit"): after a randomized sequence of calls sent
  * through the door — allowed, refused on every dimension, failing upstream,
  * in bursts from several agents — the counters and the audit tell the same
@@ -68,7 +68,7 @@ function pick(random: () => number) {
   return MOVES[0] as (typeof MOVES)[number];
 }
 
-describe('structural: session counters agree with the audit', () => {
+describe('structural: mission log counters agree with the audit', () => {
   let instance: ExecutionInstance;
 
   beforeEach(async () => {
@@ -113,14 +113,14 @@ describe('structural: session counters agree with the audit', () => {
   }
 
   for (const seed of SEEDS) {
-    it(`SUM(session_counters) == COUNT(audit allowed) per risk after ${CALLS} random calls (seed ${seed})`, async () => {
+    it(`SUM(mission_log_counters) == COUNT(audit allowed) per risk after ${CALLS} random calls (seed ${seed})`, async () => {
       const mission = await run(seed);
       const { store } = instance.root;
       const record = await store.missions.getById(mission.mission.id);
       if (!record) throw new Error('mission vanished');
 
       const report = await countersAgreeWithAudit(
-        { sessions: store.sessions, audit: store.audit },
+        { missionLogs: store.missionLogs, audit: store.audit },
         budgetMissionOf(record),
         new Date(),
       );
@@ -188,7 +188,7 @@ describe('structural: session counters agree with the audit', () => {
     const record = await store.missions.getById(mission.mission.id);
     if (!record) throw new Error('mission vanished');
     const report = await countersAgreeWithAudit(
-      { sessions: store.sessions, audit: store.audit },
+      { missionLogs: store.missionLogs, audit: store.audit },
       budgetMissionOf(record),
       new Date(),
     );

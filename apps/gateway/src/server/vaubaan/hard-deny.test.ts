@@ -26,7 +26,7 @@ import { ACT, TOOL, vaubaanTools, VAUBAAN_PORT_NAMES } from '@vaubaan/plugin-vau
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import type { AuthorityModule } from '../authority';
-import type { SessionService } from '../budget';
+import type { MissionLogService } from '../budget';
 import type { AccountsModule } from '../accounts';
 import type { ExecutionModule } from '../execution';
 import type { GroupsModule } from '../groups';
@@ -54,7 +54,7 @@ type Handed = VaubaanModuleDeps[keyof VaubaanModuleDeps];
 type Forbidden =
   | RequestsModule
   | RequestsModule['service']
-  | SessionService
+  | MissionLogService
   | ExecutionModule
   | ExecutionModule[keyof ExecutionModule]
   | AccountsModule

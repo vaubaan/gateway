@@ -1,14 +1,14 @@
 /**
  * The budget decision — pure.
  *
- * Spec §3.2 (unit, quota, rate limit, one budget per mission), §3.3 (session and
+ * Spec §3.2 (unit, quota, rate limit, one budget per mission), §3.3 (mission log and
  * remaining budget), §3.5 (gate: whole-call refusal, approval consumed on replay, "the
  * gate does not replace the budget"), §6 ("authoritative, atomic counting"). Plan §3.5.
  *
  * `decide()` reads everything it needs from its input and returns what must happen:
  * either an allow with the counters to increment and the approvals to consume, or a
  * refusal naming its code and the risk that caused it. It performs no IO; the
- * `SessionService` runs it inside the store's `BEGIN IMMEDIATE` transaction and applies
+ * `MissionLogService` runs it inside the store's `BEGIN IMMEDIATE` transaction and applies
  * the result. The three dimensions are checked in order across every touched risk:
  *
  *   1. quota    — any risk whose consumed count reached its quota: `budget-exhausted`;
@@ -58,7 +58,7 @@ export interface DecideInput {
    *  approval may cover several risks: the same id then stands under each. */
   readonly approvals?: ReadonlyMap<RiskId, string>;
   /** Risks whose gate the creator opened for the rest of the period (spec §3.5,
-   *  `gate-opened` session event): treated as `auto` until the next period. */
+   *  `gate-opened` mission log event): treated as `auto` until the next period. */
   readonly opened_gates?: ReadonlySet<RiskId>;
 }
 

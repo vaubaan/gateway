@@ -1,6 +1,6 @@
 /**
  * The gate of an accepted risk, edited after issuance (spec §3.5: "the creator sets
- * the risk's gate to `approval` at issuance, or later"; §4.2 "Mission session — gate
+ * the risk's gate to `approval` at issuance, or later"; §4.2 "Mission log — gate
  * per risk"). Over the real composition root: the mission service, its HTTP handler
  * and the budget the execution door decides with.
  */
@@ -49,8 +49,8 @@ describe('editing a gate after issuance', () => {
       e.kind === 'admin' && e.act === 'gate-changed' ? [e] : [],
     );
   const events = async () => {
-    const session = await rig.root.store.sessions.getByMission(mission.id);
-    return session ? rig.root.store.sessions.listEvents(session.id) : [];
+    const missionLog = await rig.root.store.missionLogs.getByMission(mission.id);
+    return missionLog ? rig.root.store.missionLogs.listEvents(missionLog.id) : [];
   };
 
   function gateRequest(headers: Headers, body: unknown, id = mission.id): Request {
@@ -104,8 +104,8 @@ describe('editing a gate after issuance', () => {
     );
   });
 
-  it('writes one administrative entry with the gate before and after, and a session event', async () => {
-    // Before the first call there is no session: the entry is written, no event.
+  it('writes one administrative entry with the gate before and after, and a mission log event', async () => {
+    // Before the first call there is no mission log: the entry is written, no event.
     await service().setGate(rig.seeded.ada, mission.id, PR, 'approval');
     expect(await gateEdits()).toMatchObject([
       {
@@ -118,7 +118,7 @@ describe('editing a gate after issuance', () => {
     ]);
     expect(await events()).toEqual([]);
 
-    // Once the session exists, the edit is on its timeline too.
+    // Once the mission log exists, the edit is on its timeline too.
     await call(READ);
     await service().setGate(rig.seeded.ada, mission.id, PR, 'auto');
     expect(await gateEdits()).toHaveLength(2);

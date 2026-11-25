@@ -102,20 +102,20 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'counters-agree-with-audit',
     statement:
-      'For every risk of every mission, the session counters equal the number of allowed touches in the audit, under random concurrent load.',
+      'For every risk of every mission, the mission log counters equal the number of allowed touches in the audit, under random concurrent load.',
     source: 'spec §3.3, §6 "authoritative, atomic counting", §10; ADR atomic-budget-accounting',
     specBullet: 'mission log counters agree with the audit',
     proofs: [
       {
         file: `${INTEGRATION}/execution/counters-vs-audit.test.ts`,
-        tests: ['structural: session counters agree with the audit'],
+        tests: ['structural: mission log counters agree with the audit'],
       },
       {
         file: `${INTEGRATION}/budget/pipeline-consistency.test.ts`,
-        tests: ['after a mixed run, SUM(session_counters) == COUNT(audit allowed) per risk'],
+        tests: ['after a mixed run, SUM(mission_log_counters) == COUNT(audit allowed) per risk'],
       },
       {
-        file: `${INTEGRATION}/store/sessions.test.ts`,
+        file: `${INTEGRATION}/store/mission-logs.test.ts`,
         tests: ['counters and audit agree after a mixed run (structural check)'],
       },
     ],
@@ -391,7 +391,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'calls-attributed-to-token-holder',
     statement:
-      'Every call through the execution door is attributed to the holder of the token it presented — a member, or a named token — in the audit entry and in the session event, from the authenticated token and never from what the caller declares; every token of a mission draws from one budget; and a token whose member was removed or deactivated, or that was rotated or revoked on its own, is refused at the next call, cache hit or miss.',
+      'Every call through the execution door is attributed to the holder of the token it presented — a member, or a named token — in the audit entry and in the mission log event, from the authenticated token and never from what the caller declares; every token of a mission draws from one budget; and a token whose member was removed or deactivated, or that was rotated or revoked on its own, is refused at the next call, cache hit or miss.',
     source:
       'spec §0 "Mission token", §3.2, §7.9 bis, §8; ADR mission-members-and-per-holder-tokens',
     proofs: [

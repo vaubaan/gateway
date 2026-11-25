@@ -441,13 +441,13 @@ describe('missions: members and per-holder tokens', () => {
       });
     });
 
-    it('leaves a session event for each token issued or revoked, once the session exists', async () => {
-      const session = await root.store.sessions.getOrCreate(mission.id);
+    it('leaves a mission log event for each token issued or revoked, once the mission log exists', async () => {
+      const missionLog = await root.store.missionLogs.getOrCreate(mission.id);
       await addBob();
       const bobs = await bobToken();
       await team.createNamedToken(ada, mission.id, 'CI runner');
       await team.removeMember(ada, mission.id, bob.id);
-      const events = await root.store.sessions.listEvents(session.id);
+      const events = await root.store.missionLogs.listEvents(missionLog.id);
       expect(events.map((e) => [e.kind, e.actorUserId, e.details])).toEqual([
         [
           'rotation',
@@ -568,13 +568,13 @@ describe('missions: members and per-holder tokens', () => {
 
     it('cannot see or answer the requests of the mission: they are the creator’s', async () => {
       const riskId = mission.policy[0]?.riskId ?? '';
-      const decided = await root.store.sessions.decideAndDecrement(
+      const decided = await root.store.missionLogs.decideAndDecrement(
         { missionId: mission.id, riskIds: [riskId], periodStart: mission.periodAnchor },
         () => ({ allow: true }),
       );
       const request = await root.store.requests.create({
         missionId: mission.id,
-        sessionId: decided.session.id,
+        missionLogId: decided.missionLog.id,
         kind: 'claim',
         riskId,
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
@@ -629,7 +629,7 @@ describe('missions: members and per-holder tokens', () => {
         await root.missions.service.get(ada, mission.id),
         await root.missions.service.list(ada),
         await team.team(ada, mission.id),
-        await root.audit.sessions.get(ada, mission.id),
+        await root.audit.missionLogs.get(ada, mission.id),
         await root.audit.query.search(
           { kind: 'user', user: ada, groups: [], isOperator: true },
           {

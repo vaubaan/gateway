@@ -4,7 +4,7 @@
  * whole refusal of a multi-risk call, gate opening bounded to the period, erasure of
  * arguments after decision; "integration: approval and replay").
  *
- * The executor's side is the budget's `SessionService.recordCall` (what the execution
+ * The executor's side is the budget's `MissionLogService.recordCall` (what the execution
  * door runs for every call), the creator's side is the `RequestService`. The store's
  * clock and the calls' `now` are the same manual clock.
  */
@@ -145,17 +145,20 @@ describe('approval gate: refusal, decision, replay', () => {
   }
 
   const countersOf = async (periodStart?: string, of: BudgetMission = mission) => {
-    const session = await f.store.sessions.getByMission(of.id);
-    if (!session) return {};
+    const missionLog = await f.store.missionLogs.getByMission(of.id);
+    if (!missionLog) return {};
     const period = periodStart ?? f.mission.period.anchor_at;
     return Object.fromEntries(
-      (await f.store.sessions.counters(session.id, period)).map((c) => [c.riskId, c.consumed]),
+      (await f.store.missionLogs.counters(missionLog.id, period)).map((c) => [
+        c.riskId,
+        c.consumed,
+      ]),
     );
   };
 
   const events = async (of: BudgetMission = mission) => {
-    const session = await f.store.sessions.getByMission(of.id);
-    return session ? f.store.sessions.listEvents(session.id) : [];
+    const missionLog = await f.store.missionLogs.getByMission(of.id);
+    return missionLog ? f.store.missionLogs.listEvents(missionLog.id) : [];
   };
 
   const adminEntries = async () =>
@@ -205,7 +208,7 @@ describe('approval gate: refusal, decision, replay', () => {
           keyVersion: row.key_version as number,
         }),
       ).rejects.toThrow(/associated data/);
-      // The session's events name the tool and the fingerprint, never the arguments.
+      // The mission log's events name the tool and the fingerprint, never the arguments.
       expect(JSON.stringify(await events())).not.toContain(SECRET_TITLE);
     });
 
@@ -262,7 +265,7 @@ describe('approval gate: refusal, decision, replay', () => {
         token_id: null,
         token_kind: null,
         token_holder: null,
-        session_id: result.session_id,
+        mission_log_id: result.mission_log_id,
         account_id: f.accountId,
         resource_ref: 'acme/app',
         tool: TOOL,
@@ -676,10 +679,10 @@ describe('approval gate: refusal, decision, replay', () => {
     describe('what an earlier build left open', () => {
       /** An open request as it was dropped when a request named one risk: MERGE alone. */
       async function legacyRequest(): Promise<string> {
-        const session = await f.store.sessions.getOrCreate(mission.id);
+        const missionLog = await f.store.missionLogs.getOrCreate(mission.id);
         const request = await f.store.requests.create({
           missionId: mission.id,
-          sessionId: session.id,
+          missionLogId: missionLog.id,
           kind: 'approval',
           riskId: MERGE,
           tool: TOOL,
@@ -726,12 +729,12 @@ describe('approval gate: refusal, decision, replay', () => {
       });
 
       it('approvals granted risk by risk before the upgrade still let the call through, together', async () => {
-        const session = await f.store.sessions.getOrCreate(mission.id);
+        const missionLog = await f.store.missionLogs.getOrCreate(mission.id);
         const fingerprint = fingerprintArguments(ARGS);
         for (const riskId of BOTH) {
           const request = await f.store.requests.create({
             missionId: mission.id,
-            sessionId: session.id,
+            missionLogId: missionLog.id,
             kind: 'approval',
             riskId,
             tool: TOOL,
@@ -893,7 +896,7 @@ describe('approval gate: refusal, decision, replay', () => {
       return first.request_id;
     }
 
-    it('is a session event; no approval is produced', async () => {
+    it('is a mission log event; no approval is produced', async () => {
       const requestId = await openGate();
       expect(await f.store.approvals.getByRequest(requestId)).toBeNull();
       expect((await events()).at(-1)).toMatchObject({
@@ -1097,7 +1100,7 @@ describe('approval gate: refusal, decision, replay', () => {
       });
     });
 
-    it('neither the audit, nor the session events, nor the logs ever hold the arguments', async () => {
+    it('neither the audit, nor the mission log events, nor the logs ever hold the arguments', async () => {
       const first = refused(await call());
       await approvalView(first.request_id);
       decided(await requests.decide(creator(), first.request_id, { resolution: 'grant' }));

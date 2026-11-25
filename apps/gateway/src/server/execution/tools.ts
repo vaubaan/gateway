@@ -165,7 +165,7 @@ export interface CatalogToken {
   readonly kind: MissionTokenKind;
   /** The member's email, or the token's name. */
   readonly holder: string;
-  /** Public prefix of the token, as the session and the audit show it. */
+  /** Public prefix of the token, as the mission log and the audit show it. */
   readonly prefix: string;
 }
 

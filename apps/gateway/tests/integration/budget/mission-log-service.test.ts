@@ -1,5 +1,5 @@
 /**
- * SessionService over the embedded store (spec §3.2, §3.3, §3.5, §6 "authoritative,
+ * MissionLogService over the embedded store (spec §3.2, §3.3, §3.5, §6 "authoritative,
  * atomic counting"; §10 "multi-risk decrement, period rollover on read, atomicity on
  * the last credit, several agents concurrent on the same token", "approval: binding to
  * the exact fingerprint, single use, whole refusal of a multi-risk call").
@@ -9,7 +9,7 @@ import {
   BudgetInvariantError,
   fingerprintArguments,
   missionUsageReader,
-  SessionService,
+  MissionLogService,
   type RecordCallAllowed,
   type RecordCallRefused,
   type RecordCallResult,
@@ -42,7 +42,7 @@ function refused(result: RecordCallResult): RecordCallRefused {
   return result;
 }
 
-describe('SessionService.recordCall', () => {
+describe('MissionLogService.recordCall', () => {
   let f: BudgetFixture;
 
   beforeEach(async () => {
@@ -63,13 +63,16 @@ describe('SessionService.recordCall', () => {
       now: overrides.now ?? NOW,
     });
 
-  const countersOf = async (sessionId: string, periodStart = ANCHOR) =>
+  const countersOf = async (missionLogId: string, periodStart = ANCHOR) =>
     Object.fromEntries(
-      (await f.store.sessions.counters(sessionId, periodStart)).map((c) => [c.riskId, c.consumed]),
+      (await f.store.missionLogs.counters(missionLogId, periodStart)).map((c) => [
+        c.riskId,
+        c.consumed,
+      ]),
     );
 
-  it('the session is born on the first call; N risks decrement N counters', async () => {
-    expect(await f.store.sessions.getByMission(f.mission.id)).toBeNull();
+  it('the mission log is born on the first call; N risks decrement N counters', async () => {
+    expect(await f.store.missionLogs.getByMission(f.mission.id)).toBeNull();
     const result = allowed(await call([READ, WRITE, READ]));
     expect(result).toMatchObject({
       period: { index: 0, start: ANCHOR, end: DAY1 },
@@ -78,8 +81,8 @@ describe('SessionService.recordCall', () => {
       approval_ids: [],
       fingerprint: fingerprintArguments({ repo: 'acme/app' }),
     });
-    expect(await countersOf(result.session_id)).toEqual({ [READ]: 1, [WRITE]: 1 });
-    const events = await f.store.sessions.listEvents(result.session_id);
+    expect(await countersOf(result.mission_log_id)).toEqual({ [READ]: 1, [WRITE]: 1 });
+    const events = await f.store.missionLogs.listEvents(result.mission_log_id);
     expect(events.map((e) => e.kind)).toEqual(['call-allowed']);
     expect(events[0]?.details).toMatchObject({
       tool: 'github__get_file',
@@ -101,7 +104,7 @@ describe('SessionService.recordCall', () => {
     expect(result.request_id).not.toBeNull();
     if (result.refusal.code !== 'budget-exhausted') throw new Error('unreachable');
     expect(result.refusal.claim_url).toBe(f.requestUrl(result.request_id as string));
-    expect(await countersOf(result.session_id)).toEqual({ [WRITE]: 1 });
+    expect(await countersOf(result.mission_log_id)).toEqual({ [WRITE]: 1 });
 
     const inbox = await f.store.requests.listOpenForCreator(f.creatorId);
     expect(inbox).toHaveLength(1);
@@ -110,10 +113,10 @@ describe('SessionService.recordCall', () => {
       kind: 'claim',
       riskId: WRITE,
       state: 'open',
-      sessionId: result.session_id,
+      missionLogId: result.mission_log_id,
       expiresAt: new Date(NOW.getTime() + REQUEST_EXPIRY_SECONDS * 1000).toISOString(),
     });
-    const kinds = (await f.store.sessions.listEvents(result.session_id)).map((e) => e.kind);
+    const kinds = (await f.store.missionLogs.listEvents(result.mission_log_id)).map((e) => e.kind);
     expect(kinds).toEqual(['call-allowed', 'request', 'call-refused']);
   });
 
@@ -133,7 +136,7 @@ describe('SessionService.recordCall', () => {
     allowed(await call([WRITE]));
     const result = refused(await call([READ, WRITE]));
     expect(result.refusal).toMatchObject({ code: 'budget-exhausted', risk_id: WRITE });
-    expect(await countersOf(result.session_id)).toEqual({ [WRITE]: 1 });
+    expect(await countersOf(result.mission_log_id)).toEqual({ [WRITE]: 1 });
   });
 
   it('rollover on read: the next period starts at zero, nothing ran in between', async () => {
@@ -141,8 +144,8 @@ describe('SessionService.recordCall', () => {
     refused(await call([WRITE]));
     const next = allowed(await call([WRITE], { now: at('2026-10-14T00:00:00.000Z') }));
     expect(next.period).toEqual({ index: 1, start: DAY1, end: '2026-10-15T00:00:00.000Z' });
-    expect(await countersOf(next.session_id, ANCHOR)).toEqual({ [WRITE]: 1 });
-    expect(await countersOf(next.session_id, DAY1)).toEqual({ [WRITE]: 1 });
+    expect(await countersOf(next.mission_log_id, ANCHOR)).toEqual({ [WRITE]: 1 });
+    expect(await countersOf(next.mission_log_id, DAY1)).toEqual({ [WRITE]: 1 });
   });
 
   it('reload for recurring missions is arithmetic; a one-off mission never reloads', async () => {
@@ -171,8 +174,8 @@ describe('SessionService.recordCall', () => {
     expect(allows).toHaveLength(1);
     expect(refusals).toHaveLength(N - 1);
     expect(refusals.every((r) => r.refusal.code === 'budget-exhausted')).toBe(true);
-    const sessionId = (allows[0] as RecordCallAllowed).session_id;
-    expect(await countersOf(sessionId)).toEqual({ [WRITE]: 1 });
+    const missionLogId = (allows[0] as RecordCallAllowed).mission_log_id;
+    expect(await countersOf(missionLogId)).toEqual({ [WRITE]: 1 });
     expect(await f.store.requests.listOpenForCreator(f.creatorId)).toHaveLength(1);
     expect(new Set(refusals.map((r) => r.request_id)).size).toBe(1);
   });
@@ -181,8 +184,8 @@ describe('SessionService.recordCall', () => {
     const a = allowed(await call([READ], { agent_label: 'orchestrator' }));
     allowed(await call([READ], { agent_label: 'worker-1' }));
     allowed(await call([READ], { agent_label: 'worker-2' }));
-    expect(await countersOf(a.session_id)).toEqual({ [READ]: 3 });
-    const labels = (await f.store.sessions.listEvents(a.session_id)).map(
+    expect(await countersOf(a.mission_log_id)).toEqual({ [READ]: 3 });
+    const labels = (await f.store.missionLogs.listEvents(a.mission_log_id)).map(
       (e) => e.details?.agent_label,
     );
     expect(labels).toEqual(['orchestrator', 'worker-1', 'worker-2']);
@@ -207,10 +210,10 @@ describe('SessionService.recordCall', () => {
       }),
     );
     expect(limited.request_id).toBeNull();
-    expect(await countersOf(limited.session_id)).toEqual({ [READ]: 5 });
+    expect(await countersOf(limited.mission_log_id)).toEqual({ [READ]: 5 });
     expect(await f.store.requests.listOpenForCreator(f.creatorId)).toHaveLength(0);
     allowed(await call([READ], { now: at('2026-10-13T09:01:00.000Z') }));
-    expect(await countersOf(limited.session_id)).toEqual({ [READ]: 6 });
+    expect(await countersOf(limited.mission_log_id)).toEqual({ [READ]: 6 });
   });
 
   it('a refusal on another risk records nothing in the rate window either', async () => {
@@ -249,7 +252,7 @@ describe('SessionService.recordCall', () => {
       expect(await heldArguments(f.store, request?.id as string)).toEqual(args);
       if (result.refusal.code !== 'approval-required') throw new Error('unreachable');
       expect(result.refusal.expires_at).toBe(request?.expiresAt);
-      expect(await countersOf(result.session_id)).toEqual({});
+      expect(await countersOf(result.mission_log_id)).toEqual({});
     });
 
     it('a granted approval is consumed by the identical replay (any key order), once', async () => {
@@ -260,7 +263,7 @@ describe('SessionService.recordCall', () => {
       );
       expect(replay.approval_ids).toEqual([approval.id]);
       expect(replay.remaining).toEqual({ [MERGE]: 1, [READ]: 9 });
-      expect(await countersOf(replay.session_id)).toEqual({ [READ]: 1, [MERGE]: 1 });
+      expect(await countersOf(replay.mission_log_id)).toEqual({ [READ]: 1, [MERGE]: 1 });
       expect(
         (await f.store.approvals.getByRequest(first.request_id as string))?.consumedAt,
       ).not.toBeNull();
@@ -281,7 +284,7 @@ describe('SessionService.recordCall', () => {
         code: 'approval-required',
         fingerprint: fingerprintArguments({ ...args, pr: 43 }),
       });
-      expect(await countersOf(other.session_id)).toEqual({});
+      expect(await countersOf(other.mission_log_id)).toEqual({});
     });
 
     it('an expired approval does not open the gate', async () => {
@@ -293,7 +296,7 @@ describe('SessionService.recordCall', () => {
     it('a multi-risk call with one gated risk is refused as a whole; the others stay untouched', async () => {
       const result = refused(await call([READ, MERGE], { args, tool }));
       expect(result.refusal).toMatchObject({ code: 'approval-required', risk_id: MERGE });
-      expect(await countersOf(result.session_id)).toEqual({});
+      expect(await countersOf(result.mission_log_id)).toEqual({});
     });
 
     it('the gate does not replace the budget: an approved action still counts', async () => {
@@ -314,13 +317,13 @@ describe('SessionService.recordCall', () => {
     });
   });
 
-  it('a touched risk outside the policy aborts the transaction: no session, no counters', async () => {
+  it('a touched risk outside the policy aborts the transaction: no mission log, no counters', async () => {
     await expect(call(['stripe.refund'])).rejects.toBeInstanceOf(BudgetInvariantError);
-    expect(await f.store.sessions.getByMission(f.mission.id)).toBeNull();
+    expect(await f.store.missionLogs.getByMission(f.mission.id)).toBeNull();
   });
 });
 
-describe('SessionService.stateOf', () => {
+describe('MissionLogService.stateOf', () => {
   let f: BudgetFixture;
 
   beforeEach(async () => {
@@ -361,20 +364,20 @@ describe('SessionService.stateOf', () => {
         now,
       });
     }
-    const session = await f.store.sessions.getByMission(f.mission.id);
-    expect(await f.store.sessions.counters(session?.id ?? '')).toHaveLength(3);
+    const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+    expect(await f.store.missionLogs.counters(missionLog?.id ?? '')).toHaveLength(3);
 
     const reads: (string | undefined)[] = [];
-    const sessions = {
-      getByMission: (missionId: string) => f.store.sessions.getByMission(missionId),
-      counters: async (sessionId: string, periodStart?: string) => {
+    const missionLogs = {
+      getByMission: (missionId: string) => f.store.missionLogs.getByMission(missionId),
+      counters: async (missionLogId: string, periodStart?: string) => {
         reads.push(periodStart);
-        return f.store.sessions.counters(sessionId, periodStart);
+        return f.store.missionLogs.counters(missionLogId, periodStart);
       },
-      decideAndDecrement: f.store.sessions.decideAndDecrement.bind(f.store.sessions),
+      decideAndDecrement: f.store.missionLogs.decideAndDecrement.bind(f.store.missionLogs),
     };
-    const service = new SessionService({
-      sessions,
+    const service = new MissionLogService({
+      missionLogs,
       requests: f.store.requests,
       rateWindows: f.rateWindows,
       requestUrl: f.requestUrl,
@@ -384,7 +387,7 @@ describe('SessionService.stateOf', () => {
     const later = at('2026-10-15T10:00:00.000Z');
     const usage = await service.usageOf(f.mission, later);
     expect(usage).toMatchObject({
-      session_id: session?.id,
+      mission_log_id: missionLog?.id,
       period: { index: 2, start: '2026-10-15T00:00:00.000Z' },
       state: { kind: 'active', remaining: { [`${f.setId}::${READ}`]: 9 } },
     });
@@ -392,7 +395,7 @@ describe('SessionService.stateOf', () => {
     expect(reads).toEqual(['2026-10-15T00:00:00.000Z']);
 
     // The Missions pages and the request page use the same read through this reader.
-    const reader = missionUsageReader(sessions);
+    const reader = missionUsageReader(missionLogs);
     expect(await reader.usageOf(f.mission, later)).toEqual(usage);
     expect(await reader.stateOf(f.mission, later)).toEqual(await service.stateOf(f.mission, later));
     expect(reads).toHaveLength(4);

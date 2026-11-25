@@ -1,13 +1,13 @@
 /**
- * Retention of the session history (spec §6 "Purge by operator-configured
+ * Retention of the mission log history (spec §6 "Purge by operator-configured
  * retention", §8; product owner's decision of 2026-10-13).
  *
- * A session timeline says what the audit says — which tool, when, for whom,
+ * A mission log timeline says what the audit says — which tool, when, for whom,
  * under which agent label — and the counters of a past period say how much.
  * Both leave with the audit entries of the same age: `retention_days` is one
  * promise about how long the instance remembers a call.
  *
- * What is removed, per session:
+ * What is removed, per mission log:
  *
  *   events    older than the cutoff, except the ones the budget still reads:
  *             an event of `PERIOD_STATE_EVENT_KINDS` written since the start
@@ -21,10 +21,10 @@
  *
  * The period is computed here, on read, like everywhere else (`currentPeriod`).
  */
-import type { SessionEventKind } from '@vaubaan/shared';
+import type { MissionLogEventKind } from '@vaubaan/shared';
 
 import { toIso, type Clock } from '../store/clock.ts';
-import type { MissionsRepo, SessionsRepo } from '../store/index.ts';
+import type { MissionsRepo, MissionLogsRepo } from '../store/index.ts';
 import { CREDIT_EVENT_KINDS } from './consistency.ts';
 import { GATE_EVENT_KINDS } from './gates.ts';
 import { budgetPeriodOf } from './mapping.ts';
@@ -37,27 +37,27 @@ const MS_PER_SECOND = 1000;
  * The events a decision or the counters' check reads back from the start of the
  * current period: they are state, not history, until the period is over.
  */
-export const PERIOD_STATE_EVENT_KINDS: readonly SessionEventKind[] = [
+export const PERIOD_STATE_EVENT_KINDS: readonly MissionLogEventKind[] = [
   ...GATE_EVENT_KINDS,
   ...CREDIT_EVENT_KINDS,
 ];
 
-export interface SessionHistoryPurge {
+export interface MissionLogPurge {
   readonly events: number;
   readonly counters: number;
 }
 
-export interface SessionHistoryRetentionDeps {
-  readonly sessions: Pick<SessionsRepo, 'withHistoryBefore' | 'purgeHistory'>;
+export interface MissionLogRetentionDeps {
+  readonly missionLogs: Pick<MissionLogsRepo, 'withHistoryBefore' | 'purgeHistory'>;
   readonly missions: Pick<MissionsRepo, 'getById'>;
   readonly clock: Clock;
 }
 
-export class SessionHistoryRetention {
-  constructor(private readonly deps: SessionHistoryRetentionDeps) {}
+export class MissionLogRetention {
+  constructor(private readonly deps: MissionLogRetentionDeps) {}
 
   /** Removes what is older than `retentionDays`; idempotent and bounded by its cutoff. */
-  async purge(retentionDays: number): Promise<SessionHistoryPurge> {
+  async purge(retentionDays: number): Promise<MissionLogPurge> {
     if (!Number.isInteger(retentionDays) || retentionDays < 1) {
       throw new RangeError('retention must be a positive number of days');
     }
@@ -66,8 +66,8 @@ export class SessionHistoryRetention {
     const cutoff = toIso(new Date(cutoffMs));
     let events = 0;
     let counters = 0;
-    for (const session of await this.deps.sessions.withHistoryBefore(cutoff)) {
-      const { id: sessionId, missionId } = session;
+    for (const missionLog of await this.deps.missionLogs.withHistoryBefore(cutoff)) {
+      const { id: missionLogId, missionId } = missionLog;
       const mission = await this.deps.missions.getById(missionId);
       if (!mission) continue;
       const spec = budgetPeriodOf(mission);
@@ -78,7 +78,7 @@ export class SessionHistoryRetention {
         spec.length_seconds === null
           ? null
           : earliest(period.start, toIso(new Date(cutoffMs - spec.length_seconds * MS_PER_SECOND)));
-      const removed = await this.deps.sessions.purgeHistory(sessionId, {
+      const removed = await this.deps.missionLogs.purgeHistory(missionLogId, {
         eventsBefore: cutoff,
         keep: { kinds: PERIOD_STATE_EVENT_KINDS, since: period.start },
         countersBefore,

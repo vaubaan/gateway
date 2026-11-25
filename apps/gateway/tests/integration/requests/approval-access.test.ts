@@ -192,7 +192,7 @@ describe('the arguments of an approval request are for the creator only', () => 
 
     it('reads nothing of it on the mission’s pages either', async () => {
       expect(await rig.root.missions.service.get(userOf(), mission.id)).toBeNull();
-      expect(await rig.root.audit.sessions.get(userOf(), mission.id)).toBeNull();
+      expect(await rig.root.audit.missionLogs.get(userOf(), mission.id)).toBeNull();
     });
   });
 
@@ -350,9 +350,9 @@ describe('the arguments of an approval request are for the creator only', () => 
     const everything = await rig.root.store.audit.list();
     expect(everything.some((e) => e.kind === 'admin' && e.act === 'approval-granted')).toBe(true);
     expect(JSON.stringify(everything)).not.toContain(ARGUMENT_MARKER);
-    const session = await rig.root.store.sessions.getByMission(mission.id);
+    const missionLog = await rig.root.store.missionLogs.getByMission(mission.id);
     expect(
-      JSON.stringify(await rig.root.store.sessions.listEvents(session?.id ?? '')),
+      JSON.stringify(await rig.root.store.missionLogs.listEvents(missionLog?.id ?? '')),
     ).not.toContain(ARGUMENT_MARKER);
   });
 });

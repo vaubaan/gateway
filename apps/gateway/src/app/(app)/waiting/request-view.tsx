@@ -74,7 +74,7 @@ import type {
   RequestAsker,
   RequestView as View,
   RiskBudgetLine,
-  SessionEventLine,
+  MissionLogEventLine,
 } from '@/server/requests';
 import type { RiskId } from '@vaubaan/shared';
 
@@ -211,7 +211,7 @@ function Notices({
 // What led here, and what the agent sees
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EventLine({ event }: { event: SessionEventLine }) {
+function EventLine({ event }: { event: MissionLogEventLine }) {
   const words = eventWords(event);
   return (
     <FeedEvent time={<LocalTime ts={event.at} />} tone={words.tone}>

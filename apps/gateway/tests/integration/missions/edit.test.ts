@@ -9,7 +9,7 @@
  *   - every section moves in one edit: name, expiry, accounts added and removed,
  *     resources added and removed, permissions added and removed, quota, rate (calls
  *     and window) and gate — written in one transaction, traced by one
- *     `mission-changed` audit entry with each section before and after, and by session
+ *     `mission-changed` audit entry with each section before and after, and by mission log
  *     events per risk plus one summary the activity words;
  *   - a refusal carries, word for word, the issue a creation asking for the same thing
  *     gets; a fact unrelated to what moves (a resource gone stale) refuses nothing;
@@ -17,7 +17,7 @@
  *   - the creator only; a revoked mission is not edited; an expired one is, and an end
  *     moved into the future brings it back;
  *   - a removed permission closes the claims and approval requests about it;
- *   - same token, same session, same counters: a removed resource is refused from the
+ *   - same token, same mission log, same counters: a removed resource is refused from the
  *     next call, an added one is reached, a removed permission fails closed even for a
  *     call whose mission was loaded before the edit.
  */
@@ -99,12 +99,12 @@ describe('editing a mission after issuance', () => {
       e.kind === 'admin' && e.act === 'mission-changed' ? [e] : [],
     );
   const events = async () => {
-    const session = await rig.root.store.sessions.getByMission(mission.id);
-    return session ? rig.root.store.sessions.listEvents(session.id) : [];
+    const missionLog = await rig.root.store.missionLogs.getByMission(mission.id);
+    return missionLog ? rig.root.store.missionLogs.listEvents(missionLog.id) : [];
   };
 
   it('moves every section in one edit, with the same token and the same counters', async () => {
-    // A session with two reads, so the counters and the events have somewhere to be.
+    // A mission log with two reads, so the counters and the events have somewhere to be.
     for (let n = 1; n <= 2; n += 1) {
       expect(
         (await seedCall(rig, await fresh(), { risks: [READ], args: { n } })).result.outcome,
@@ -218,7 +218,7 @@ describe('editing a mission after issuance', () => {
     expect(beforeIds.sort()).toEqual([MERGE, PR, READ].sort());
     expect(afterIds.sort()).toEqual(['github.comment-write', PR, READ, SUPABASE_READ].sort());
 
-    // Session events: one per risk that moved, and the summary the activity words.
+    // Mission log events: one per risk that moved, and the summary the activity words.
     const kinds = (await events()).map((e) => [e.kind, e.riskId]);
     expect(kinds).toEqual(
       expect.arrayContaining([
@@ -231,7 +231,7 @@ describe('editing a mission after issuance', () => {
       ]),
     );
     const summary = (await events()).find((e) => e.kind === 'mission-changed');
-    const activity = await rig.root.audit.sessions.get(rig.seeded.ada, mission.id);
+    const activity = await rig.root.audit.missionLogs.get(rig.seeded.ada, mission.id);
     const worded = activity?.events.find((e) => e.kind === 'mission-changed');
     expect(summary).toBeDefined();
     expect(worded?.mission_change).toEqual(
@@ -522,11 +522,11 @@ describe('an edited mission at the execution door', () => {
     ).toBeUndefined();
     const refused = await rig.call(issued, 'depot__read_item', { space: 'app-staging' });
     expect(refused.error).toBeDefined();
-    // The counter carried on: two reads allowed in all, on one session.
+    // The counter carried on: two reads allowed in all, on one mission log.
     const stored = await rig.root.store.missions.getById(issued.mission.id);
-    const session = await rig.root.store.sessions.getByMission(issued.mission.id);
-    if (!stored || !session) throw new Error('fixture');
-    const counters = await rig.root.store.sessions.counters(session.id);
+    const missionLog = await rig.root.store.missionLogs.getByMission(issued.mission.id);
+    if (!stored || !missionLog) throw new Error('fixture');
+    const counters = await rig.root.store.missionLogs.counters(missionLog.id);
     expect(counters.reduce((n, c) => n + c.consumed, 0)).toBe(2);
   });
 });

@@ -1,10 +1,10 @@
 /**
- * Audit: the Audit page's search, the Mission session page's
+ * Audit: the Audit page's search, the Mission log page's
  * view, the retention sweeper. Read-only over the store, apart from the
  * purge.
  * Handbook: docs/handbook/audit.md.
  */
-import { SessionHistoryRetention } from '../budget/retention';
+import { MissionLogRetention } from '../budget/retention';
 import type { CredentialKind } from '@vaubaan/shared';
 
 import type { InstanceConfig } from '../config';
@@ -14,13 +14,13 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { AuditQueryService } from './query-service';
 import { AuditRetentionSweeper, type SweepTimers } from './retention';
-import { MissionSessionService } from './session-view';
+import { MissionLogViewService } from './mission-log-view';
 import { ActivityOverviewService } from './overview';
 import { ActivityTimelineService } from './timeline';
 
 export interface AuditModule {
   readonly query: AuditQueryService;
-  readonly sessions: MissionSessionService;
+  readonly missionLogs: MissionLogViewService;
   readonly timeline: ActivityTimelineService;
   readonly overview: ActivityOverviewService;
   readonly retention: AuditRetentionSweeper;
@@ -42,7 +42,7 @@ export function createAuditModule(deps: AuditModuleDeps): AuditModule {
   const clock = deps.clock ?? systemClock;
   return {
     query: new AuditQueryService({ store: deps.store }),
-    sessions: new MissionSessionService({
+    missionLogs: new MissionLogViewService({
       store: deps.store,
       missions: deps.missions,
       clock,
@@ -56,8 +56,8 @@ export function createAuditModule(deps: AuditModuleDeps): AuditModule {
     }),
     retention: new AuditRetentionSweeper({
       audit: deps.store.audit,
-      sessionHistory: new SessionHistoryRetention({
-        sessions: deps.store.sessions,
+      missionLogHistory: new MissionLogRetention({
+        missionLogs: deps.store.missionLogs,
         missions: deps.store.missions,
         clock,
       }),
@@ -159,17 +159,17 @@ export {
   eventView,
   holderParam,
   LATEST_EVENTS,
-  MissionSessionService,
+  MissionLogViewService,
   parseHolderParam,
   PAST_PERIODS_SHOWN,
-  type MissionSessionDeps,
-  type MissionSessionView,
-  type SessionEventView,
-  type SessionHolderActivity,
-  type SessionHolderRef,
-  type SessionHolderView,
-  type SessionLabelActivity,
-  type SessionOpenRequest,
-  type SessionPeriodRow,
-  type SessionRiskRow,
-} from './session-view';
+  type MissionLogViewDeps,
+  type MissionLogView,
+  type MissionLogEventView,
+  type MissionLogHolderActivity,
+  type MissionLogHolderRef,
+  type MissionLogHolderView,
+  type MissionLogLabelActivity,
+  type MissionLogOpenRequest,
+  type MissionLogPeriodRow,
+  type MissionLogRiskRow,
+} from './mission-log-view';

@@ -6,7 +6,7 @@
  * `<public_url>/r/<request_id>` is what a `budget-exhausted` or
  * `approval-required` refusal hands to the executor; `/r/<id>` is the route
  * that answers it. Both are written here and nowhere else: the budget's
- * `SessionService` receives `requestUrlBuilder(config.publicUrl)` as its
+ * `MissionLogService` receives `requestUrlBuilder(config.publicUrl)` as its
  * `requestUrl` dependency, the route file sits next to this prefix.
  */
 
@@ -31,7 +31,7 @@ export function requestUrl(publicUrl: URL, requestId: string): string {
   return `${publicUrl.origin}${requestPath(requestId)}`;
 }
 
-/** The `requestUrl` dependency of the budget's `SessionService`. */
+/** The `requestUrl` dependency of the budget's `MissionLogService`. */
 export function requestUrlBuilder(publicUrl: URL): (requestId: string) => string {
   return (requestId) => requestUrl(publicUrl, requestId);
 }

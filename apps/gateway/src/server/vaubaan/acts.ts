@@ -450,7 +450,7 @@ export class VaubaanActs {
   }
 
   /**
-   * The user's missions, newest first: policy, state, session period and what
+   * The user's missions, newest first: policy, state, current period and what
    * is left of each budget. With `mission_id`, that mission with its
    * accounts and resources. The missions the user created and the ones
    * shared with them as a member, each marked with its `role`.

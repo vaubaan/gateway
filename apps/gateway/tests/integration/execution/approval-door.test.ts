@@ -333,10 +333,10 @@ describe('approve an action through the execution door (GitHub macro-actions at 
       )
       .get(requestId);
     expect(erased?.args_blob).toBeNull();
-    const session = await rig.root.store.sessions.getByMission(rig.mission.mission.id);
+    const missionLog = await rig.root.store.missionLogs.getByMission(rig.mission.mission.id);
     for (const kept of [
       await rig.root.store.audit.list(),
-      await rig.root.store.sessions.listEvents(session?.id ?? ''),
+      await rig.root.store.missionLogs.listEvents(missionLog?.id ?? ''),
       rig.logs,
     ]) {
       expect(JSON.stringify(kept)).not.toContain('WORKFLOW-CONTENT-MARKER');

@@ -7,7 +7,7 @@ import {
   parseAuditQuery,
   parseInstant,
 } from './filters';
-import { holderParam, parseHolderParam } from './session-view';
+import { holderParam, parseHolderParam } from './mission-log-view';
 import {
   ARGUMENTS_NOT_SHOWN,
   scopeOf,

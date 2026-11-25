@@ -1,7 +1,7 @@
 /**
  * "Work on a mission as a team" in a browser, against an ephemeral instance
  * with a simulated IdP (spec §7.9 bis, §0 "Mission member" / "Mission token",
- * §4.2 "Missions" / "Mission session" / "Audit", §8).
+ * §4.2 "Missions" / "Mission log" / "Audit", §8).
  *
  * Ines creates a mission and, on its page, adds Joan as a teammate and makes
  * a machine key for the CI. Joan signs in, finds the mission under "Shared

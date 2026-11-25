@@ -14,7 +14,7 @@
  *
  * This step is **stateless** : it only intersects slices with the catalog
  * and checks set membership. Budget, rate limit and gate are evaluated by
- * the gateway after an `allowed` outcome, with the session counters as
+ * the gateway after an `allowed` outcome, with the mission log counters as
  * input ; they never run on a denied call.
  */
 

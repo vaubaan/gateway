@@ -58,8 +58,8 @@ import {
   AUDIT_PARAMS,
   holderParam,
   TIMELINE_PARAMS,
-  type MissionSessionView,
-  type SessionHolderView,
+  type MissionLogView,
+  type MissionLogHolderView,
 } from '@/server/audit';
 import { riskExplainer } from '@/lib/services/reference';
 
@@ -73,12 +73,12 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-type HolderActivity = MissionSessionView['holder_activity'][number];
-type LabelActivity = MissionSessionView['label_activity'][number];
-type PeriodRow = MissionSessionView['periods'][number];
+type HolderActivity = MissionLogView['holder_activity'][number];
+type LabelActivity = MissionLogView['label_activity'][number];
+type PeriodRow = MissionLogView['periods'][number];
 
 /** A person by their email, a machine key by its name; `null`: not attributed. */
-function HolderName({ holder }: { holder: SessionHolderView | null }) {
+function HolderName({ holder }: { holder: MissionLogHolderView | null }) {
   if (!holder) return <span className={styles.quietText}>not attributed (an earlier version)</span>;
   return (
     <KeyHolder
@@ -89,13 +89,13 @@ function HolderName({ holder }: { holder: SessionHolderView | null }) {
   );
 }
 
-export default async function MissionSessionPage({ params }: Props) {
+export default async function MissionLogPage({ params }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const { id } = await params;
   const { root, user } = session;
   const [view, detail] = await Promise.all([
-    root.audit.sessions.get(user, id),
+    root.audit.missionLogs.get(user, id),
     root.missions.service.get(user, id),
   ]);
   if (!view || !detail) notFound();

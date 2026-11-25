@@ -29,7 +29,7 @@ import {
   type Slice,
 } from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
-import type { EventScope } from './sessions.ts';
+import type { EventScope } from './mission-logs.ts';
 import { InvariantError } from '../errors.ts';
 import type { Iso, Principal, RiskId } from '../types.ts';
 import {
@@ -284,7 +284,7 @@ export interface AuditRepo {
   ): Promise<TokenHolderActivity[]>;
   /**
    * Allowed call entries touching `riskId` in `[since, until)` — the audit side of the
-   * structural check "session counters agree with the audit" (spec §10).
+   * structural check "mission log counters agree with the audit" (spec §10).
    */
   /** Allowed call entries of the mission that touched the risk and were charged on the set. */
   countAllowedTouches(
@@ -328,7 +328,7 @@ interface AuditRow {
   token_id: string | null;
   token_kind: string | null;
   token_holder: string | null;
-  session_id: string | null;
+  mission_log_id: string | null;
   account_id: string | null;
   resource_ref: string | null;
   tool: string | null;
@@ -382,7 +382,7 @@ const AUDIT_COLUMNS = [
   'token_id',
   'token_kind',
   'token_holder',
-  'session_id',
+  'mission_log_id',
   'account_id',
   'resource_ref',
   'tool',
@@ -427,7 +427,7 @@ function callParams(id: string, e: CallAuditEntry, acceptedSetId: string): SqlPa
     token_id: e.token_id,
     token_kind: e.token_kind,
     token_holder: e.token_holder,
-    session_id: e.session_id,
+    mission_log_id: e.mission_log_id,
     account_id: e.account_id,
     resource_ref: e.resource_ref,
     tool: e.tool,
@@ -922,7 +922,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       token_id: row.token_id,
       token_kind: tokenKind,
       token_holder: tokenKind === null ? null : row.token_holder,
-      session_id: row.session_id,
+      mission_log_id: row.mission_log_id,
       account_id: row.account_id,
       resource_ref: row.resource_ref,
       tool: requireColumn(row.tool, 'audit.tool'),

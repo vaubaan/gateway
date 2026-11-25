@@ -1,5 +1,5 @@
 /**
- * One event of a mission's session, in the words of the interface — pure.
+ * One event of a mission log, in the words of the interface — pure.
  *
  * The page of a request is read by the creator of its mission and nobody else
  * (handbook requests, Invariants), and only the creator answers a request
@@ -11,7 +11,7 @@
  * details do not have the shape of its kind is worded without detail, never
  * thrown on.
  */
-import { parseEventDetails, type SessionEventDetails } from '@vaubaan/shared';
+import { parseEventDetails, type MissionLogEventDetails } from '@vaubaan/shared';
 
 import { GATE_WORDS, gateWordOf } from '@/lib/vocabulary';
 import { describeMissionChange } from '@/lib/missions/change-words';
@@ -57,7 +57,7 @@ const PLAIN = {
 /** The refusals that ask something of the creator: the call waits, it did not fail. */
 const ASKING: readonly string[] = ['approval-required', 'budget-exhausted'];
 
-function worded(parsed: SessionEventDetails): EventWords {
+function worded(parsed: MissionLogEventDetails): EventWords {
   switch (parsed.kind) {
     case 'call-allowed':
       return {

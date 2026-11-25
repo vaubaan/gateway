@@ -18,7 +18,7 @@ import {
   type MissionPolicy,
   type MissionStatus,
   type PolicyLineKey,
-  type SessionCounter,
+  type MissionLogCounter,
 } from '@vaubaan/shared';
 import { currentPeriod, type CurrentPeriod, type PeriodSpec } from './period.ts';
 
@@ -44,7 +44,7 @@ export interface MissionStateInput {
 
 /** A counter row as the derivation needs it: set, risk, period key, consumed. */
 export type PeriodCounter = Pick<
-  SessionCounter,
+  MissionLogCounter,
   'resource_set_id' | 'risk_id' | 'period_start' | 'consumed'
 >;
 

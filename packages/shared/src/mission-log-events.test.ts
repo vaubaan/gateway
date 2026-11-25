@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { parseEventDetails } from './session-events.ts';
+import { parseEventDetails } from './mission-log-events.ts';
 
 const CALL = {
   tool: 'github__push',

@@ -70,10 +70,10 @@ describe('store: the approval gate', () => {
   async function approvalRequest(
     overrides: { tool?: string; fingerprint?: string; expiresAt?: string } = {},
   ): Promise<RequestRecord> {
-    const session = await store.sessions.getOrCreate(missionId);
+    const missionLog = await store.missionLogs.getOrCreate(missionId);
     return store.requests.create({
       missionId,
-      sessionId: session.id,
+      missionLogId: missionLog.id,
       kind: 'approval',
       riskId: MERGE,
       tool: overrides.tool ?? TOOL,
@@ -91,14 +91,14 @@ describe('store: the approval gate', () => {
       .get(id);
 
   const eventsOf = async () => {
-    const session = await store.sessions.getByMission(missionId);
-    return session ? store.sessions.listEvents(session.id) : [];
+    const missionLog = await store.missionLogs.getByMission(missionId);
+    return missionLog ? store.missionLogs.listEvents(missionLog.id) : [];
   };
 
   /** Runs `read` inside a decision transaction that allows nothing. */
   async function inDecision<T>(read: (ctx: DecideContext) => T): Promise<T> {
     let value: T | undefined;
-    await store.sessions.decideAndDecrement(
+    await store.missionLogs.decideAndDecrement(
       { missionId, riskIds: [MERGE], periodStart: PERIOD },
       (ctx) => {
         value = read(ctx);
@@ -154,7 +154,7 @@ describe('store: the approval gate', () => {
 
       const result = await store.requests.decideApproval(request.id, creator, (ctx) => {
         expect(ctx.request).toMatchObject({ id: request.id, state: 'open', tool: TOOL });
-        expect(ctx.session?.missionId).toBe(missionId);
+        expect(ctx.missionLog?.missionId).toBe(missionId);
         expect(ctx.now).toBe(t.clock.now().toISOString());
         const approval = ctx.createApproval('2026-10-13T09:10:00.000Z');
         ctx.recordEvent({
@@ -397,10 +397,12 @@ describe('store: the approval gate', () => {
 
   describe('riskEvents', () => {
     it('returns the events of the asked kinds and risks since an instant, oldest first', async () => {
-      const session = await store.sessions.getOrCreate(missionId);
+      const missionLog = await store.missionLogs.getOrCreate(missionId);
       const record = async (ts: string, kind: string, riskId: string | null) => {
         t.clock.set(ts);
-        return (await store.sessions.recordEvent(session.id, { kind, riskId, details: { ts } })).id;
+        return (
+          await store.missionLogs.recordEvent(missionLog.id, { kind, riskId, details: { ts } })
+        ).id;
       };
       await record('2026-10-12T23:59:59.999Z', 'gate-opened', MERGE); // before `since`
       const opened = await record('2026-10-13T00:00:00.000Z', 'gate-opened', MERGE);
@@ -437,12 +439,12 @@ describe('store: the approval gate', () => {
         before?.policy.map((p) => (p.riskId === READ ? { ...p, gate: 'approval' } : p)),
       );
       expect(await gateOf(MERGE)).toBe('approval');
-      // No session yet: nothing to record on.
+      // No mission log yet: nothing to record on.
       expect(await eventsOf()).toEqual([]);
     });
 
-    it('records gate-changed on the session, in the same transaction', async () => {
-      await store.sessions.getOrCreate(missionId);
+    it('records gate-changed on the mission log, in the same transaction', async () => {
+      await store.missionLogs.getOrCreate(missionId);
       await store.missions.setGate(missionId, MERGE, 'auto', creator);
       expect(await eventsOf()).toMatchObject([
         {
@@ -455,7 +457,7 @@ describe('store: the approval gate', () => {
     });
 
     it('the gate a risk already has: nothing written, nothing recorded', async () => {
-      await store.sessions.getOrCreate(missionId);
+      await store.missionLogs.getOrCreate(missionId);
       const before = await store.missions.getById(missionId);
       t.clock.advance(1_000);
       const same = await store.missions.setGate(missionId, MERGE, 'approval', creator);
@@ -464,7 +466,7 @@ describe('store: the approval gate', () => {
     });
 
     it('`closeOpening` on a gate already `approval`: the event that ends an opening, and nothing else', async () => {
-      await store.sessions.getOrCreate(missionId);
+      await store.missionLogs.getOrCreate(missionId);
       t.clock.advance(1_000);
       const closed = await store.missions.setGate(missionId, MERGE, 'approval', creator, {
         closeOpening: true,
@@ -504,7 +506,7 @@ describe('store: the approval gate', () => {
       token_id: null,
       token_kind: null,
       token_holder: null,
-      session_id: null,
+      mission_log_id: null,
       account_id: null,
       resource_ref: 'acme/app',
       tool: TOOL,

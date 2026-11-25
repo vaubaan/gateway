@@ -33,7 +33,7 @@ import {
   type MissionPolicyEntry,
   type PolicyLineKey,
   type RiskId,
-  type SessionEventDetails,
+  type MissionLogEventDetails,
 } from '@vaubaan/shared';
 
 import type { Subject, InspectedMission, LostPart } from '../authority';
@@ -51,7 +51,7 @@ import {
   statedPeriodOf,
   type CurrentPeriod,
   type MissionState,
-  type SessionService,
+  type MissionLogService,
 } from '../budget';
 import { isSelfResource } from '../config';
 import { accountSummaryOf, lastDiscoveryAt } from '../accounts/mapping';
@@ -261,13 +261,13 @@ export class MissionService {
   /** Macro-actions per service, "Anything else" included; immutable like the catalogs. */
   private readonly catalogActions = new Map<string, readonly MacroAction[]>();
 
-  private readonly budget: Pick<SessionService, 'stateOf'>;
+  private readonly budget: Pick<MissionLogService, 'stateOf'>;
   /** Edits, versions and restores (`mission-edits.ts`). */
   readonly #edits: MissionEdits;
 
   constructor(private readonly deps: MissionServiceDeps) {
     this.mint = deps.mint ?? mintMissionToken;
-    this.budget = deps.budget ?? missionUsageReader(deps.store.sessions);
+    this.budget = deps.budget ?? missionUsageReader(deps.store.missionLogs);
     this.#edits = new MissionEdits(deps, this);
   }
 
@@ -563,7 +563,7 @@ export class MissionService {
   }
 
   /**
-   * A new token for the creator, same mission, same session, same budget
+   * A new token for the creator, same mission, same mission log, same budget
    * (spec §7.8): the creator's previous token stops working; every other
    * holder's token is untouched. A member rotates their own token through
    * `MissionTeamService.generateToken`, which the creator may use as well.
@@ -798,7 +798,7 @@ export class MissionService {
     // single-process only: the read and the write are two store calls, so an opening
     // granted between them is missed. Not reachable while every store call is
     // synchronous in one process; with a second process, decide inside
-    // `MissionsRepo.setGate`'s transaction (it owns the session's events).
+    // `MissionsRepo.setGate`'s transaction (it owns the mission log's events).
     const line = lineOfRisk(mission, riskId, resourceSetId);
     if (!line) return { ok: false, reason: 'risk-not-in-policy' };
     const openNow =
@@ -1149,15 +1149,15 @@ export class MissionService {
     return issues;
   }
 
-  /** Session events exist only once the session does (born on the first call). */
+  /** Mission log events exist only once the mission log does (born on the first call). */
   private async recordEvent(
     missionId: string,
     actorUserId: string,
-    event: Extract<SessionEventDetails, { kind: 'rotation' | 'revocation' }>,
+    event: Extract<MissionLogEventDetails, { kind: 'rotation' | 'revocation' }>,
   ): Promise<void> {
-    const session = await this.deps.store.sessions.getByMission(missionId);
-    if (!session) return;
-    await this.deps.store.sessions.recordEvent(session.id, { ...event, actorUserId });
+    const missionLog = await this.deps.store.missionLogs.getByMission(missionId);
+    if (!missionLog) return;
+    await this.deps.store.missionLogs.recordEvent(missionLog.id, { ...event, actorUserId });
   }
 
   /**
@@ -1402,7 +1402,7 @@ export class MissionService {
 
   /**
    * The gated risks the creator opened for the current period, with the instant the
-   * gate closes again — the budget's own derivation (`openedGatesOf`) over the session's
+   * gate closes again — the budget's own derivation (`openedGatesOf`) over the mission log's
    * gate events, so this page and `decide()` cannot disagree.
    */
   private async openGatesOf(
@@ -1418,7 +1418,7 @@ export class MissionService {
     return currentPeriod(budgetMissionOf(mission).period, this.deps.clock.now());
   }
 
-  /** The gates opened for `period`, read from the session's gate events since it started. */
+  /** The gates opened for `period`, read from the mission log's gate events since it started. */
   private async openGatesIn(
     mission: MissionRecord,
     period: CurrentPeriod,
@@ -1427,9 +1427,9 @@ export class MissionService {
     // A one-off mission has no period end: a gate is never opened "for the period" on it.
     if (period.end === null) return open;
     if (!mission.policy.some((entry) => entry.gate === 'approval')) return open;
-    const session = await this.deps.store.sessions.getByMission(mission.id);
-    if (!session) return open;
-    const events = await this.deps.store.sessions.listEvents(session.id, {
+    const missionLog = await this.deps.store.missionLogs.getByMission(mission.id);
+    if (!missionLog) return open;
+    const events = await this.deps.store.missionLogs.listEvents(missionLog.id, {
       kinds: GATE_EVENT_KINDS,
       since: period.start,
     });

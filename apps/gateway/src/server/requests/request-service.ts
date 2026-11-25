@@ -4,7 +4,7 @@ import type { MissionService } from '../missions/mission-service';
  * (spec §2.3 Request, §3.4, §3.5, §4.2 "Request inbox", §6 "requests are
  * granted only in a human session", §7.6, §7.7).
  *
- * The budget's `SessionService.recordCall` inserts the row — a `claim`, or an
+ * The budget's `MissionLogService.recordCall` inserts the row — a `claim`, or an
  * `approval` request with the call's arguments sealed — inside the refusal
  * transaction and puts `<public_url>/r/<id>` in the refusal; this service
  * owns the rest: the inbox, the creator's view, the decision and its events,
@@ -51,7 +51,7 @@ import {
   type BudgetMission,
   type CurrentPeriod,
   type MissionState,
-  type SessionService,
+  type MissionLogService,
 } from '../budget';
 import type { MissionGrounds, Subject } from '../authority';
 import { revivesEndedMission, type CeilingCheck } from '../limits';
@@ -90,21 +90,21 @@ import {
 } from './claim';
 import { toolTitleOf } from '../services/tool-titles';
 import { askedBy, REFUSED_CALL_KIND } from './asker';
-import { eventLineOf, type SessionEventLine } from './events';
+import { eventLineOf, type MissionLogEventLine } from './events';
 import { effectiveState } from './state';
 import { requestUrl } from './url';
 
-/** How many session events the creator's view shows, most recent first. */
-export const SESSION_EVENTS_SHOWN = 20;
+/** How many mission log events the creator's view shows, most recent first. */
+export const MISSION_LOG_EVENTS_SHOWN = 20;
 
-/** The user behind a request page or a decision: the session's user. */
+/** The user behind a request page or a decision: the web session's user. */
 const MS_PER_SECOND = 1000;
 
 export interface RequestServiceDeps {
   readonly missions?: Pick<MissionService, 'permissionOptions'>;
   readonly store: Pick<
     Store,
-    'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter' | 'users'
+    'requests' | 'missions' | 'missionLogs' | 'approvals' | 'audit' | 'auditWriter' | 'users'
   >;
   /** Derives `orphaned` on every mission read (handbook authority). */
   readonly grounds: Pick<MissionGrounds, 'derive'>;
@@ -117,11 +117,11 @@ export interface RequestServiceDeps {
   readonly clock: Clock;
   readonly logger: Logger;
   /**
-   * The budget's "load counters, derive state" read (`SessionService.usageOf`).
-   * Defaults to the same read over `store.sessions`, for a module wired before
-   * the `SessionService` exists.
+   * The budget's "load counters, derive state" read (`MissionLogService.usageOf`).
+   * Defaults to the same read over `store.missionLogs`, for a module wired before
+   * the `MissionLogService` exists.
    */
-  readonly budget?: Pick<SessionService, 'usageOf'>;
+  readonly budget?: Pick<MissionLogService, 'usageOf'>;
   /**
    * The `limits.active_missions` ceiling (spec §4.3 bis): a new end granted to an
    * ended mission adds an active one. Absent: no ceiling.
@@ -188,7 +188,7 @@ export interface RiskBudgetLine {
 /**
  * Who asked (spec §8): the holder of the token the refused call presented —
  * authenticated — and the label the agent gave itself — a claim. Read from the
- * session's `call-refused` events (`asker.ts`); the holder is named for a page.
+ * mission log's `call-refused` events (`asker.ts`); the holder is named for a page.
  */
 export interface RequestAsker {
   /** `null` on a call recorded before tokens had a holder. */
@@ -224,7 +224,7 @@ export interface RequestMissionView {
  */
 export interface WaitingItem {
   readonly request: RequestSummary;
-  /** `null` when no event of the session points to the request any more. */
+  /** `null` when no event of the mission log points to the request any more. */
   readonly asker: RequestAsker | null;
   /** One line per risk of the request still in the mission's policy, in the request's order. */
   readonly budget: readonly RiskBudgetLine[];
@@ -237,14 +237,14 @@ export interface ClaimView {
   readonly kind: 'claim';
   readonly request: RequestSummary;
   readonly mission: RequestMissionView;
-  /** Who asked; `null` when the session holds no trace of the refused call. */
+  /** Who asked; `null` when the mission log holds no trace of the refused call. */
   readonly asker: RequestAsker | null;
   readonly period: CurrentPeriod;
   /** The claimed risk; `null` when it left the policy since. */
   readonly risk: RiskBudgetLine | null;
   readonly other_risks: readonly RiskBudgetLine[];
-  /** Last events of the mission's session, most recent first. */
-  readonly events: readonly SessionEventLine[];
+  /** Last events of the mission log, most recent first. */
+  readonly events: readonly MissionLogEventLine[];
   /** The four actions with their consequence; empty once the request is not open. */
   readonly options: readonly ClaimOption[];
 }
@@ -297,7 +297,7 @@ export interface ApprovalView {
   readonly kind: 'approval';
   readonly request: RequestSummary;
   readonly mission: RequestMissionView;
-  /** Who asked; `null` when the session holds no trace of the refused call. */
+  /** Who asked; `null` when the mission log holds no trace of the refused call. */
   readonly asker: RequestAsker | null;
   readonly period: CurrentPeriod;
   readonly call: ApprovalCall;
@@ -309,8 +309,8 @@ export interface ApprovalView {
   readonly approval: GrantedApproval | null;
   /** How long a yes stays usable (`approvals.expiry`), in seconds. */
   readonly approval_valid_seconds: number;
-  /** Last events of the mission's session, most recent first. */
-  readonly events: readonly SessionEventLine[];
+  /** Last events of the mission log, most recent first. */
+  readonly events: readonly MissionLogEventLine[];
   /** The three actions with their consequence; empty once the request is not open. */
   readonly options: readonly ApprovalOption[];
 }
@@ -320,7 +320,7 @@ export interface PermissionView {
   readonly request: RequestSummary;
   readonly mission: RequestMissionView;
   readonly asker: RequestAsker | null;
-  readonly events: readonly SessionEventLine[];
+  readonly events: readonly MissionLogEventLine[];
   readonly reason: string;
   readonly editor: Awaited<ReturnType<MissionService['permissionOptions']>>;
 }
@@ -381,10 +381,10 @@ export class RequestService {
   // is needed (a per-process memo of a pure function of the build).
   private readonly labels = new Map<string, ReadonlyMap<RiskId, string>>();
 
-  private readonly budget: Pick<SessionService, 'usageOf'>;
+  private readonly budget: Pick<MissionLogService, 'usageOf'>;
 
   constructor(private readonly deps: RequestServiceDeps) {
-    this.budget = deps.budget ?? missionUsageReader(deps.store.sessions);
+    this.budget = deps.budget ?? missionUsageReader(deps.store.missionLogs);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -510,7 +510,7 @@ export class RequestService {
     }
 
     const budget = budgetMissionOf(mission);
-    const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
+    const { mission_log_id, state, period, consumed } = await this.budget.usageOf(budget, now);
     const lines = budget.policy.map((entry) => this.lineOf(entry, consumed));
     const claimed = claimLineOf(budget, request);
     const isClaimed = (line: RiskBudgetLine): boolean =>
@@ -518,7 +518,7 @@ export class RequestService {
       line.risk_id === claimed.riskId &&
       line.resource_set_id === claimed.resourceSetId;
     const risk = lines.find(isClaimed) ?? null;
-    const events = await this.lastEvents(session_id);
+    const events = await this.lastEvents(mission_log_id);
 
     return {
       outcome: 'ok',
@@ -707,7 +707,7 @@ export class RequestService {
 
   /**
    * The creator's answer to a claim. The state change, the effect on the
-   * counters or on the expiry, and the session event are one transaction of
+   * counters or on the expiry, and the mission log event are one transaction of
    * the store; the token does not change and the executor replays its call.
    */
   async decideClaim(
@@ -827,11 +827,11 @@ export class RequestService {
       throw new InvariantError(`approval request ${request.id} has no tool or fingerprint`);
     }
     const budget = budgetMissionOf(mission);
-    const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
+    const { mission_log_id, state, period, consumed } = await this.budget.usageOf(budget, now);
     const open = summary.state === 'open';
 
-    const gateEvents = session_id
-      ? await store.sessions.listEvents(session_id, {
+    const gateEvents = mission_log_id
+      ? await store.missionLogs.listEvents(mission_log_id, {
           kinds: GATE_EVENT_KINDS,
           since: period.start,
         })
@@ -872,7 +872,7 @@ export class RequestService {
 
     const approval =
       request.state === 'granted' ? await store.approvals.getByRequest(request.id) : null;
-    const events = await this.lastEvents(session_id);
+    const events = await this.lastEvents(mission_log_id);
 
     // An overdue request reads `expired` before the sweeper erases its blob:
     // nothing is opened for it either.
@@ -933,16 +933,16 @@ export class RequestService {
     };
   }
 
-  private async lastEvents(sessionId: string | null): Promise<EventRecord[]> {
-    if (!sessionId) return [];
-    return this.deps.store.sessions.listEvents(sessionId, {
+  private async lastEvents(missionLogId: string | null): Promise<EventRecord[]> {
+    if (!missionLogId) return [];
+    return this.deps.store.missionLogs.listEvents(missionLogId, {
       order: 'desc',
-      limit: SESSION_EVENTS_SHOWN,
+      limit: MISSION_LOG_EVENTS_SHOWN,
     });
   }
 
   /**
-   * Who asked: the first refused call of the session that pointed to this request,
+   * Who asked: the first refused call of the mission log that pointed to this request,
    * its holder named. Reads the refused calls recorded since the request was dropped
    * (a replay is refused again and points to the same request).
    */
@@ -962,8 +962,8 @@ export class RequestService {
         refused_calls: 1,
       };
     }
-    if (!request.sessionId) return null;
-    const events = await this.deps.store.sessions.listEvents(request.sessionId, {
+    if (!request.missionLogId) return null;
+    const events = await this.deps.store.missionLogs.listEvents(request.missionLogId, {
       kinds: [REFUSED_CALL_KIND],
       since: request.createdAt,
     });
@@ -1264,8 +1264,8 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
           actorUserId: user.id,
           details: { request_id: request.id, ...span },
         });
-        // The event is the opening: without a session to carry it nothing was opened.
-        if (!recorded) throw new InvariantError(`request ${request.id} has no session`);
+        // The event is the opening: without a mission log to carry it nothing was opened.
+        if (!recorded) throw new InvariantError(`request ${request.id} has no mission log`);
       }
       if (opened.length === 0) throw new InvariantError(`request ${request.id} opens no gate`);
       return {

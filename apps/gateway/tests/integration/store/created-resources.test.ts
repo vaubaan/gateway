@@ -8,7 +8,7 @@
  *     `FRESH_RESOURCE_STALE_GRACE_MS` ago;
  *   - `MissionsRepo.addResources` adds to an explicit selection with its source, turns
  *     an empty `all` into `selected`, writes nothing under `account`, and records a
- *     `resources-created` event in the mission's session;
+ *     `resources-created` event in the mission log;
  *   - `MissionsRepo.edit` stores the resource rows it adds with source `edit`
  *     (ADR mission-editable-after-issuance) and leaves the kept rows' source alone.
  */
@@ -290,15 +290,15 @@ describe('created resources in the store', () => {
       });
     });
 
-    it('records `resources-created` in the session', async () => {
+    it('records `resources-created` in the mission log', async () => {
       const m = await mission([], true);
-      const session = await store.sessions.getOrCreate(m.id);
+      const missionLog = await store.missionLogs.getOrCreate(m.id);
       const fresh = await created();
       await store.missions.addResources(m.id, account, [fresh.id], 'created', {
         tool: 'github__create_repo',
         actorUserId: creator,
       });
-      const events = await store.sessions.listEvents(session.id);
+      const events = await store.missionLogs.listEvents(missionLog.id);
       expect(events.map((e) => [e.kind, e.actorUserId, e.details])).toEqual([
         [
           'resources-created',

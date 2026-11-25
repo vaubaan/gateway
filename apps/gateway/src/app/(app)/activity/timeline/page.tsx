@@ -1,5 +1,5 @@
 /**
- * `/activity/timeline` — the session events of every mission the reader may
+ * `/activity/timeline` — the mission log events of every mission the reader may
  * read (spec §4.2 "Activity", §3.3): calls, requests and their answers,
  * resets, limits, gates and keys, newest first, worded like the mission's own
  * page (`eventWords`). Filtered by mission (`?mission=`), key holder

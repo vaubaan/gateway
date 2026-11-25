@@ -6,7 +6,7 @@
  * is refused with the uncovered list, and while the authority is missing the
  * mission is `orphaned` and every call is refused `mission-inactive`. The
  * state is derived, never stored: when the authority comes back the same
- * token serves again, with its session and counters (feature P2.2b).
+ * token serves again, with its mission log and counters (feature P2.2b).
  */
 import { REFUSAL_RPC_CODE } from '@vaubaan/gateway-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -207,19 +207,19 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   });
 
   describe('`orphaned` is derived and reversible (spec §2.3)', () => {
-    /** The session and its counters, as the store holds them. */
+    /** The mission log and its counters, as the store holds them. */
     const sessionOf = async (mission: { mission: { id: string } }) => {
-      const session = await rig.root.store.sessions.getByMission(mission.mission.id);
-      if (!session) throw new Error('the mission has no session yet');
-      const counters = await rig.root.store.sessions.counters(session.id);
+      const missionLog = await rig.root.store.missionLogs.getByMission(mission.mission.id);
+      if (!missionLog) throw new Error('the mission has no mission log yet');
+      const counters = await rig.root.store.missionLogs.counters(missionLog.id);
       return {
-        id: session.id,
-        createdAt: session.createdAt,
+        id: missionLog.id,
+        createdAt: missionLog.createdAt,
         consumed: Object.fromEntries(counters.map((c) => [c.riskId, c.consumed])),
       };
     };
 
-    it('lose → refused → regain: the same token serves the next call, with the same session and counters', async () => {
+    it('lose → refused → regain: the same token serves the next call, with the same mission log and counters', async () => {
       const first = await shareToBob([READ]);
       const mission = await rig.issueFor(rig.bob, [READ]);
       expect((await rig.read(mission)).result).toBeDefined();
@@ -248,7 +248,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       expect(again).toMatchObject({ replaced: null, orphaned: 0, restored: 1 });
       expect(await rig.statusOf(mission)).toBe('active');
 
-      // The very same Bearer, the very same session, the counters where they were.
+      // The very same Bearer, the very same mission log, the counters where they were.
       expect((await rig.read(mission)).result).toBeDefined();
       expect(rig.depot.calls).toHaveLength(upstream + 1);
       const after = await sessionOf(mission);
@@ -598,9 +598,9 @@ describe('a request on an orphaned mission still expires on the normal delay', (
       riskIds,
     });
   const requestEvents = async (missionId: string) => {
-    const session = await rig.root.store.sessions.getByMission(missionId);
-    if (!session) return [];
-    return (await rig.root.store.sessions.listEvents(session.id, { kinds: ['request'] })).map(
+    const missionLog = await rig.root.store.missionLogs.getByMission(missionId);
+    if (!missionLog) return [];
+    return (await rig.root.store.missionLogs.listEvents(missionLog.id, { kinds: ['request'] })).map(
       (event) => event.details,
     );
   };

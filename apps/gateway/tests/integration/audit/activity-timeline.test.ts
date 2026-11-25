@@ -1,6 +1,6 @@
 /**
  * `ActivityTimelineService` on an ephemeral instance (spec §4.2 "Activity"):
- * the session events of every mission a person may read, scoped in SQL like
+ * the mission log events of every mission a person may read, scoped in SQL like
  * the Record, newest first, filtered by mission, and the requests of a page
  * linked for the creator only.
  */
@@ -35,7 +35,7 @@ describe('the Activity’s Timeline', () => {
   const events = async (viewer: AuditViewer, filters = NO_TIMELINE_FILTER) =>
     (await rig.root.audit.timeline.search(viewer, filters)).events;
 
-  it('lists the sessions of the missions one created, newest first, each event under its mission', async () => {
+  it('lists the mission logs of the missions one created, newest first, each event under its mission', async () => {
     await seedCall(rig, mission);
     await seedCall(rig, mission, { tool: 'github__create_pull_request', risks: [PR] });
     const second = await issueMission(rig, rig.seeded.ada, githubDraft(rig, { name: 'Second' }));
@@ -81,7 +81,7 @@ describe('the Activity’s Timeline', () => {
     expect(await events({ kind: 'bootstrap' })).toEqual([]);
   });
 
-  it('the owner of an account reads the calls through it in the Record, not the session of the mission', async () => {
+  it('the owner of an account reads the calls through it in the Record, not the mission log', async () => {
     const bobs = await seedAccount(rig.root.store, {
       service: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },

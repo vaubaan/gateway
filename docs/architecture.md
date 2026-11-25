@@ -52,7 +52,7 @@ Handbooks: [execution-door](handbook/execution-door.md), [git-remote](handbook/g
 application supplies the stages. A stage that refuses ends the call with a structured refusal
 (`risk-not-accepted`, `budget-exhausted`, `approval-required`…) that tells the agent what to do,
 and every call, allowed or refused, writes one audit entry. Handbooks:
-[gateway-core](handbook/gateway-core.md), [budget-and-sessions](handbook/budget-and-sessions.md),
+[gateway-core](handbook/gateway-core.md), [budget-and-mission-logs](handbook/budget-and-mission-logs.md),
 [audit](handbook/audit.md).
 
 ## The policy engine

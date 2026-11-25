@@ -36,9 +36,9 @@ describe('a plugin call past its deadline', () => {
   });
 
   const consumed = async (): Promise<number> => {
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    if (!session) return 0;
-    const counters = await instance.root.store.sessions.counters(session.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    if (!missionLog) return 0;
+    const counters = await instance.root.store.missionLogs.counters(missionLog.id);
     return counters.filter((c) => c.riskId === READ).reduce((sum, c) => sum + c.consumed, 0);
   };
 

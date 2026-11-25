@@ -364,7 +364,7 @@ export interface OrphanView {
   /**
    * True when the mission serves calls again as soon as the authority returns
    * (the share is made again, the user is back in the owner group), with its
-   * session and counters intact. A revoked or deleted account never comes back.
+   * mission log and counters intact. A revoked or deleted account never comes back.
    */
   readonly can_come_back: boolean;
 }
@@ -441,7 +441,8 @@ export interface MissionView {
   readonly created_at: string;
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
-  /** The current period of the session; `end` is `null` for a one-off mission. */
+  /** The current period of the mission log; `end` is `null` for a one-off mission. The
+   *  agents read the field as `session`: their protocol keeps the name. */
   readonly session: { readonly period_start: string; readonly period_end: string | null } | null;
   /** `null` when the user issued it themselves in the interface. */
   readonly issued_via: IssuedViaView | null;

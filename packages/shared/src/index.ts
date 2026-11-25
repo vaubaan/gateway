@@ -118,13 +118,13 @@ export type {
   RequestKind,
   RequestStatus,
   Resource,
-  Session,
-  SessionCounter,
-  SessionEventKind,
+  MissionLog,
+  MissionLogCounter,
+  MissionLogEventKind,
   ShareStatus,
   TokenAttribution,
 } from './domain.ts';
-export { parseEventDetails } from './session-events.ts';
+export { parseEventDetails } from './mission-log-events.ts';
 export type {
   ApprovalEventDetails,
   CallAllowedEventDetails,
@@ -137,8 +137,8 @@ export type {
   RequestEventDetails,
   RevocationEventDetails,
   RotationEventDetails,
-  SessionEventDetails,
-} from './session-events.ts';
+  MissionLogEventDetails,
+} from './mission-log-events.ts';
 export { validateDataModel } from './data-model.ts';
 export type {
   DataModel,

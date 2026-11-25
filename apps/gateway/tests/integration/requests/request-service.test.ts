@@ -4,8 +4,8 @@
  * resolutions and their events, the state machine against the store, expiry
  * on read and by the sweeper.
  *
- * The claim itself is dropped by the budget's `SessionService.recordCall`
- * (handbook budget-and-sessions); these tests start from its refusal.
+ * The claim itself is dropped by the budget's `MissionLogService.recordCall`
+ * (handbook budget-and-mission-logs); these tests start from its refusal.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -92,16 +92,21 @@ describe('RequestService', () => {
   }
 
   const countersOf = async (periodStart = ANCHOR) => {
-    const session = await f.store.sessions.getByMission(f.mission.id);
-    if (!session) return {};
+    const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+    if (!missionLog) return {};
     return Object.fromEntries(
-      (await f.store.sessions.counters(session.id, periodStart)).map((c) => [c.riskId, c.consumed]),
+      (await f.store.missionLogs.counters(missionLog.id, periodStart)).map((c) => [
+        c.riskId,
+        c.consumed,
+      ]),
     );
   };
 
   const eventKinds = async () => {
-    const session = await f.store.sessions.getByMission(f.mission.id);
-    return session ? (await f.store.sessions.listEvents(session.id)).map((e) => e.kind) : [];
+    const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+    return missionLog
+      ? (await f.store.missionLogs.listEvents(missionLog.id)).map((e) => e.kind)
+      : [];
   };
 
   async function otherUser(email: string): Promise<{ id: string }> {
@@ -220,7 +225,7 @@ describe('RequestService', () => {
         expires_at: null,
         period_seconds: DAY_SECONDS,
       });
-      // Who asked is read from the refused call of the session: its label, its tool.
+      // Who asked is read from the refused call of the mission log: its label, its tool.
       expect(view.asker).toEqual({
         token_kind: null,
         user_id: null,
@@ -364,8 +369,8 @@ describe('RequestService', () => {
       expect(decided.decision).toHaveProperty('credits', { [WRITE]: 1 });
       expect(await countersOf()).toEqual({ [READ]: 1, [WRITE]: 0 });
 
-      const session = await f.store.sessions.getByMission(f.mission.id);
-      const [event] = await f.store.sessions.listEvents(session!.id, { kinds: ['reset'] });
+      const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+      const [event] = await f.store.missionLogs.listEvents(missionLog!.id, { kinds: ['reset'] });
       expect(event).toMatchObject({
         kind: 'reset',
         riskId: WRITE,
@@ -393,9 +398,12 @@ describe('RequestService', () => {
       expect((await call([READ], mission)).outcome).toBe('allowed');
       const readClaim = refused(await call([READ], mission)).request_id;
       const counters = async () => {
-        const session = await f.store.sessions.getByMission(mission.id);
+        const missionLog = await f.store.missionLogs.getByMission(mission.id);
         return Object.fromEntries(
-          (await f.store.sessions.counters(session!.id, ANCHOR)).map((c) => [c.riskId, c.consumed]),
+          (await f.store.missionLogs.counters(missionLog!.id, ANCHOR)).map((c) => [
+            c.riskId,
+            c.consumed,
+          ]),
         );
       };
       expect(await counters()).toEqual({ [READ]: 1, [WRITE]: 1 });
@@ -419,10 +427,12 @@ describe('RequestService', () => {
     it('with nothing consumed on the claimed risk a reset gives nothing back and touches nothing', async () => {
       const id = await exhaust();
       await call([READ]);
-      const session = await f.store.sessions.getByMission(f.mission.id);
+      const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
       f.store.db
-        .prepare('UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND risk_id = ?')
-        .run(session!.id, WRITE);
+        .prepare(
+          'UPDATE mission_log_counters SET consumed = 0 WHERE mission_log_id = ? AND risk_id = ?',
+        )
+        .run(missionLog!.id, WRITE);
       const decided = granted(await requests.decide(creator(), id, { resolution: 'reset-period' }));
       expect((decided.decision as { credits: object }).credits).toEqual({});
       expect(await countersOf()).toEqual({ [READ]: 1, [WRITE]: 0 });
@@ -664,7 +674,7 @@ describe('RequestService', () => {
     it('an approval is not granted on a mission revoked since it was read', async () => {
       const approval = await f.store.requests.create({
         missionId: f.mission.id,
-        sessionId: null,
+        missionLogId: null,
         kind: 'approval',
         riskId: MERGE,
         tool: 'github__merge',
@@ -723,8 +733,8 @@ describe('RequestService', () => {
         act: 'request-refused',
         object: { type: 'request', id },
       });
-      const session = await f.store.sessions.getByMission(f.mission.id);
-      const events = await f.store.sessions.listEvents(session!.id, { kinds: ['request'] });
+      const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+      const events = await f.store.missionLogs.listEvents(missionLog!.id, { kinds: ['request'] });
       expect(events.map((e) => e.details?.state ?? 'dropped')).toEqual([
         'dropped',
         'refused',
@@ -831,8 +841,8 @@ describe('RequestService', () => {
       expect((await f.store.requests.getById(second))?.state).toBe('expired');
       expect(await requests.sweep()).toBe(0);
 
-      const session = await f.store.sessions.getByMission(f.mission.id);
-      const events = await f.store.sessions.listEvents(session!.id, { kinds: ['request'] });
+      const missionLog = await f.store.missionLogs.getByMission(f.mission.id);
+      const events = await f.store.missionLogs.listEvents(missionLog!.id, { kinds: ['request'] });
       expect(events.at(-1)).toMatchObject({
         riskId: WRITE,
         details: { request_id: first, request_kind: 'claim', state: 'expired' },

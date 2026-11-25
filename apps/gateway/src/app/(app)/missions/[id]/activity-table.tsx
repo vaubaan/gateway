@@ -13,7 +13,7 @@ import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { AgentLabel, DataTable, Mono, type Column, type RowTone } from '@/components/ui';
-import type { SessionEventView } from '@/server/audit';
+import type { MissionLogEventView } from '@/server/audit';
 import { riskReferencePath } from '@/lib/services/links';
 import { ROUTES } from '@/lib/vocabulary';
 
@@ -31,7 +31,7 @@ interface OpenRequest {
 
 const ROW_TONE: Readonly<Record<'bad' | 'warn', RowTone>> = { bad: 'bad', warn: 'warn' };
 
-export function ActivityTable<Event extends SessionEventView>({
+export function ActivityTable<Event extends MissionLogEventView>({
   events,
   openRequests,
   labels,
@@ -53,9 +53,9 @@ export function ActivityTable<Event extends SessionEventView>({
   empty: React.ReactNode;
   testId?: string;
 }) {
-  const openOf = (event: SessionEventView) =>
+  const openOf = (event: MissionLogEventView) =>
     openRequests.find((request) => request.id === event.request_id);
-  const wordsOf = (event: SessionEventView) =>
+  const wordsOf = (event: MissionLogEventView) =>
     eventWords(event, { requestOpen: openOf(event) !== undefined });
 
   const columns: Column<Event>[] = [

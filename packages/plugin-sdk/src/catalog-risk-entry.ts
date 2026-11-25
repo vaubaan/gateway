@@ -52,9 +52,17 @@ const SCOPE_CAP_KEYS = [
   'items_per_call_max',
   'bytes_per_call_max',
   'calls_per_minute_max',
-  'calls_per_session_max',
+  'calls_per_mission_log_max',
 ] as const satisfies readonly (keyof ScopeCaps)[];
-const CAP_KEYS: ReadonlySet<string> = new Set(SCOPE_CAP_KEYS);
+/**
+ * Former names a catalog may still write, read as the key they became. The mission's
+ * history was its session before it was its mission log (ADR
+ * the-missions-session-becomes-the-mission-log).
+ */
+const FORMER_CAP_KEYS = {
+  calls_per_session_max: 'calls_per_mission_log_max',
+} as const satisfies Record<string, (typeof SCOPE_CAP_KEYS)[number]>;
+const CAP_KEYS: ReadonlySet<string> = new Set([...SCOPE_CAP_KEYS, ...Object.keys(FORMER_CAP_KEYS)]);
 
 type Axis = keyof RiskVector;
 /** The five axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */
@@ -158,17 +166,25 @@ type MutableCaps = { -readonly [K in keyof ScopeCaps]?: number };
 /**
  * `caps` or `infra_limits` : a mapping of the `ScopeCaps` keys to positive
  * integers. Builds a typed object from the keys it checked ; an unknown key
- * or a value that is not a positive integer is reported.
+ * or a value that is not a positive integer is reported. A former key name is
+ * read as its current one; writing both is reported.
  */
 function capsFrom(raw: unknown, ctx: ParseContext): ScopeCaps | undefined {
   if (!isRecord(raw)) return notAMapping(ctx);
   unknownKeys(raw, CAP_KEYS, ctx);
   const caps: MutableCaps = {};
-  for (const key of SCOPE_CAP_KEYS) {
-    const value = raw[key];
-    if (value === undefined && !(key in raw)) continue;
+  const read = (written: string, key: keyof ScopeCaps): void => {
+    const value = raw[written];
+    if (value === undefined && !(written in raw)) return;
     if (isPositiveInt(value)) caps[key] = value;
-    else ctx.issues.push(`${ctx.at}.${key}: expected a positive integer`);
+    else ctx.issues.push(`${ctx.at}.${written}: expected a positive integer`);
+  };
+  for (const key of SCOPE_CAP_KEYS) read(key, key);
+  for (const [former, key] of Object.entries(FORMER_CAP_KEYS) as [string, keyof ScopeCaps][]) {
+    if (!(former in raw)) continue;
+    if (key in raw)
+      ctx.issues.push(`${ctx.at}.${former}: former name of ${key}, written beside it`);
+    else read(former, key);
   }
   return caps;
 }

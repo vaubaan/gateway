@@ -18,7 +18,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { AuthModule } from '../auth';
 import type { MissionGrounds } from '../authority';
-import { createBudgetStage, type SessionService } from '../budget';
+import { createBudgetStage, type MissionLogService } from '../budget';
 import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
@@ -56,8 +56,8 @@ export interface ExecutionModuleDeps {
   readonly accounts: Pick<AccountsModule, 'credentials' | 'discoveryAfterCall' | 'futureResources'>;
   /** Re-checks the creator's authority on every request (handbook authority, Start here). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
-  /** The budget's session service (quota, rate windows, gate) — one per process. */
-  readonly budget: SessionService;
+  /** The budget's mission log service (quota, rate windows, gate) — one per process. */
+  readonly budget: MissionLogService;
   readonly cache: CacheClient;
   readonly rateLimiter: RateLimiter;
   readonly logger: Logger;

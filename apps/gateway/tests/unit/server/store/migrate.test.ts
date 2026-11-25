@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the forty-two migrations 0001 to 0042 in the default directory', () => {
+  it('ships the forty-three migrations 0001 to 0043 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -151,6 +151,7 @@ describe('migration runner', () => {
       [40, 'one_vaubaan_account_per_person'],
       [41, 'plugin_versions'],
       [42, 'plugin_signers'],
+      [43, 'mission_logs'],
     ]);
   });
 });
@@ -218,6 +219,92 @@ describe('migration 0035: the management door retired, its missions kept', () =>
       .all();
     expect(tables).toEqual([]);
     expect(db.prepare('SELECT COUNT(*) AS n FROM delegations').get()).toEqual({ n: 0 });
+  });
+});
+
+describe('migration 0043: the mission log, never a session', () => {
+  const AT = '2026-11-25T08:00:00.000Z';
+  const clock = new ManualClock();
+  let db: StoreDb;
+
+  beforeEach(() => {
+    db = openDb({ path: MEMORY_PATH });
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 43),
+      clock,
+    );
+    const run = (sql: string): void => {
+      db.prepare(sql).run(AT);
+    };
+    run(
+      "INSERT INTO users (id, subject, identity_key, email, status, created_at) VALUES ('ada', 's', 'k', 'ada@x', 'active', ?)",
+    );
+    db.prepare(
+      `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, created_at, updated_at)
+       VALUES ('m', 'mission', 'ada', 'active', ?, ?, ?)`,
+    ).run(AT, AT, AT);
+    run("INSERT INTO sessions (id, mission_id, created_at) VALUES ('log', 'm', ?)");
+    run(
+      `INSERT INTO session_counters (session_id, resource_set_id, risk_id, period_start, consumed)
+       VALUES ('log', 'set', 'github.code-read', ?, 3)`,
+    );
+    run(
+      `INSERT INTO events (id, session_id, ts, kind, risk_id, details_json)
+       VALUES ('e', 'log', ?, 'call-allowed', 'github.code-read', '{}')`,
+    );
+    db.prepare(
+      `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, created_at, expires_at)
+       VALUES ('r', 'm', 'log', 'claim', 'open', 'github.code-read', ?, ?)`,
+    ).run(AT, AT);
+    run(
+      `INSERT INTO audit (id, ts, kind, mission_id, session_id, tool, arguments_hash, decision)
+       VALUES ('a', ?, 'call', 'm', 'log', 'github__read', 'h', 'allowed')`,
+    );
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('keeps every row under the new names, its foreign keys and indexes with it', () => {
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    const one = (sql: string): unknown => db.prepare(sql).get();
+    expect(one('SELECT id, mission_id FROM mission_logs')).toEqual({ id: 'log', mission_id: 'm' });
+    expect(one('SELECT mission_log_id, consumed FROM mission_log_counters')).toEqual({
+      mission_log_id: 'log',
+      consumed: 3,
+    });
+    expect(one('SELECT mission_log_id FROM events')).toEqual({ mission_log_id: 'log' });
+    expect(one('SELECT mission_log_id FROM requests')).toEqual({ mission_log_id: 'log' });
+    expect(one('SELECT mission_log_id FROM audit')).toEqual({ mission_log_id: 'log' });
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE name LIKE '%session%' AND tbl_name <> 'web_sessions' ORDER BY name",
+        )
+        .all(),
+    ).toEqual([]);
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events' ORDER BY name",
+        )
+        .all(),
+    ).toEqual(
+      expect.arrayContaining([
+        { name: 'events_mission_log_holder_ts' },
+        { name: 'events_mission_log_label_ts' },
+        { name: 'events_mission_log_ts' },
+      ]),
+    );
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    // The cascade follows the rename: deleting the mission deletes its log, counters and events.
+    db.prepare("DELETE FROM requests WHERE id = 'r'").run();
+    db.prepare("DELETE FROM missions WHERE id = 'm'").run();
+    expect(one('SELECT COUNT(*) AS n FROM mission_logs')).toEqual({ n: 0 });
+    expect(one('SELECT COUNT(*) AS n FROM mission_log_counters')).toEqual({ n: 0 });
+    expect(one('SELECT COUNT(*) AS n FROM events')).toEqual({ n: 0 });
   });
 });
 

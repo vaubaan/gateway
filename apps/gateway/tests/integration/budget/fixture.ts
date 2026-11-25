@@ -1,13 +1,13 @@
 /**
  * Shared fixture of the budget integration suites: an ephemeral `:memory:` store, one
- * creator, one account, one mission with a three-risk policy, and a `SessionService`
+ * creator, one account, one mission with a three-risk policy, and a `MissionLogService`
  * over an in-memory sliding window.
  */
 // The store's camelCase policy line, inside its set: not the shared domain type.
 import type { MissionPolicyLineInput as MissionPolicyEntryRecord } from '../../../src/server/store/types.ts';
 import {
   budgetMissionOf,
-  SessionService,
+  MissionLogService,
   type BudgetMission,
 } from '../../../src/server/budget/index.ts';
 import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit/index.ts';
@@ -37,7 +37,7 @@ export interface BudgetFixture extends TestStore {
   readonly mission: BudgetMission;
   /** The one resource set of the mission's account. */
   readonly setId: string;
-  readonly service: SessionService;
+  readonly service: MissionLogService;
   readonly rateWindows: SlidingWindowRateLimiter;
   requestUrl(requestId: string): string;
   /** Another mission for the same creator and account. */
@@ -70,8 +70,8 @@ export async function openBudgetFixture(
   ).id;
   const requestUrl = (requestId: string) => `https://gateway.example.com/r/${requestId}`;
   const rateWindows = new SlidingWindowRateLimiter();
-  const service = new SessionService({
-    sessions: store.sessions,
+  const service = new MissionLogService({
+    missionLogs: store.missionLogs,
     requests: store.requests,
     rateWindows,
     requestUrl,

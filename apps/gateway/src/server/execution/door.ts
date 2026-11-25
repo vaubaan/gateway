@@ -17,7 +17,7 @@
  *                 a web session or a delegated token → 403
  *                 `wrong-credential-kind` (spec §6 "none crosses over").
  *                 A verified token names its holder: every call is attributed
- *                 to them in the audit and the session (spec §8)
+ *                 to them in the audit and the mission log (spec §8)
  *   grounds       the creator's authority over the mission, re-read from the
  *                 store on every request (spec §2.3 "orphaned", §10): a mission
  *                 whose grounds are gone reads `orphaned` for this request and
@@ -84,7 +84,7 @@ import type { JsonRpcError } from '@vaubaan/shared';
 
 import type { BuildInfo } from '../compose/root';
 import type { AnsweredCall } from '../accounts/discovery-after-call';
-import { budgetMissionOf, type SessionService } from '../budget';
+import { budgetMissionOf, type MissionLogService } from '../budget';
 import type { Logger } from '../logging';
 import type { PluginCallGate } from '../plugins/call-gate';
 import { maskedToken } from '../missions';
@@ -115,7 +115,7 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   readonly permissionTool?: ListToolsResult['tools'][number];
   readonly requestPermission?: (ctx: MissionContext, args: unknown) => Promise<CallToolResult>;
   readonly registry: PluginRegistry;
-  readonly budget: Pick<SessionService, 'stateOf'>;
+  readonly budget: Pick<MissionLogService, 'stateOf'>;
   readonly pipeline: CallPipeline;
   /**
    * Told of every allowed call once the door has its answer, before the answer

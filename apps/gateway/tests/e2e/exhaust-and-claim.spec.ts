@@ -7,7 +7,7 @@
  * HTTP on `/mcp`, through the execution door, to the mocked GitHub. Two pass,
  * the third is refused `budget-exhausted` with the claim URL. The URL is then
  * opened by someone else (403, no detail) and by the creator, who signs in on
- * the way, reads the session and decides; the executor replays its call with
+ * the way, reads the mission log and decides; the executor replays its call with
  * the same token.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';

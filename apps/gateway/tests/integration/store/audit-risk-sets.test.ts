@@ -25,7 +25,7 @@ function call(ts: string, over: Partial<CallAuditEntry> = {}): CallAuditEntry {
     token_id: null,
     token_kind: null,
     token_holder: null,
-    session_id: 's1',
+    mission_log_id: 's1',
     account_id: 'c1',
     resource_ref: 'acme/repo',
     tool: 'github__create_branch',

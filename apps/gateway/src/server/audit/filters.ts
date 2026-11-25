@@ -43,7 +43,7 @@ export interface AuditFilters {
   /**
    * The holder of the token a call presented, as typed: a member's email, the
    * name of a named token, or the exact form `member:<user id>` /
-   * `named:<name>` the session page links with. Authenticated, unlike the label.
+   * `named:<name>` the mission log page links with. Authenticated, unlike the label.
    */
   readonly tokenHolder: string | null;
   readonly kind: AuditKind | null;

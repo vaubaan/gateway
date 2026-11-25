@@ -1,6 +1,6 @@
 /**
  * `events.agent_label` (migration 0008): the label of a call event is a column
- * the session timeline filters on (spec §7.9). The backfill of rows written by
+ * the mission log timeline filters on (spec §7.9). The backfill of rows written by
  * an earlier image, the copy made at insert, and the filtered keyset read.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import { loadMigrations, runMigrations } from '../../../src/server/store/migrate
 import {
   agentLabelColumn,
   CALL_EVENT_KINDS,
-} from '../../../src/server/store/repositories/sessions.ts';
+} from '../../../src/server/store/repositories/mission-logs.ts';
 import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const AT = '2026-10-13T08:00:00.000Z';
@@ -32,7 +32,7 @@ describe('events.agent_label', () => {
     await t.store.close();
   });
 
-  async function openSession(): Promise<string> {
+  async function openMissionLog(): Promise<string> {
     const user = await t.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
       subject: 's',
@@ -60,7 +60,7 @@ describe('events.agent_label', () => {
         },
       ],
     });
-    return (await t.store.sessions.getOrCreate(mission.id)).id;
+    return (await t.store.missionLogs.getOrCreate(mission.id)).id;
   }
 
   it('backfills the events an earlier image stored, call events only', () => {
@@ -119,7 +119,7 @@ describe('events.agent_label', () => {
         .prepare<[], { name: string }>("SELECT name FROM pragma_index_list('events')")
         .all()
         .map((row) => row.name);
-      expect(indexes).toContain('events_session_label_ts');
+      expect(indexes).toContain('events_mission_log_label_ts');
     } finally {
       db.close();
     }
@@ -137,12 +137,12 @@ describe('events.agent_label', () => {
     expect(label('call-allowed', null)).toBeNull();
     expect(label('rotation', { agent_label: 'coder' })).toBeNull();
 
-    const sessionId = await openSession();
-    const stored = await t.store.sessions.recordEvent(sessionId, {
+    const missionLogId = await openMissionLog();
+    const stored = await t.store.missionLogs.recordEvent(missionLogId, {
       kind: 'call-refused',
       details: { tool: 't', agent_label: 'coder' },
     });
-    await t.store.sessions.recordEvent(sessionId, {
+    await t.store.missionLogs.recordEvent(missionLogId, {
       kind: 'rotation',
       details: { agent_label: 'coder' },
     });
@@ -153,8 +153,8 @@ describe('events.agent_label', () => {
   });
 
   it('reads the calls of one label, or the unlabelled ones, newest first by keyset', async () => {
-    const sessionId = await openSession();
-    const { sessions } = t.store;
+    const missionLogId = await openMissionLog();
+    const { missionLogs } = t.store;
     const ids: Record<string, string[]> = { coder: [], other: [], none: [] };
     for (let i = 0; i < 4; i++) {
       for (const [key, label] of [
@@ -162,18 +162,21 @@ describe('events.agent_label', () => {
         ['other', 'other'],
         ['none', null],
       ] as const) {
-        const event = await sessions.recordEvent(sessionId, {
+        const event = await missionLogs.recordEvent(missionLogId, {
           kind: i % 2 === 0 ? 'call-allowed' : 'call-refused',
           details: { tool: 't', agent_label: label },
         });
         ids[key]?.push(event.id);
       }
       // Not a call: in no filtered read, whatever its details say.
-      await sessions.recordEvent(sessionId, { kind: 'request', details: { agent_label: 'coder' } });
+      await missionLogs.recordEvent(missionLogId, {
+        kind: 'request',
+        details: { agent_label: 'coder' },
+      });
     }
     const newestFirst = (key: string) => [...(ids[key] ?? [])].reverse();
-    const idsOf = async (options: Parameters<typeof sessions.listRecentEvents>[1]) =>
-      (await sessions.listRecentEvents(sessionId, options)).map((e) => e.id);
+    const idsOf = async (options: Parameters<typeof missionLogs.listRecentEvents>[1]) =>
+      (await missionLogs.listRecentEvents(missionLogId, options)).map((e) => e.id);
 
     expect(await idsOf({ limit: 100 })).toHaveLength(16);
     expect(await idsOf({ limit: 100, calls: { agentLabel: 'coder' } })).toEqual(
@@ -183,7 +186,7 @@ describe('events.agent_label', () => {
     expect(await idsOf({ limit: 100, calls: { agentLabel: 'nobody' } })).toEqual([]);
 
     // Keyset: a page of 3, then what is older than its last event.
-    const page = await sessions.listRecentEvents(sessionId, {
+    const page = await missionLogs.listRecentEvents(missionLogId, {
       limit: 3,
       calls: { agentLabel: 'coder' },
     });
@@ -198,9 +201,9 @@ describe('events.agent_label', () => {
       newestFirst('none').slice(3),
     );
 
-    // Another session's events are never in the read.
+    // Another mission log's events are never in the read.
     expect(
-      await sessions.listRecentEvents('no-such-session', {
+      await missionLogs.listRecentEvents('no-such-mission-log', {
         limit: 10,
         calls: { agentLabel: 'coder' },
       }),

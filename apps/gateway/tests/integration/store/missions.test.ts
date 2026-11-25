@@ -627,7 +627,7 @@ describe('missions repository', () => {
   });
   it('setLimits moves the quota and the rate of listed risks, in one transaction, and nothing else', async () => {
     const m = await create();
-    const session = await store.sessions.getOrCreate(m.id);
+    const missionLog = await store.missionLogs.getOrCreate(m.id);
     const result = await store.missions.setLimits(
       m.id,
       [
@@ -656,7 +656,7 @@ describe('missions repository', () => {
     ]);
     expect(flatPolicy(result!.mission)).toEqual([{ ...POLICY[0], quota: 7 }, POLICY[1]]);
     // One event, for the risk that moved.
-    expect(await store.sessions.listEvents(session.id)).toMatchObject([
+    expect(await store.missionLogs.listEvents(missionLog.id)).toMatchObject([
       {
         kind: 'limits-changed',
         riskId: 'github.code-read',
@@ -705,7 +705,7 @@ describe('missions repository', () => {
       [{ riskId: 'github.code-read', quota: 3, rateLimit: 4 }],
       creator,
     );
-    const seen = await store.sessions.decideAndDecrement(
+    const seen = await store.missionLogs.decideAndDecrement(
       { missionId: m.id, riskIds: ['github.code-read'], periodStart: m.periodAnchor },
       (ctx) => ({ allow: false, limits: ctx.limits }),
     );
@@ -739,8 +739,8 @@ describe('missions repository', () => {
 
     it('makes the mission the edited state in one transaction, with an event per risk that moved', async () => {
       const m = await create();
-      // A session, so the events have somewhere to go.
-      await store.sessions.decideAndDecrement(
+      // A mission log, so the events have somewhere to go.
+      await store.missionLogs.decideAndDecrement(
         { missionId: m.id, riskIds: ['github.code-read'], periodStart: m.periodAnchor },
         () => ({ allow: true }),
       );
@@ -783,8 +783,8 @@ describe('missions repository', () => {
         'github.code-read',
         'supabase[staging].bulk-row-write',
       ]);
-      const session = await store.sessions.getByMission(m.id);
-      const events = session ? await store.sessions.listEvents(session.id) : [];
+      const missionLog = await store.missionLogs.getByMission(m.id);
+      const events = missionLog ? await store.missionLogs.listEvents(missionLog.id) : [];
       expect(events.map((e) => [e.kind, e.riskId])).toEqual(
         expect.arrayContaining([
           ['permission-removed', 'github.merge-protected'],

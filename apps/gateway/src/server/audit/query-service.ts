@@ -40,7 +40,7 @@ import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, ShareKey, Store
 import type { AccountRecord, MissionRecord } from '../store/types';
 import type { AuditFilters } from './filters';
 import { keysetOf, pageOf, type PagePosition } from './paging';
-import { parseHolderParam } from './session-view';
+import { parseHolderParam } from './mission-log-view';
 
 export const AUDIT_PAGE_SIZE = 50;
 

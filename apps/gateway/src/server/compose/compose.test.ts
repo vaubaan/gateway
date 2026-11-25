@@ -36,7 +36,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(42);
+    expect(root.store.schemaVersion).toBe(43);
     expect(root.registry.size).toBe(REPOSITORY_PLUGINS.length);
     expect(root.registry.ids).toEqual(REPOSITORY_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
@@ -215,10 +215,10 @@ describe('buildRoot when a step fails after the store is opened', () => {
             await store.close();
           },
         };
-        Object.defineProperty(failing, 'sessions', {
+        Object.defineProperty(failing, 'missionLogs', {
           get() {
             if (sweepersStarted) throw new Error('late wiring failure');
-            return store.sessions;
+            return store.missionLogs;
           },
         });
         return failing;

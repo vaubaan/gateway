@@ -1,7 +1,7 @@
 /**
  * `AuditQueryService` on an ephemeral instance (spec §4.2 "Audit", §8):
  * the visibility rule, every filter, keyset paging, and "nobody sees raw
- * arguments". Calls are seeded through `SessionService.recordCall` and the
+ * arguments". Calls are seeded through `MissionLogService.recordCall` and the
  * store's audit writer (see `support.ts`); administrative entries come from
  * the real services.
  */
@@ -676,7 +676,7 @@ describe('audit search: visibility, filters, paging', () => {
       expect(byCi.map((c) => c.token)).toEqual([
         { kind: 'named', key: 'CI runner', label: 'CI runner' },
       ]);
-      // The exact form the session page links with.
+      // The exact form the mission log page links with.
       expect(calls(await search(ada(), { tokenHolder: `member:${bob.id}` }))).toHaveLength(1);
       expect(calls(await search(ada(), { tokenHolder: 'named:CI runner' }))).toHaveLength(1);
       // The creator's own calls are hers, by her email.

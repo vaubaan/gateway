@@ -54,7 +54,7 @@ export const ROUTES = {
   newMission: '/missions/new',
   accounts: '/accounts',
   activity: '/activity',
-  /** The Activity's tabs: the audit record, and the session events of every mission. */
+  /** The Activity's tabs: the audit record, and the mission log events of every mission. */
   activityRecord: '/activity/record',
   activityTimeline: '/activity/timeline',
   reference: '/reference',
@@ -619,7 +619,7 @@ export const TRUST_LEVEL_CUSTOM = 'Custom';
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity (`/activity`: the Record, the audit; the Timeline, the session
 // events). Protocol names: audit entry, call, administrative act, decision,
-// refusal code, token holder, agent label, session event.
+// refusal code, token holder, agent label, mission log event.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The tabs of Activity, in their order. */

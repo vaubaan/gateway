@@ -1,13 +1,13 @@
 /**
- * SessionService — the store-backed executor of the pure budget decision.
+ * MissionLogService — the store-backed executor of the pure budget decision.
  *
- * Spec §3.3 (the session is born on the first call; the session is the source of
+ * Spec §3.3 (the mission log is born on the first call; the mission log is the source of
  * truth for the budget), §3.4 / §3.5 (the refusal drops a request into the creator's
  * inbox and carries its URL), §6 ("the budget decision and the decrement are a single
  * operation"). Plan §3.5. ADR atomic-budget-accounting.
  *
  * `recordCall` runs, inside one `BEGIN IMMEDIATE` transaction of the store
- * (`SessionsRepo.decideAndDecrement`): session get-or-create, counter read for the
+ * (`MissionLogsRepo.decideAndDecrement`): mission log get-or-create, counter read for the
  * current period, the gates the creator opened for the period, approval lookup for
  * the risks still gated, the pure `decide()`, then — on allow — approval consumption,
  * the rate-window push and the counter increments; on refusal, the request drop (or
@@ -50,7 +50,7 @@ import type {
   NewEvent,
   RequestRecord,
   RequestsRepo,
-  SessionsRepo,
+  MissionLogsRepo,
   StoredLimits,
 } from '../store/index.ts';
 import type { RequestLine } from '../store/types.ts';
@@ -102,7 +102,7 @@ export interface RecordCallInput {
 
 export interface RecordCallAllowed {
   readonly outcome: 'allowed';
-  readonly session_id: string;
+  readonly mission_log_id: string;
   readonly period: CurrentPeriod;
   readonly fingerprint: string;
   /** Distinct risks decremented, in call order (in each set charged). */
@@ -120,7 +120,7 @@ export interface RecordCallAllowed {
 
 export interface RecordCallRefused {
   readonly outcome: 'refused';
-  readonly session_id: string;
+  readonly mission_log_id: string;
   readonly period: CurrentPeriod;
   readonly fingerprint: string;
   readonly refusal: Refusal;
@@ -130,8 +130,8 @@ export interface RecordCallRefused {
 
 export type RecordCallResult = RecordCallAllowed | RecordCallRefused;
 
-export interface SessionServiceDeps {
-  readonly sessions: Pick<SessionsRepo, 'decideAndDecrement' | 'getByMission' | 'counters'>;
+export interface MissionLogServiceDeps {
+  readonly missionLogs: Pick<MissionLogsRepo, 'decideAndDecrement' | 'getByMission' | 'counters'>;
   readonly requests: Pick<RequestsRepo, 'prepareArguments'>;
   readonly rateWindows: SlidingWindows;
   /** `<public_url>/r/<request_id>` — built by the composition root from the configuration. */
@@ -175,8 +175,8 @@ interface TransactionOutcome extends DecisionOutcome {
   readonly policy: MissionPolicy;
 }
 
-export class SessionService {
-  constructor(private readonly deps: SessionServiceDeps) {}
+export class MissionLogService {
+  constructor(private readonly deps: MissionLogServiceDeps) {}
 
   async recordCall(input: RecordCallInput): Promise<RecordCallResult> {
     const { mission, now } = input;
@@ -186,7 +186,7 @@ export class SessionService {
     const fingerprint = fingerprintArguments(input.args);
     const prepared = await this.prepareApprovalArguments(input, risks);
 
-    const result = await this.deps.sessions.decideAndDecrement(
+    const result = await this.deps.missionLogs.decideAndDecrement(
       { missionId: mission.id, lines: linesOf(sets, risks), periodStart: period.start },
       (ctx): TransactionOutcome => {
         const live: BudgetMission = {
@@ -206,7 +206,7 @@ export class SessionService {
     if (decision.kind === 'allow') {
       return {
         outcome: 'allowed',
-        session_id: result.session.id,
+        mission_log_id: result.missionLog.id,
         period,
         fingerprint,
         decrements: risks,
@@ -217,7 +217,7 @@ export class SessionService {
     }
     return {
       outcome: 'refused',
-      session_id: result.session.id,
+      mission_log_id: result.missionLog.id,
       period,
       fingerprint,
       refusal: this.refusalOf(mission, decision, request),
@@ -285,7 +285,7 @@ export class SessionService {
     const sets = setsOf(input);
     const period = currentPeriod(mission.period, now);
     const fingerprint = fingerprintArguments(input.args);
-    const result = await this.deps.sessions.decideAndDecrement(
+    const result = await this.deps.missionLogs.decideAndDecrement(
       { missionId: mission.id, lines: linesOf(sets, risks), periodStart: period.start },
       (ctx): TransactionOutcome | PreflightPass => {
         const live: BudgetMission = {
@@ -344,7 +344,7 @@ export class SessionService {
    * The single "load counters, derive state" read; only the current period is loaded.
    */
   async usageOf(mission: BudgetMission, now: Date): Promise<MissionUsage> {
-    return readMissionUsage(this.deps.sessions, mission, now);
+    return readMissionUsage(this.deps.missionLogs, mission, now);
   }
 
   /** Seals the arguments ahead of the transaction when a touched risk may need an

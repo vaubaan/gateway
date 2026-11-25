@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
-import { holderColumns } from '../../../src/server/store/repositories/sessions.ts';
+import { holderColumns } from '../../../src/server/store/repositories/mission-logs.ts';
 import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const AT = '2026-10-13T08:00:00.000Z';
@@ -148,7 +148,7 @@ describe('token holders (migration 0010)', () => {
     }
   });
 
-  async function openMission(): Promise<{ missionId: string; sessionId: string; ada: string }> {
+  async function openMission(): Promise<{ missionId: string; missionLogId: string; ada: string }> {
     const ada = (
       await t.store.users.upsertFromIdp({
         issuer: 'http://idp.test',
@@ -170,8 +170,8 @@ describe('token holders (migration 0010)', () => {
       accounts: [{ accountId: account.id, resourceIds: [] }],
       policy: [{ riskId: READ, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
-    const session = await t.store.sessions.getOrCreate(mission.id);
-    return { missionId: mission.id, sessionId: session.id, ada };
+    const missionLog = await t.store.missionLogs.getOrCreate(mission.id);
+    return { missionId: mission.id, missionLogId: missionLog.id, ada };
   }
 
   it('copies the holder of a call event into its columns, and of nothing else', () => {
@@ -195,9 +195,9 @@ describe('token holders (migration 0010)', () => {
   });
 
   it('reads the timeline of one holder by keyset, newest first, and counts the calls per holder', async () => {
-    const { missionId, sessionId, ada } = await openMission();
+    const { missionId, missionLogId, ada } = await openMission();
     const event = (kind: string, tokenKind: string | null, holder: string | null) =>
-      t.store.sessions.recordEvent(sessionId, {
+      t.store.missionLogs.recordEvent(missionLogId, {
         kind,
         details: {
           tool: 'github__get_file',
@@ -218,7 +218,7 @@ describe('token holders (migration 0010)', () => {
       token_id: kind ? 'tok' : null,
       token_kind: kind,
       token_holder: holder,
-      session_id: sessionId,
+      mission_log_id: missionLogId,
       account_id: null,
       resource_ref: null,
       tool: 'github__get_file',
@@ -255,23 +255,23 @@ describe('token holders (migration 0010)', () => {
     await event('call-allowed', 'named', ada);
 
     const of = { calls: { holder: { kind: 'member', holder: ada } } } as const;
-    const first = await t.store.sessions.listRecentEvents(sessionId, { limit: 2, ...of });
+    const first = await t.store.missionLogs.listRecentEvents(missionLogId, { limit: 2, ...of });
     expect(first.map((e) => e.kind)).toEqual(['call-allowed', 'call-refused']);
     const last = first.at(-1);
-    const rest = await t.store.sessions.listRecentEvents(sessionId, {
+    const rest = await t.store.missionLogs.listRecentEvents(missionLogId, {
       limit: 2,
       before: { ts: last?.ts ?? '', id: last?.id ?? '' },
       ...of,
     });
     expect(rest.map((e) => e.kind)).toEqual(['call-allowed']);
     expect(
-      await t.store.sessions.listRecentEvents(sessionId, {
+      await t.store.missionLogs.listRecentEvents(missionLogId, {
         limit: 10,
         calls: { holder: { kind: 'named', holder: 'CI runner' } },
       }),
     ).toHaveLength(1);
     expect(
-      await t.store.sessions.listRecentEvents(sessionId, {
+      await t.store.missionLogs.listRecentEvents(missionLogId, {
         limit: 10,
         calls: { holder: { kind: 'member', holder: 'nobody' } },
       }),
@@ -304,7 +304,7 @@ describe('token holders (migration 0010)', () => {
         token_id: kind ? 'tok' : null,
         token_kind: kind,
         token_holder: holder,
-        session_id: null,
+        mission_log_id: null,
         account_id: null,
         resource_ref: null,
         tool,

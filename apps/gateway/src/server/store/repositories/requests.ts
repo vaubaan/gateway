@@ -12,7 +12,7 @@ import type {
   RequestLine,
   RequestRecord,
   RiskId,
-  SessionRecord,
+  MissionLogRecord,
 } from '../types.ts';
 import { insertApprovalSync, riskIdsColumn, riskIdsOf } from './approvals.ts';
 import {
@@ -26,7 +26,11 @@ import {
 import { REQUEST_KINDS, REQUEST_STATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { policyLineKey, type PolicyLineKey } from '@vaubaan/shared';
 
-import { createSessionPrimitives, type EventScope, type RiskEventQuery } from './sessions.ts';
+import {
+  createMissionLogPrimitives,
+  type EventScope,
+  type RiskEventQuery,
+} from './mission-logs.ts';
 import { createVersionPrimitives } from './mission-versions.ts';
 import { missionScopePiece } from './audit.ts';
 
@@ -43,7 +47,7 @@ export interface PreparedArguments {
 
 export interface RequestInput {
   readonly missionId: string;
-  readonly sessionId?: string | null;
+  readonly missionLogId?: string | null;
   readonly kind: RequestKind;
   /** The claimed risk; for an approval request, the first of `riskIds` when given. */
   readonly riskId: RiskId;
@@ -96,21 +100,21 @@ export interface ClaimDecisionContext {
   readonly request: RequestRecord;
   /** The claim's mission as stored, read inside this transaction. */
   readonly mission: StoredMissionFacts;
-  /** The mission's session; null only when the session row was deleted since. */
-  readonly session: SessionRecord | null;
+  /** The mission log; null only when the mission log row was deleted since. */
+  readonly missionLog: MissionLogRecord | null;
   readonly now: Iso;
   /** Consumed count per line in the period starting at `periodStart`. */
   counters(periodStart: Iso): ReadonlyMap<PolicyLineKey, number>;
   /**
    * Sets the counter of ONE line to zero in the period; returns what it held (0
-   * when there was nothing to give back, or no session). No other line is touched.
+   * when there was nothing to give back, or no mission log). No other line is touched.
    */
   resetCounter(periodStart: Iso, line: RequestLine): number;
   /** Gives `amount` actions back on one line; false (nothing written) when fewer were consumed. */
   creditCounter(periodStart: Iso, line: RequestLine, amount: number): boolean;
   /** Moves the mission's expiry; a mission stored `expired` becomes `active` again. */
   setMissionExpiry(expiresAt: Iso): void;
-  /** Records an event on the mission's session; null when there is no session. */
+  /** Records an event on the mission log; null when there is no mission log. */
   recordEvent(event: NewEvent): EventRecord | null;
 }
 
@@ -139,17 +143,17 @@ export interface ApprovalDecisionContext {
   readonly request: RequestRecord;
   /** The request's mission as stored, read inside this transaction. */
   readonly mission: StoredMissionFacts;
-  /** The mission's session; null only when the session row was deleted since. */
-  readonly session: SessionRecord | null;
+  /** The mission log; null only when the mission log row was deleted since. */
+  readonly missionLog: MissionLogRecord | null;
   readonly now: Iso;
   /**
    * The approval a grant produces: bound to the request's mission, tool and fingerprint,
    * covering every risk the request lists, single-use, valid until `expiresAt`.
    */
   createApproval(expiresAt: Iso): ApprovalRecord;
-  /** Events of the mission's session about some risks (empty when there is no session). */
+  /** Events of the mission log about some risks (empty when there is no mission log). */
   riskEvents(query: RiskEventQuery): EventRecord[];
-  /** Records an event on the mission's session; null when there is no session. */
+  /** Records an event on the mission log; null when there is no mission log. */
   recordEvent(event: NewEvent): EventRecord | null;
 }
 
@@ -213,7 +217,7 @@ export interface RequestsRepo extends PermissionRequestsRepo {
   /**
    * Sweeper: flips open requests past their expiry to `expired`, erases their sealed
    * arguments, and records one `request` event (`state: 'expired'`) per request on its
-   * mission's session. Returns the expired requests.
+   * mission log. Returns the expired requests.
    */
   sweepExpired(): Promise<RequestRecord[]>;
 }
@@ -221,7 +225,7 @@ export interface RequestsRepo extends PermissionRequestsRepo {
 interface RequestRow {
   id: string;
   mission_id: string;
-  session_id: string | null;
+  mission_log_id: string | null;
   kind: string;
   state: string;
   risk_id: string;
@@ -236,7 +240,7 @@ interface RequestRow {
   decision_json: string | null;
 }
 
-const COLUMNS = `r.id, r.mission_id, r.session_id, r.kind, r.state, r.risk_id, r.risk_ids_json,
+const COLUMNS = `r.id, r.mission_id, r.mission_log_id, r.kind, r.state, r.risk_id, r.risk_ids_json,
   r.tool, r.fingerprint,
   CASE WHEN r.args_blob IS NULL THEN 0 ELSE 1 END AS has_args, r.created_at, r.expires_at,
   r.decided_at, r.decided_by_user_id, r.decision_json`;
@@ -290,7 +294,7 @@ function toRecord(ctx: RepoContext, row: RequestRow): RequestRecord {
   return {
     id: row.id,
     missionId: row.mission_id,
-    sessionId: row.session_id,
+    missionLogId: row.mission_log_id,
     kind: parseEnum(REQUEST_KINDS, row.kind, 'requests.kind'),
     state: parseEnum(REQUEST_STATES, row.state, 'requests.state'),
     riskId: row.risk_id,
@@ -321,7 +325,7 @@ export async function prepareRequestArguments(
 }
 
 const SELECT_BY_ID = `SELECT ${COLUMNS} FROM requests r WHERE r.id = ?`;
-const INSERT_OPEN = `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, risk_ids_json,
+const INSERT_OPEN = `INSERT INTO requests (id, mission_id, mission_log_id, kind, state, risk_id, risk_ids_json,
     tool, fingerprint, args_blob, key_version, created_at, expires_at)
   VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)`;
 
@@ -463,7 +467,7 @@ export function insertRequestSync(
     .run(
       id,
       input.missionId,
-      input.sessionId ?? null,
+      input.missionLogId ?? null,
       input.kind,
       input.riskId,
       risks?.json ?? null,
@@ -509,9 +513,9 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     `UPDATE requests SET state = 'expired', args_blob = NULL, key_version = NULL
      WHERE id = ? AND state = 'open'`,
   );
-  // Sessions, counters and events belong to the sessions repository: its primitives run
+  // Mission logs, counters and events belong to the mission logs repository: its primitives run
   // here, inside this repository's transactions.
-  const sessions = createSessionPrimitives(ctx);
+  const missionLogs = createMissionLogPrimitives(ctx);
   const versions = createVersionPrimitives(ctx);
   const extendMission = db.prepare<[string, string, string]>(
     `UPDATE missions SET expires_at = ?, updated_at = ?,
@@ -533,13 +537,13 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     };
   }
 
-  /** Flips one overdue request and leaves its trace on the session. In-transaction. */
+  /** Flips one overdue request and leaves its trace on the mission log. In-transaction. */
   function expireSync(request: RequestRecord, now: Iso): RequestRecord {
     expireOne.run(request.id);
-    const session = sessions.sessionOfMission(request.missionId);
-    if (session) {
-      sessions.recordEvent(
-        session.id,
+    const missionLog = missionLogs.missionLogOfMission(request.missionId);
+    if (missionLog) {
+      missionLogs.recordEvent(
+        missionLog.id,
         {
           kind: 'request',
           riskId: request.riskId,
@@ -554,35 +558,36 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
 
   function claimContext(
     request: RequestRecord,
-    session: SessionRecord | null,
+    missionLog: MissionLogRecord | null,
     now: Iso,
     decidedByUserId: string,
   ): ClaimDecisionContext {
     const read = (periodStart: Iso): Map<PolicyLineKey, number> =>
       new Map(
-        session
-          ? sessions
-              .countersOfPeriod(session.id, periodStart)
+        missionLog
+          ? missionLogs
+              .countersOfPeriod(missionLog.id, periodStart)
               .map((c) => [policyLineKey(c.resourceSetId, c.riskId), c.consumed])
           : [],
       );
     return {
       request,
       mission: missionFactsSync(request.missionId),
-      session,
+      missionLog,
       now,
       counters: read,
       resetCounter(periodStart, line) {
-        if (!session) return 0;
+        if (!missionLog) return 0;
         const held = read(periodStart).get(policyLineKey(line.resourceSetId, line.riskId)) ?? 0;
         // The same conditional write as a quota credit: it gives back exactly what was
         // read, or nothing — both happen inside this transaction.
-        if (held < 1 || !sessions.creditCounter(session.id, periodStart, line, held)) return 0;
+        if (held < 1 || !missionLogs.creditCounter(missionLog.id, periodStart, line, held))
+          return 0;
         return held;
       },
       creditCounter(periodStart, line, amount) {
-        if (!session || !Number.isInteger(amount) || amount < 1) return false;
-        return sessions.creditCounter(session.id, periodStart, line, amount);
+        if (!missionLog || !Number.isInteger(amount) || amount < 1) return false;
+        return missionLogs.creditCounter(missionLog.id, periodStart, line, amount);
       },
       setMissionExpiry(expiresAt) {
         extendMission.run(expiresAt, now, request.missionId);
@@ -594,14 +599,14 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
         );
       },
       recordEvent(event) {
-        return session ? sessions.recordEvent(session.id, event, now) : null;
+        return missionLog ? missionLogs.recordEvent(missionLog.id, event, now) : null;
       },
     };
   }
 
   function approvalContext(
     request: RequestRecord,
-    session: SessionRecord | null,
+    missionLog: MissionLogRecord | null,
     now: Iso,
   ): ApprovalDecisionContext {
     const { tool, fingerprint } = request;
@@ -611,7 +616,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     return {
       request,
       mission: missionFactsSync(request.missionId),
-      session,
+      missionLog,
       now,
       createApproval(expiresAt) {
         return insertApprovalSync(
@@ -628,10 +633,10 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
         );
       },
       riskEvents(query) {
-        return session ? sessions.riskEvents(session.id, query) : [];
+        return missionLog ? missionLogs.riskEvents(missionLog.id, query) : [];
       },
       recordEvent(event) {
-        return session ? sessions.recordEvent(session.id, event, now) : null;
+        return missionLog ? missionLogs.recordEvent(missionLog.id, event, now) : null;
       },
     };
   }
@@ -646,7 +651,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     kind: RequestKind,
     decidedByUserId: string,
     now: Iso,
-    apply: (request: RequestRecord, session: SessionRecord | null) => R,
+    apply: (request: RequestRecord, missionLog: MissionLogRecord | null) => R,
   ): RequestDecisionResult<R> {
     const request = getRequestRecord(ctx, id);
     if (!request) throw new NotFoundError('request', id);
@@ -655,7 +660,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     }
     if (request.state !== 'open') return { status: 'not-open', request };
     if (request.expiresAt <= now) return { status: 'not-open', request: expireSync(request, now) };
-    const outcome = apply(request, sessions.sessionOfMission(request.missionId));
+    const outcome = apply(request, missionLogs.missionLogOfMission(request.missionId));
     decideOpen.run(outcome.state, now, decidedByUserId, toJson(outcome.decision), id);
     return {
       status: 'decided',
@@ -713,24 +718,24 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     async decideClaim(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
-        decideOpenSync(id, 'claim', decidedByUserId, now, (request, session) =>
-          apply(claimContext(request, session, now, decidedByUserId)),
+        decideOpenSync(id, 'claim', decidedByUserId, now, (request, missionLog) =>
+          apply(claimContext(request, missionLog, now, decidedByUserId)),
         ),
       );
     },
     async decideApproval(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
-        decideOpenSync(id, 'approval', decidedByUserId, now, (request, session) =>
-          apply(approvalContext(request, session, now)),
+        decideOpenSync(id, 'approval', decidedByUserId, now, (request, missionLog) =>
+          apply(approvalContext(request, missionLog, now)),
         ),
       );
     },
     async decidePermission(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
-        decideOpenSync(id, 'permission', decidedByUserId, now, (request, session) =>
-          apply(approvalContext(request, session, now)),
+        decideOpenSync(id, 'permission', decidedByUserId, now, (request, missionLog) =>
+          apply(approvalContext(request, missionLog, now)),
         ),
       );
     },

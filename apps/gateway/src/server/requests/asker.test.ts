@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { askedBy } from './asker';
-import type { SessionEventLike } from './events';
+import type { MissionLogEventLike } from './events';
 
 const REQUEST = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -11,7 +11,7 @@ function refusedCall(
   ts: string,
   details: Record<string, unknown>,
   kind = 'call-refused',
-): SessionEventLike {
+): MissionLogEventLike {
   serial += 1;
   return {
     id: `e${serial}`,
@@ -87,7 +87,7 @@ describe('askedBy', () => {
     expect(
       askedBy([refusedCall('2026-10-13T09:00:00.000Z', { request_id: OTHER })], REQUEST),
     ).toBeNull();
-    const unreadable: SessionEventLike = {
+    const unreadable: MissionLogEventLike = {
       id: 'x',
       ts: '2026-10-13T09:00:00.000Z',
       kind: 'call-refused',

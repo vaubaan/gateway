@@ -1,9 +1,9 @@
 /**
- * Who asked — pure (spec §3.4 "the creator sees the session history", §8 "the
+ * Who asked — pure (spec §3.4 "the creator sees the mission log history", §8 "the
  * token the call presented and its holder").
  *
  * A request row names its mission, never the caller: the call that was refused
- * is a `call-refused` event of the mission's session, and that event carries
+ * is a `call-refused` event of the mission log, and that event carries
  * the `request_id` the refusal pointed to, the token's holder (authenticated)
  * and the label the agent gave itself (a claim). This module reads the answer
  * to "who asks, and with what" out of those events; the service turns the
@@ -15,7 +15,7 @@
  */
 import { parseEventDetails, type MissionTokenKind } from '@vaubaan/shared';
 
-import type { SessionEventLike } from './events';
+import type { MissionLogEventLike } from './events';
 
 /** The event kind a refused call is recorded under. */
 export const REFUSED_CALL_KIND = 'call-refused';
@@ -34,11 +34,11 @@ export interface AskedBy {
 }
 
 /**
- * The caller behind a request, from the refused calls of its session (any
- * order). `null` when no event points to the request: its session is gone, or
+ * The caller behind a request, from the refused calls of its mission log (any
+ * order). `null` when no event points to the request: its mission log is gone, or
  * the events were purged by retention.
  */
-export function askedBy(events: readonly SessionEventLike[], requestId: string): AskedBy | null {
+export function askedBy(events: readonly MissionLogEventLike[], requestId: string): AskedBy | null {
   let first: { readonly ts: string; readonly asked: Omit<AskedBy, 'refused_calls'> } | null = null;
   let refused = 0;
   for (const event of events) {

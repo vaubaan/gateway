@@ -1,14 +1,14 @@
 /**
- * Structural check: the session counters agree with the audit (spec §3.3 "the two
- * must agree; a structural test checks it", §10 "session counters agree with the
+ * Structural check: the mission log counters agree with the audit (spec §3.3 "the two
+ * must agree; a structural test checks it", §10 "mission log counters agree with the
  * audit"). Per `(mission, resource set, risk, period)` (risk model §4.7: a call charged
  * on several sets counts once in each):
  *
- *   SUM(session_counters.consumed) + credits given back by granted claims
+ *   SUM(mission_log_counters.consumed) + credits given back by granted claims
  *     == COUNT(audit WHERE decision = 'allowed' AND risk touched)
  *
  * A granted claim (`reset` / quota `extension`, handbook requests) lowers the counters
- * without touching the audit; its session event records, per risk, how many actions it
+ * without touching the audit; its mission log event records, per risk, how many actions it
  * gave back (`details.credits` for the period `details.period_start`), and the check
  * adds them back. Details are read through `parseEventDetails`: an event whose stored
  * details do not have the shape of its kind gives back nothing.
@@ -23,10 +23,10 @@ import {
   policyLineKey,
   type PolicyLineKey,
   type RiskId,
-  type SessionEventKind,
+  type MissionLogEventKind,
 } from '@vaubaan/shared';
-import type { AuditRepo, EventRecord, SessionsRepo } from '../store/index.ts';
-import { sessionCounterOf, type BudgetMission } from './mapping.ts';
+import type { AuditRepo, EventRecord, MissionLogsRepo } from '../store/index.ts';
+import { missionLogCounterOf, type BudgetMission } from './mapping.ts';
 import { consumedInPeriod } from './mission-state.ts';
 import { currentPeriod, type CurrentPeriod } from './period.ts';
 
@@ -36,7 +36,7 @@ const OPEN_ENDED_UNTIL = '9999-12-31T23:59:59.999Z';
 export interface CounterAuditLine {
   readonly resource_set_id: string;
   readonly risk_id: RiskId;
-  /** Sum of the session counters of the period. */
+  /** Sum of the mission log counters of the period. */
   readonly counted: number;
   /** Actions given back by granted claims in the period. */
   readonly credited: number;
@@ -45,11 +45,11 @@ export interface CounterAuditLine {
 
 export type CounterAuditMismatch = CounterAuditLine;
 
-/** Session event kinds that may carry `details.credits` (a granted claim). */
+/** Mission log event kinds that may carry `details.credits` (a granted claim). */
 export const CREDIT_EVENT_KINDS = [
   'reset',
   'extension',
-] as const satisfies readonly SessionEventKind[];
+] as const satisfies readonly MissionLogEventKind[];
 
 export interface CounterAuditReport {
   readonly mission_id: string;
@@ -60,7 +60,7 @@ export interface CounterAuditReport {
 }
 
 export interface ConsistencyDeps {
-  readonly sessions: Pick<SessionsRepo, 'getByMission' | 'counters' | 'listEvents'>;
+  readonly missionLogs: Pick<MissionLogsRepo, 'getByMission' | 'counters' | 'listEvents'>;
   readonly audit: Pick<AuditRepo, 'countAllowedTouches'>;
 }
 
@@ -70,12 +70,12 @@ export async function countersAgreeWithAudit(
   now: Date,
 ): Promise<CounterAuditReport> {
   const period = currentPeriod(mission.period, now);
-  const session = await deps.sessions.getByMission(mission.id);
-  const counters = session ? await deps.sessions.counters(session.id, period.start) : [];
-  const counted = consumedInPeriod(counters.map(sessionCounterOf), period.start);
-  const credited = session
+  const missionLog = await deps.missionLogs.getByMission(mission.id);
+  const counters = missionLog ? await deps.missionLogs.counters(missionLog.id, period.start) : [];
+  const counted = consumedInPeriod(counters.map(missionLogCounterOf), period.start);
+  const credited = missionLog
     ? creditsOf(
-        await deps.sessions.listEvents(session.id, {
+        await deps.missionLogs.listEvents(missionLog.id, {
           since: period.start,
           kinds: CREDIT_EVENT_KINDS,
           limit: Number.MAX_SAFE_INTEGER,

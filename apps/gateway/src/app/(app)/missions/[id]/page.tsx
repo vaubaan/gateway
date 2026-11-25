@@ -148,7 +148,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
       : null;
   const [team, activity, inbox, context, history] = await Promise.all([
     root.missions.team.team(user, id),
-    root.audit.sessions.get(user, id),
+    root.audit.missionLogs.get(user, id),
     isCreator ? root.requests.service.inbox(user) : Promise.resolve([]),
     // The cards read the creator's lines against their authority now, as "Edit mission" does.
     isCreator ? root.missions.service.issuanceContext(user) : Promise.resolve([]),

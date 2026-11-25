@@ -112,7 +112,7 @@ const ctx: MissionContext = {
       gate: 'auto',
     },
   ],
-  session: null,
+  missionLog: null,
 };
 
 const call: CallRequest = {
@@ -169,7 +169,7 @@ const resolveTarget: ResourceStage = {
 const allowBudget: BudgetStage = {
   decide: async (_c, _call, input) => ({
     outcome: 'allowed',
-    session_id: 'ses_1',
+    mission_log_id: 'ses_1',
     remaining: Object.fromEntries(input.risks_touched.map((r) => [r, 99])),
     approval_id: null,
   }),
@@ -296,7 +296,7 @@ describe('CallPipeline', () => {
       token_id: 'tok_1',
       token_kind: 'member',
       token_holder: 'usr_1',
-      session_id: 'ses_1',
+      mission_log_id: 'ses_1',
       account_id: 'con_1',
       resource_ref: 'prj_x',
       tool: 'supabase__execute_sql',
@@ -542,7 +542,7 @@ describe('CallPipeline', () => {
       budget: {
         decide: async () => ({
           outcome: 'allowed',
-          session_id: 'ses_1',
+          mission_log_id: 'ses_1',
           remaining: { 'supabase.read-data': 4 },
           approval_id: 'apr_1',
         }),
@@ -569,7 +569,7 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'allowed',
       upstream_error: 'upstream call failed (Error)',
-      session_id: 'ses_1',
+      mission_log_id: 'ses_1',
     });
   });
 
@@ -810,7 +810,7 @@ describe('CallPipeline', () => {
         refusal_code: null,
         risks_touched: ['supabase.read-data'],
         remaining_budget: null,
-        session_id: null,
+        mission_log_id: null,
       });
     });
 

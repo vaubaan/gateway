@@ -146,9 +146,9 @@ describe('streaming on the execution door', () => {
   });
 
   const consumed = async (): Promise<number> => {
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    if (!session) return 0;
-    const counters = await instance.root.store.sessions.counters(session.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    if (!missionLog) return 0;
+    const counters = await instance.root.store.missionLogs.counters(missionLog.id);
     return counters.filter((c) => c.riskId === READ).reduce((sum, c) => sum + c.consumed, 0);
   };
   const auditEntries = () => instance.root.store.audit.list({ missionId: mission.mission.id });
@@ -186,8 +186,8 @@ describe('streaming on the execution door', () => {
     });
     // The decision was taken and counted before that byte left…
     expect(await consumed()).toBe(1);
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    const events = await instance.root.store.sessions.listEvents(session?.id ?? '');
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    const events = await instance.root.store.missionLogs.listEvents(missionLog?.id ?? '');
     expect(events.map((e) => e.kind)).toEqual(['call-allowed']);
     // …and the audit entry, one per call, waits for the end of the stream.
     expect(await auditEntries()).toHaveLength(0);

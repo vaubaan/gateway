@@ -5,7 +5,7 @@
  * mission-members-and-per-holder-tokens).
  *
  *   - two members and a named token draw from ONE counter and are attributed
- *     separately, in the audit, the session and the catalog;
+ *     separately, in the audit, the mission log and the catalog;
  *   - the holder is the token's, whatever the caller declares;
  *   - a token whose member was removed or deactivated, or that was rotated or
  *     revoked on its own, is refused 401 with the reason at the very next call
@@ -115,9 +115,9 @@ describe('execution door: one mission, several token holders', () => {
     );
 
   const consumed = async (): Promise<number> => {
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    if (!session) return 0;
-    const counters = await instance.root.store.sessions.counters(session.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    if (!missionLog) return 0;
+    const counters = await instance.root.store.missionLogs.counters(missionLog.id);
     return counters.filter((c) => c.riskId === READ).reduce((sum, c) => sum + c.consumed, 0);
   };
 
@@ -176,8 +176,8 @@ describe('execution door: one mission, several token holders', () => {
       [ada.id, bob.id, 'CI runner', bob.id, ada.id, 'CI runner', bob.id, ada.id].map(idOf),
     );
 
-    // The session: the same attribution on the events, and the per-holder table.
-    const view = await instance.root.audit.sessions.get(ada, mission.mission.id);
+    // The mission log: the same attribution on the events, and the per-holder table.
+    const view = await instance.root.audit.missionLogs.get(ada, mission.mission.id);
     expect(view?.holder_activity.map((a) => [a.holder?.label, a.allowed, a.refused])).toEqual([
       [ada.email, 2, 1],
       [bob.email, 2, 1],
@@ -260,8 +260,8 @@ describe('execution door: one mission, several token holders', () => {
       // What was declared is kept as what it is: a label.
       agent_label: ada.email,
     });
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    const [event] = await instance.root.store.sessions.listEvents(session?.id ?? '');
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    const [event] = await instance.root.store.missionLogs.listEvents(missionLog?.id ?? '');
     expect(event?.details).toMatchObject({
       token_kind: 'member',
       holder: bob.id,

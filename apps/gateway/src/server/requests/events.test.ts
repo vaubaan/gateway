@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeEvent, eventLineOf, type SessionEventLike } from './events';
+import { describeEvent, eventLineOf, type MissionLogEventLike } from './events';
 
-function event(kind: string, details: Record<string, unknown> | null = null): SessionEventLike {
+function event(kind: string, details: Record<string, unknown> | null = null): MissionLogEventLike {
   return {
     id: 'e1',
     ts: '2026-10-13T09:00:00.000Z',
@@ -13,7 +13,7 @@ function event(kind: string, details: Record<string, unknown> | null = null): Se
   };
 }
 
-/** Stored details as the writers build them (`SessionEventDetails`, `@vaubaan/shared`). */
+/** Stored details as the writers build them (`MissionLogEventDetails`, `@vaubaan/shared`). */
 const CALL = {
   tool: 'github__push',
   fingerprint: 'sha256:abc',

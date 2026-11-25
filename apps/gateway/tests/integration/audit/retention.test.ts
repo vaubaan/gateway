@@ -28,7 +28,7 @@ function call(ts: string, missionId: string): CallAuditEntry {
     token_id: null,
     token_kind: null,
     token_holder: null,
-    session_id: null,
+    mission_log_id: null,
     account_id: null,
     resource_ref: null,
     tool: 'github__get_file',
@@ -154,11 +154,11 @@ describe('audit retention sweeper', () => {
   });
 
   it('touches nothing outside the audit', async () => {
-    const session = await t.store.sessions.getOrCreate(missionId);
-    await t.store.sessions.recordEvent(session.id, { kind: 'call-allowed', riskId: READ });
+    const missionLog = await t.store.missionLogs.getOrCreate(missionId);
+    await t.store.missionLogs.recordEvent(missionLog.id, { kind: 'call-allowed', riskId: READ });
     await t.store.requests.create({
       missionId,
-      sessionId: session.id,
+      missionLogId: missionLog.id,
       kind: 'claim',
       riskId: READ,
       expiresAt: daysAgo(-1),
@@ -169,7 +169,7 @@ describe('audit retention sweeper', () => {
       'accounts',
       'missions',
       'mission_policy',
-      'sessions',
+      'mission_logs',
       'events',
       'requests',
     ];

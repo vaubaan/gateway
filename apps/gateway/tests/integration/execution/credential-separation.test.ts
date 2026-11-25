@@ -84,8 +84,8 @@ describe('the two credentials never cross over', () => {
     const asBearer = await rpc(EXECUTION_URL, bearer(sessionId));
     expect(asBearer.response.status).toBe(403);
     expect(asBearer.body.error?.data).toMatchObject(expected);
-    // Nothing of the refused session reached a mission's session or audit.
-    expect(instance.root.store.db.prepare('SELECT * FROM sessions').all()).toEqual([]);
+    // Nothing of the refused session reached a mission log or the audit.
+    expect(instance.root.store.db.prepare('SELECT * FROM mission_logs').all()).toEqual([]);
   });
 
   it('refuses every kind of mission token alike on the request surface: requests are granted in a human session only', async () => {

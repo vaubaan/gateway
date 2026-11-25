@@ -364,7 +364,7 @@ describe('resource sets through the execution door', () => {
     );
     const record = await instance.root.store.missions.getById(issued.mission.id);
     const report = await countersAgreeWithAudit(
-      { sessions: instance.root.store.sessions, audit: instance.root.store.audit },
+      { missionLogs: instance.root.store.missionLogs, audit: instance.root.store.audit },
       budgetMissionOf(record!),
       new Date(),
     );

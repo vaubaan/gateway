@@ -1,7 +1,7 @@
 /**
  * What the activity of a mission says of one event, in the words of the
- * interface (spec §4.2 "Mission session — event timeline"). Pure, over the
- * typed fields of `SessionEventView`, so the wording is tested without a
+ * interface (spec §4.2 "Mission log — event timeline"). Pure, over the
+ * typed fields of `MissionLogEventView`, so the wording is tested without a
  * browser.
  *
  * An event has a short outcome — "allowed", "refused", "asked first", "key
@@ -11,10 +11,10 @@
  * Protocol names (refusal codes, permission ids, key prefixes) are marked
  * `mono` and printed as the protocol spells them.
  */
-import type { SessionEventKind } from '@vaubaan/shared';
+import type { MissionLogEventKind } from '@vaubaan/shared';
 
 import { GATE_WORDS, gateWordOf } from '@/lib/vocabulary';
-import type { SessionEventView } from '@/server/audit';
+import type { MissionLogEventView } from '@/server/audit';
 
 export interface EventLine {
   readonly text: string;
@@ -39,13 +39,13 @@ const REFUSAL_OUTCOME: Readonly<Record<string, { outcome: string; tone: 'bad' | 
   'rate-limited': { outcome: 'too fast', tone: 'bad' },
 };
 
-function creditLines(event: SessionEventView): EventLine[] {
+function creditLines(event: MissionLogEventView): EventLine[] {
   return Object.entries(event.credits ?? {}).map(([risk, given]) =>
     identifier(`${risk} +${given} given back`),
   );
 }
 
-function permissionLines(permission: NonNullable<SessionEventView['permission']>): EventLine[] {
+function permissionLines(permission: NonNullable<MissionLogEventView['permission']>): EventLine[] {
   return [
     line(`${permission.quota} a period`),
     line(`${permission.rate_limit_max} per ${permission.rate_window_seconds} s`),
@@ -53,13 +53,13 @@ function permissionLines(permission: NonNullable<SessionEventView['permission']>
   ];
 }
 
-function keyLines(event: SessionEventView): EventLine[] {
+function keyLines(event: MissionLogEventView): EventLine[] {
   if (!event.token_prefix) return [];
   // Whose key it is stands in the "Who" column of the row.
   return [identifier(`vbn_live_${event.token_prefix}_…`)];
 }
 
-const KNOWN: Readonly<Record<SessionEventKind, true>> = {
+const KNOWN: Readonly<Record<MissionLogEventKind, true>> = {
   'call-allowed': true,
   'call-refused': true,
   request: true,
@@ -78,7 +78,7 @@ const KNOWN: Readonly<Record<SessionEventKind, true>> = {
   revocation: true,
 };
 
-function isKnown(kind: string): kind is SessionEventKind {
+function isKnown(kind: string): kind is MissionLogEventKind {
   return Object.hasOwn(KNOWN, kind);
 }
 
@@ -87,7 +87,7 @@ function isKnown(kind: string): kind is SessionEventKind {
  * page then links to it, or says who it waits for).
  */
 export function eventWords(
-  event: SessionEventView,
+  event: MissionLogEventView,
   options: { readonly requestOpen: boolean },
 ): EventWords {
   // A kind written by a later version is printed as it is stored.

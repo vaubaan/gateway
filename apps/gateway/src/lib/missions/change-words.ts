@@ -1,7 +1,7 @@
 /**
  * An edit of a mission in words (ADR mission-editable-after-issuance): what the
  * mission's activity, the request timeline and the audit say of a
- * `mission-changed` session event. Pure, no import but the event's shape, so the
+ * `mission-changed` mission log event. Pure, no import but the event's shape, so the
  * pages and the server read it alike.
  */
 import type { MissionChangedEventDetails } from '@vaubaan/shared';

@@ -43,7 +43,7 @@ const ctx: MissionContext = {
   resources: [],
   resource_sets: [],
   policy: [],
-  session: null,
+  missionLog: null,
 };
 
 const call: CallRequest = {
@@ -61,7 +61,7 @@ function pipeline(over: Partial<CallPipelineDeps>) {
     budget: {
       decide: async () => ({
         outcome: 'allowed',
-        session_id: 'ses_1',
+        mission_log_id: 'ses_1',
         remaining: {},
         approval_id: null,
       }),

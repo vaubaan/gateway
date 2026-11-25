@@ -333,7 +333,7 @@ export interface RiskStage {
 export type BudgetDecision =
   | {
       readonly outcome: 'allowed';
-      readonly session_id: string;
+      readonly mission_log_id: string;
       /** Remaining quota per touched risk after the decrement. */
       readonly remaining: Readonly<Record<RiskId, number>>;
       /** Approval consumed, when the gate was `approval`. */
@@ -688,7 +688,7 @@ export function callAuditBase(ctx: MissionContext, call: CallRequest, now: Date)
     token_id: attribution.token_id,
     token_kind: attribution.token_kind,
     token_holder: attribution.holder,
-    session_id: ctx.session?.id ?? null,
+    mission_log_id: ctx.missionLog?.id ?? null,
     account_id: null,
     resource_ref: null,
     tool: call.tool,
@@ -941,7 +941,7 @@ export class CallPipeline {
     if (budget.outcome === 'refused') return this.refused(classified.entry, budget.refusal);
     return {
       ...classified.entry,
-      session_id: budget.session_id,
+      mission_log_id: budget.mission_log_id,
       decision: 'allowed',
       approval_id: budget.approval_id,
       remaining_budget: budget.remaining,

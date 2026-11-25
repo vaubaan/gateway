@@ -1,7 +1,7 @@
 /**
  * Rate limiting — the in-memory sliding window behind the composition root's
  * `RateLimiter` port and the budget's synchronous `SlidingWindows`.
- * Handbook: docs/handbook/budget-and-sessions.md.
+ * Handbook: docs/handbook/budget-and-mission-logs.md.
  */
 export {
   SlidingWindowRateLimiter,

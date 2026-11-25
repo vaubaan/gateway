@@ -23,10 +23,11 @@ interface keeps the word **Activity**, which covers the audit and the mission lo
 
 ## Consequences
 
-- No new name, column, type or text calls a mission's history a session. The code still says
-  `sessions`, `session_counters`, `Session`, `SessionCounter` and `calls_per_session_max` until
-  the refactor renames them, the tables by a migration; until then, those names mean the mission
-  log.
+- No new name, column, type or text calls a mission's history a session. Migration 0043 renamed
+  the tables in place (`mission_logs`, `mission_log_counters`, every `mission_log_id` column); the
+  code says `MissionLog`, `MissionLogCounter`, `MissionLogsRepo`, `MissionLogService`, and a
+  catalog writes `calls_per_mission_log_max`, its former name `calls_per_session_max` still read
+  as it.
 - The agents' protocol does not change: no tool answer carries the word.
 
 ## Rejected alternatives

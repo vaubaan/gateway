@@ -1,6 +1,6 @@
 /**
- * `MissionSessionService` on an ephemeral instance (spec §4.2 "Mission
- * session", §3.3): counters per risk and per period with what is left, gate
+ * `MissionLogViewService` on an ephemeral instance (spec §4.2 "Mission
+ * mission log", §3.3): counters per risk and per period with what is left, gate
  * per risk, open requests by link only, agent labels seen, the timeline.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -45,7 +45,7 @@ function perRisk(byLine: Readonly<Record<string, number>> | undefined): Record<s
   );
 }
 
-describe('mission session view', () => {
+describe('mission log view', () => {
   let rig: OperatorRig;
   let mission: MissionRecord;
 
@@ -58,19 +58,19 @@ describe('mission session view', () => {
   });
 
   const view = async (user = rig.seeded.ada, id = mission.id) => {
-    const found = await rig.root.audit.sessions.get(user, id);
-    if (!found) throw new Error('expected a session view');
+    const found = await rig.root.audit.missionLogs.get(user, id);
+    if (!found) throw new Error('expected a mission log view');
     return found;
   };
 
   it('is the creator’s only: another user and an unknown mission get the same answer', async () => {
     await seedCall(rig, mission);
-    expect(await rig.root.audit.sessions.get(rig.seeded.bob, mission.id)).toBeNull();
-    expect(await rig.root.audit.sessions.get(rig.operator, mission.id)).toBeNull();
-    expect(await rig.root.audit.sessions.get(rig.seeded.ada, 'no-such-mission')).toBeNull();
+    expect(await rig.root.audit.missionLogs.get(rig.seeded.bob, mission.id)).toBeNull();
+    expect(await rig.root.audit.missionLogs.get(rig.operator, mission.id)).toBeNull();
+    expect(await rig.root.audit.missionLogs.get(rig.seeded.ada, 'no-such-mission')).toBeNull();
   });
 
-  it('a member reads the whole session, attributed per holder, and is given no way to answer a request', async () => {
+  it('a member reads the whole mission log, attributed per holder, and is given no way to answer a request', async () => {
     const { ada, bob } = rig.seeded;
     const added = await rig.root.missions.team.addMember(ada, mission.id, { email: bob.email });
     expect(added.ok).toBe(true);
@@ -89,7 +89,7 @@ describe('mission session view', () => {
     const asBob = await view(bob);
     expect(asAda.viewer_role).toBe('creator');
     expect(asBob.viewer_role).toBe('member');
-    // The same session: counters, timeline, per-holder table.
+    // The same mission log: counters, timeline, per-holder table.
     expect(asBob.risks).toEqual(asAda.risks);
     expect(asBob.events).toEqual(asAda.events);
     expect(asBob.holder_activity).toEqual(asAda.holder_activity);
@@ -139,12 +139,12 @@ describe('mission session view', () => {
 
     // Removed, the mission is gone for him again.
     await rig.root.missions.team.removeMember(ada, mission.id, bob.id);
-    expect(await rig.root.audit.sessions.get(bob, mission.id)).toBeNull();
+    expect(await rig.root.audit.missionLogs.get(bob, mission.id)).toBeNull();
   });
 
-  it('before the first call: no session, a full budget, the gate of every risk', async () => {
+  it('before the first call: no mission log, a full budget, the gate of every risk', async () => {
     const v = await view();
-    expect(v.session).toBeNull();
+    expect(v.missionLog).toBeNull();
     expect(v.events).toEqual([]);
     expect(v.open_requests).toEqual([]);
     expect(v.agent_labels).toEqual([]);
@@ -171,7 +171,7 @@ describe('mission session view', () => {
     await seedCall(rig, mission, { risks: [PR] }); // refused: nothing counted
 
     const v = await view();
-    expect(v.session).not.toBeNull();
+    expect(v.missionLog).not.toBeNull();
     expect(
       v.risks.map((r) => [r.risk_id, r.consumed, r.remaining, r.exhausted]).sort(byRisk),
     ).toEqual(
@@ -480,14 +480,14 @@ describe('mission session view', () => {
           accounts: [{ account_id: rig.seeded.github.account.id, policy }],
         }),
       );
-      // The session is born with a real call; the bulk goes straight through the
+      // The mission log is born with a real call; the bulk goes straight through the
       // repository, which is what fills the label column.
       const born = await seedCall(rig, busy, { agentLabel: 'scout' });
-      const sessionId = born.result.session_id;
-      const { sessions } = rig.root.store;
-      const bornEvent = (await sessions.listRecentEvents(sessionId, { limit: 1 }))[0];
+      const missionLogId = born.result.mission_log_id;
+      const { missionLogs } = rig.root.store;
+      const bornEvent = (await missionLogs.listRecentEvents(missionLogId, { limit: 1 }))[0];
       const call = (label: string | null) =>
-        sessions.recordEvent(sessionId, {
+        missionLogs.recordEvent(missionLogId, {
           kind: 'call-allowed',
           riskId: READ,
           details: {
@@ -509,7 +509,10 @@ describe('mission session view', () => {
       for (let i = 0; i < recent; i++) {
         scoutIds.push((await call('scout')).id);
         await call('other');
-        await sessions.recordEvent(sessionId, { kind: 'rotation', details: { token_prefix: 'x' } });
+        await missionLogs.recordEvent(missionLogId, {
+          kind: 'rotation',
+          details: { token_prefix: 'x' },
+        });
       }
       const newestFirst = [...scoutIds].reverse();
       const scout = { ...NO_TIMELINE_FILTER, missionId: busy.id, agentLabel: 'scout' };
@@ -523,7 +526,7 @@ describe('mission session view', () => {
       expect(first.events.every((e) => e.agent_label === 'scout')).toBe(true);
       expect(first.older).not.toBeNull();
 
-      // "Older" is the rest, the call the session was born with included: nothing is
+      // "Older" is the rest, the call the mission log was born with included: nothing is
       // skipped behind the 2 100 events of other labels, and nothing is listed twice.
       const second = await read({ direction: 'older', from: first.older ?? fail() });
       expect(second.events.map((e) => e.id)).toEqual(newestFirst.slice(TIMELINE_PAGE_SIZE));
@@ -718,7 +721,7 @@ describe('eventView', () => {
     const shown = eventView(
       {
         id: 'e-1',
-        sessionId: 's-1',
+        missionLogId: 's-1',
         ts: '2026-10-13T09:00:00.000Z',
         kind: 'call-allowed',
         riskId: MERGE,
@@ -776,7 +779,7 @@ describe('eventView', () => {
       eventView(
         {
           id: 'e-2',
-          sessionId: 's-1',
+          missionLogId: 's-1',
           ts: '2026-10-13T09:00:00.000Z',
           kind: 'reset',
           riskId: null,
@@ -793,7 +796,7 @@ describe('eventView', () => {
     const shown = eventView(
       {
         id: 'e-3',
-        sessionId: 's-1',
+        missionLogId: 's-1',
         ts: '2026-10-13T09:00:00.000Z',
         kind: 'call-allowed',
         riskId: MERGE,

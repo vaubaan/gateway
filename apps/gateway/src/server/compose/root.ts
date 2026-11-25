@@ -26,7 +26,7 @@ import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } 
 import { upgradeSingleSignInProviderSettings } from '../auth/single-sign-in-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, type AuthorityModule } from '../authority';
-import { SessionService } from '../budget';
+import { MissionLogService } from '../budget';
 import { createAccountsModule, type AccountsModule, type RefreshTimers } from '../accounts';
 import {
   buildInfoFromEnv,
@@ -160,10 +160,10 @@ export interface GatewayRoot {
   readonly missions: MissionsModule;
   /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL. */
   readonly requests: RequestsModule;
-  /** Audit search, mission session view, retention sweeper. */
+  /** Audit search, mission log view, retention sweeper. */
   readonly audit: AuditModule;
-  /** Budget: the session service deciding and counting every allowed call. */
-  readonly budget: SessionService;
+  /** Budget: the mission log service deciding and counting every allowed call. */
+  readonly budget: MissionLogService;
   /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline. */
   readonly execution: ExecutionModule;
   /** The git remote: `/git/**`, the second door of the execution surface (spec §4.1 ter). */
@@ -944,8 +944,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
   opened.push(() => audit.retention.stop());
   await audit.retention.start();
-  const budget = new SessionService({
-    sessions: store.sessions,
+  const budget = new MissionLogService({
+    missionLogs: store.missionLogs,
     requests: store.requests,
     rateWindows: windows,
     // The single builder of `<public_url>/r/<id>` (requests module).

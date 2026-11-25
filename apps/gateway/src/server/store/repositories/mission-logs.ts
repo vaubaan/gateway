@@ -1,5 +1,5 @@
 /**
- * Sessions, durable counters, events — and the transactional decision primitive.
+ * Mission logs, durable counters, events — and the transactional decision primitive.
  *
  * Spec §3.3 and §6 ("authoritative, atomic counting"); plan §3.5. The accounting rules
  * (period arithmetic, quota and rate comparisons, gate handling) belong to the budget module
@@ -17,8 +17,8 @@
  * migration 0010) for the timeline of one token holder. The details stay the source:
  * the columns are never returned in an `EventRecord`.
  *
- * This file is the only writer of `sessions`, `session_counters` and `events`. The
- * requests repository reaches them through `createSessionPrimitives` (a granted claim
+ * This file is the only writer of `mission_logs`, `mission_log_counters` and `events`. The
+ * requests repository reaches them through `createMissionLogPrimitives` (a granted claim
  * credits counters and leaves events inside its own transaction). The two files import
  * each other; each only calls the other's functions once the store is being built.
  */
@@ -42,8 +42,8 @@ import type {
   RequestLine,
   RequestRecord,
   RiskId,
-  SessionCounterRecord,
-  SessionRecord,
+  MissionLogCounterRecord,
+  MissionLogRecord,
 } from '../types.ts';
 import { consumeApprovalSync, findApprovalsSync, type ApprovedCall } from './approvals.ts';
 import {
@@ -87,7 +87,7 @@ export type DecideInput = {
 
 /** What the `decide` callback sees and may do, all inside the open transaction. */
 export interface DecideContext {
-  readonly session: SessionRecord;
+  readonly missionLog: MissionLogRecord;
   /** Consumed count per requested line in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<PolicyLineKey, number>;
   /**
@@ -107,7 +107,7 @@ export interface DecideContext {
   /** Single-use consumption of one approval of the mission; `null` when it is not usable. */
   consumeApproval(approvalId: string): ApprovalRecord | null;
   /**
-   * Events of this session about some risks, oldest first — how the decision learns
+   * Events of this mission log about some risks, oldest first — how the decision learns
    * that the creator opened a gate for the period (spec §3.5). Details are returned as
    * stored; the caller reads them through `parseEventDetails`.
    */
@@ -119,7 +119,7 @@ export interface DecideContext {
    * arguments must be sealed beforehand with `RequestsRepo.prepareArguments` (the
    * encryptor is asynchronous, this transaction is not) and passed as `prepared`.
    */
-  createRequest(input: Omit<InsertRequestInput, 'missionId' | 'sessionId'>): RequestRecord;
+  createRequest(input: Omit<InsertRequestInput, 'missionId' | 'missionLogId'>): RequestRecord;
   /** Records an extra event beyond the one returned in the outcome. */
   recordEvent(event: UntypedNewEvent): EventRecord;
 }
@@ -132,7 +132,7 @@ export interface StoredLimits {
   readonly rateWindowSeconds: number;
 }
 
-/** Which events of a session `riskEvents` returns. */
+/** Which events of a mission log `riskEvents` returns. */
 export interface RiskEventQuery {
   readonly kinds: readonly string[];
   /** The `risk_id` column of the events. */
@@ -150,15 +150,15 @@ export interface DecisionOutcome {
 
 export interface DecideResult<R extends DecisionOutcome> {
   readonly outcome: R;
-  readonly session: SessionRecord;
+  readonly missionLog: MissionLogRecord;
   /** Counters after the transaction, for the requested lines. */
   readonly counters: ReadonlyMap<PolicyLineKey, number>;
 }
 
-export interface SessionsRepo {
-  getByMission(missionId: string): Promise<SessionRecord | null>;
-  /** "The session is born on the first call": idempotent creation. */
-  getOrCreate(missionId: string): Promise<SessionRecord>;
+export interface MissionLogsRepo {
+  getByMission(missionId: string): Promise<MissionLogRecord | null>;
+  /** "The mission log is born on the first call": idempotent creation. */
+  getOrCreate(missionId: string): Promise<MissionLogRecord>;
   /**
    * Runs `decide` inside one `BEGIN IMMEDIATE` transaction with the current counters and,
    * when it allows, increments the counters of every requested line by one. The callback
@@ -168,32 +168,32 @@ export interface SessionsRepo {
     input: DecideInput,
     decide: (ctx: DecideContext) => R,
   ): Promise<DecideResult<R>>;
-  counters(sessionId: string, periodStart?: Iso): Promise<SessionCounterRecord[]>;
-  recordEvent(sessionId: string, event: UntypedNewEvent): Promise<EventRecord>;
-  listEvents(sessionId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
+  counters(missionLogId: string, periodStart?: Iso): Promise<MissionLogCounterRecord[]>;
+  recordEvent(missionLogId: string, event: UntypedNewEvent): Promise<EventRecord>;
+  listEvents(missionLogId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
   /**
-   * The session timeline, newest first (`ts DESC, id DESC`), paged by keyset: `before`
+   * The mission log timeline, newest first (`ts DESC, id DESC`), paged by keyset: `before`
    * is the last event of the previous page. `listEvents` with `order: 'desc'` gives the
    * same first page; this one resumes after a position.
    */
-  listRecentEvents(sessionId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
+  listRecentEvents(missionLogId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
   /**
-   * The events of every session a viewer may read (the Activity's Timeline): scoped in
+   * The events of every mission log a viewer may read (the Activity's Timeline): scoped in
    * SQL before the filters and the keyset, like `AuditRepo.search`. Newest first; oldest
    * first when it reads the page newer than `after`. Each event carries its mission.
    */
   searchEvents(query: EventSearch): Promise<MissionEventRecord[]>;
   /**
-   * The sessions that hold an event or a counter older than `cutoff`: what a retention
+   * The mission logs that hold an event or a counter older than `cutoff`: what a retention
    * sweep looks at. A superset of what it removes.
    */
-  withHistoryBefore(cutoff: Iso): Promise<SessionRecord[]>;
+  withHistoryBefore(cutoff: Iso): Promise<MissionLogRecord[]>;
   /**
-   * Retention of one session's history, in one transaction. The only path that deletes
+   * Retention of one mission log's history, in one transaction. The only path that deletes
    * an event or a counter while its mission exists; the caller computes the bounds from
    * the mission's period (`budget/retention.ts`).
    */
-  purgeHistory(sessionId: string, bounds: HistoryPurgeBounds): Promise<HistoryPurged>;
+  purgeHistory(missionLogId: string, bounds: HistoryPurgeBounds): Promise<HistoryPurged>;
 }
 
 export interface HistoryPurgeBounds {
@@ -222,8 +222,8 @@ export interface RecentEventsOptions {
 }
 
 /**
- * Whose session events a search may return: the sessions of the missions one user
- * created or is a current member of, or every session (an operator). An empty scope
+ * Whose mission log events a search may return: the mission logs of the missions one user
+ * created or is a current member of, or every mission log (an operator). An empty scope
  * matches nothing.
  */
 export interface EventScope {
@@ -251,7 +251,7 @@ export interface EventSearch {
   readonly limit: number;
 }
 
-/** An event with the mission its session belongs to. */
+/** An event with the mission its mission log belongs to. */
 export interface MissionEventRecord extends EventRecord {
   readonly missionId: string;
 }
@@ -299,14 +299,14 @@ export interface ListEventsOptions {
   readonly order?: 'asc' | 'desc';
 }
 
-interface SessionRow {
+interface MissionLogRow {
   id: string;
   mission_id: string;
   created_at: string;
 }
 
 interface CounterRow {
-  session_id: string;
+  mission_log_id: string;
   resource_set_id: string;
   risk_id: string;
   period_start: string;
@@ -324,7 +324,7 @@ interface LimitsRow {
 
 interface EventRow {
   id: string;
-  session_id: string;
+  mission_log_id: string;
   ts: string;
   kind: string;
   risk_id: string | null;
@@ -333,20 +333,20 @@ interface EventRow {
   details_json: string | null;
 }
 
-const SESSION_COLUMNS = 'id, mission_id, created_at';
-const COUNTER_COLUMNS = 'session_id, resource_set_id, risk_id, period_start, consumed';
+const MISSION_LOG_COLUMNS = 'id, mission_id, created_at';
+const COUNTER_COLUMNS = 'mission_log_id, resource_set_id, risk_id, period_start, consumed';
 const EVENT_COLUMNS =
-  'id, session_id, ts, kind, risk_id, resource_set_id, actor_user_id, details_json';
+  'id, mission_log_id, ts, kind, risk_id, resource_set_id, actor_user_id, details_json';
 /** `kind IN (…)` over the call kinds: constants of this file, never input. */
 const CALL_KINDS_SQL = CALL_EVENT_KINDS.map((kind) => `'${kind}'`).join(', ');
 
-function sessionToRecord(row: SessionRow): SessionRecord {
+function missionLogToRecord(row: MissionLogRow): MissionLogRecord {
   return { id: row.id, missionId: row.mission_id, createdAt: row.created_at };
 }
 
-function counterToRecord(row: CounterRow): SessionCounterRecord {
+function counterToRecord(row: CounterRow): MissionLogCounterRecord {
   return {
-    sessionId: row.session_id,
+    missionLogId: row.mission_log_id,
     resourceSetId: row.resource_set_id,
     riskId: row.risk_id,
     periodStart: row.period_start,
@@ -357,7 +357,7 @@ function counterToRecord(row: CounterRow): SessionCounterRecord {
 function eventToRecord(row: EventRow): EventRecord {
   return {
     id: row.id,
-    sessionId: row.session_id,
+    missionLogId: row.mission_log_id,
     ts: row.ts,
     kind: row.kind,
     riskId: row.risk_id,
@@ -368,27 +368,27 @@ function eventToRecord(row: EventRow): EventRecord {
 }
 
 /**
- * The session-side reads and writes that also run inside another repository's
+ * The mission-log side reads and writes that also run inside another repository's
  * transaction (a claim decision, the request sweeper). All synchronous and without a
  * transaction of their own: the caller holds it, so each stays atomic with the rest of
  * the caller's work.
  */
-export interface SessionPrimitives {
-  sessionOfMission(missionId: string): SessionRecord | null;
+export interface MissionLogPrimitives {
+  missionLogOfMission(missionId: string): MissionLogRecord | null;
   /** Appends one event at `now` and returns the stored row. */
-  recordEvent(sessionId: string, event: UntypedNewEvent, now: Iso): EventRecord;
-  /** Every counter of the session in the period starting at `periodStart`, by line. */
-  countersOfPeriod(sessionId: string, periodStart: Iso): SessionCounterRecord[];
+  recordEvent(missionLogId: string, event: UntypedNewEvent, now: Iso): EventRecord;
+  /** Every counter of the mission log in the period starting at `periodStart`, by line. */
+  countersOfPeriod(missionLogId: string, periodStart: Iso): MissionLogCounterRecord[];
   /** Gives `amount` actions back on one line; false (nothing written) when fewer were consumed. */
-  creditCounter(sessionId: string, periodStart: Iso, line: RequestLine, amount: number): boolean;
-  /** Events of the session of some kinds about some risks since an instant, oldest first. */
-  riskEvents(sessionId: string, query: RiskEventQuery): EventRecord[];
+  creditCounter(missionLogId: string, periodStart: Iso, line: RequestLine, amount: number): boolean;
+  /** Events of the mission log of some kinds about some risks since an instant, oldest first. */
+  riskEvents(missionLogId: string, query: RiskEventQuery): EventRecord[];
 }
 
-export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
+export function createMissionLogPrimitives(ctx: RepoContext): MissionLogPrimitives {
   const { db } = ctx;
-  const byMission = db.prepare<[string], SessionRow>(
-    `SELECT ${SESSION_COLUMNS} FROM sessions WHERE mission_id = ?`,
+  const byMission = db.prepare<[string], MissionLogRow>(
+    `SELECT ${MISSION_LOG_COLUMNS} FROM mission_logs WHERE mission_id = ?`,
   );
   const insertEvent = db.prepare<
     [
@@ -412,26 +412,26 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     `SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`,
   );
   const countersOfPeriod = db.prepare<[string, string], CounterRow>(
-    `SELECT ${COUNTER_COLUMNS} FROM session_counters
-     WHERE session_id = ? AND period_start = ? ORDER BY risk_id, resource_set_id`,
+    `SELECT ${COUNTER_COLUMNS} FROM mission_log_counters
+     WHERE mission_log_id = ? AND period_start = ? ORDER BY risk_id, resource_set_id`,
   );
   const creditOne = db.prepare<[number, string, string, string, string, number]>(
-    `UPDATE session_counters SET consumed = consumed - ?
-     WHERE session_id = ? AND period_start = ? AND resource_set_id = ? AND risk_id = ?
+    `UPDATE mission_log_counters SET consumed = consumed - ?
+     WHERE mission_log_id = ? AND period_start = ? AND resource_set_id = ? AND risk_id = ?
        AND consumed >= ?`,
   );
 
   return {
-    sessionOfMission(missionId) {
+    missionLogOfMission(missionId) {
       const row = byMission.get(missionId);
-      return row ? sessionToRecord(row) : null;
+      return row ? missionLogToRecord(row) : null;
     },
-    recordEvent(sessionId, event, now) {
+    recordEvent(missionLogId, event, now) {
       const id = ctx.newId();
       const holder = holderColumns(event);
       insertEvent.run(
         id,
-        sessionId,
+        missionLogId,
         now,
         event.kind,
         event.riskId ?? null,
@@ -444,68 +444,68 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
       );
       return eventToRecord(requireRow(eventById.get(id), 'event', id));
     },
-    countersOfPeriod(sessionId, periodStart) {
-      return countersOfPeriod.all(sessionId, periodStart).map(counterToRecord);
+    countersOfPeriod(missionLogId, periodStart) {
+      return countersOfPeriod.all(missionLogId, periodStart).map(counterToRecord);
     },
-    creditCounter(sessionId, periodStart, line, amount) {
+    creditCounter(missionLogId, periodStart, line, amount) {
       return (
-        creditOne.run(amount, sessionId, periodStart, line.resourceSetId, line.riskId, amount)
+        creditOne.run(amount, missionLogId, periodStart, line.resourceSetId, line.riskId, amount)
           .changes === 1
       );
     },
-    riskEvents(sessionId, query) {
+    riskEvents(missionLogId, query) {
       if (query.kinds.length === 0 || query.riskIds.length === 0) return [];
       return db
         .prepare<string[], EventRow>(
           `SELECT ${EVENT_COLUMNS} FROM events
-           WHERE session_id = ? AND ts >= ?
+           WHERE mission_log_id = ? AND ts >= ?
              AND kind IN (${placeholders(query.kinds.length)})
              AND risk_id IN (${placeholders(query.riskIds.length)})
            ORDER BY ts, id`,
         )
-        .all(sessionId, query.since, ...query.kinds, ...query.riskIds)
+        .all(missionLogId, query.since, ...query.kinds, ...query.riskIds)
         .map(eventToRecord);
     },
   };
 }
 
-export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
+export function createMissionLogsRepo(ctx: RepoContext): MissionLogsRepo {
   const { db } = ctx;
-  const primitives = createSessionPrimitives(ctx);
-  const insertSession = db.prepare<[string, string, string]>(
-    `INSERT INTO sessions (id, mission_id, created_at) VALUES (?, ?, ?)
+  const primitives = createMissionLogPrimitives(ctx);
+  const insertMissionLog = db.prepare<[string, string, string]>(
+    `INSERT INTO mission_logs (id, mission_id, created_at) VALUES (?, ?, ?)
      ON CONFLICT (mission_id) DO NOTHING`,
   );
   const increment = db.prepare<[string, string, string, string]>(
-    `INSERT INTO session_counters (session_id, resource_set_id, risk_id, period_start, consumed)
+    `INSERT INTO mission_log_counters (mission_log_id, resource_set_id, risk_id, period_start, consumed)
      VALUES (?, ?, ?, ?, 1)
-     ON CONFLICT (session_id, resource_set_id, risk_id, period_start)
-     DO UPDATE SET consumed = session_counters.consumed + 1`,
+     ON CONFLICT (mission_log_id, resource_set_id, risk_id, period_start)
+     DO UPDATE SET consumed = mission_log_counters.consumed + 1`,
   );
   const countersAll = db.prepare<[string], CounterRow>(
-    `SELECT ${COUNTER_COLUMNS} FROM session_counters
-     WHERE session_id = ? ORDER BY period_start, risk_id, resource_set_id`,
+    `SELECT ${COUNTER_COLUMNS} FROM mission_log_counters
+     WHERE mission_log_id = ? ORDER BY period_start, risk_id, resource_set_id`,
   );
   const missionExists = db.prepare<[string], { one: number }>(
     'SELECT 1 AS one FROM missions WHERE id = ?',
   );
   const eventsSince = db.prepare<[string, string, number], EventRow>(
-    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE mission_log_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
   );
   const eventsAll = db.prepare<[string, number], EventRow>(
-    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE mission_log_id = ? ORDER BY ts, id LIMIT ?`,
   );
   const eventsRecent = db.prepare<[string, number], EventRow>(
-    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? ORDER BY ts DESC, id DESC LIMIT ?`,
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE mission_log_id = ? ORDER BY ts DESC, id DESC LIMIT ?`,
   );
   const eventsRecentBefore = db.prepare<[string, string, string, string, number], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events
-     WHERE session_id = ? AND (ts < ? OR (ts = ? AND id < ?)) ORDER BY ts DESC, id DESC LIMIT ?`,
+     WHERE mission_log_id = ? AND (ts < ? OR (ts = ? AND id < ?)) ORDER BY ts DESC, id DESC LIMIT ?`,
   );
   // The calls of one label, and the calls without one. Separate statements rather than
   // `? IS NULL OR agent_label = ?`: Postgres cannot type a parameter that is only
-  // compared with NULL. The index `events_session_label_ts` serves the four of them.
-  const CALLS = `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? AND kind IN (${CALL_KINDS_SQL})`;
+  // compared with NULL. The index `events_mission_log_label_ts` serves the four of them.
+  const CALLS = `SELECT ${EVENT_COLUMNS} FROM events WHERE mission_log_id = ? AND kind IN (${CALL_KINDS_SQL})`;
   const KEYSET = 'AND (ts < ? OR (ts = ? AND id < ?))';
   const NEWEST_FIRST = 'ORDER BY ts DESC, id DESC LIMIT ?';
   const callsOfLabel = db.prepare<[string, string, number], EventRow>(
@@ -521,7 +521,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     `${CALLS} AND agent_label IS NULL ${KEYSET} ${NEWEST_FIRST}`,
   );
 
-  // The calls made with a token of one holder (index `events_session_holder_ts`).
+  // The calls made with a token of one holder (index `events_mission_log_holder_ts`).
   const callsOfHolder = db.prepare<[string, string, string, number], EventRow>(
     `${CALLS} AND token_kind = ? AND token_holder = ? ${NEWEST_FIRST}`,
   );
@@ -530,12 +530,16 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     EventRow
   >(`${CALLS} AND token_kind = ? AND token_holder = ? ${KEYSET} ${NEWEST_FIRST}`);
 
-  function getOrCreateSync(missionId: string, now: Iso): SessionRecord {
+  function getOrCreateSync(missionId: string, now: Iso): MissionLogRecord {
     // Checked first: with foreign keys on, the insert would otherwise surface a driver
     // error instead of the store's NotFoundError.
     if (!missionExists.get(missionId)) throw new NotFoundError('mission', missionId);
-    insertSession.run(ctx.newId(), missionId, now);
-    return requireRow(primitives.sessionOfMission(missionId) ?? undefined, 'session', missionId);
+    insertMissionLog.run(ctx.newId(), missionId, now);
+    return requireRow(
+      primitives.missionLogOfMission(missionId) ?? undefined,
+      'mission log',
+      missionId,
+    );
   }
 
   /** The distinct risk ids of some lines, for an `IN (…)` list. */
@@ -544,7 +548,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   }
 
   function readCounters(
-    sessionId: string,
+    missionLogId: string,
     periodStart: Iso,
     lines: readonly RequestLine[],
   ): Map<PolicyLineKey, number> {
@@ -555,10 +559,10 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     if (riskIds.length === 0) return result;
     const rows = db
       .prepare<string[], CounterRow>(
-        `SELECT ${COUNTER_COLUMNS} FROM session_counters
-         WHERE session_id = ? AND period_start = ? AND risk_id IN (${placeholders(riskIds.length)})`,
+        `SELECT ${COUNTER_COLUMNS} FROM mission_log_counters
+         WHERE mission_log_id = ? AND period_start = ? AND risk_id IN (${placeholders(riskIds.length)})`,
       )
-      .all(sessionId, periodStart, ...riskIds);
+      .all(missionLogId, periodStart, ...riskIds);
     for (const row of rows) {
       const key = policyLineKey(row.resource_set_id, row.risk_id);
       if (result.has(key)) result.set(key, row.consumed);
@@ -617,66 +621,76 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     });
   }
 
-  function recentRows(sessionId: string, options: RecentEventsOptions): EventRow[] {
+  function recentRows(missionLogId: string, options: RecentEventsOptions): EventRow[] {
     const { before, limit, calls } = options;
     if (!calls) {
       return before
-        ? eventsRecentBefore.all(sessionId, before.ts, before.ts, before.id, limit)
-        : eventsRecent.all(sessionId, limit);
+        ? eventsRecentBefore.all(missionLogId, before.ts, before.ts, before.id, limit)
+        : eventsRecent.all(missionLogId, limit);
     }
     if ('holder' in calls) {
       const { kind, holder } = calls.holder;
       return before
-        ? callsOfHolderBefore.all(sessionId, kind, holder, before.ts, before.ts, before.id, limit)
-        : callsOfHolder.all(sessionId, kind, holder, limit);
+        ? callsOfHolderBefore.all(
+            missionLogId,
+            kind,
+            holder,
+            before.ts,
+            before.ts,
+            before.id,
+            limit,
+          )
+        : callsOfHolder.all(missionLogId, kind, holder, limit);
     }
     const label = calls.agentLabel;
     if (label === null) {
       return before
-        ? callsUnlabelledBefore.all(sessionId, before.ts, before.ts, before.id, limit)
-        : callsUnlabelled.all(sessionId, limit);
+        ? callsUnlabelledBefore.all(missionLogId, before.ts, before.ts, before.id, limit)
+        : callsUnlabelled.all(missionLogId, limit);
     }
     return before
-      ? callsOfLabelBefore.all(sessionId, label, before.ts, before.ts, before.id, limit)
-      : callsOfLabel.all(sessionId, label, limit);
+      ? callsOfLabelBefore.all(missionLogId, label, before.ts, before.ts, before.id, limit)
+      : callsOfLabel.all(missionLogId, label, limit);
   }
 
-  const withHistory = db.prepare<[string, string], SessionRow>(
-    `SELECT ${SESSION_COLUMNS} FROM sessions
-     WHERE EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id AND e.ts < ?)
-        OR EXISTS (SELECT 1 FROM session_counters c
-                   WHERE c.session_id = sessions.id AND c.period_start < ?)
+  const withHistory = db.prepare<[string, string], MissionLogRow>(
+    `SELECT ${MISSION_LOG_COLUMNS} FROM mission_logs
+     WHERE EXISTS (SELECT 1 FROM events e WHERE e.mission_log_id = mission_logs.id AND e.ts < ?)
+        OR EXISTS (SELECT 1 FROM mission_log_counters c
+                   WHERE c.mission_log_id = mission_logs.id AND c.period_start < ?)
      ORDER BY id`,
   );
   const purgeEventsBefore = db.prepare<[string, string]>(
-    'DELETE FROM events WHERE session_id = ? AND ts < ?',
+    'DELETE FROM events WHERE mission_log_id = ? AND ts < ?',
   );
   const purgeCountersBefore = db.prepare<[string, string]>(
-    'DELETE FROM session_counters WHERE session_id = ? AND period_start < ?',
+    'DELETE FROM mission_log_counters WHERE mission_log_id = ? AND period_start < ?',
   );
 
   return {
     async getByMission(missionId) {
-      return primitives.sessionOfMission(missionId);
+      return primitives.missionLogOfMission(missionId);
     },
     async withHistoryBefore(cutoff) {
-      return withHistory.all(cutoff, cutoff).map(sessionToRecord);
+      return withHistory.all(cutoff, cutoff).map(missionLogToRecord);
     },
-    async purgeHistory(sessionId, bounds) {
+    async purgeHistory(missionLogId, bounds) {
       const { eventsBefore, keep, countersBefore } = bounds;
       return withImmediateTransaction(db, () => {
         const events =
           keep.kinds.length === 0
-            ? purgeEventsBefore.run(sessionId, eventsBefore).changes
+            ? purgeEventsBefore.run(missionLogId, eventsBefore).changes
             : db
                 .prepare<string[]>(
                   `DELETE FROM events
-                   WHERE session_id = ? AND ts < ?
+                   WHERE mission_log_id = ? AND ts < ?
                      AND NOT (ts >= ? AND kind IN (${placeholders(keep.kinds.length)}))`,
                 )
-                .run(sessionId, eventsBefore, keep.since, ...keep.kinds).changes;
+                .run(missionLogId, eventsBefore, keep.since, ...keep.kinds).changes;
         const counters =
-          countersBefore === null ? 0 : purgeCountersBefore.run(sessionId, countersBefore).changes;
+          countersBefore === null
+            ? 0
+            : purgeCountersBefore.run(missionLogId, countersBefore).changes;
         return { events, counters };
       });
     },
@@ -694,60 +708,60 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         return true;
       });
       return withImmediateTransaction(db, () => {
-        const session = getOrCreateSync(input.missionId, now);
-        const counters = readCounters(session.id, input.periodStart, lines);
+        const missionLog = getOrCreateSync(input.missionId, now);
+        const counters = readCounters(missionLog.id, input.periodStart, lines);
         const context: DecideContext = {
-          session,
+          missionLog,
           counters,
           limits: readLimits(input.missionId, lines),
           now,
           findApprovals: (call) => findApprovalsSync(ctx, input.missionId, call, now),
           consumeApproval: (id) => consumeApprovalSync(ctx, input.missionId, id, now),
-          riskEvents: (query) => primitives.riskEvents(session.id, query),
+          riskEvents: (query) => primitives.riskEvents(missionLog.id, query),
           findOpenRequest: (lookup) => findOpenRequestSync(ctx, input.missionId, lookup, now),
           createRequest: (request) =>
             insertRequestSync(
               ctx,
-              { ...request, missionId: input.missionId, sessionId: session.id },
+              { ...request, missionId: input.missionId, missionLogId: missionLog.id },
               now,
             ),
-          recordEvent: (event) => primitives.recordEvent(session.id, event, now),
+          recordEvent: (event) => primitives.recordEvent(missionLog.id, event, now),
         };
         const outcome = decide(context);
         if (outcome.allow) {
           for (const line of lines) {
-            increment.run(session.id, line.resourceSetId, line.riskId, input.periodStart);
+            increment.run(missionLog.id, line.resourceSetId, line.riskId, input.periodStart);
           }
         }
-        if (outcome.event) primitives.recordEvent(session.id, outcome.event, now);
+        if (outcome.event) primitives.recordEvent(missionLog.id, outcome.event, now);
         return {
           outcome,
-          session,
-          counters: readCounters(session.id, input.periodStart, lines),
+          missionLog,
+          counters: readCounters(missionLog.id, input.periodStart, lines),
         };
       });
     },
-    async counters(sessionId, periodStart) {
+    async counters(missionLogId, periodStart) {
       return periodStart
-        ? primitives.countersOfPeriod(sessionId, periodStart)
-        : countersAll.all(sessionId).map(counterToRecord);
+        ? primitives.countersOfPeriod(missionLogId, periodStart)
+        : countersAll.all(missionLogId).map(counterToRecord);
     },
-    async recordEvent(sessionId, event) {
-      return primitives.recordEvent(sessionId, event, nowIso(ctx));
+    async recordEvent(missionLogId, event) {
+      return primitives.recordEvent(missionLogId, event, nowIso(ctx));
     },
-    async listEvents(sessionId, options = {}) {
+    async listEvents(missionLogId, options = {}) {
       const limit = options.limit ?? DEFAULT_LIST_LIMIT;
       if (!options.kinds && options.order !== 'desc') {
         const rows = options.since
-          ? eventsSince.all(sessionId, options.since, limit)
-          : eventsAll.all(sessionId, limit);
+          ? eventsSince.all(missionLogId, options.since, limit)
+          : eventsAll.all(missionLogId, limit);
         return rows.map(eventToRecord);
       }
       const kinds = options.kinds ?? [];
       if (options.kinds && kinds.length === 0) return [];
       const direction = options.order === 'desc' ? 'DESC' : 'ASC';
-      const where = ['session_id = ?'];
-      const params: (string | number)[] = [sessionId];
+      const where = ['mission_log_id = ?'];
+      const params: (string | number)[] = [missionLogId];
       if (options.since) {
         where.push('ts >= ?');
         params.push(options.since);
@@ -765,8 +779,8 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         .all(...params)
         .map(eventToRecord);
     },
-    async listRecentEvents(sessionId, options) {
-      return recentRows(sessionId, options).map(eventToRecord);
+    async listRecentEvents(missionLogId, options) {
+      return recentRows(missionLogId, options).map(eventToRecord);
     },
     async searchEvents(query) {
       const { sql, params } = eventSearchStatement(query);
@@ -844,7 +858,7 @@ function eventSearchStatement(query: EventSearch): { sql: string; params: (strin
     .join(', ');
   return {
     sql: `SELECT ${columns}, s.mission_id AS mission_id
-          FROM events e JOIN sessions s ON s.id = e.session_id
+          FROM events e JOIN mission_logs s ON s.id = e.mission_log_id
           WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`,
     params,
   };

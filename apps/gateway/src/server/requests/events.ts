@@ -1,9 +1,9 @@
 /**
- * One line per session event, for the creator's view of a request (spec §3.4
- * "the creator sees the session history"). Pure and total: an event kind this
+ * One line per mission log event, for the creator's view of a request (spec §3.4
+ * "the creator sees the mission log history"). Pure and total: an event kind this
  * module does not know (a later feature's) reads as its bare kind.
  *
- * Event details are written by the budget's `SessionService` (calls, request
+ * Event details are written by the budget's `MissionLogService` (calls, request
  * drops), the `MissionService` (rotation, revocation) and the
  * `RequestService` (decisions, expiry); see the handbooks of each. They are
  * read through `parseEventDetails` (`@vaubaan/shared`) only: an event whose
@@ -27,7 +27,7 @@ import {
 
 import { describeMissionChange } from '../../lib/missions/change-words';
 
-export interface SessionEventLike {
+export interface MissionLogEventLike {
   readonly id: string;
   readonly ts: Iso8601;
   readonly kind: string;
@@ -36,14 +36,14 @@ export interface SessionEventLike {
   readonly details: Readonly<Record<string, unknown>> | null;
 }
 
-export interface SessionEventLine {
+export interface MissionLogEventLine {
   readonly id: string;
   readonly at: Iso8601;
   readonly kind: string;
   readonly risk_id: RiskId | null;
   readonly summary: string;
   /**
-   * The stored details of the event, as its writer built them (`SessionEventDetails`):
+   * The stored details of the event, as its writer built them (`MissionLogEventDetails`):
    * what a page words the event from (`parseEventDetails`). Never arguments — an event
    * holds a tool name and a fingerprint.
    */
@@ -166,7 +166,7 @@ function describeWithoutDetails(kind: string): string {
   }
 }
 
-export function describeEvent(event: SessionEventLike): string {
+export function describeEvent(event: MissionLogEventLike): string {
   const parsed = parseEventDetails(event.kind, event.details);
   if (!parsed) return describeWithoutDetails(event.kind);
   switch (parsed.kind) {
@@ -207,7 +207,7 @@ export function describeEvent(event: SessionEventLike): string {
   }
 }
 
-export function eventLineOf(event: SessionEventLike): SessionEventLine {
+export function eventLineOf(event: MissionLogEventLike): MissionLogEventLine {
   return {
     id: event.id,
     at: event.ts,

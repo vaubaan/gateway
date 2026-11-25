@@ -871,7 +871,7 @@ function safeAfter(before: MissionSnapshot, after: MissionSnapshot): MissionSnap
 // The summary of an edit, and its words
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The `mission-changed` session event's details for these changes. */
+/** The `mission-changed` mission log event's details for these changes. */
 export function changeSummaryOf(
   changes: MissionChanges,
   requestsClosed: number,

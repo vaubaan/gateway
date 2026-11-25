@@ -372,15 +372,29 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     (ok.risks as Record<string, unknown>[])[0]!.infra_limits = {
       bytes_per_call_max: 1024,
       calls_per_minute_max: 30,
-      calls_per_session_max: 5,
+      calls_per_mission_log_max: 5,
     };
     const loaded = validateCatalog(ok).catalog.risks[0]!;
     expect(loaded.caps).toEqual({ items_per_call_max: 50, temporal_window_days: 7 });
     expect(loaded.infra_limits).toEqual({
       bytes_per_call_max: 1024,
       calls_per_minute_max: 30,
-      calls_per_session_max: 5,
+      calls_per_mission_log_max: 5,
     });
+    // The former name of a key is read as the key it became; both at once is refused.
+    const former = doc();
+    (former.risks as Record<string, unknown>[])[0]!.infra_limits = { calls_per_session_max: 5 };
+    expect(validateCatalog(former).catalog.risks[0]!.infra_limits).toEqual({
+      calls_per_mission_log_max: 5,
+    });
+    const both = doc();
+    (both.risks as Record<string, unknown>[])[0]!.caps = {
+      calls_per_session_max: 5,
+      calls_per_mission_log_max: 6,
+    };
+    expect(issuesOf(() => validateCatalog(both))).toEqual([
+      'risks[0].caps.calls_per_session_max: former name of calls_per_mission_log_max, written beside it',
+    ]);
     // An empty mapping is kept as an empty mapping.
     const empty = doc();
     (empty.risks as Record<string, unknown>[])[0]!.caps = {};

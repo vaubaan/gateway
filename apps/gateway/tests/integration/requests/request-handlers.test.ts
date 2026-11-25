@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import {
   budgetMissionOf,
-  SessionService,
+  MissionLogService,
   type BudgetMission,
   type RecordCallResult,
 } from '../../../src/server/budget';
@@ -34,7 +34,7 @@ const OTHER_RISK = 'github.read-meta';
 describe('requests: exhaust and claim over HTTP', () => {
   let root: GatewayRoot;
   let seeded: SeededInstance;
-  let budget: SessionService;
+  let budget: MissionLogService;
   let mission: BudgetMission;
   let token: string;
 
@@ -43,8 +43,8 @@ describe('requests: exhaust and claim over HTTP', () => {
     seeded = await seedInstance(root);
     // What the execution door composes: the budget's service on the root's
     // store, with the request URL of the requests module.
-    budget = new SessionService({
-      sessions: root.store.sessions,
+    budget = new MissionLogService({
+      missionLogs: root.store.missionLogs,
       requests: root.store.requests,
       rateWindows: new SlidingWindowRateLimiter(),
       requestUrl: root.requests.requestUrl,

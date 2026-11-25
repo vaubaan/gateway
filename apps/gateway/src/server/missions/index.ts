@@ -12,7 +12,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
 import { AccountAuthorityService, type AuthorityService, type MissionGrounds } from '../authority';
-import type { SessionService } from '../budget';
+import type { MissionLogService } from '../budget';
 import type { InstanceConfig } from '../config';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
@@ -47,8 +47,8 @@ export interface MissionsModuleDeps {
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   readonly clock?: Clock;
   readonly mint?: TokenMinter;
-  /** The budget's state read; defaults to the same read over `store.sessions`. */
-  readonly budget?: Pick<SessionService, 'stateOf'>;
+  /** The budget's state read; defaults to the same read over `store.missionLogs`. */
+  readonly budget?: Pick<MissionLogService, 'stateOf'>;
   /** The `limits.active_missions` ceiling (`root.limits`); absent, none. */
   readonly ceilings?: CeilingCheck;
   /** Told of a mission revoked by someone other than its creator; default: nobody. */

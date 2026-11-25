@@ -14,7 +14,7 @@ last_reviewed: 2026-11-15
 `@vaubaan/gateway-core`: typed refusals, the audit entry, the mission context
 and the call pipeline whose stages the application fills
 ([execution-door](execution-door.md),
-[budget-and-sessions](budget-and-sessions.md), the store, the plugins). Spec:
+[budget-and-mission-logs](budget-and-mission-logs.md), the store, the plugins). Spec:
 [gateway-risk-model](../spec/gateway-risk-model.md) §8, §12;
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.1, §8.
 

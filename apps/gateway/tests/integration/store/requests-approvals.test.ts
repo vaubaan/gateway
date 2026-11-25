@@ -258,7 +258,7 @@ describe('approvals repository', () => {
     call: ApprovedCall = CALL,
     riskId: string = MERGE,
   ): Promise<ApprovalRecord | null> => {
-    const result = await store.sessions.decideAndDecrement(
+    const result = await store.missionLogs.decideAndDecrement(
       { missionId, riskIds: [MERGE], periodStart: PERIOD },
       (ctx) => {
         const found = ctx.findApprovals(call).find((a) => a.riskIds.includes(riskId));
@@ -320,7 +320,7 @@ describe('approvals repository', () => {
       accounts: [{ accountId, resourceIds: [] }],
       policy: [{ riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' }],
     });
-    const stolen = await store.sessions.decideAndDecrement(
+    const stolen = await store.missionLogs.decideAndDecrement(
       { missionId: elsewhere.id, riskIds: [MERGE], periodStart: PERIOD },
       (ctx) => ({
         allow: false,

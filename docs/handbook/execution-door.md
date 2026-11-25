@@ -16,7 +16,7 @@ last_reviewed: 2026-11-01
 
 # Execution door — handbook
 
-How an agent holding a mission token lists and calls tools on `/mcp` and reads `/mcp/catalog`. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.4, §3.1, §4.1, §6, §7.5, §7.9; stage order and refusal shapes: [gateway-core](gateway-core.md); counting: [budget and sessions](budget-and-sessions.md). ADRs: [docker-image-and-config-format](../decisions/docker-image-and-config-format.md), [mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md), [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md), [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md).
+How an agent holding a mission token lists and calls tools on `/mcp` and reads `/mcp/catalog`. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.4, §3.1, §4.1, §6, §7.5, §7.9; stage order and refusal shapes: [gateway-core](gateway-core.md); counting: [budget and sessions](budget-and-mission-logs.md). ADRs: [docker-image-and-config-format](../decisions/docker-image-and-config-format.md), [mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md), [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md), [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md).
 
 ## Start here
 

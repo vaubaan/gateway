@@ -11,7 +11,7 @@
  *   - what waits    `RequestService.waiting` — the creator's open requests;
  *   - accounts      `AccountService.listFor` and `ShareService.received`;
  *   - counts        the audit's per-holder activity of each of those missions
- *                   (a member reads the session of a mission shared with them,
+ *                   (a member reads the mission log of a mission shared with them,
  *                   spec §0 "Mission member").
  *
  * Cost: a handful of indexed reads per mission the person can read. The home
@@ -42,7 +42,7 @@ export const STOPPED_SHOWN = 3;
 export interface NowDeps {
   readonly store: Pick<
     Store,
-    'missions' | 'users' | 'sessions' | 'audit' | 'requests' | 'accounts'
+    'missions' | 'users' | 'missionLogs' | 'audit' | 'requests' | 'accounts'
   >;
   readonly registry: PluginRegistry;
   readonly missions: Pick<MissionService, 'list' | 'trustRaisesFor'>;
@@ -267,8 +267,10 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       continue;
     }
 
-    const session = await store.sessions.getByMission(mission.id);
-    const [last] = session ? await store.sessions.listRecentEvents(session.id, { limit: 1 }) : [];
+    const missionLog = await store.missionLogs.getByMission(mission.id);
+    const [last] = missionLog
+      ? await store.missionLogs.listRecentEvents(missionLog.id, { limit: 1 })
+      : [];
     running.push({
       id: mission.id,
       name: mission.name,

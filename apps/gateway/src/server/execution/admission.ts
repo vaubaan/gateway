@@ -61,7 +61,7 @@ export interface MissionAdmissionDeps {
     InstanceConfig,
     'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources'
   >;
-  readonly store: Pick<Store, 'accounts' | 'users' | 'groups' | 'sessions'>;
+  readonly store: Pick<Store, 'accounts' | 'users' | 'groups' | 'missionLogs'>;
   readonly tokens: TokenVerifier;
   readonly tokenUse: TokenUseRecorder;
   readonly grounds: Pick<MissionGrounds, 'inspect'>;

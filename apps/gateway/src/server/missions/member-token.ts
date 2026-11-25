@@ -10,7 +10,7 @@
  * Both are the same act on the same row, so they are written once: the token
  * is minted and stored (the holder's previous active token becomes
  * `rotated`), the administrative entry says `mission-token-issued` for a
- * first token and `mission-rotated` for a replacement, and the session
+ * first token and `mission-rotated` for a replacement, and the mission log
  * records a `rotation` event. The callers keep what differs: who may ask, and
  * what is handed back.
  */
@@ -20,7 +20,7 @@ import type { TokenMinter } from './token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 
 export interface MemberTokenDeps {
-  readonly store: Pick<Store, 'missions' | 'sessions' | 'auditWriter'>;
+  readonly store: Pick<Store, 'missions' | 'missionLogs' | 'auditWriter'>;
   readonly mint: TokenMinter;
   readonly clock: Clock;
 }
@@ -59,9 +59,9 @@ export async function reissueMemberToken(
     after: { token_prefix: issued.prefix, token_kind: 'member', holder: userId },
     via_mission_id: viaMissionId,
   });
-  const session = await deps.store.sessions.getByMission(missionId);
-  if (session) {
-    await deps.store.sessions.recordEvent(session.id, {
+  const missionLog = await deps.store.missionLogs.getByMission(missionId);
+  if (missionLog) {
+    await deps.store.missionLogs.recordEvent(missionLog.id, {
       kind: 'rotation',
       details: {
         token_prefix: issued.prefix,

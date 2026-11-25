@@ -33,7 +33,7 @@ import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { riskIdsOf } from './approvals.ts';
 import { requestLinesOf, storedLinesOf } from './requests.ts';
-import { createSessionPrimitives, type EventScope } from './sessions.ts';
+import { createMissionLogPrimitives, type EventScope } from './mission-logs.ts';
 import { createVersionPrimitives } from './mission-versions.ts';
 import { missionScopePiece } from './audit.ts';
 
@@ -165,7 +165,7 @@ export interface MissionsRepo {
    * (or removed) brings a mission stored `expired` back to `active`. Open claims and
    * approval requests about a removed risk are closed (`refused`, `mission-changed`),
    * unconsumed approvals covering one are retired, and, when the mission has a
-   * session, one event per risk that moved is recorded (`permission-added`,
+   * mission log, one event per risk that moved is recorded (`permission-added`,
    * `permission-removed`, `limits-changed`, `gate-changed`), the closed requests'
    * `request` events, then `summary(requestsClosed)`.
    */
@@ -197,7 +197,7 @@ export interface MissionsRepo {
    * account. An id already selected, in any set, keeps its row, its set and its
    * source. One transaction. `NotFoundError` when the mission does not carry the
    * account; `InvariantError` when a resource is not one of that account's. With
-   * `created`, the mission's session (when it has one) records a `resources-created`
+   * `created`, the mission log (when it has one) records a `resources-created`
    * event in the same transaction.
    */
   addResources(
@@ -270,7 +270,7 @@ export interface MissionsRepo {
   replacePolicy(id: string, policy: readonly MissionPolicyEntry[]): Promise<MissionRecord>;
   /**
    * Sets the gate of one accepted line (spec §3.5 "at issuance, or later") and, when the
-   * mission has a session, records the `gate-changed` event in the same transaction: the
+   * mission has a mission log, records the `gate-changed` event in the same transaction: the
    * event is what ends a gate opening granted earlier in the period, so the two must not
    * come apart. The line is a risk in a set, or a risk alone when exactly one set of the
    * mission accepts it. Returns the gate the line had; `null` (nothing written) when it
@@ -294,7 +294,7 @@ export interface MissionsRepo {
    * the quota per period and the number of calls of the rate window, nothing else — the
    * rate window, the gate and the list of accepted risks stay as they are. In one
    * transaction: every listed risk is read, the ones whose values move are written, and,
-   * when the mission has a session, one `limits-changed` event per changed risk is
+   * when the mission has a mission log, one `limits-changed` event per changed risk is
    * recorded. Returns each listed risk with its limits before and after; `null` (nothing
    * written) when a listed risk is not in the mission's policy. The budget reads the
    * policy rows inside its own decision transaction, so no call decided after this
@@ -394,7 +394,7 @@ export interface MissionEditInput {
   readonly accounts: readonly MissionAccountInput[];
   /** The lines of the accounts given without sets, as `CreateMissionInput.policy`. */
   readonly policy?: readonly MissionPolicyLineInput[];
-  /** The session's summary event of the edit, given how many requests it closed. */
+  /** The mission log's summary event of the edit, given how many requests it closed. */
   readonly summary: (requestsClosed: number) => NewEvent;
   /**
    * The version this edit restores (a rollback, spec §4.2 "History"): the version it
@@ -973,9 +973,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const setLimitsStmt = db.prepare<[number, number, string, string]>(
     'UPDATE mission_policy SET quota = ?, rate_limit = ? WHERE resource_set_id = ? AND risk_id = ?',
   );
-  // The session's events belong to the sessions repository: its primitives run here,
+  // The mission log's events belong to the mission logs repository: its primitives run here,
   // inside this repository's transaction.
-  const sessions = createSessionPrimitives(ctx);
+  const missionLogs = createMissionLogPrimitives(ctx);
   // Every write that may move the configuration ends with `versions.recordSync`: one
   // version when something moved, none otherwise (migration 0039).
   const versions = createVersionPrimitives(ctx);
@@ -1340,9 +1340,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         const keptIds = new Set(planned.filter((p) => p.kept).map((p) => p.id));
         const nextAccounts = new Set(input.accounts.map((c) => c.accountId));
 
-        const session = sessions.sessionOfMission(id);
+        const missionLog = missionLogs.missionLogOfMission(id);
         const record = (event: NewEvent): void => {
-          if (session) sessions.recordEvent(session.id, event, now);
+          if (missionLog) missionLogs.recordEvent(missionLog.id, event, now);
         };
         const actorUserId = input.actorUserId;
 
@@ -1641,13 +1641,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           );
         }
         // What the mission created is in its activity.
-        const session =
+        const missionLog =
           source === 'created' && created && refs.length > 0
-            ? sessions.sessionOfMission(missionId)
+            ? missionLogs.missionLogOfMission(missionId)
             : null;
-        if (session && created) {
-          sessions.recordEvent(
-            session.id,
+        if (missionLog && created) {
+          missionLogs.recordEvent(
+            missionLog.id,
             {
               kind: 'resources-created',
               actorUserId: created.actorUserId,
@@ -1837,11 +1837,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           { cause: requestId ? 'permission-request' : 'edit', author: byPerson(actor) },
           now,
         );
-        const session = sessions.sessionOfMission(id);
-        if (session) {
+        const missionLog = missionLogs.missionLogOfMission(id);
+        if (missionLog) {
           for (const p of removed)
-            sessions.recordEvent(
-              session.id,
+            missionLogs.recordEvent(
+              missionLog.id,
               {
                 kind: 'gate-changed',
                 riskId: p.riskId,
@@ -1851,8 +1851,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
               },
               now,
             );
-          sessions.recordEvent(
-            session.id,
+          missionLogs.recordEvent(
+            missionLog.id,
             {
               kind: 'permissions-changed',
               actorUserId: actor,
@@ -1887,10 +1887,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           versions.recordSync(id, { cause: 'edit', author: byPerson(actorUserId) }, now);
         }
         touch.run(now, id);
-        const session = sessions.sessionOfMission(id);
-        if (session) {
-          sessions.recordEvent(
-            session.id,
+        const missionLog = missionLogs.missionLogOfMission(id);
+        if (missionLog) {
+          missionLogs.recordEvent(
+            missionLog.id,
             {
               kind: 'gate-changed',
               riskId: target.riskId,
@@ -1904,7 +1904,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         return {
           mission: requireMission(id),
           previous,
-          openingClosed: closing && session !== null,
+          openingClosed: closing && missionLog !== null,
         };
       });
     },
@@ -1946,11 +1946,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         }
         touch.run(now, id);
         versions.recordSync(id, { cause: 'edit', author: byPerson(actorUserId) }, now);
-        const session = sessions.sessionOfMission(id);
-        if (session) {
+        const missionLog = missionLogs.missionLogOfMission(id);
+        if (missionLog) {
           for (const a of moved) {
-            sessions.recordEvent(
-              session.id,
+            missionLogs.recordEvent(
+              missionLog.id,
               {
                 kind: 'limits-changed',
                 riskId: a.riskId,

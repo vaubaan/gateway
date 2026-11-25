@@ -361,9 +361,9 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     });
     const mission = await rig.issueFor(rig.bob, [READ]);
     expect((await rig.read(mission)).result).toBeDefined();
-    const session = (await rig.root.store.sessions.getByMission(mission.mission.id))!;
+    const missionLog = (await rig.root.store.missionLogs.getByMission(mission.mission.id))!;
     const consumed = async () =>
-      (await rig.root.store.sessions.counters(session.id)).map((c) => [c.riskId, c.consumed]);
+      (await rig.root.store.missionLogs.counters(missionLog.id)).map((c) => [c.riskId, c.consumed]);
     expect(await consumed()).toEqual([[READ, 1]]);
 
     // The IdP omits the group at this sign-in (a group overage claim, a broken mapping).
@@ -374,11 +374,13 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     expect(refused.error?.data).toMatchObject({ code: 'mission-inactive', status: 'orphaned' });
     expect(await consumed()).toEqual([[READ, 1]]);
 
-    // The next sign-in carries it again: same mission, same token, same session, same counters.
+    // The next sign-in carries it again: same mission, same token, same mission log, same counters.
     await signIn(bobClaims(['depot-readers']));
     expect(await rig.statusOf(mission)).toBe('active');
     expect((await rig.read(mission)).result).toBeDefined();
-    expect((await rig.root.store.sessions.getByMission(mission.mission.id))?.id).toBe(session.id);
+    expect((await rig.root.store.missionLogs.getByMission(mission.mission.id))?.id).toBe(
+      missionLog.id,
+    );
     expect(await consumed()).toEqual([[READ, 2]]);
 
     // Both sign-ins are the user's own acts.

@@ -63,7 +63,7 @@ import {
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
 import { createSecondFactorsRepo, type SecondFactorsRepo } from './repositories/second-factors.ts';
-import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
+import { createMissionLogsRepo, type MissionLogsRepo } from './repositories/mission-logs.ts';
 import { createSharesRepo, type SharesRepo } from './repositories/shares.ts';
 import { createUsersRepo, type UsersRepo } from './repositories/users.ts';
 import { createWebSessionsRepo, type WebSessionsRepo } from './repositories/web-sessions.ts';
@@ -108,7 +108,7 @@ export interface Store {
   readonly missions: MissionsRepo;
   /** The versions of every mission's configuration, kept as long as the mission (0039). */
   readonly missionVersions: MissionVersionsRepo;
-  readonly sessions: SessionsRepo;
+  readonly missionLogs: MissionLogsRepo;
   readonly requests: RequestsRepo;
   readonly approvals: ApprovalsRepo;
   readonly audit: AuditRepo;
@@ -174,7 +174,7 @@ export function openStore(options: StoreOptions): Store {
     shares: createSharesRepo(ctx),
     missions: createMissionsRepo(ctx),
     missionVersions: createMissionVersionsRepo(ctx),
-    sessions: createSessionsRepo(ctx),
+    missionLogs: createMissionLogsRepo(ctx),
     requests: createRequestsRepo(ctx),
     approvals: createApprovalsRepo(ctx),
     audit,
@@ -332,9 +332,9 @@ export type {
   EventSearch,
   MissionEventRecord,
   RiskEventQuery,
-  SessionsRepo,
+  MissionLogsRepo,
   StoredLimits,
-} from './repositories/sessions.ts';
+} from './repositories/mission-logs.ts';
 export { prepareRequestArguments } from './repositories/requests.ts';
 export type {
   ApprovalDecisionContext,

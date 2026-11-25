@@ -6,7 +6,7 @@
  * links. The Timeline tab pages the same way.
  *
  * Nine days of work for the audit user: at least 63 lines in the record (each
- * day is the creation of a mission and six calls) and 72 session events (six
+ * day is the creation of a mission and six calls) and 72 mission log events (six
  * calls and two requests a day).
  */
 import { expect, test, type Page } from '@playwright/test';

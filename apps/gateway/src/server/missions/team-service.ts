@@ -38,7 +38,7 @@
  * (a member adding a member) is `not-found` too: the page never offers it, and
  * the answer does not need to say more.
  */
-import type { MissionTokenKind, SessionEventDetails } from '@vaubaan/shared';
+import type { MissionTokenKind, MissionLogEventDetails } from '@vaubaan/shared';
 
 import { findActiveUserByEmail } from '../authority/principals';
 import type { Subject } from '../authority';
@@ -56,7 +56,7 @@ import { issueTokenTo, type IssuedSecret } from './token-issuer';
 import { parseTokenName } from '../../lib/missions/token-name';
 
 export interface MissionTeamDeps {
-  readonly store: Pick<Store, 'missions' | 'users' | 'sessions' | 'auditWriter'>;
+  readonly store: Pick<Store, 'missions' | 'users' | 'missionLogs' | 'auditWriter'>;
   /** Who may read a mission, its state at this instant, and its kit. */
   readonly missions: Pick<MissionService, 'access' | 'stateOf' | 'stateAfterRefusal' | 'kitOf'>;
   readonly clock: Clock;
@@ -588,7 +588,7 @@ export class MissionTeamService {
     const revoked = await this.deps.store.missions.revokeMemberTokensOf(userId);
     for (const token of revoked) {
       await this.auditRevocation(actorId, token, 'holder-deactivated');
-      // No session event: its actor column names a user, and the operator may be
+      // No mission log event: its actor column names a user, and the operator may be
       // the bootstrap operator. The administrative entry is the record.
     }
     if (revoked.length > 0) {
@@ -702,19 +702,19 @@ export class MissionTeamService {
     });
   }
 
-  /** Session events exist only once the session does (born on the first call). */
+  /** Mission log events exist only once the mission log does (born on the first call). */
   private async recordEvent(
     missionId: string,
     actorUserId: string,
-    event: Extract<SessionEventDetails, { kind: 'rotation' | 'revocation' }>,
+    event: Extract<MissionLogEventDetails, { kind: 'rotation' | 'revocation' }>,
   ): Promise<void> {
-    const session = await this.deps.store.sessions.getByMission(missionId);
-    if (!session) return;
-    await this.deps.store.sessions.recordEvent(session.id, { ...event, actorUserId });
+    const missionLog = await this.deps.store.missionLogs.getByMission(missionId);
+    if (!missionLog) return;
+    await this.deps.store.missionLogs.recordEvent(missionLog.id, { ...event, actorUserId });
   }
 }
 
-/** The holder as the audit and the session keep it: a user id, or the token's name. */
+/** The holder as the audit and the mission log keep it: a user id, or the token's name. */
 function holderKey(token: Pick<MissionTokenRecord, 'holder'>): string {
   return token.holder.kind === 'member' ? token.holder.userId : token.holder.name;
 }

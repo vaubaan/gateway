@@ -93,7 +93,7 @@ export interface SeedSummary {
   /**
    * The team on the active mission (spec §7.9 bis): Bob is a member and has
    * generated his own token; "CI runner" is a named token Alice created. Both
-   * made calls, so the session and the audit attribute them.
+   * made calls, so the mission log and the audit attribute them.
    */
   readonly team: {
     readonly mission: { readonly id: string; readonly name: string };
@@ -531,7 +531,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     const refusal = await seeder.call(active, label, tool, args);
     if (refusal) fail(`${tool} was refused on the active mission`, refusal);
   }
-  // A call outside the mission's risks, refused and audited: the session page shows it.
+  // A call outside the mission's risks, refused and audited: the mission log page shows it.
   await seeder.call(active, 'coder', 'github__create_release', {
     ...repository,
     tag_name: 'v2.0.0',

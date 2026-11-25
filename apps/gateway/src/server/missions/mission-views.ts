@@ -12,7 +12,7 @@ import type {
   OrphanCause,
   PartLossCause,
 } from '../authority';
-import type { MissionState, SessionService } from '../budget';
+import type { MissionState, MissionLogService } from '../budget';
 import type { SelfResource } from '../config';
 import type { CeilingCheck, LimitReached } from '../limits';
 import type { Logger } from '../logging';
@@ -38,14 +38,20 @@ import type { NotificationEvents } from '../notifications/events';
 export interface MissionServiceDeps {
   readonly store: Pick<
     Store,
-    'missions' | 'missionVersions' | 'accounts' | 'sessions' | 'users' | 'auditWriter' | 'requests'
+    | 'missions'
+    | 'missionVersions'
+    | 'accounts'
+    | 'missionLogs'
+    | 'users'
+    | 'auditWriter'
+    | 'requests'
   >;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
   /**
    * `orphaned` is derived, never stored (spec §2.3): every mission this service
    * loads is read through `grounds.inspect`, so the pages, the gate edit, the
-   * rotation and the session view all see the state of this instant.
+   * rotation and the mission log view all see the state of this instant.
    */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** `InstanceConfig.publicUrl` — the instance URL of the bootstrap kit. */
@@ -60,11 +66,11 @@ export interface MissionServiceDeps {
   /** Tests inject a deterministic minter; production stores the SHA-256 digest. */
   readonly mint?: TokenMinter;
   /**
-   * The budget's "load counters, derive state" read (`SessionService.stateOf`).
-   * Defaults to the same read over `store.sessions`, for a module wired before
-   * the `SessionService` exists.
+   * The budget's "load counters, derive state" read (`MissionLogService.stateOf`).
+   * Defaults to the same read over `store.missionLogs`, for a module wired before
+   * the `MissionLogService` exists.
    */
-  readonly budget?: Pick<SessionService, 'stateOf'>;
+  readonly budget?: Pick<MissionLogService, 'stateOf'>;
   /**
    * The `limits.active_missions` ceiling (spec §4.3 bis): asked before a mission is
    * added and before an ended one is given a new end. Absent: no ceiling.

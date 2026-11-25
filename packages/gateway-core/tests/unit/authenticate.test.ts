@@ -33,7 +33,7 @@ const missionCtx: MissionContext = {
   resources: [],
   resource_sets: [],
   policy: [],
-  session: null,
+  missionLog: null,
 };
 
 const KNOWN: Record<string, ResolvedCredential> = {

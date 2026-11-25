@@ -247,13 +247,13 @@ async function openRig(): Promise<Rig> {
       const mission = await rig.issue();
       const riskId = mission.policy[0]?.riskId;
       if (!riskId) throw new Error('expected a policy');
-      const decided = await root.store.sessions.decideAndDecrement(
+      const decided = await root.store.missionLogs.decideAndDecrement(
         { missionId: mission.id, riskIds: [riskId], periodStart: mission.periodAnchor },
         () => ({ allow: true }),
       );
       const request = await root.store.requests.create({
         missionId: mission.id,
-        sessionId: decided.session.id,
+        missionLogId: decided.missionLog.id,
         kind: 'claim',
         riskId,
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),

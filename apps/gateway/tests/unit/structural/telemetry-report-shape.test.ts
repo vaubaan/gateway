@@ -18,7 +18,7 @@
  *      plugin's declaration, the build stamp and the closed vocabularies —
  *      so no value can be derived from a call;
  *   3. none of the things spec §9 forbids appears anywhere on the wire:
- *      argument values, argument hashes, resource refs, mission, session,
+ *      argument values, argument hashes, resource refs, mission, mission log,
  *      user and account identifiers, the mission tokens and their
  *      holders (a member's id and email, the name of a named token: who is
  *      calling never leaves the instance), the agent label, the caller's
@@ -402,9 +402,9 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       expected.push({ tool, ...drawn.expected });
     }
 
-    // The session exists by now: its id is forbidden too.
-    const session = await root.store.sessions.getByMission(mission.mission.id);
-    if (session) forbidden.add(session.id);
+    // The mission log exists by now: its id is forbidden too.
+    const missionLog = await root.store.missionLogs.getByMission(mission.mission.id);
+    if (missionLog) forbidden.add(missionLog.id);
 
     await root.telemetry.profileNow();
     let overview = await root.telemetry.overview();

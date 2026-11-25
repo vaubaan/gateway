@@ -3,9 +3,9 @@
  *
  * "On a request, the creator may choose to open the gate for the rest of the period:
  * the risk switches to `auto` until the next reload, then returns to `approval`. This
- * is a session event." The event is `gate-opened`, written by the request service with
+ * is a mission log event." The event is `gate-opened`, written by the request service with
  * the period it was granted in; `decide()` receives the set this module derives from
- * the session's events as `opened_gates`.
+ * the mission log's events as `opened_gates`.
  *
  * Two rules bound an opening:
  *
@@ -30,7 +30,7 @@ import {
   type Iso8601,
   type PolicyLineKey,
   type RiskId,
-  type SessionEventKind,
+  type MissionLogEventKind,
 } from '@vaubaan/shared';
 import type { CurrentPeriod } from './period.ts';
 
@@ -40,7 +40,7 @@ export const GATE_EVENT_KINDS = [
   'gate-changed',
   // A permission removed by an edit ends its opening: added again, it asks again.
   'permission-removed',
-] as const satisfies readonly SessionEventKind[];
+] as const satisfies readonly MissionLogEventKind[];
 
 /**
  * The gate that applies to a risk now: `approval` unless the policy says `auto` or the
@@ -54,7 +54,7 @@ export function effectiveGate(
   return entry.gate === 'approval' && !openedGates.has(entry.risk_id) ? 'approval' : 'auto';
 }
 
-/** What `openedGatesOf` reads of a stored session event. */
+/** What `openedGatesOf` reads of a stored mission log event. */
 export interface GateEventLike {
   readonly ts: Iso8601;
   readonly kind: string;
@@ -64,7 +64,7 @@ export interface GateEventLike {
 }
 
 /**
- * The lines (set, risk) whose gate the creator opened for `period`, from the session's
+ * The lines (set, risk) whose gate the creator opened for `period`, from the mission log's
  * `GATE_EVENT_KINDS` events of those risks since the period started (any order).
  */
 export function openedGatesOf(

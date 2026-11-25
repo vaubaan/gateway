@@ -60,7 +60,7 @@ import type { Store } from '../store';
 import { reachedResourcesBySet, takesFutureResources } from '../store/mission-reach';
 import type { AccountRecord, AccountResourceRecord, MissionRecord } from '../store/types';
 
-export type MissionContextStore = Pick<Store, 'accounts' | 'users' | 'groups' | 'sessions'>;
+export type MissionContextStore = Pick<Store, 'accounts' | 'users' | 'groups' | 'missionLogs'>;
 
 /** The shared `AccountResource` of a stored row — what `classify` and `execute` receive. */
 export function missionResourceOf(
@@ -147,7 +147,7 @@ export async function loadMissionContext(
     }
   }
 
-  const session = await store.sessions.getByMission(mission.id);
+  const missionLog = await store.missionLogs.getByMission(mission.id);
   return {
     mission: {
       id: mission.id,
@@ -162,6 +162,6 @@ export async function loadMissionContext(
     resources,
     resource_sets: resourceSets,
     policy: mission.policy.map(policyEntryOf),
-    session: session ? { id: session.id, started_at: session.createdAt } : null,
+    missionLog: missionLog ? { id: missionLog.id, started_at: missionLog.createdAt } : null,
   };
 }

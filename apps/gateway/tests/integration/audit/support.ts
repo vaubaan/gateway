@@ -2,8 +2,8 @@
  * Shared rig of the audit suites: the real composition root on the `:memory:`
  * store (shipped plugins, seeded accounts), a mission issued through the
  * real `MissionService`, and calls seeded the way the execution door
- * produces them: `SessionService.recordCall` for the
- * session, counters and events, then the store's audit writer for the entry —
+ * produces them: `MissionLogService.recordCall` for the
+ * mission log, counters and events, then the store's audit writer for the entry —
  * the two halves `CallPipeline` runs for every call.
  */
 import { fingerprintArguments, jsonBytes, type CallAuditEntry } from '@vaubaan/gateway-core';
@@ -12,7 +12,7 @@ import type { RiskId, TokenAttribution } from '@vaubaan/shared';
 import {
   budgetMissionOf,
   type RecordCallResult,
-  type SessionService,
+  type MissionLogService,
 } from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
 import type { MissionDraft } from '../../../src/server/missions';
@@ -31,7 +31,7 @@ export const ARGUMENT_MARKER = 'RAW-ARGUMENT-MARKER-7f3a';
 export interface AuditRig {
   readonly root: GatewayRoot;
   readonly seeded: SeededInstance;
-  readonly budget: SessionService;
+  readonly budget: MissionLogService;
 }
 
 export interface OperatorRig extends AuditRig {
@@ -156,7 +156,7 @@ export async function seedCall(
     token_id: token?.token_id ?? null,
     token_kind: token?.token_kind ?? null,
     token_holder: token?.holder ?? null,
-    session_id: result.session_id,
+    mission_log_id: result.mission_log_id,
     account_id:
       call.accountId === undefined ? (mission.accounts[0]?.accountId ?? null) : call.accountId,
     resource_ref: call.resourceRef ?? 'acme/app',

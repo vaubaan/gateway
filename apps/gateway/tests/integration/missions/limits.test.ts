@@ -16,7 +16,7 @@
  *     whose mission was loaded before it (the race);
  *   - the creator only: a teammate, an operator, another user are told "not found";
  *     a revoked or orphaned mission is not changed;
- *   - one `limits-changed` entry with before and after; one session event per risk.
+ *   - one `limits-changed` entry with before and after; one mission log event per risk.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -65,8 +65,8 @@ describe('changing the limits of a mission after issuance', () => {
       e.kind === 'admin' && e.act === 'limits-changed' ? [e] : [],
     );
   const events = async () => {
-    const session = await rig.root.store.sessions.getByMission(mission.id);
-    return session ? rig.root.store.sessions.listEvents(session.id) : [];
+    const missionLog = await rig.root.store.missionLogs.getByMission(mission.id);
+    return missionLog ? rig.root.store.missionLogs.listEvents(missionLog.id) : [];
   };
 
   it('raises and lowers a quota and a rate; nothing else of the mission moves', async () => {
@@ -206,8 +206,8 @@ describe('changing the limits of a mission after issuance', () => {
     });
   });
 
-  it('writes one administrative entry with before and after, and one session event per risk that moved', async () => {
-    // Before the first call there is no session: the entry is written, no event.
+  it('writes one administrative entry with before and after, and one mission log event per risk that moved', async () => {
+    // Before the first call there is no mission log: the entry is written, no event.
     await service().setLimits(rig.seeded.ada, mission.id, [
       { risk_id: PR, quota: 3, rate_limit_max: 50 },
     ]);

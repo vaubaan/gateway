@@ -2,13 +2,13 @@
  * Store records ⇄ domain values, for missions and the budget.
  *
  * The store keeps camelCase persistence records (`MissionRecord`, its policy entries
- * with flat `rateLimit` / `rateWindowSeconds`, `SessionCounterRecord`,
+ * with flat `rateLimit` / `rateWindowSeconds`, `MissionLogCounterRecord`,
  * `AccountResourceRecord`); missions, the budget and the pipeline speak
  * `@vaubaan/shared`'s vocabulary (`MissionPolicyEntry` with `rate_limit: { max,
- * window_seconds }`, `Period`, `SessionCounter`). This module is the only place that
+ * window_seconds }`, `Period`, `MissionLogCounter`). This module is the only place that
  * translates between the two, in both directions, so neither side renames anything for
  * the other: the policy entry (`policyEntryOf` / `policyEntryRecordOf`), the period
- * (`periodOf`, `statedPeriodOf`, `budgetPeriodOf`), the counter (`sessionCounterOf`) and
+ * (`periodOf`, `statedPeriodOf`, `budgetPeriodOf`), the counter (`missionLogCounterOf`) and
  * the staleness of a resource (`isStale`). An account's own shapes are translated by
  * `accounts/mapping.ts`.
  *
@@ -24,14 +24,14 @@ import type {
   MissionPolicyEntry,
   MissionStatus,
   Period,
-  SessionCounter,
+  MissionLogCounter,
 } from '@vaubaan/shared';
 import type {
   AccountResourceRecord,
   MissionPolicyEntry as MissionPolicyEntryRecord,
   MissionPolicyLineInput,
   MissionRecord,
-  SessionCounterRecord,
+  MissionLogCounterRecord,
 } from '../store/types.ts';
 import type { PeriodSpec } from './period.ts';
 
@@ -144,9 +144,9 @@ export function budgetMissionOf(record: MissionRecord): BudgetMission {
   };
 }
 
-export function sessionCounterOf(record: SessionCounterRecord): SessionCounter {
+export function missionLogCounterOf(record: MissionLogCounterRecord): MissionLogCounter {
   return {
-    session_id: record.sessionId,
+    mission_log_id: record.missionLogId,
     resource_set_id: record.resourceSetId,
     risk_id: record.riskId,
     period_start: record.periodStart,

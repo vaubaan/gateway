@@ -27,7 +27,7 @@
  * a migration trigger refuses the value. When the authority comes back (the
  * share is made again, the creator is back in the group at the next sign-in,
  * the operator reassigns the account), the same mission serves calls
- * again, with the same token, the same session and the same counters; so does
+ * again, with the same token, the same mission log and the same counters; so does
  * a part whose access was withdrawn. A revoked account never comes back:
  * its part stays lost, and a mission with nothing else stays orphaned.
  *

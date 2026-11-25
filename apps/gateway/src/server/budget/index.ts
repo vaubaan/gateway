@@ -1,10 +1,10 @@
 /**
- * Budget, session and decision core.
+ * Budget, mission log and decision core.
  *
  * Pure pieces (`decide`, period arithmetic, fingerprint, mission state) and their
- * store-backed executor (`SessionService`), the pipeline's `BudgetStage` adapter and
+ * store-backed executor (`MissionLogService`), the pipeline's `BudgetStage` adapter and
  * the counters-vs-audit structural check.
- * Handbook: docs/handbook/budget-and-sessions.md. ADR: docs/decisions/atomic-budget-accounting.md.
+ * Handbook: docs/handbook/budget-and-mission-logs.md. ADR: docs/decisions/atomic-budget-accounting.md.
  */
 export { BudgetInvariantError } from './errors.ts';
 export {
@@ -55,7 +55,7 @@ export {
   policyEntryRecordOf,
   policyLineInputOf,
   resourceSetLabelOf,
-  sessionCounterOf,
+  missionLogCounterOf,
   statedPeriodOf,
   type BudgetMission,
   type BudgetResourceSet,
@@ -66,23 +66,23 @@ export {
   readMissionUsage,
   type MissionUsage,
   type MissionUsageReader,
-  type MissionUsageSessions,
+  type MissionUsageLogs,
 } from './mission-usage.ts';
 export {
   livePolicy,
-  SessionService,
+  MissionLogService,
   type RecordCallAllowed,
   type RecordCallInput,
   type RecordCallRefused,
   type RecordCallResult,
-  type SessionServiceDeps,
-} from './session-service.ts';
+  type MissionLogServiceDeps,
+} from './mission-log-service.ts';
 export { createBudgetStage, type BudgetStageDeps } from './budget-stage.ts';
 export {
   PERIOD_STATE_EVENT_KINDS,
-  SessionHistoryRetention,
-  type SessionHistoryPurge,
-  type SessionHistoryRetentionDeps,
+  MissionLogRetention,
+  type MissionLogPurge,
+  type MissionLogRetentionDeps,
 } from './retention.ts';
 export {
   countersAgreeWithAudit,

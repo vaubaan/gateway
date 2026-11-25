@@ -3,7 +3,7 @@
  * per mission, however many agents", §7.9, §8).
  *
  * A label is what a caller says about itself: it is written on the audit
- * entry and the session event of the call, and that is all. These tests hold
+ * entry and the mission log event of the call, and that is all. These tests hold
  * the other half of the sentence — "no effect on authorization" — over HTTP:
  *
  *   - several labels, and no label, draw from ONE counter;
@@ -81,9 +81,9 @@ describe('agent label: attribution only', () => {
     return all.flatMap((e) => (e.kind === 'call' ? [e] : []));
   };
   const counter = async (mission: IssuedMission): Promise<number> => {
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    if (!session) return 0;
-    const rows = await instance.root.store.sessions.counters(session.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    if (!missionLog) return 0;
+    const rows = await instance.root.store.missionLogs.counters(missionLog.id);
     return rows.filter((c) => c.riskId === READ).reduce((sum, c) => sum + c.consumed, 0);
   };
 
@@ -102,9 +102,9 @@ describe('agent label: attribution only', () => {
     }
     expect(await counter(mission)).toBe(3);
 
-    // One session, one counter row; the labels are on the entries and the events only.
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    const counters = await instance.root.store.sessions.counters(session?.id ?? '');
+    // One mission log, one counter row; the labels are on the entries and the events only.
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    const counters = await instance.root.store.missionLogs.counters(missionLog?.id ?? '');
     expect(counters).toHaveLength(1);
     expect((await entries(mission)).map((e) => [e.decision, e.agent_label])).toEqual([
       ['allowed', 'planner'],
@@ -114,7 +114,7 @@ describe('agent label: attribution only', () => {
       ['refused', 'reviewer'],
       ['refused', null],
     ]);
-    const events = await instance.root.store.sessions.listEvents(session?.id ?? '', {
+    const events = await instance.root.store.missionLogs.listEvents(missionLog?.id ?? '', {
       kinds: ['call-allowed'],
     });
     const labels = events.map((event) => {

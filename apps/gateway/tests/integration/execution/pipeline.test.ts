@@ -53,9 +53,9 @@ describe('execution door: the call pipeline', () => {
   }
 
   async function consumed(mission: IssuedMission, riskId: string): Promise<number> {
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    if (!session) return 0;
-    const counters = await instance.root.store.sessions.counters(session.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    if (!missionLog) return 0;
+    const counters = await instance.root.store.missionLogs.counters(missionLog.id);
     return counters.filter((c) => c.riskId === riskId).reduce((sum, c) => sum + c.consumed, 0);
   }
 
@@ -87,7 +87,7 @@ describe('execution door: the call pipeline', () => {
 
       const entries = await callEntries(mission);
       expect(entries).toHaveLength(1);
-      const session = await instance.root.store.sessions.getByMission(mission.mission.id);
+      const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
       expect(entries[0]).toMatchObject({
         kind: 'call',
         mission_id: mission.mission.id,
@@ -95,7 +95,7 @@ describe('execution door: the call pipeline', () => {
         token_id: expect.any(String) as string,
         token_kind: 'member',
         token_holder: mission.mission.creatorUserId,
-        session_id: session?.id,
+        mission_log_id: missionLog?.id,
         account_id: instance.account.id,
         resource_ref: 'scratch',
         tool: 'depot__read_item',
@@ -233,7 +233,7 @@ describe('execution door: the call pipeline', () => {
       expect(refusal.executed_slices).toHaveLength(1);
       expect(refusal.hint).toContain(PURGE);
       expect(instance.depot.calls).toHaveLength(0);
-      expect(await instance.root.store.sessions.getByMission(mission.mission.id)).toBeNull();
+      expect(await instance.root.store.missionLogs.getByMission(mission.mission.id)).toBeNull();
       const [entry] = await callEntries(mission);
       expect(entry).toMatchObject({
         decision: 'refused',

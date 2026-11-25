@@ -86,7 +86,7 @@ describe('vaubaan plugin — hard deny, on the object graph of the real root', (
       'root.authority.grounds',
       'root.missions.service',
       'root.store.requests',
-      'root.store.sessions',
+      'root.store.missionLogs',
       'root.store.accounts',
       'root.store.shares',
       'root.store.groups',

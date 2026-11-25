@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/restore/
   - apps/gateway/src/server/backup/
   - apps/gateway/src/server/crypto/backup-file.ts
-last_reviewed: 2026-11-16
+last_reviewed: 2026-11-25
 ---
 
 # Store — handbook
@@ -41,7 +41,7 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
 - A mission token, a share and a request's held arguments are reached with their parent only
   (`MissionTokenKey`, `ShareKey`, `RequestKey`): no repository method takes their id alone, and one
   of another parent reads as missing (**[inv: lookups-keyed-by-parent]**).
-- Single writers: sessions, counters and events only through `repositories/sessions.ts`; a
+- Single writers: mission logs, counters and events only through `repositories/mission-logs.ts`; a
   request is decided only by `decideClaim` / `decideApproval`, a counter lowered only in a claim.
 - Derived, never stored: a mission's `orphaned` ([authority](authority.md); type, read and `0007`
   triggers refuse it) and a resource's inherited `default_env` (applied at every read).
@@ -75,7 +75,7 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   itself.
 - **Migration 0036 renamed the store in place** (ADR one-word-per-thing-account-service-plugin):
   `accounts`, `account_resources`, `mission_accounts`, `sign_in_accounts`, every `account_id`
-  column, and the stored acts, refusal codes and JSON fields of the audit, the session events and
+  column, and the stored acts, refusal codes and JSON fields of the audit, the mission log events and
   the decisions of requests. Ids, associated data and the KDF context `vaubaan/connection-key/v1:`
   (`crypto/aead.ts`) never move: change one byte and no stored credential opens. A test that
   seeds an older version writes the old names and stops before 0036; `SEALED_COLUMNS` reads a
@@ -87,6 +87,14 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   left as written (an OAuth broker's `providers`), any other says `service…`; the web sessions
   are rewritten too, so nobody is signed out (`pre-service-rename-backup.test.ts`). A test that
   seeds a version before 0037 writes `provider`.
+- **Migration 0043 renamed the mission log in place** (ADR
+  [the-missions-session-becomes-the-mission-log](../decisions/the-missions-session-becomes-the-mission-log.md)):
+  `sessions` → `mission_logs`, `session_counters` → `mission_log_counters`, `session_id` →
+  `mission_log_id` on those, `events`, `requests` and `audit`, and the three `events_*` indexes.
+  No stored value carries the word, so no row changes. `web_sessions` and
+  `users.sessions_ended_at` are the web session's and keep theirs. A test that seeds a version
+  before 0043 writes `sessions` / `session_id`; one that applies 0016 late
+  (`permission-migration.test.ts`) undoes 0043 first, since 0016 copies `session_id`.
 - `issueToken` re-checks membership and mission status inside the insert transaction
   (`TokenNotIssuableError`), because hashing the secret leaves time for a revocation.
 

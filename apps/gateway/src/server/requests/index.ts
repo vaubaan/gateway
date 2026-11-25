@@ -30,7 +30,7 @@ export interface RequestsModule {
   readonly sweeper: RequestSweeper;
   /**
    * `<public_url>/r/<id>` — the `requestUrl` dependency of the budget's
-   * `SessionService`: the URL in a refusal and the route that answers it
+   * `MissionLogService`: the URL in a refusal and the route that answers it
    * come from the same builder.
    */
   readonly requestUrl: (requestId: string) => string;
@@ -115,7 +115,7 @@ export {
   type ParsedClaimDecision,
 } from './claim';
 export { clientIpOf, clientIpResolver, trustedProxyList, UNKNOWN_CLIENT } from './client-ip';
-export { describeEvent, eventLineOf, type SessionEventLine } from './events';
+export { describeEvent, eventLineOf, type MissionLogEventLine } from './events';
 export {
   ADDRESSED_TO_CREATOR,
   createRequestHandlers,
@@ -128,7 +128,7 @@ export {
 export { askedBy, REFUSED_CALL_KIND, type AskedBy } from './asker';
 export {
   RequestService,
-  SESSION_EVENTS_SHOWN,
+  MISSION_LOG_EVENTS_SHOWN,
   type ApprovalCall,
   type ApprovalGateLine,
   type RequestAsker,

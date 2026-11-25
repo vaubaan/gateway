@@ -1,5 +1,5 @@
 /**
- * The pipeline's `BudgetStage` over the `SessionService`.
+ * The pipeline's `BudgetStage` over the `MissionLogService`.
  *
  * `@vaubaan/gateway-core`'s `CallPipeline` calls `budget.decide(ctx, call,
  * { risks_touched, resource_set_ids, now })` after the risk stage allowed the call and expects a
@@ -23,10 +23,10 @@ import type { MissionsRepo } from '../store/index.ts';
 import { BudgetInvariantError } from './errors.ts';
 import type { BudgetMission } from './mapping.ts';
 import { periodSpecOf, type PeriodSpec } from './period.ts';
-import type { SessionService } from './session-service.ts';
+import type { MissionLogService } from './mission-log-service.ts';
 
 export interface BudgetStageDeps {
-  readonly service: SessionService;
+  readonly service: MissionLogService;
   readonly missions: Pick<MissionsRepo, 'getById'>;
 }
 
@@ -84,11 +84,11 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
       if (result.outcome === 'refused') return { outcome: 'refused', refusal: result.refusal };
       return {
         outcome: 'allowed',
-        session_id: result.session_id,
+        mission_log_id: result.mission_log_id,
         remaining: result.remaining,
         resource_set_ids: result.resource_set_ids,
         // The audit entry carries one approval id; a call touching several gated
-        // risks consumed one per risk, all listed on the session event.
+        // risks consumed one per risk, all listed on the mission log event.
         approval_id: result.approval_ids[0] ?? null,
       };
     },

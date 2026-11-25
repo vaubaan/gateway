@@ -23,7 +23,7 @@
  *   - waiting — `RequestsRepo.countOpenInScope`, one statement;
  *   - the use of the period — the budget's own derivation
  *     (`MissionService.standing` → `stateOf`), the same remaining counts the
- *     mission page and its session page read: `used = quota - remaining`;
+ *     mission page and its mission log page read: `used = quota - remaining`;
  *   - the accounts' names, states and expiries — one read per distinct account.
  *
  * Nothing here is a sentence: the page words it (`vocabulary.ts`).
@@ -44,7 +44,7 @@ import type { MissionService } from '../missions';
 import type { AccountRecord, CallTotalsRow, MissionRecord, Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { AuditViewer } from './query-service';
-import { HolderNames, type SessionHolderView } from './session-view';
+import { HolderNames, type MissionLogHolderView } from './mission-log-view';
 import { eventScopeOf } from './timeline';
 
 /** What "expires soon" means, in days, for a mission's end and an account's key. */
@@ -101,7 +101,7 @@ export interface OverviewAccount extends OverviewCounts {
 
 export interface OverviewHolder extends OverviewCounts {
   /** `null`: calls written before keys had a holder. */
-  readonly holder: SessionHolderView | null;
+  readonly holder: MissionLogHolderView | null;
   /** This holder's part of the mission's calls in the span, from 0 to 1. */
   readonly share: number;
 }

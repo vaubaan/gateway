@@ -25,7 +25,7 @@ import type {
   RequestKind,
   RequestStatus,
   RiskId,
-  SessionEventDetails,
+  MissionLogEventDetails,
   ShareStatus,
 } from '@vaubaan/shared';
 
@@ -244,7 +244,7 @@ export interface MissionVersionRecord {
   readonly cause: MissionVersionCause;
   readonly author: MissionVersionAuthor;
   readonly restoredFrom: number | null;
-  /** The whole configuration (snake_case JSON, like a session event's details). */
+  /** The whole configuration (snake_case JSON, like a mission log event's details). */
   readonly config: MissionVersionConfig;
   /** What moved from the previous version; `null` for version 1. */
   readonly changes: MissionChangedEventDetails | null;
@@ -423,16 +423,16 @@ export interface MissionMemberRecord {
   readonly removedAt: Iso | null;
 }
 
-// --- sessions -----------------------------------------------------------------------
+// --- mission logs -----------------------------------------------------------------------
 
-export interface SessionRecord {
+export interface MissionLogRecord {
   readonly id: string;
   readonly missionId: string;
   readonly createdAt: Iso;
 }
 
-export interface SessionCounterRecord {
-  readonly sessionId: string;
+export interface MissionLogCounterRecord {
+  readonly missionLogId: string;
   readonly resourceSetId: string;
   readonly riskId: RiskId;
   readonly periodStart: Iso;
@@ -441,7 +441,7 @@ export interface SessionCounterRecord {
 
 export interface EventRecord {
   readonly id: string;
-  readonly sessionId: string;
+  readonly missionLogId: string;
   readonly ts: Iso;
   readonly kind: string;
   readonly riskId: RiskId | null;
@@ -452,12 +452,12 @@ export interface EventRecord {
 }
 
 /**
- * An event to write: a kind and the details of that kind (`SessionEventDetails`,
+ * An event to write: a kind and the details of that kind (`MissionLogEventDetails`,
  * `@vaubaan/shared`), so a writer cannot rename a stored key. Every writer of the
  * gateway builds a `NewEvent`. `EventRecord` stays loose on purpose: a stored row is
  * read back through `parseEventDetails`.
  */
-export type NewEvent = SessionEventDetails & {
+export type NewEvent = MissionLogEventDetails & {
   readonly riskId?: RiskId | null;
   /** The resource set of `riskId`, for an event about one line of the policy. */
   readonly resourceSetId?: string | null;
@@ -465,7 +465,7 @@ export type NewEvent = SessionEventDetails & {
 };
 
 /**
- * What the `events` table can hold, whatever the kind. Only the sessions repository
+ * What the `events` table can hold, whatever the kind. Only the mission logs repository
  * accepts it, for its own tests that store free-form rows; a writer builds a `NewEvent`.
  */
 export interface UntypedNewEvent {
@@ -485,7 +485,7 @@ export type RequestState = RequestStatus;
 export interface RequestRecord {
   readonly id: string;
   readonly missionId: string;
-  readonly sessionId: string | null;
+  readonly missionLogId: string | null;
   readonly kind: RequestKind;
   readonly state: RequestState;
   /** The claimed risk; for an approval request, the first of `riskIds`. */

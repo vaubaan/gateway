@@ -178,8 +178,8 @@ describe('authority is recomputed, never snapshotted', () => {
         expect(row()).toEqual(asIssued);
       }
       // Seven calls allowed, three refused; the refused ones consumed nothing.
-      const session = await rig.root.store.sessions.getByMission(mission.mission.id);
-      const counters = await rig.root.store.sessions.counters(session?.id ?? '');
+      const missionLog = await rig.root.store.missionLogs.getByMission(mission.mission.id);
+      const counters = await rig.root.store.missionLogs.counters(missionLog?.id ?? '');
       expect(counters.map((c) => c.consumed)).toEqual([4]);
     });
   });

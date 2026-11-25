@@ -2,7 +2,7 @@ import { withImmediateTransaction } from '../db.ts';
 import { nowIso, type RepoContext } from './context.ts';
 import type { RequestLine } from '../types.ts';
 import { insertRequestSync, setRisksJsonOf } from './requests.ts';
-import { createSessionPrimitives } from './sessions.ts';
+import { createMissionLogPrimitives } from './mission-logs.ts';
 
 export interface PermissionRefusalInput {
   readonly missionId: string;
@@ -120,14 +120,14 @@ export function createPermissionRequests(ctx: RepoContext) {
           const risks = JSON.parse(row.risk_ids_json) as string[];
           const first = risks[0];
           if (!first) return { ok: false, reason: 'invalid-refusal' };
-          const session = db
-            .prepare<[string], { id: string }>('SELECT id FROM sessions WHERE mission_id = ?')
+          const missionLog = db
+            .prepare<[string], { id: string }>('SELECT id FROM mission_logs WHERE mission_id = ?')
             .get(input.missionId);
           const request = insertRequestSync(
             ctx,
             {
               missionId: input.missionId,
-              sessionId: session?.id ?? null,
+              missionLogId: missionLog?.id ?? null,
               kind: 'permission',
               riskId: first,
               riskIds: risks,
@@ -140,9 +140,9 @@ export function createPermissionRequests(ctx: RepoContext) {
             now,
           );
           requestId = request.id;
-          if (session)
-            createSessionPrimitives(ctx).recordEvent(
-              session.id,
+          if (missionLog)
+            createMissionLogPrimitives(ctx).recordEvent(
+              missionLog.id,
               {
                 kind: 'request',
                 riskId: first,

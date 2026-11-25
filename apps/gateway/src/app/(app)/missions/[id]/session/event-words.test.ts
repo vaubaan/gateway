@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SessionEventView } from '@/server/audit';
+import type { MissionLogEventView } from '@/server/audit';
 
 import { eventWords } from './event-words';
 
-function event(kind: string, over: Partial<SessionEventView> = {}): SessionEventView {
+function event(kind: string, over: Partial<MissionLogEventView> = {}): MissionLogEventView {
   return {
     id: 'e1',
     ts: '2026-10-13T09:00:00.000Z',
@@ -38,7 +38,7 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
   };
 }
 
-const words = (e: SessionEventView, requestOpen = false) => eventWords(e, { requestOpen });
+const words = (e: MissionLogEventView, requestOpen = false) => eventWords(e, { requestOpen });
 
 describe('what the activity of a mission says of an event', () => {
   it('says the mission reached what it created, with the refs (ADR created-resources-join-the-mission)', () => {

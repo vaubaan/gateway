@@ -35,8 +35,8 @@ export interface CallAuditEntry {
   readonly token_id: string | null;
   readonly token_kind: MissionTokenKind | null;
   readonly token_holder: string | null;
-  /** Null when the call was refused before the session was touched. */
-  readonly session_id: string | null;
+  /** Null when the call was refused before the mission log was touched. */
+  readonly mission_log_id: string | null;
   /** Account and resource the call targeted, when resolved. */
   readonly account_id: string | null;
   readonly resource_ref: string | null;
@@ -155,7 +155,7 @@ export type AdminAct =
    *  carries the cause and the uncovered risks. */
   | 'mission-orphaned'
   /** The authority behind an orphaned mission came back: it serves calls again,
-   *  session and counters intact. The entry names the human whose act returned
+   *  mission log and counters intact. The entry names the human whose act returned
    *  it (the owner who shared again, the operator who reassigned the account
    *  or added a group member, the user whose sign-in carried the group again);
    *  `before` carries the cause the mission was orphaned for. */

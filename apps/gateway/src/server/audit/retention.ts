@@ -7,13 +7,13 @@
  * then every `intervalMs`. The purge is idempotent and bounded by its cutoff,
  * so a sweep that runs twice, or late, removes the same rows.
  *
- * The same sweep removes the session history of the same age — the timeline
- * events and the counters of periods that are over (`SessionHistoryRetention`,
+ * The same sweep removes the mission log history of the same age — the timeline
+ * events and the counters of periods that are over (`MissionLogRetention`,
  * `budget/retention.ts`): `retention_days` is one promise about how long a call
  * is remembered, wherever it is written. The two purges fail apart: one that
  * throws is logged and does not hold the other back.
  */
-import type { SessionHistoryRetention } from '../budget/retention';
+import type { MissionLogRetention } from '../budget/retention';
 import type { Logger } from '../logging';
 import type { AuditRepo } from '../store';
 
@@ -27,8 +27,8 @@ export interface SweepTimers {
 
 export interface RetentionSweeperDeps {
   readonly audit: Pick<AuditRepo, 'purgeByRetention'>;
-  /** The session history of the same age; absent, only the audit is swept. */
-  readonly sessionHistory?: Pick<SessionHistoryRetention, 'purge'>;
+  /** The mission log history of the same age; absent, only the audit is swept. */
+  readonly missionLogHistory?: Pick<MissionLogRetention, 'purge'>;
   /** `InstanceConfig.retentionDays` (`retention_days` / `VAUBAAN_RETENTION_DAYS`). */
   readonly retentionDays: number;
   readonly logger: Logger;
@@ -86,7 +86,7 @@ export class AuditRetentionSweeper {
   /**
    * One purge. Returns the number of audit entries removed, or `null` when
    * that purge failed: a failure is logged and the next interval retries, it
-   * never takes the instance down. The session history is purged in the same
+   * never takes the instance down. The mission log history is purged in the same
    * sweep; what it removed is in the log.
    */
   sweep(): Promise<number | null> {
@@ -98,24 +98,24 @@ export class AuditRetentionSweeper {
 
   private async purge(): Promise<number | null> {
     const removed = await this.purgeAudit();
-    await this.purgeSessionHistory();
+    await this.purgeMissionLogHistory();
     return removed;
   }
 
-  private async purgeSessionHistory(): Promise<void> {
-    const { sessionHistory, retentionDays, logger } = this.deps;
-    if (!sessionHistory) return;
+  private async purgeMissionLogHistory(): Promise<void> {
+    const { missionLogHistory, retentionDays, logger } = this.deps;
+    if (!missionLogHistory) return;
     try {
-      const removed = await sessionHistory.purge(retentionDays);
+      const removed = await missionLogHistory.purge(retentionDays);
       if (removed.events > 0 || removed.counters > 0) {
-        logger.info('audit retention: session history purged', {
+        logger.info('audit retention: mission log history purged', {
           events: removed.events,
           counters: removed.counters,
           retention_days: retentionDays,
         });
       }
     } catch (err) {
-      logger.error('audit retention: session history purge failed', {
+      logger.error('audit retention: mission log history purge failed', {
         retention_days: retentionDays,
         detail: err instanceof Error ? err.message : String(err),
       });

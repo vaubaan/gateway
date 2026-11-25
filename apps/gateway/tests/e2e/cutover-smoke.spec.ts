@@ -7,7 +7,7 @@
  *   issue a mission from the plugin's macro-actions at a trust level → an MCP client lists
  *   the tools and calls one over HTTP on `/mcp` with the mission token → a
  *   quota runs out → the refusal's claim URL → the creator grants → the replay
- *   passes → the calls show on the Audit page and on the mission's session.
+ *   passes → the calls show on the Audit page and on the mission log.
  *
  * What it is not: no real identity provider, no real service, no Claude Code.
  * Those three are the manual scenario's.

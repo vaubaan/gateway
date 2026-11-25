@@ -277,8 +277,8 @@ describe('execution door: a resource the mission creates joins the mission', () 
     expect(fresh).toBeDefined();
     expect(account?.created_resource_ids).toEqual([fresh!.id]);
 
-    const session = await instance.root.store.sessions.getByMission(mission.mission.id);
-    const events = await instance.root.store.sessions.listEvents(session!.id);
+    const missionLog = await instance.root.store.missionLogs.getByMission(mission.mission.id);
+    const events = await instance.root.store.missionLogs.listEvents(missionLog!.id);
     expect(events.find((e) => e.kind === 'resources-created')).toMatchObject({
       actorUserId: instance.ada.id,
       details: {

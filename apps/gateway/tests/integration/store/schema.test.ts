@@ -38,6 +38,8 @@ const EXPECTED_TABLES = [
   'local_links',
   'local_secrets',
   'mission_accounts',
+  'mission_log_counters',
+  'mission_logs',
   'mission_members',
   'mission_policy',
   'mission_resource_sets',
@@ -57,8 +59,6 @@ const EXPECTED_TABLES = [
   'request_lines',
   'requests',
   'schema_migrations',
-  'session_counters',
-  'sessions',
   'share_restrictions',
   'shares',
   'sign_in_accounts',
@@ -106,7 +106,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(42);
+    expect(store.schemaVersion).toBe(43);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -145,10 +145,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(42);
+    expect(second.schemaVersion).toBe(43);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(42);
+    ).toBe(43);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

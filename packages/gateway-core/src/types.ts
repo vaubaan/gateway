@@ -2,7 +2,7 @@
  * Domain vocabulary of the gateway core.
  *
  * Spec: docs/spec/vaubaan-gateway.md §0 (vocabulary), §2 (domain), §3
- * (authority, budget, session), §4.1 (refusal codes), §6 (three credentials).
+ * (authority, budget, mission log), §4.1 (refusal codes), §6 (three credentials).
  *
  * The domain types themselves live in `@vaubaan/shared` (ADR
  * plugin-contract-and-credential-spec D8): one source of truth for the
@@ -20,7 +20,7 @@ import type {
   Mission,
   MissionPolicy,
   Principal,
-  Session,
+  MissionLog,
   TokenAttribution,
 } from '@vaubaan/shared';
 
@@ -141,9 +141,9 @@ export type MissionSummary = Pick<
   'id' | 'name' | 'status' | 'creator_id' | 'expires_at' | 'period'
 >;
 
-/** Handle on the mission's session (spec §3.3). Created on the first call;
+/** Handle on the mission log (spec §3.3). Created on the first call;
  *  a context loaded before that call carries `null`. */
-export type SessionHandle = Pick<Session, 'id' | 'started_at'>;
+export type MissionLogHandle = Pick<MissionLog, 'id' | 'started_at'>;
 
 /**
  * Who a mission token belongs to (spec §0 "Mission token": each token
@@ -163,7 +163,7 @@ export interface AuthenticatedToken {
   readonly holder: TokenHolder;
 }
 
-/** What the audit entry and the session event of a call keep of its token. */
+/** What the audit entry and the mission log event of a call keep of its token. */
 export function tokenAttributionOf(token: AuthenticatedToken): TokenAttribution {
   return {
     token_id: token.id,
@@ -196,5 +196,5 @@ export interface MissionContext {
    *  accepted risks of a set are the `risk_id`s of its lines. Nothing stores
    *  `accepted_risks` beside it. */
   readonly policy: MissionPolicy;
-  readonly session: SessionHandle | null;
+  readonly missionLog: MissionLogHandle | null;
 }

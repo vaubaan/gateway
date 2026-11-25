@@ -179,7 +179,7 @@ export function changesBetween(
 
 /**
  * The compact summary a version is listed with (`mission_versions.changes_json`): the
- * shape of a `mission-changed` session event, so that `missionChangeClauses` words it.
+ * shape of a `mission-changed` mission log event, so that `missionChangeClauses` words it.
  * `null` for a first version, which has nothing before it.
  */
 export function versionChanges(

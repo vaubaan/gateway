@@ -26,6 +26,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `github.comment-write` (catalog version 17): a mission that ticks Read and Propose has them
   without being edited. Token permissions: Issues and Pull requests, already asked.
 
+### Changed
+
+- **The living history of a mission is its mission log, in the store and the code** (ADR
+  the-missions-session-becomes-the-mission-log). Migration 0043 renames `sessions` and
+  `session_counters` to `mission_logs` and `mission_log_counters`, and every `session_id` column
+  to `mission_log_id`, in place: no row changes, nothing to do at upgrade. `web_sessions` and the
+  MCP transport's sessions keep their names; no tool answer changes.
+- **Plugin SDK: the scope cap `calls_per_session_max` is now `calls_per_mission_log_max`.** A
+  catalog that still writes the former name is read as the new one; writing both is refused.
+
 ## [2.0.0-alpha.31] - 2026-11-24
 
 ### Highlights
