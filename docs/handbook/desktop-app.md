@@ -41,6 +41,7 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 ## Procedures
 
 - **Signing secrets**: the six `APPLE_*` secrets listed in the workflow's header, all or none. Without them the job builds an unsigned `.dmg` and warns.
+- **A release**: the tag's run attaches the signed `.dmg` files to the GitHub release (job `desktop-assets` of `release.yml`); the bundle's version is the numeric core of the gateway's (`2.0.0` for `2.0.0-alpha.31`), the file name carries the whole version.
 - **Try a build**: download the artifact `vaubaan-desktop-<target>` of a run; an unsigned app opens with right-click › Open.
 
 ## Debug

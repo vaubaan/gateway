@@ -132,7 +132,11 @@ owner doing anything:
    names it: a pre-release has no alias), pull request `chore(release): <version>`, merge once green.
 2. Only a maintainer tags, by hand: `git tag -a v<version> -m "Vaubaan Gateway <version>" <commit>`,
    `git push origin v<version>` publishes. A failed job is re-run; a version tag never moves.
-3. Rollback: no downgrade (an older image refuses a newer database): fix forward, or restore a
+3. The tag's run also builds the macOS app (`desktop.yml`, called by `release.yml`) and attaches
+   `Vaubaan-<version>-arm64.dmg` and `-x64.dmg` to the release once it exists, signed and notarized
+   only; without the Apple secrets they stay artifacts of the run. A failed app build never holds
+   the image's release back: run `desktop.yml` by hand, then `gh release upload`.
+4. Rollback: no downgrade (an older image refuses a newer database): fix forward, or restore a
    pre-upgrade backup with the previous image.
 
 #### On a private repository

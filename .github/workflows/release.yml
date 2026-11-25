@@ -6,11 +6,13 @@ name: release
 #
 #   push of a tag v2.x.y   the real thing: gates, image for linux/amd64 and
 #                          linux/arm64 on ghcr.io, SBOM, provenance attestation,
-#                          GitHub release with the CHANGELOG.md section as body.
+#                          GitHub release with the CHANGELOG.md section as body,
+#                          then the signed macOS app (desktop.yml) attached to it.
 #   workflow_dispatch      a dry run of the selected ref: same plan, same gates,
 #                          same image build, smoke test and SBOM on each
-#                          architecture. The jobs that hold a write permission
-#                          (push, publish, release) are skipped,
+#                          architecture, and the macOS app built. The jobs that
+#                          hold a write permission (push, publish, release,
+#                          desktop-assets) are skipped,
 #                          so nothing is pushed, attested, tagged or released.
 #
 # A plugin is never released here: the catalog (vaubaan/gateway-plugins) rebuilds,
@@ -493,3 +495,43 @@ jobs:
             --notes-file release-notes.md \
             "${flags[@]}" \
             vaubaan-gateway-*.spdx.json
+
+  # The macOS app of this version (desktop.yml): built beside the image, never holding
+  # the image's release back. Its .dmg files are attached once the release exists.
+  desktop:
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop.yml
+    secrets:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+
+  # Attaches the .dmg files to the release, signed and notarized only: an unsigned app
+  # stays an artifact of the run (Gatekeeper would refuse it on a person's Mac).
+  desktop-assets:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [release, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Unsigned apps stay out of the release
+        if: needs.desktop.outputs.signed != 'true'
+        run: echo "::warning title=No macOS app in this release::the Apple secrets are not set, the .dmg files were not signed; they stay artifacts of this run."
+      - if: needs.desktop.outputs.signed == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: vaubaan-desktop-*
+          merge-multiple: true
+      - name: Attach the .dmg files
+        if: needs.desktop.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" Vaubaan-*.dmg
