@@ -19,7 +19,14 @@ import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
 import { validEnv } from '../../support/config/testing';
 
-import { appDir, outcomeOf, renderPage, surfaceFiles, type Outcome } from './guard-harness';
+import {
+  appDir,
+  outcomeOf,
+  renderPage,
+  returnedRoot,
+  surfaceFiles,
+  type Outcome,
+} from './guard-harness';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));
@@ -165,18 +172,20 @@ describe('the human surface authenticates in every page and route', () => {
       expect(await outcomeOf(currentUser)).toEqual({ kind: 'redirect', to: '/login' });
     });
 
-    // The first `currentActor()` loads the account service and its plugins cold: about 5 s
-    // already on main, so the default 5 s timeout made this test flaky in CI.
-    it('return the user, with the actor of the account service', { timeout: 30_000 }, async () => {
+    it('return the user, with the actor of the account service', async () => {
       await signInUser('ada');
-      expect(await outcomeOf(currentUser)).toMatchObject({
+      const user = await outcomeOf(currentUser);
+      expect(user).toMatchObject({
         kind: 'returned',
-        value: { root, principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
+        value: { principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
       });
-      expect(await outcomeOf(currentActor)).toMatchObject({
+      expect(returnedRoot(user)).toBe(root);
+      const actor = await outcomeOf(currentActor);
+      expect(actor).toMatchObject({
         kind: 'returned',
-        value: { root, actor: { user: { email: 'ada@example.com' }, groups: [] } },
+        value: { actor: { user: { email: 'ada@example.com' }, groups: [] } },
       });
+      expect(returnedRoot(actor)).toBe(root);
     });
   });
 

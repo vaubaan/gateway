@@ -45,6 +45,18 @@ export type Outcome =
   | { readonly kind: 'not-found' }
   | { readonly kind: 'threw'; readonly error: unknown };
 
+/**
+ * The `root` a guard returned, for a `toBe` against the test's root. Never put
+ * the root in a `toMatchObject`: it walks the expected object key by key even
+ * when it is the very same reference, so the whole composition root (store,
+ * services, every plugin) costs about 8 s per assertion.
+ */
+export function returnedRoot(outcome: Outcome): unknown {
+  if (outcome.kind !== 'returned') return undefined;
+  const { value } = outcome;
+  return typeof value === 'object' && value !== null && 'root' in value ? value.root : undefined;
+}
+
 /** Runs a server function and names how Next's control-flow errors ended it. */
 export async function outcomeOf(run: () => Promise<unknown>): Promise<Outcome> {
   try {

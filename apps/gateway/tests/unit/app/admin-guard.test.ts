@@ -17,7 +17,7 @@ import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
 import { validEnv } from '../../support/config/testing';
 
-import { appDir, outcomeOf, renderPage, surfaceFiles } from './guard-harness';
+import { appDir, outcomeOf, renderPage, returnedRoot, surfaceFiles } from './guard-harness';
 import { saveTestOidcSignInProvider } from '../../support/auth/testing';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
@@ -107,15 +107,14 @@ describe('the Administration surface authorizes in every page and route', () => 
       expect(await outcomeOf(requireOperator)).toEqual({ kind: 'not-found' });
     });
 
-    // The first `requireOperator()` loads the account service and its plugins cold: about
-    // 5 s with 19 plugins, so the default 5 s timeout is flaky in CI (as in app-guard.test.ts).
-    it('returns the root and the principal to an operator', { timeout: 30_000 }, async () => {
+    it('returns the root and the principal to an operator', async () => {
       await signInUser('ops', [ADMIN_GROUP]);
       const outcome = await outcomeOf(requireOperator);
       expect(outcome).toMatchObject({
         kind: 'returned',
-        value: { root, principal: { kind: 'user', isOperator: true } },
+        value: { principal: { kind: 'user', isOperator: true } },
       });
+      expect(returnedRoot(outcome)).toBe(root);
     });
 
     it('lets the bootstrap operator in while the token is active, and nobody once it is revoked', async () => {
