@@ -77,7 +77,7 @@ test('a day of calls: the mission, its activity, then the record of the mission'
 
   // ── The activity of the mission: what waits, who called, what was used ────
   await page.getByRole('link', { name: 'what waits, who called and what was used' }).click();
-  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
+  await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/activity$`));
   await expect(page.getByRole('heading', { name: /^Activity of /, level: 1 })).toBeVisible();
   // Its events are the Timeline's: no second list here.
   await expect(page.getByTestId('timeline')).toHaveCount(0);
@@ -148,7 +148,7 @@ test('a day of calls: the mission, its activity, then the record of the mission'
   await expect(timeline.locator('tbody tr')).toHaveCount(8);
 
   // ── The audit of this mission ─────────────────────────────────────────────
-  await page.goto(`/missions/${day.mission_id}/session`);
+  await page.goto(`/missions/${day.mission_id}/activity`);
   await page.getByRole('link', { name: 'Full record', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/activity/record\\?mission=${day.mission_id}$`));
@@ -317,6 +317,6 @@ test('the timeline shows every column at 1280 px', async ({ page, request }) => 
 
 test('the activity of a mission that is not yours does not exist', async ({ page }) => {
   await signIn(page);
-  const response = await page.goto('/missions/no-such-mission/session');
+  const response = await page.goto('/missions/no-such-mission/activity');
   expect(response?.status()).toBe(404);
 });

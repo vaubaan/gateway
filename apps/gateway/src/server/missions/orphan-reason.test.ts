@@ -60,7 +60,7 @@ describe('explainOrphan', () => {
     }
   });
 
-  it('says a lost authority can come back, names the account and the risks, and that the session is kept', () => {
+  it('says a lost authority can come back, names the account and the risks, and that its activity is kept', () => {
     const explanation = explainOrphan(
       {
         cause: 'authority-lost',

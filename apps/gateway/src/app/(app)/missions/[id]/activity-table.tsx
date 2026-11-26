@@ -19,7 +19,7 @@ import { ROUTES } from '@/lib/vocabulary';
 
 import styles from '../missions.styles';
 import { yesOf } from '../mission-view';
-import { eventWords } from './session/event-words';
+import { eventWords } from './activity/event-words';
 
 /** A request of the rows that still waits: where to answer it (`null`: not the reader's to answer). */
 interface OpenRequest {

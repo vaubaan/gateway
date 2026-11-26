@@ -565,7 +565,7 @@ export function MissionMenu({
   const isCreator = acts.team.role === 'creator';
   return (
     <MoreMenu label="More actions" testId="mission-menu">
-      <MenuItem href={`${ROUTES.missions}/${missionId}/session`}>
+      <MenuItem href={`${ROUTES.missions}/${missionId}/activity`}>
         {MISSION_ACTIONS.activity}
       </MenuItem>
       {duplicable && (

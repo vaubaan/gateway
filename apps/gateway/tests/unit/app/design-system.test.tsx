@@ -606,7 +606,7 @@ describe('the components added with the mission pages', () => {
   it('keeps the rest behind a named button, closed, and writes a stopping act in words', () => {
     const html = renderToStaticMarkup(
       <MoreMenu label="More actions">
-        <MenuItem href="/missions/m1/session">Activity</MenuItem>
+        <MenuItem href="/missions/m1/activity">Activity</MenuItem>
         <MenuItem danger>Stop the mission</MenuItem>
         <MenuItem disabled note="Its creator alone can copy it">
           Duplicate

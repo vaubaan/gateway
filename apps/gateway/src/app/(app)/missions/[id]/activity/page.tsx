@@ -1,5 +1,5 @@
 /**
- * `/missions/<id>/session` — the activity of one mission (spec §4.2, §3.3):
+ * `/missions/<id>/activity` — the activity of one mission (spec §4.2, §3.3):
  * what waits for an answer, who called in the current period — per key holder
  * and per agent label —, then, one click away, what each permission used and
  * the counters of the earlier periods.

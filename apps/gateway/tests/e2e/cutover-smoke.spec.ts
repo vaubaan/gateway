@@ -280,7 +280,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await snap(page, 'cutover-timeline');
 
   // The activity of the mission: what each permission used, who called.
-  await page.goto(`/missions/${missionId}/session`);
+  await page.goto(`/missions/${missionId}/activity`);
   const permissions = page.getByTestId('session-permissions');
   await permissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
   const readCode = permissions.locator(`tr[data-permission="${READ_CODE}"]`);

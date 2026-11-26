@@ -167,7 +167,7 @@ export default async function TimelinePage({ searchParams }: Props) {
         {mission && (
           <p className={styles.missionLinks} data-testid="timeline-mission-links">
             This mission:{' '}
-            <Link href={`${ROUTES.missions}/${encodeURIComponent(mission)}/session`}>
+            <Link href={`${ROUTES.missions}/${encodeURIComponent(mission)}/activity`}>
               what waits, who called and what was used
             </Link>
             {' · '}

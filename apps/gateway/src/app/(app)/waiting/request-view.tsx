@@ -248,7 +248,7 @@ function Context({ view, children }: { view: View; children: React.ReactNode }) 
           title={REQUEST_WORDS.whatLedHere}
           id="led-here"
           note={
-            <Link href={`${missionPath(view.mission.id)}/session`}>
+            <Link href={`${missionPath(view.mission.id)}/activity`}>
               {REQUEST_WORDS.missionActivity}
             </Link>
           }

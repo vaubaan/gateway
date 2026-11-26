@@ -12,7 +12,7 @@
  * else of its details, read through `parseEventDetails` (`@vaubaan/shared`):
  * an event whose stored details do not have the shape of its kind is listed
  * with its kind, time, risk and actor, and no detail. What a page says of
- * each kind is the page's (`app/(app)/missions/[id]/session/event-words.ts`).
+ * each kind is the page's (`app/(app)/missions/[id]/activity/event-words.ts`).
  *
  * The gate of a risk is two facts: the mission's own `gate`, and
  * `gate_open_until` when the creator opened it "for the rest of the period"

@@ -762,12 +762,12 @@ export const ACTIVITY_SCOPE = {
   installer: 'Until someone signs in, the record holds the changes made while installing.',
 } as const;
 
-/** Whose sessions the Timeline lists, said once above it. */
+/** Whose mission logs the Timeline lists, said once above it. */
 export const TIMELINE_SCOPE = {
-  administrator: 'As an administrator you read the sessions of every mission.',
+  administrator: 'As an administrator you read the mission log of every mission.',
   person:
-    'You read the sessions of the missions you created and of those shared with you; the calls through the accounts you own are in the Record.',
-  installer: 'The setup token reads no session: sign in as a person.',
+    'You read the mission logs of the missions you created and of those shared with you; the calls through the accounts you own are in the Record.',
+  installer: 'The setup token reads no mission log: sign in as a person.',
 } as const;
 
 /** The periods of the record, as the segments name them. */
@@ -1649,7 +1649,7 @@ export const MISSION_HISTORY = {
   by: (who: string) => `by ${who}`,
   restored: 'Restored',
   restoredAs: (from: number, to: number) =>
-    `Version ${from} is the configuration again, as version ${to}. The keys, the session and what was used this period are unchanged.`,
+    `Version ${from} is the configuration again, as version ${to}. The keys, the mission log and what was used this period are unchanged.`,
   alreadyCurrent: (from: number) =>
     `Version ${from} is already the configuration: nothing changed.`,
   leftOut: 'Left out:',
@@ -1671,7 +1671,7 @@ export const MISSION_HISTORY = {
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
   editLede:
-    'Change anything but how often the limits reset. Same key, same session, same counters: the next call of every holder sees the edited mission.',
+    'Change anything but how often the limits reset. Same key, same mission log, same counters: the next call of every holder sees the edited mission.',
   nothingChangedYet: 'Nothing changed yet.',
   periodFixed:
     'How often the limits reset does not change on a running mission: its counters are kept per period. Duplicate the mission for another one.',

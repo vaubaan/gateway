@@ -100,7 +100,7 @@ describe('the side navigation', () => {
   it('puts every page under exactly one entry', () => {
     expect(sectionOf('/')).toBe('now');
     expect(sectionOf('/waiting/abc')).toBe('waiting');
-    expect(sectionOf('/missions/abc/session')).toBe('missions');
+    expect(sectionOf('/missions/abc/activity')).toBe('missions');
     expect(sectionOf('/missions-archive')).toBeNull();
     expect(sectionOf('/accounts/new/github')).toBe('accounts');
     expect(sectionOf('/shares')).toBe('accounts');
@@ -114,7 +114,7 @@ describe('the side navigation', () => {
 
   it('marks a section for its own path and the paths under it', () => {
     expect(isCurrentSection('/missions', '/missions')).toBe(true);
-    expect(isCurrentSection('/missions/abc/session', '/missions')).toBe(true);
+    expect(isCurrentSection('/missions/abc/activity', '/missions')).toBe(true);
     expect(isCurrentSection('/missions-archive', '/missions')).toBe(false);
     expect(isCurrentSection('/reference/github', '/missions')).toBe(false);
   });
@@ -183,6 +183,8 @@ describe('the routes follow the words', () => {
     expect(byOld.get('/delegations/:path*')).toBe(ROUTES.settings);
     expect(byOld.get('/settings/connected-apps/:path*')).toBe(ROUTES.settings);
     expect(byOld.get('/admin/connections')).toBe(`${ROUTES.accounts}#without-owner`);
+    // The activity of a mission followed its title: the mission log is no longer a session.
+    expect(byOld.get('/missions/:id/session')).toBe('/missions/:id/activity');
   });
 
   it('never redirects the callback a service was given: it is part of the protocol', () => {
@@ -207,7 +209,7 @@ describe('the routes follow the words', () => {
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
       expect(source).toMatch(
-        /^\/(admin\/connections|connections|requests|audit|services|shares|delegations|settings\/connected-apps|account)\b/,
+        /^\/(admin\/connections|connections|requests|audit|services|shares|delegations|settings\/connected-apps|account|missions\/:id\/session$)\b/,
       );
     }
   });

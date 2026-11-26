@@ -6,7 +6,7 @@ tracks:
   - apps/gateway/src/server/store/repositories/audit.ts
   - apps/gateway/src/server/store/repositories/mission-logs.ts
   - apps/gateway/src/app/(app)/activity/
-  - apps/gateway/src/app/(app)/missions/[id]/session/
+  - apps/gateway/src/app/(app)/missions/[id]/activity/
   - apps/gateway/tests/integration/audit/admin-mutations.test.ts
   - packages/gateway-core/src/audit.ts
 last_reviewed: 2026-11-25
@@ -21,9 +21,9 @@ How the record is read (Activity's Overview, Record and Timeline, the activity o
 - [`query-service.ts`](../../apps/gateway/src/server/audit/query-service.ts) — `search`, `scopeOf`, `standingOn`, the views: the Record (`/activity/record`).
 - [`store/repositories/audit.ts`](../../apps/gateway/src/server/store/repositories/audit.ts) — `scopePredicate`, the one visibility predicate.
 - [`overview.ts`](../../apps/gateway/src/server/audit/overview.ts) — the Overview (`/activity`): per mission of the Timeline's scope, calls, waiting requests, bytes, accounts, key holders, use of the period, what expires soon; the page's links and use per action are `app/(app)/activity/overview-model.ts`.
-- [`timeline.ts`](../../apps/gateway/src/server/audit/timeline.ts) — the Timeline (`/activity/timeline`): mission log events of every readable mission, through `MissionLogsRepo.searchEvents`; its words are `missions/[id]/session/event-words.ts`.
+- [`timeline.ts`](../../apps/gateway/src/server/audit/timeline.ts) — the Timeline (`/activity/timeline`): mission log events of every readable mission, through `MissionLogsRepo.searchEvents`; its words are `missions/[id]/activity/event-words.ts`.
 - [`paging.ts`](../../apps/gateway/src/server/audit/paging.ts) — the pages of both tabs: `?cursor=` (older), `?after=` (newer), `?at=` (first line's number).
-- [`mission-log-view.ts`](../../apps/gateway/src/server/audit/mission-log-view.ts) — the activity of one mission, its mission log (`/missions/<id>/session`, a route that keeps its name): what waits, who called, usage, periods, and its latest events for the mission page.
+- [`mission-log-view.ts`](../../apps/gateway/src/server/audit/mission-log-view.ts) — the activity of one mission, its mission log (`/missions/<id>/activity`; the older `/missions/<id>/session` answers with a permanent redirect): what waits, who called, usage, periods, and its latest events for the mission page.
 - [`retention.ts`](../../apps/gateway/src/server/audit/retention.ts) — the sweeper, the audit's only delete path.
 - [`admin-mutations.test.ts`](../../apps/gateway/tests/integration/audit/admin-mutations.test.ts) — the guard that every mutation writes an entry.
 

@@ -286,7 +286,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
 
   // ── While it runs freely for the period, the mission's activity says so too ──
-  await hedy.goto(`/missions/${issued.mission_id}/session`);
+  await hedy.goto(`/missions/${issued.mission_id}/activity`);
   const sessionPermissions = hedy.getByTestId('session-permissions');
   await sessionPermissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
   const sessionGate = permissionRow(sessionPermissions, GATED);
@@ -343,7 +343,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
 
   // …and the activity of the mission: the opening was closed on the mission. The page
   // remembered that the permissions were open.
-  await hedy.goto(`/missions/${issued.mission_id}/session`);
+  await hedy.goto(`/missions/${issued.mission_id}/activity`);
   const gateNow = permissionRow(hedy.getByTestId('session-permissions'), GATED);
   await expect(gateNow).toContainText('ask me first');
   await expect(gateNow).not.toContainText('runs freely until');

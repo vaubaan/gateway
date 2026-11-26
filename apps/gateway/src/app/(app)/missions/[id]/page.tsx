@@ -405,7 +405,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
 
       {justEdited && (
         <Callout tone="ok" title={MISSION_WORDS.edited} testId="mission-edited">
-          The key, the session and what was used this period are unchanged.
+          The key, the mission log and what was used this period are unchanged.
         </Callout>
       )}
 
