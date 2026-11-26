@@ -14,6 +14,8 @@
  *   POST /api/sign-in-account/create            an invitation link's token + a password
  *   POST /api/sign-in-account/reset             a reset link's token + a password
  *   POST /api/sign-in-account/forgot            an address; one answer for every address
+ *   POST /api/recover/password                  in a recovery session (the master key proven):
+ *                                       an account + a password → signed in as it
  *
  * Signed in (`guardMutation`, role `user`), from Settings → Security:
  *
@@ -30,13 +32,15 @@
  * asked for it; an administrator who has none enrols one
  * before the session exists (D4 of the ADR).
  */
+import { RECOVERY_ACTOR_ID } from '@vaubaan/gateway-core';
+
 import type { LocalSignInProvider, SignInProvider } from '../config/sign-in';
 import { NoticeStore, type Notice } from '../accounts/pending';
 import { createNoticeRedirect } from '../accounts/notice-redirect';
 import type { SessionStore } from '../compose/ports';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
-import type { Clock } from '../store/clock';
+import { toIso, type Clock } from '../store/clock';
 import type { SignInAccountRecord } from '../store';
 import type { AdministratorsService } from './administrators';
 import { waiverApplies, type SecondFactorService } from './second-factor';
@@ -58,6 +62,8 @@ import { completeLogin, refuseNewUserAtCeiling, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import type { PendingLocalStep, SessionService } from './session-service';
 import type { SignInProvidersService } from './sign-in-providers';
+import type { RecoveryService } from './recovery';
+import { passwordProblem } from '../crypto/password';
 import { createThrottle, type ThrottleDeps } from './throttle';
 
 const SEE_OTHER = 303;
@@ -129,6 +135,8 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
    * administrators included (ADR local-accounts-sign-in-provider, amendment 2026-11-25).
    */
   readonly local?: boolean;
+  /** The recovery by the master key: its session lets the key's holder set a password. */
+  readonly recovery?: Pick<RecoveryService, 'isOpen' | 'passwordSet'>;
 }
 
 export interface LocalAuthHandlers {
@@ -140,6 +148,7 @@ export interface LocalAuthHandlers {
   createSignInAccount(request: Request): Promise<Response>;
   resetPassword(request: Request): Promise<Response>;
   forgotPassword(request: Request): Promise<Response>;
+  recoverPassword(request: Request): Promise<Response>;
   beginSecondFactor(request: Request): Promise<Response>;
   confirmSecondFactor(request: Request): Promise<Response>;
   removeSecondFactor(request: Request): Promise<Response>;
@@ -604,6 +613,55 @@ export function createLocalAuthHandlers(
         if (user) await deps.store.users.endSessions(user.id);
       }
       return redirect(`${LOGIN_PAGE}?${RESET_DONE_PARAM}=done`);
+    },
+
+    /**
+     * A new password chosen in a recovery session (ADR administrators-live-in-the-instance,
+     * amendment 2026-11-26): the way back of an instance that sends no mail. Refusals that
+     * leave the session open (two passwords that differ, a weak one) return to the form;
+     * then the session closes loudly, the password is set, every session of the account
+     * ends, and the person is signed in as after a password, the second factor's step
+     * included when they enrolled one.
+     */
+    async recoverPassword(request) {
+      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
+      if (!deps.recovery || !(await deps.recovery.isOpen(request.headers))) {
+        return redirect(FORGOT_PASSWORD_PAGE);
+      }
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      const password = rawField(form, 'password');
+      const again = (code: string): Response =>
+        redirect(`${FORGOT_PASSWORD_PAGE}?${ACCOUNT_ERROR_PARAM}=${encodeURIComponent(code)}`);
+      if (password !== rawField(form, 'password_again')) return again('password-mismatch');
+      if (passwordProblem(password)) return again('password-weak');
+      const signInAccount = await deps.signInAccounts.signInAccountById(
+        rawField(form, 'sign_in_account'),
+      );
+      if (!signInAccount) return again('sign-in-account-not-found');
+      const signInProvider = await localSignInProvider(signInAccount.signInProvider);
+      if (!signInProvider) return again('no-local-sign-in-provider');
+      let clearCookie: string;
+      try {
+        ({ clearCookie } = await deps.recovery.passwordSet(request.headers, signInAccount));
+      } catch {
+        return redirect(FORGOT_PASSWORD_PAGE);
+      }
+      await deps.signInAccounts.changePassword(signInAccount.id, password, RECOVERY_ACTOR_ID);
+      const identity = localIdentity(signInProvider, signInAccount);
+      const user = await deps.store.users.getByIdentity(identity.issuer, identity.subject);
+      // Every session open before this one ends; the one `proceed` opens next survives,
+      // even when it falls within the same millisecond.
+      const before = toIso(new Date(deps.clock.now().getTime() - 1));
+      if (user) await deps.store.users.endSessions(user.id, before);
+      let response: Response;
+      try {
+        response = await proceed(request, signInProvider, identity, '/');
+      } catch (err) {
+        response = failLogin(err, { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+      }
+      response.headers.append('Set-Cookie', clearCookie);
+      return response;
     },
 
     async forgotPassword(request) {

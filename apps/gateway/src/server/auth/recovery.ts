@@ -10,8 +10,10 @@
  * `HMAC-SHA-256(K, "vaubaan-recovery-v1\n" + public origin + "\n" + challenge)`; the
  * instance computes the same with its current key and compares in constant time. A
  * passed proof opens a recovery session (fifteen minutes, its own cookie) that can do
- * one thing: name an administrator. The naming writes `administrator-recovered`, mails
- * the administrators when the instance sends mail, and puts a banner on every page for
+ * one thing: name an administrator (`administrator-recovered`), or set a sign-in
+ * account's password (`password-recovered`, ADR amendment 2026-11-26), for an instance
+ * that sends no mail and so has no reset link. Either act mails the administrators when
+ * the instance sends mail, notifies their devices, and puts a banner on every page for
  * thirty days (`recovery.last`).
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -30,6 +32,7 @@ import {
   type AdministratorsService,
 } from './administrators';
 import type { LinkMailer } from './local-handlers';
+import { signInAccountsObjectId } from './sign-in-accounts';
 import type { NotificationEvents } from '../notifications/events';
 
 /** The names in the `host` jar; the service writes through its own (`RecoveryDeps.cookies`). */
@@ -52,9 +55,10 @@ interface RecoverySessionRecord {
   readonly createdAt: string;
 }
 
-/** What `recovery.last` keeps: when, and what was named (no secret). */
+/** What `recovery.last` keeps: when, what was done, and to whom (no secret). */
 export interface RecoveryRecord {
   readonly at: string;
+  readonly act: 'administrator' | 'password';
   readonly named: Record<string, unknown>;
 }
 
@@ -158,9 +162,7 @@ export class RecoveryService {
     headers: Headers,
     request: NameRequest,
   ): Promise<{ named: Record<string, unknown>; clearCookie: string }> {
-    const id = this.cookies.read(headers, 'vbn_recovery');
-    if (!id || !(await this.isOpen(headers))) throw new Error('no recovery session');
-    await this.deps.sessions.delete(`recovery:${id}`);
+    await this.close(headers);
     const administrators = this.deps.administrators;
     let named: Record<string, unknown>;
     if (request.kind === 'user') {
@@ -201,14 +203,52 @@ export class RecoveryService {
       before: null,
       after: named,
     });
-    const record: RecoveryRecord = { at, named };
-    await this.deps.store.config.set(RECOVERY_LAST_KEY, JSON.stringify(record));
     this.deps.logger.warn('an administrator was named by the master key', {
       kind: String(named.kind ?? request.kind),
     });
+    await this.announce({ at, act: 'administrator', named });
+    return { named, clearCookie: this.cookies.clear('vbn_recovery') };
+  }
+
+  /**
+   * The other act of a recovery session: records that the key's holder sets the password
+   * of the sign-in account `signInAccount`, and closes the session. The caller sets the
+   * password once this returned; a session closed meanwhile throws and nothing is set.
+   * As loud as a naming: the audit entry, the mail, the notification, the banner.
+   */
+  async passwordSet(
+    headers: Headers,
+    signInAccount: { readonly email: string; readonly signInProvider: string },
+  ): Promise<{ clearCookie: string }> {
+    await this.close(headers);
+    const at = toIso(this.deps.clock.now());
+    const named = { email: signInAccount.email };
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: at,
+      user_id: RECOVERY_ACTOR_ID,
+      act: 'password-recovered',
+      object: { type: 'instance-config', id: signInAccountsObjectId(signInAccount.signInProvider) },
+      before: null,
+      after: named,
+    });
+    this.deps.logger.warn('a password was set with the master key');
+    await this.announce({ at, act: 'password', named });
+    return { clearCookie: this.cookies.clear('vbn_recovery') };
+  }
+
+  /** Ends this browser's recovery session; throws when it holds none. */
+  private async close(headers: Headers): Promise<void> {
+    const id = this.cookies.read(headers, 'vbn_recovery');
+    if (!id || !(await this.isOpen(headers))) throw new Error('no recovery session');
+    await this.deps.sessions.delete(`recovery:${id}`);
+  }
+
+  /** What every act of a recovery leaves: the banner's record, the mail, the notification. */
+  private async announce(record: RecoveryRecord): Promise<void> {
+    await this.deps.store.config.set(RECOVERY_LAST_KEY, JSON.stringify(record));
     await this.tellAdministrators(record);
     this.deps.notifications?.masterKeyRecovered();
-    return { named, clearCookie: this.cookies.clear('vbn_recovery') };
   }
 
   /** The last recovery, while every page says so (thirty days); `null` otherwise. */
@@ -229,8 +269,11 @@ export class RecoveryService {
     if (!send) return;
     // Every administrator, a locked-out one first of all: they are who must know.
     const people = await this.deps.administrators.withAWayIn({ anyWay: true });
+    const password = record.act === 'password';
     const text = [
-      `On ${record.at}, somebody holding this gateway's master key used the recovery page to name an administrator:`,
+      password
+        ? `On ${record.at}, somebody holding this gateway's master key used it to choose a new password for this sign-in account:`
+        : `On ${record.at}, somebody holding this gateway's master key used the recovery page to name an administrator:`,
       JSON.stringify(record.named),
       '',
       'If it was not one of you, the master key is in other hands: rotate it, and review the administrators under Administration → Users.',
@@ -239,7 +282,9 @@ export class RecoveryService {
       try {
         await send({
           to: person.email,
-          subject: 'An administrator was named with the master key',
+          subject: password
+            ? 'A password was chosen with the master key'
+            : 'An administrator was named with the master key',
           text,
         });
       } catch {

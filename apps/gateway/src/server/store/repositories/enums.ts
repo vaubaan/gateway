@@ -137,6 +137,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'second-factor-waiver-changed': true,
   'second-factor-changed': true,
   'administrator-recovered': true,
+  'password-recovered': true,
   'backup-made': true,
   'backup-failed': true,
   'device-added': true,

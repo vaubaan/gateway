@@ -95,7 +95,7 @@ function bodyOf(notification: Notification): string {
     case 'backup-failed':
       return 'The scheduled backup failed: nothing was uploaded.';
     case 'master-key-recovery':
-      return 'An administrator was named with the master key. If it was not one of you, rotate it.';
+      return 'The master key was used to recover access: an administrator named or a password chosen. If it was not one of you, rotate it.';
     case 'plugin-signer-added':
       return `${line(notification.signer)} was added as a trusted plugin signer. If it was not one of you, remove it.`;
   }

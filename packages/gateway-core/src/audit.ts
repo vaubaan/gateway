@@ -289,6 +289,9 @@ export type AdminAct =
   /** The master key's holder named an administrator through the recovery page:
    *  `after` carries what was named. The actor is `recovery`. */
   | 'administrator-recovered'
+  /** The master key's holder set a sign-in account's password through the recovery session:
+   *  `after` carries the account's address. The actor is `recovery`. */
+  | 'password-recovered'
   /** The scheduled backup uploaded one (ADR scheduled-encrypted-backup-to-object-storage):
    *  `after` carries the object key, size, SHA-256, key versions, the self-check and what
    *  the retention deleted. Object: `instance-config` / `backup`; actor `schedule`. */

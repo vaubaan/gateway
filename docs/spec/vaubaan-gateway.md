@@ -1155,9 +1155,10 @@ values.
   in local mode, reached from its own computer only, asks it of the people who enrolled one and
   enrols nobody by force
   ([amendment](../decisions/local-accounts-sign-in-provider.md#amendment-2026-11-25--local-mode-enrols-no-second-factor-by-force)).
-- **Recovery by the master key**: a page reachable without a session lets the key's holder name one
-  administrator and nothing else; the key never leaves the browser (it proves holding it against a
-  single-use challenge); the naming is audited, mailed to the administrators when the instance sends
+- **Recovery by the master key**: a page reachable without a session lets the key's holder do one
+  thing, name one administrator or set a new password for one sign-in account (its second factor
+  kept, its sessions ended); the key never leaves the browser (it proves holding it against a
+  single-use challenge); the act is audited, mailed to the administrators when the instance sends
   mail, and shown on every page for thirty days.
 - **Web sessions** are bound to the instance's origin and last 8 hours at most, 1 hour idle; a
   person, or an administrator for them, can end all their sessions at once. Every mutation requires
@@ -1405,7 +1406,7 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
     every one after, before the session; waived for a sign-in provider outright or on its token's `mfa`, never for
     an administrator; an earlier sign-in account's factor moved to its person;
   - recovery by the master key (§6): the browser's proof equal to the instance's, a wrong key and a
-    replayed challenge refused, the recovery session naming one administrator only, the entry, the
+    replayed challenge refused, the recovery session naming one administrator or setting one password only, the entry, the
     mail and the thirty-day banner;
   - the sign-in provider test (§4.2): no user, session or group written, the tester's session kept,
     another session's callback refused, the verdict computed as a sign-in would, the result usable

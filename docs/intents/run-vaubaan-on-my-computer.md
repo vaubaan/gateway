@@ -3,7 +3,7 @@ title: Run Vaubaan on my computer
 status: proposed
 actors: [developer, consultant]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-24
+last_reviewed: 2026-11-26
 ---
 
 # Run Vaubaan on my computer
@@ -72,6 +72,29 @@ acceptance:
 - The app says when a release is out, with its notes, and installs it only when I accept
 - An update keeps the store, the master key and every account; a failed update leaves the former version running
 - A security patch is marked as such, as on the versions feed
+
+## Get back into my instance when I forget my password
+
+An instance on my computer sends no mail: the encryption key I kept at the setup is the way back.
+
+### Choose a new password with my encryption key
+
+status: implemented
+requires: instance, sign-in-account
+creates: web-session
+anchors: apps/gateway/src/app/(public)/sign-in-account/forgot/page.tsx, apps/gateway/src/components/auth/RecoverWithKey.tsx, apps/gateway/src/server/auth/local-handlers.ts, apps/gateway/src/server/auth/recovery.ts, apps/gateway/tests/integration/auth/recovery-password.test.ts
+spec: ../spec/vaubaan-gateway.md#6-security
+
+### Choose a new password with Touch ID in the desktop app
+
+status: proposed
+requires: instance, sign-in-account
+creates: web-session
+spec: ../spec/vaubaan-gateway.md#6-security
+acceptance:
+
+- In the app, "Forgot your password?" asks Touch ID or my Mac's password, then the new password, with no key file to find
+- The app reads the key from the Keychain only after that check, and the reset leaves the same audit entry, banner and notification as with the key file
 
 ## Reach my agent's first call in one path
 

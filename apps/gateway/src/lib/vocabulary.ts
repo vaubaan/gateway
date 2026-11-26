@@ -855,6 +855,7 @@ export const ACT_WORDS = {
   'second-factor-waiver-changed': 'changed the second-factor waiver of a sign-in provider',
   'second-factor-changed': 'changed a second factor',
   'administrator-recovered': 'named an administrator with the master key',
+  'password-recovered': 'chose a new password with the master key',
   'backup-made': 'made a backup',
   'backup-failed': 'failed to make a backup',
   'device-added': 'received notifications on a device',

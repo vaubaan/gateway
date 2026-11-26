@@ -657,6 +657,16 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  // Without a recovery session, back to the forgot page (amendment 2026-11-26).
+  'auth.handlers.recoverPassword': form('origin-only', 303, (rig, headers) =>
+    rig.root.auth.handlers.recoverPassword(
+      post('/api/recover/password', headers, {
+        sign_in_account: 'x',
+        password: 'a sentence I remember',
+        password_again: 'a sentence I remember',
+      }),
+    ),
+  ),
   'auth.handlers.enrolAtSignIn': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.enrolAtSignIn(
       post('/auth/local/local/enrol', headers, { code: '000000' }),

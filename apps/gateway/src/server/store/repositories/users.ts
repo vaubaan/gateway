@@ -1,6 +1,6 @@
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
-import { USER_STATUSES, type UserRecord } from '../types.ts';
+import { USER_STATUSES, type Iso, type UserRecord } from '../types.ts';
 import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 
 /**
@@ -64,9 +64,11 @@ export interface UsersRepo {
   /**
    * Ends every web session of one active user ("sign out everywhere"):
    * `sessions_ended_at` = now, the status untouched. Returns `false` when the user is
-   * unknown or not active (nothing was written).
+   * unknown or not active (nothing was written). `before`: the sessions created up to
+   * this instant end instead, for a caller that opens the person's next session within
+   * the same millisecond (a password chosen with the master key, then signed in).
    */
-  endSessions(id: string): Promise<boolean>;
+  endSessions(id: string, before?: Iso): Promise<boolean>;
 }
 
 interface UserRow {
@@ -207,8 +209,8 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
         () => endSessions.run(nowIso(ctx), bare, `${bare}/`, exceptUserId ?? '').changes,
       );
     },
-    async endSessions(id) {
-      return endSessionsOfUser.run(nowIso(ctx), id).changes > 0;
+    async endSessions(id, before) {
+      return endSessionsOfUser.run(before ?? nowIso(ctx), id).changes > 0;
     },
     async getById(id) {
       const row = getUserRow(ctx, id);

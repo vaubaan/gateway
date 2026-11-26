@@ -47,8 +47,9 @@ export default async function RecoverPage({ searchParams }: Props) {
     <AuthPage instance={instance} footer={<BuildFooter />}>
       <AuthHeading title="Recover with the master key">
         For a gateway nobody can administer any more. Whoever holds its master key can name one
-        administrator here — and only that. It is recorded, mailed to the administrators when this
-        gateway sends mail, and shown on every page for thirty days.
+        administrator here (a forgotten password is chosen again from the sign-in page’s “Forgot
+        your password?”). It is recorded, mailed to the administrators when this gateway sends mail,
+        and shown on every page for thirty days.
       </AuthHeading>
 
       {outcome ? (

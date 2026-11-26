@@ -1424,6 +1424,9 @@ const RULES: Readonly<Record<string, Rule>> = {
   'RecoveryService.name': exempt(
     'no human actor: the holder of the master key; writes `administrator-recovered` (actor `recovery`) besides the designation’s own `administrator-granted` (tests/integration/auth/recovery.test.ts)',
   ),
+  'RecoveryService.passwordSet': exempt(
+    'no human actor: the holder of the master key; writes `password-recovered` (actor `recovery`) besides the password’s own `local-password-changed` (tests/integration/auth/recovery-password.test.ts)',
+  ),
   'SecondFactorService.has': READ,
   'SecondFactorService.beginEnrolment': READ,
   'SecondFactorService.recoveryCodesLeft': READ,

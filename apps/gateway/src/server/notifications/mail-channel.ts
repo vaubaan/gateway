@@ -54,7 +54,7 @@ const SUBJECTS: Readonly<Record<NotificationKind, string>> = {
   'mission-account-lost': 'Something stopped without you',
   'mission-revoked': 'Something stopped without you',
   'backup-failed': 'Something stopped without you',
-  'master-key-recovery': 'An administrator was named with the master key',
+  'master-key-recovery': 'The master key was used to recover access',
   'plugin-signer-added': 'A trusted plugin signer was added',
 };
 

@@ -52,3 +52,14 @@ signature proves nothing a MAC does not.
 
 An address is a claim, a person is (issuer, subject); a shell already reaches store and key, and
 the page is the path the audit covers.
+
+## Amendment 2026-11-26 — the recovery session can also set a sign-in account's password
+
+An instance with no mail relay, every local one, had no way back from a forgotten password: its
+only administrator is already named, and a reset link leaves by mail or from a signed-in
+administrator. The recovery session now does one of two things: name an administrator, or set a
+new password for one sign-in account. It grants nothing the key's holder could not already take
+(naming themselves, then resetting any account), and it is as loud as the naming: audited, on every
+page for thirty days, notified to the administrators, every session of the account ended. The
+second factor is untouched and still asked at the next sign-in. The proof stays computed in the
+browser; picking the key file reads it there, it is never uploaded.

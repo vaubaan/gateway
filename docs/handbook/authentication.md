@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/crypto/password.ts
   - apps/gateway/src/server/backup/copy.ts
   - apps/gateway/src/app/admin/
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-26
 ---
 
 # Authentication — handbook
@@ -83,6 +83,17 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   administrator designation, ends the setup and opens the session. `/admin` sends the bootstrap
   session there; the server checklist never shows. Its sign-ins enrol no second factor by force
   (`local` in `LocalAuthHandlerDeps`); a factor someone enrolled is still asked.
+
+- **A forgotten password without mail is chosen again with the master key**: the forgot
+  page (`/sign-in-account/forgot`) shows `RecoverWithKey` when the instance sends no mail (or
+  on `?with=key`), the same proof as `/admin/recover`; once this browser holds a recovery
+  session, the page turns into the new-password form posting to `/api/recover/password`
+  (`recoverPassword` in `local-handlers.ts`). It lives with the sign-in accounts, not in
+  `recovery-handlers.ts`, because it ends with `proceed`. `RecoveryService.passwordSet`
+  closes the session and announces first (audit `password-recovered`, banner `act:
+'password'`, mail, notification), then the password is set. The former sessions end at
+  `now − 1 ms` (`users.endSessions(id, before)`): `sessions_ended_at` ends every session
+  created at or before it, and the one `proceed` opens can fall within the same millisecond.
 
 - **Cookie names depend on the mode**: `__Host-vbn_*` and `Secure` on an https
   instance, plain `vbn_*` without `Secure` in local mode (`cookieJar` in

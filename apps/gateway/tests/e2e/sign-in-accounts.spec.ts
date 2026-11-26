@@ -194,11 +194,35 @@ test('an invited person creates a sign-in account on the link, signs in, enrols 
   await page.goto('/settings/security');
   await expect(page.getByTestId('second-factor')).toContainText('7 recovery codes left');
 
-  // "Forgot your password" says beforehand that this gateway sends no mail.
+  // "Forgot your password" on a gateway that sends no mail goes straight to the encryption
+  // key: pasted, proven in the browser and never sent, then a new password, and the person
+  // is signed in, through their second factor (ADR administrators-live-in-the-instance,
+  // amendment 2026-11-26).
   await signOut(page);
-  await page.goto('/sign-in-account/forgot');
+  await page.goto('/login');
+  await page.getByRole('link', { name: 'Forgot your password?' }).click();
   await expect(page.getByText(/sends no mail/)).toBeVisible();
   await snap(page, 'account-forgot');
+  const key = (await (await request.get(controlUrl('/master-key'))).json()) as { file: string };
+  let sentKey = false;
+  page.on('request', (r) => {
+    if ((r.postData() ?? '').includes(key.file.trim())) sentKey = true;
+  });
+  await page.getByTestId('master-key-text').fill(key.file.trim());
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Choose a new password');
+  await snap(page, 'account-forgot-new-password');
+  const NEW_PASSWORD = 'a new sentence lin remembers';
+  await page.getByLabel(/^New password/).fill(NEW_PASSWORD);
+  await page.getByLabel(/^The same password again/).fill(NEW_PASSWORD);
+  await page.getByRole('button', { name: 'Set the password and sign in' }).click();
+  await expect(page).toHaveURL(`${PUBLIC_URL}/login/code`);
+  await page.getByLabel(/^Code/).fill(codes[1] ?? '');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+  await expect(page.getByTestId('recovery-banner')).toContainText(GUEST_EMAIL);
+  expect(sentKey).toBe(false);
+  await control(request, '/recovery/cleanup');
 });
 
 test('the first administrator is created from the setup page; their first sign-in enrols the second factor before the session', async ({

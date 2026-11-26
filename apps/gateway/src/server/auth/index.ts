@@ -143,6 +143,19 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     clock,
     logger: logger.child({ component: 'second-factor' }),
   });
+  const recovery = new RecoveryService({
+    publicUrl: deps.config.publicUrl,
+    masterKey: deps.config.encryption.masterKey,
+    sessions: deps.sessions,
+    store: deps.store,
+    administrators,
+    audit: deps.store.auditWriter,
+    clock,
+    logger: logger.child({ component: 'recovery' }),
+    mailer: deps.mailer,
+    notifications: deps.notifications,
+    cookies,
+  });
   const { proceed: finishSignIn, ...localHandlers } = createLocalAuthHandlers({
     publicUrl: deps.config.publicUrl,
     instanceLabel: deps.config.instanceName ?? deps.config.publicUrl.host,
@@ -168,6 +181,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     clientIp,
     mailer: deps.mailer,
     local: deps.config.local,
+    recovery,
   });
   const handlers = createAuthHandlers({
     publicUrl: deps.config.publicUrl,
@@ -193,19 +207,6 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     clientIp,
     checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
     finishSignIn,
-  });
-  const recovery = new RecoveryService({
-    publicUrl: deps.config.publicUrl,
-    masterKey: deps.config.encryption.masterKey,
-    sessions: deps.sessions,
-    store: deps.store,
-    administrators,
-    audit: deps.store.auditWriter,
-    clock,
-    logger: logger.child({ component: 'recovery' }),
-    mailer: deps.mailer,
-    notifications: deps.notifications,
-    cookies,
   });
   const recoveryHandlers = createRecoveryHandlers({
     publicUrl: deps.config.publicUrl,
