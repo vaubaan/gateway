@@ -16,6 +16,7 @@ import {
   REDACTED_VALUE,
   SUPABASE_API_BASE,
   redactAuthConfig,
+  redactBranchConfig,
   redactFunctionSecrets,
   supabasePlugin,
 } from '../../src/index.ts';
@@ -170,5 +171,35 @@ describe('executeSupabase — no read returns a secret value', () => {
     const text = resultText(result);
     expect(text).toContain('google-client-id');
     for (const secret of SECRET_VALUES) expect(text).not.toContain(secret);
+  });
+});
+
+describe("redactBranchConfig — a preview branch's database settings", () => {
+  test('keeps the settings, redacts the password, the JWT secret and any field added tomorrow', () => {
+    expect(
+      redactBranchConfig({
+        ref: 'hrrzrckpczvaugzjrlie',
+        postgres_version: '17.4',
+        status: 'ACTIVE_HEALTHY',
+        db_host: 'db.hrrzrckpczvaugzjrlie.supabase.co',
+        db_port: 5432,
+        db_user: 'postgres',
+        db_pass: 'hunter2',
+        jwt_secret: 'super-secret',
+        service_role_key: 'eyJ.new.field',
+        empty: '',
+      }),
+    ).toEqual({
+      ref: 'hrrzrckpczvaugzjrlie',
+      postgres_version: '17.4',
+      status: 'ACTIVE_HEALTHY',
+      db_host: 'db.hrrzrckpczvaugzjrlie.supabase.co',
+      db_port: 5432,
+      db_user: 'postgres',
+      db_pass: REDACTED_VALUE,
+      jwt_secret: REDACTED_VALUE,
+      service_role_key: REDACTED_VALUE,
+      empty: '',
+    });
   });
 });

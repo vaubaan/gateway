@@ -34,6 +34,27 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   shows its icon once a version built with this CLI is in the catalog; an older gateway ignores
   the two fields.
 
+- **Supabase (plugin 6.4.0): an agent reaches the preview branches of its projects** (ADR
+  preview-branches-are-discovered-resources). Each preview branch a pull request opens is a
+  resource of its own, under its own ref, named after its project and git branch and labelled
+  `preview` by Vaubaan (a label the owner cannot change; a persistent branch is the owner's to
+  label). A mission whose `preview` set takes future resources reaches each new branch without
+  being edited, judged by the `preview` policy whatever its project's label. Four tools:
+  - `list_branches`: a project's branches, with their ref, git branch, pull request and status;
+    the branches it names that the gateway did not know are known a few seconds later;
+  - `get_branch`: a branch's database settings, without its database password or JWT secret;
+  - `delete_branch` and `reset_branch`: under the new `supabase.branch-delete` and
+    `supabase.branch-reset`, in Administer, never on prod (catalog version 11); Supabase is asked
+    first whether the ref is still a branch of its project, never its default branch.
+
+  `list_projects` names a branch's parent (`branch_of`). Token permission: Branching (read, and
+  read-write for deleting and resetting).
+
+- **Plugin SDK 1.1.0: `resourceRevealingTools`**, the tools whose success may reveal resources
+  the account does not know yet (a listing of preview branches). After one succeeds, the gateway
+  runs the account's discovery once, off the request path; it adds nothing to the mission by
+  itself. A gateway older than 1.1 ignores it.
+
 ### Changed
 
 - **The living history of a mission is its mission log, in the store and the code** (ADR

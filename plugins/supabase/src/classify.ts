@@ -295,6 +295,28 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
     },
   },
 
+  // ─── preview branches ─────────────────────────────────────────────────────
+  // Listed under the parent project ; read, deleted and reset under the branch
+  // itself, a resource of its own labelled `preview` (ADR
+  // preview-branches-are-discovered-resources) : the call is judged in the
+  // branch's environment, never the parent's.
+  [TOOL.listBranches]: {
+    plane: 'db',
+    produce: (_id, ref) => [slice([...project(ref), n('branch'), UNNAMED], 'R')],
+  },
+  [TOOL.getBranch]: {
+    plane: 'db',
+    produce: (_id, ref) => [slice([...project(ref), n('branch')], 'R')],
+  },
+  [TOOL.deleteBranch]: {
+    plane: 'db',
+    produce: (_id, ref) => [slice([...project(ref), n('branch'), n('delete')], 'W')],
+  },
+  [TOOL.resetBranch]: {
+    plane: 'db',
+    produce: (_id, ref) => [slice([...project(ref), n('branch'), n('reset')], 'W')],
+  },
+
   // ─── storage ──────────────────────────────────────────────────────────────
   [TOOL.listBuckets]: {
     plane: 'storage',
@@ -635,7 +657,7 @@ export function resolveProjectRef(
     const explicit = projectRefIdent(given);
     if (explicit === null) return { denied: missing('project_ref') };
     return {
-      denied: `supabase project '${explicit}' is not a resource of this mission. ${missionProjectsHint(own)}`,
+      denied: `supabase project '${explicit}' is not a resource of this mission. ${missionProjectsHint(own)} A preview branch opened a moment ago becomes known once ${TOOL.listBranches} on its project has listed it.`,
     };
   }
   if (own.length === 1) return refOf(own[0]!);
@@ -645,6 +667,34 @@ export function resolveProjectRef(
         ? 'project_ref: argument missing and the mission touches no Supabase project.'
         : `ambiguous supabase target: the mission touches ${own.length} Supabase projects, specify project_ref (a ref or a name). ${missionProjectsHint(own)}`,
   };
+}
+
+/**
+ * The tools that act on a preview branch itself : the resource they name must
+ * be one discovery described as a branch, never a project. `execute` checks
+ * it again against Supabase before deleting or resetting anything.
+ */
+const BRANCH_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  TOOL.getBranch,
+  TOOL.deleteBranch,
+  TOOL.resetBranch,
+]);
+
+/**
+ * The parent project of a mission resource discovery described as a preview
+ * branch (`metadata.parent_project_ref`, held to the ref grammar), or `null`
+ * for a project, a default branch, or a ref the mission does not hold.
+ */
+export function branchParentOf(ref: string, resources: readonly Resource[]): string | null {
+  const resource = resources.find((r) => r.service === SERVICE_ID && r.ref === ref);
+  const metadata = resource?.metadata;
+  if (metadata === undefined || metadata.is_default === true) return null;
+  const parent = projectRefIdent(metadata.parent_project_ref);
+  return parent !== null && parent !== ref ? parent : null;
+}
+
+function notABranch(ref: string): string {
+  return `project_ref: '${ref}' is not a preview branch. Name the branch by its own ref, as ${TOOL.listBranches} on its project lists it.`;
 }
 
 /** The resource's ref as the call sends it : a URL path segment and a host label. */
@@ -671,11 +721,15 @@ export interface MissionProject {
   readonly environment: string | null;
   readonly region: unknown;
   readonly url: string;
+  /** A preview branch : its parent project's ref and its git branch. */
+  readonly branch_of?: string;
+  readonly git_branch?: unknown;
 }
 
 /** The note `list_projects` answers with : what it lists, and how to name a project. */
 export const LIST_PROJECTS_NOTE =
   "The Supabase projects of this mission on this account; the account's other projects are left out. " +
+  'A preview branch is listed as a project of its own, with `branch_of` naming its parent. ' +
   'Name one in `project_ref` by its ref or its name.';
 
 /**
@@ -690,13 +744,19 @@ export function missionProjects(resources: readonly Resource[]): {
 } {
   const projects = resources
     .filter((r) => r.service === SERVICE_ID)
-    .map((r) => ({
-      ref: r.ref,
-      name: r.displayName,
-      environment: r.env ?? null,
-      region: r.metadata?.region ?? null,
-      url: projectUrl(r.ref),
-    }));
+    .map((r) => {
+      const parent = branchParentOf(r.ref, resources);
+      return {
+        ref: r.ref,
+        name: r.displayName,
+        environment: r.env ?? null,
+        region: r.metadata?.region ?? null,
+        url: projectUrl(r.ref),
+        ...(parent !== null
+          ? { branch_of: parent, git_branch: r.metadata?.git_branch ?? null }
+          : {}),
+      };
+    });
   return { projects, note: LIST_PROJECTS_NOTE };
 }
 
@@ -730,6 +790,9 @@ export function classifySupabase(
   if (!descriptor) return { denied: `unknown supabase tool '${tool}'.` };
   const target = resolveProjectRef(args, resources);
   if ('denied' in target) return target;
+  if (BRANCH_ONLY_TOOLS.has(tool) && branchParentOf(target.ref, resources) === null) {
+    return { denied: notABranch(target.ref) };
+  }
   const read = readIdentifiers(tool, args);
   if ('denied' in read) return read;
   // `execute` builds most request bodies from the arguments: one the schema does not

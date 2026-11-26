@@ -106,7 +106,9 @@ in the interface, the code, the store and the protocol:
   transfers or revokes the account, and labels its resources.
 - **Resource** — one thing reachable through an account (a repository, a database project…).
   Discovered by the plugin when the account is connected, on demand, right after a gateway call that created one
-  (the plugin declares which calls create; the refresh never delays the answer), and **on its own**:
+  (the plugin declares which calls create; the refresh never delays the answer), right after a call
+  that listed resources the account may not know yet (a project's preview branches; the plugin
+  declares which calls reveal, and such a call adds nothing to the mission by itself), and **on its own**:
   every account in use is refreshed once an hour (`accounts.refresh_interval`, §4.3), and again when
   a page shows it and its last refresh is older than 15 minutes. The same refresh asks the service
   again what the key may do and until when. Nobody needs to press "Refresh"; it stays, small, for
@@ -114,7 +116,10 @@ in the interface, the code, the store and the protocol:
   trace in the record. The
   owner labels each with an **environment** (`prod`, `staging`…) and may give the account a
   **default environment**, carried by every resource without its own label, later ones included; a
-  resource's own label wins; setting or clearing the default is an audited owner act.
+  resource's own label wins; setting or clearing the default is an audited owner act. Where the
+  service itself decides the environment, the plugin sets the label at discovery and the owner
+  cannot change it: a project's preview branch is `preview`
+  ([preview-branches-are-discovered-resources](../decisions/preview-branches-are-discovered-resources.md)).
   Environment-qualified `RiskId`s resolve against the label of the resource a call touches (or,
   where the environment lives in the arguments, the plugin derives it). An environment-scoped risk
   on a resource with no label, or a label outside the risk's environments, is refused. The owner may

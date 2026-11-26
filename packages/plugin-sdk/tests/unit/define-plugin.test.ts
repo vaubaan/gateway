@@ -210,6 +210,28 @@ describe('definePlugin', () => {
     ).toThrow(PluginDefinitionError);
   });
 
+  test('resourceRevealingTools is optional; it names MCP tools of the plugin, once each, none creating', () => {
+    const name = acmePlugin.tools[0]!.name;
+    expect(pluginIssues({ ...acmePlugin, resourceRevealingTools: [name] })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, resourceRevealingTools: [] })).toEqual([
+      'resourceRevealingTools: expected a non-empty list of tool names when present',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, resourceRevealingTools: ['acme__list_nothing'] })).toEqual(
+      ["resourceRevealingTools: 'acme__list_nothing' is not a tool of this plugin"],
+    );
+    expect(pluginIssues({ ...acmePlugin, resourceRevealingTools: [name, name] })).toEqual([
+      `resourceRevealingTools: '${name}' is listed twice`,
+    ]);
+    expect(
+      pluginIssues({
+        ...acmePlugin,
+        createdResources: () => [],
+        resourceCreatingTools: [name],
+        resourceRevealingTools: [name],
+      }),
+    ).toEqual([`resourceRevealingTools: '${name}' is a creating tool already`]);
+  });
+
   test('a plugin that declares resourceCreatingTools reads the created resource (createdResources)', () => {
     const name = acmePlugin.tools[0]!.name;
     expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name] })).toEqual([

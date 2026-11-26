@@ -75,9 +75,9 @@ describe('supabase plugin — structural kit', () => {
     assertNoWildcard(supabasePlugin);
   });
 
-  test('declares 45 tools, the same set the classifier knows', () => {
+  test('declares 49 tools, the same set the classifier knows', () => {
     const declared = supabasePlugin.tools.map((t) => t.name).sort();
-    expect(declared).toHaveLength(45);
+    expect(declared).toHaveLength(49);
     expect(declared).toEqual([...SUPABASE_CLASSIFIED_TOOLS].sort());
   });
 
@@ -92,7 +92,7 @@ describe('supabase plugin — structural kit', () => {
       resources: [staging],
       cardinalities: false,
     });
-    expect(report.toolsChecked).toBe(45);
+    expect(report.toolsChecked).toBe(49);
     // No sample lands on the fallback : every write a tool can make has a
     // dedicated catalog entry (ADR fallback-risk-only-when-uncategorized).
     expect(report.fallbackHits).toEqual([]);
@@ -113,7 +113,7 @@ describe('supabase plugin — structural kit', () => {
       resources: [staging],
       context: (fetch, resources) => execCtx(fetch, resources),
     });
-    expect(report.toolsChecked).toBe(45);
+    expect(report.toolsChecked).toBe(49);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'function_slug',
@@ -131,7 +131,7 @@ describe('supabase plugin — structural kit', () => {
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: PROD_REF }, [staging]),
     ).toEqual({
-      denied: `supabase project '${PROD_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${STAGING_REF}) — supabase__list_projects lists them.`,
+      denied: `supabase project '${PROD_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${STAGING_REF}) — supabase__list_projects lists them. A preview branch opened a moment ago becomes known once supabase__list_branches on its project has listed it.`,
     });
     expect(supabasePlugin.classify('supabase__get_project', {}, [staging, prod])).toEqual({
       denied: `ambiguous supabase target: the mission touches 2 Supabase projects, specify project_ref (a ref or a name). Projects of this mission: Acme / app-staging (${STAGING_REF}), Acme / app (${PROD_REF}) — supabase__list_projects lists them.`,
@@ -455,6 +455,82 @@ describe('discoverSupabaseResources', () => {
     // No `env` : the owner labels it later.
     expect(resources.every((r) => r.env === undefined)).toBe(true);
     for (const call of fetch.calls) expect(call.headers.authorization).toBe('Bearer sbp_access');
+  });
+
+  test("each project's preview branches are resources of their own, labelled preview (ADR preview-branches-are-discovered-resources)", async () => {
+    const BRANCH_REF = 'hrrzrckpczvaugzjrlie';
+    const STAGING_BRANCH_REF = 'stagingbranchrefxxxx';
+    const fetch = mockFetch([
+      { url: `${SUPABASE_API_BASE}/organizations`, body: [{ id: 'org-1', name: 'Acme' }] },
+      {
+        url: `${SUPABASE_API_BASE}/projects`,
+        body: [
+          {
+            ref: STAGING_REF,
+            name: 'app',
+            organization_id: 'org-1',
+            region: 'eu-west-1',
+            status: 'ACTIVE_HEALTHY',
+          },
+          { ref: PROD_REF, name: 'other', organization_id: 'org-1' },
+        ],
+      },
+      {
+        url: `${SUPABASE_API_BASE}/projects/${STAGING_REF}/branches`,
+        body: [
+          // The default branch is the project itself: never a second resource.
+          { project_ref: STAGING_REF, name: 'main', is_default: true },
+          {
+            project_ref: BRANCH_REF,
+            name: 'feature/login',
+            git_branch: 'feature/login',
+            pr_number: 89,
+            is_default: false,
+            persistent: false,
+            status: 'MIGRATIONS_PASSED',
+          },
+          // A persistent branch is the owner's to label.
+          {
+            project_ref: STAGING_BRANCH_REF,
+            name: 'develop',
+            git_branch: 'develop',
+            persistent: true,
+          },
+          // A ref outside the grammar names nothing a call could reach.
+          { project_ref: 'Not A Ref', name: 'odd' },
+        ],
+      },
+      // Branching off on this project: its branches are not listed, the project still is.
+      { url: `${SUPABASE_API_BASE}/projects/${PROD_REF}/branches`, status: 400, body: {} },
+    ]);
+    const resources = await supabasePlugin.discoverResources(connCtx(fetch));
+    expect(resources.map((r) => r.ref)).toEqual([
+      STAGING_REF,
+      PROD_REF,
+      BRANCH_REF,
+      STAGING_BRANCH_REF,
+    ]);
+    expect(resources[2]).toEqual({
+      service: 'supabase',
+      ref: BRANCH_REF,
+      displayName: 'Acme / app / feature/login',
+      env: 'preview',
+      metadata: {
+        organization: 'org-1',
+        organization_name: 'Acme',
+        region: 'eu-west-1',
+        parent_project_ref: STAGING_REF,
+        git_branch: 'feature/login',
+        pr_number: 89,
+        persistent: false,
+        status: 'MIGRATIONS_PASSED',
+      },
+    });
+    expect(resources[3]!.env).toBeUndefined();
+    expect(resources[3]!.metadata).toMatchObject({
+      parent_project_ref: STAGING_REF,
+      persistent: true,
+    });
   });
 
   test('caps the list and warns through the logger', async () => {

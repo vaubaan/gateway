@@ -735,6 +735,61 @@ describe('classifySupabase — plane functions', () => {
 // Strict-fail behavior
 // ────────────────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────────────
+// Preview branches (ADR preview-branches-are-discovered-resources)
+// ────────────────────────────────────────────────────────────────────────
+
+describe('classifySupabase — preview branches', () => {
+  const BRANCH_REF = 'hrrzrckpczvaugzjrlie';
+  const branch: Resource = {
+    ...mkResource(BRANCH_REF, 'preview'),
+    metadata: { parent_project_ref: STAGING_REF, persistent: false },
+  };
+  const both = [staging, branch];
+
+  test('list_branches reads under the parent project; the branch tools act under the branch itself', () => {
+    expect(
+      classifySerialized('supabase__list_branches', { project_ref: STAGING_REF }, both),
+    ).toEqual([`supabase.project[${STAGING_REF}].branch[any].R`]);
+    const on = { project_ref: BRANCH_REF };
+    expect(classifySerialized('supabase__get_branch', on, both)).toEqual([
+      `supabase.project[${BRANCH_REF}].branch.R`,
+    ]);
+    expect(classifySerialized('supabase__delete_branch', on, both)).toEqual([
+      `supabase.project[${BRANCH_REF}].branch.delete.W`,
+    ]);
+    expect(classifySerialized('supabase__reset_branch', on, both)).toEqual([
+      `supabase.project[${BRANCH_REF}].branch.reset.W`,
+    ]);
+  });
+
+  test('a call on a branch names the branch alone, so it is judged in the branch environment', () => {
+    const slices = classifySerialized(
+      'supabase__execute_sql',
+      { project_ref: BRANCH_REF, query: 'select 1' },
+      both,
+    );
+    expect(slices).toEqual([`supabase.project[${BRANCH_REF}].schema[any].row[bulk].R`]);
+  });
+
+  test('a project, a default branch or a branch whose parent is malformed is not a branch', () => {
+    const notBranch = (resource: Resource): string[] | string =>
+      classifySerialized('supabase__delete_branch', { project_ref: resource.ref }, [
+        staging,
+        resource,
+      ]);
+    expect(notBranch(staging)).toMatch(/is not a preview branch/);
+    for (const metadata of [
+      { parent_project_ref: STAGING_REF, is_default: true },
+      { parent_project_ref: 'Not/A/Ref' },
+      { parent_project_ref: BRANCH_REF },
+      {},
+    ]) {
+      expect(notBranch({ ...branch, metadata })).toMatch(/is not a preview branch/);
+    }
+  });
+});
+
 describe('classifySupabase — strict-fail', () => {
   test('unknown tool → denied', () => {
     const r = classifySupabase('supabase__nope_not_a_tool', { project_ref: STAGING_REF }, [
@@ -746,7 +801,7 @@ describe('classifySupabase — strict-fail', () => {
   test('project_ref outside the mission resources → denied', () => {
     const r = classifySupabase('supabase__get_project', { project_ref: 'rogue-ref' }, [staging]);
     expect(r).toEqual({
-      denied: `supabase project 'rogue-ref' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them.`,
+      denied: `supabase project 'rogue-ref' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them. A preview branch opened a moment ago becomes known once supabase__list_branches on its project has listed it.`,
     });
   });
 
@@ -806,7 +861,7 @@ describe('classifySupabase — strict-fail', () => {
     const vercel = { service: 'vercel', ref: 'prj_x', env: 'prod', displayName: 'shop' } as const;
     const r = classifySupabase('supabase__get_project', { project_ref: 'shop' }, [staging, vercel]);
     expect(r).toEqual({
-      denied: `supabase project 'shop' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them.`,
+      denied: `supabase project 'shop' is not a resource of this mission. Projects of this mission: ${STAGING_REF} (${STAGING_REF}) — supabase__list_projects lists them. A preview branch opened a moment ago becomes known once supabase__list_branches on its project has listed it.`,
     });
   });
 

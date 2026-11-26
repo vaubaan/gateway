@@ -1,5 +1,6 @@
 /**
- * Discovery after a creating call (ADR created-resources-join-the-mission).
+ * Discovery after a creating call (ADR created-resources-join-the-mission), or
+ * after a revealing one (ADR preview-branches-are-discovered-resources).
  *
  * A call that succeeded through the execution door, of a tool its plugin lists
  * in `resourceCreatingTools` (`fly__create_app`), created a resource the
@@ -26,6 +27,9 @@
  *                          added; the actor is the human behind the call's key
  *   never fails a call     an error is logged with the account id, the tool
  *                          and the mission — never the call's arguments
+ *   revealing calls        a tool of `resourceRevealingTools` (a listing of
+ *                          preview branches) schedules the same discovery,
+ *                          tried once: no retry when it adds nothing
  *
  * Single process: the in-flight map is local (`// single-process only`), like
  * the broker's refresh lock; a hosted deployment with several processes would
@@ -70,6 +74,11 @@ export interface ScheduledCause extends DiscoveryAfterCallCause {
    * return them. Empty: it looks again while it adds nothing.
    */
   readonly createdRefs?: readonly string[];
+  /**
+   * A revealing call (`resourceRevealingTools`, a listing): one discovery, never
+   * looked at again when it adds nothing — finding nothing new is the usual answer.
+   */
+  readonly once?: boolean;
 }
 
 export interface DiscoveryAfterCallDeps {
@@ -107,20 +116,24 @@ export class DiscoveryAfterCall {
    * The door's hook, called with every allowed call it answered. Schedules a
    * discovery of the call's account when the call succeeded (not an
    * `isError` result) and its tool is one the plugin declares as creating a
-   * resource. Returns whether it scheduled one. Never throws, never waits.
+   * resource, or as revealing some (tried once). Returns whether it scheduled one. Never throws, never waits.
    * `createdRefs`: what the call created, as `CreatedResources` recorded it.
    */
   afterCall(ctx: MissionContext, call: AnsweredCall, createdRefs: readonly string[] = []): boolean {
     if (this.stopped || call.accountId === null || isErrorResult(call.result)) return false;
     const registered = this.deps.registry.serviceForTool(call.tool);
-    if (!registered?.plugin.resourceCreatingTools?.includes(call.tool)) return false;
+    const plugin = registered?.plugin;
+    const creating = plugin?.resourceCreatingTools?.includes(call.tool) === true;
+    const revealing = plugin?.resourceRevealingTools?.includes(call.tool) === true;
+    if (!plugin || (!creating && !revealing)) return false;
     const account = ctx.accounts.find((c) => c.id === call.accountId);
-    if (!account || account.service !== registered.plugin.id) return false;
+    if (!account || account.service !== plugin.id) return false;
     this.schedule(call.accountId, {
       missionId: ctx.mission.id,
       tool: call.tool,
       userId: callerUserId(ctx),
       ...(createdRefs.length > 0 ? { createdRefs } : {}),
+      ...(creating ? {} : { once: true }),
     });
     return true;
   }
@@ -130,8 +143,10 @@ export class DiscoveryAfterCall {
     if (this.stopped) return;
     const current = this.inFlight.get(accountId);
     if (current) {
-      // The latest call names the cause: one queued discovery covers them all.
-      current.queued = cause;
+      // The latest call names the cause: one queued discovery covers them all. A
+      // revealing call never takes the place of a creating one, whose retries it would drop.
+      const creatingQueued = current.queued !== null && current.queued.once !== true;
+      if (!(creatingQueued && cause.once === true)) current.queued = cause;
       return;
     }
     let started!: () => void;
@@ -203,8 +218,9 @@ export class DiscoveryAfterCall {
         // Created refs named: look again until discovery returns them (they are reached
         // already, recorded from the call's answer). None: until it adds something.
         const lookAgain =
-          !outcome.record.ok ||
-          (cause.createdRefs?.length ? outcome.missing > 0 : outcome.added === 0);
+          cause.once !== true &&
+          (!outcome.record.ok ||
+            (cause.createdRefs?.length ? outcome.missing > 0 : outcome.added === 0));
         const delay = this.retryDelaysMs[attempts - 1];
         if (!lookAgain || delay === undefined || this.stopped) break;
         await this.sleep(delay);

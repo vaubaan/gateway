@@ -94,6 +94,14 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
         tools: [TOOL.listTables, TOOL.listMigrations, TOOL.executeSql],
       },
       { name: 'Migrations', access: 'read-write', tools: [TOOL.applyMigration] },
+      // Supabase's fine-grained `branching_development_*` permissions : a preview
+      // branch is a development branch. Discovery lists the branches with it too.
+      { name: 'Branching', access: 'read', tools: [TOOL.listBranches, TOOL.getBranch] },
+      {
+        name: 'Branching',
+        access: 'read-write',
+        tools: [TOOL.deleteBranch, TOOL.resetBranch],
+      },
       { name: 'Advisors', access: 'read', tools: [TOOL.getAdvisors] },
       {
         name: 'Storage Config',

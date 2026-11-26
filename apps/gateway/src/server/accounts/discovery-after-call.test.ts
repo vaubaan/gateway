@@ -14,10 +14,12 @@ import type { AfterCallDiscovery, DiscoveryAfterCallCause } from './service';
 
 const CREATE = 'yard__create_shed';
 const READ = 'yard__read_shed';
+const LIST = 'yard__list_sheds';
 
 const plugin = {
   id: 'yard',
   resourceCreatingTools: [CREATE],
+  resourceRevealingTools: [LIST],
 } as unknown as ServicePlugin;
 
 const registry: Pick<PluginRegistry, 'serviceForTool'> = {
@@ -136,6 +138,37 @@ describe('DiscoveryAfterCall', () => {
     found.scheduler.afterCall(context(), created, ['fresh']);
     await found.scheduler.idle();
     expect(found.runs).toHaveLength(1);
+  });
+
+  it('after a revealing call, discovers once and never looks again when nothing new appeared (ADR preview-branches-are-discovered-resources)', async () => {
+    const r = rig(async () => ok(0));
+    expect(r.scheduler.afterCall(context(), { ...created, tool: LIST })).toBe(true);
+    await r.scheduler.idle();
+    expect(r.runs).toHaveLength(1);
+    expect(r.sleeps).toEqual([]);
+    expect(r.audits).toEqual([expect.objectContaining({ attempts: 1, added: 0 })]);
+
+    // A failed discovery is not retried either: the hourly refresh comes anyway.
+    const down = rig(async () => failed);
+    down.scheduler.afterCall(context(), { ...created, tool: LIST });
+    await down.scheduler.idle();
+    expect(down.runs).toHaveLength(1);
+  });
+
+  it('a queued revealing call never replaces a queued creating one, whose retries it would drop', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const r = rig(async (n) => {
+      if (n === 1) await held;
+      return ok(1);
+    });
+    r.scheduler.schedule('con_1', { missionId: 'mis_1', tool: CREATE, userId: 'u1' });
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    r.scheduler.schedule('con_1', { missionId: 'mis_2', tool: CREATE, userId: 'u2' });
+    r.scheduler.schedule('con_1', { missionId: 'mis_3', tool: LIST, userId: 'u3', once: true });
+    release();
+    await r.scheduler.idle();
+    expect(r.runs.map((c) => c.missionId)).toEqual(['mis_1', 'mis_2']);
   });
 
   it('names the creator as the actor of a call made with a named key', async () => {

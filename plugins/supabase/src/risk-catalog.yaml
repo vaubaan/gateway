@@ -42,7 +42,7 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor.
 #
-# Risk count : 25 named risks + 1 fallback.
+# Risk count : 28 named risks + 1 fallback.
 
 # catalog_version 6 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-levels-prefill-the-policy). No risk,
@@ -57,9 +57,13 @@
 # password, email, phone or app_metadata of a user set by `create_user` /
 # `update_user` (whoever sets them signs in as that user, or changes what the
 # policies grant), in `change-data`.
+# catalog_version 11 (2026-11-26) : preview branches, each a resource of its
+# own labelled `preview` (ADR preview-branches-are-discovered-resources) :
+# `supabase.branch-delete` and `supabase.branch-reset`, in `administer`. Listing
+# and reading a branch are reads (`read-data`).
 service: supabase
-catalog_version: 10
-catalog_date: 2026-11-19
+catalog_version: 11
+catalog_date: 2026-11-26
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -197,6 +201,39 @@ risks:
       cost: free
       visibility: internal
     acceptable_in_envs: [preview, staging, prod]
+
+  - id: supabase.branch-delete
+    label: Delete a preview branch
+    reason: >-
+      `delete_branch` : the branch's database, storage and functions are
+      gone. A preview branch is disposable by design (the GitHub integration
+      creates it again when the pull request is reopened, under a new ref),
+      but what was written there is lost. Only on the branch itself, never on
+      a project or its default branch ; never on prod.
+    matches: supabase.project[**].branch.delete.W
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+    acceptable_in_envs: [preview, staging]
+
+  - id: supabase.branch-reset
+    label: Reset a preview branch
+    reason: >-
+      `reset_branch` : Supabase rebuilds the branch's database from the
+      project's migrations ; the data it held is lost. Repairs a branch whose
+      setup failed without closing the pull request. Only on the branch
+      itself ; never on prod.
+    matches: supabase.project[**].branch.reset.W
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: internal
+    acceptable_in_envs: [preview, staging]
 
   # ───────────────────────────────────────────────────────────────────────
   # Plane `storage`
@@ -586,13 +623,14 @@ macro_actions:
         rate_limit: { max: 10, window_seconds: 60 }
   - id: administer
     label: 'Administer'
-    description: 'Database roles, storage and auth configuration, SSO.'
+    description: 'Database roles, storage and auth configuration, SSO, preview branches.'
     narrative: >-
       Changing who may do what in the project: database roles and grants, storage settings, SSO
       and third-party sign-in, the auth configuration. Each one shifts the posture for every
       application and every user at once, and outlives the mission. A wrong identity provider or
       signup policy lets strangers sign in, which is why none of this belongs to the other
-      verbs.
+      verbs. Deleting or resetting a preview branch is here too: it drops what the branch
+      held, and only a branch labelled preview or staging can be.
     entries:
       - risk_id: supabase.db-role-write
         quota: 50
@@ -609,3 +647,9 @@ macro_actions:
       - risk_id: supabase.auth-config-write
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.branch-delete
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: supabase.branch-reset
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }

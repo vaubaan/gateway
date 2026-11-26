@@ -21,7 +21,7 @@
     "w": 1200,
     "h": 680,
     "title": "Modelled, then folded into verbs",
-    "desc": "Supabase, modelled: one project carries the environment (preview, staging, prod) over 4 planes (db, storage, auth, functions) and their entities. A migration becomes one permission per environment; bulk row writes have no production form. The 25 permissions fold into 5 verbs a person ticks."
+    "desc": "Supabase, modelled: one project carries the environment (preview, staging, prod) over 4 planes (db, storage, auth, functions) and their entities. A migration becomes one permission per environment; bulk row writes have no production form. The 27 permissions fold into 5 verbs a person ticks."
   },
   "the-map": {
     "w": 1200,

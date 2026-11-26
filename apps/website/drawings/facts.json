@@ -2,7 +2,7 @@
   "totals": {
     "services": 21,
     "planes": 29,
-    "permissions": 279,
+    "permissions": 281,
     "macroActions": 85
   },
   "services": {
@@ -232,7 +232,7 @@
     },
     "supabase": {
       "name": "Supabase",
-      "permissions": 25,
+      "permissions": 27,
       "planes": [
         "db",
         "storage",
@@ -532,7 +532,7 @@
         {
           "id": "administer",
           "label": "Administer",
-          "description": "Database roles, storage and auth configuration, SSO.",
+          "description": "Database roles, storage and auth configuration, SSO, preview branches.",
           "entries": [
             {
               "id": "supabase.db-role-write",
@@ -546,6 +546,32 @@
                 "preview",
                 "staging",
                 "prod"
+              ]
+            },
+            {
+              "id": "supabase.branch-delete",
+              "row": 4,
+              "reason": "irreversible",
+              "quota": 20,
+              "careful": null,
+              "trusting": "approval",
+              "autonomous": "approval",
+              "envs": [
+                "preview",
+                "staging"
+              ]
+            },
+            {
+              "id": "supabase.branch-reset",
+              "row": 3,
+              "reason": "costly-to-undo",
+              "quota": 20,
+              "careful": "approval",
+              "trusting": "approval",
+              "autonomous": "auto",
+              "envs": [
+                "preview",
+                "staging"
               ]
             },
             {

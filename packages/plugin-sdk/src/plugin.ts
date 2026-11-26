@@ -232,6 +232,20 @@ export interface ServicePlugin {
   readonly resourceCreatingTools?: readonly string[];
 
   /**
+   * The tools whose success may reveal resources the account does not know
+   * yet, without creating them : a listing of a project's preview branches,
+   * each a resource `discoverResources` returns. After such a call succeeds
+   * through the execution door, the host runs the account's discovery off the
+   * request path, as after a creating tool, once : it adds nothing to the
+   * mission by itself — a revealed resource reaches a mission like any
+   * discovered one (ADR preview-branches-are-discovered-resources). Each name
+   * is an MCP tool of the plugin, never one of `resourceCreatingTools`
+   * (`definePlugin`). Absent : no listing triggers a discovery. A host older
+   * than SDK 1.1 ignores it ; the hourly refresh still finds the resources.
+   */
+  readonly resourceRevealingTools?: readonly string[];
+
+  /**
    * The instance as this service's git remote (spec vaubaan-gateway §4.1 ter) :
    * `git clone` / `git push` against
    * `https://<instance>/git/<service id>/<repository>.git` with the mission key

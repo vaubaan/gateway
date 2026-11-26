@@ -64,6 +64,7 @@ export function pluginIssues(plugin: ServicePlugin): string[] {
     ...hookIssues(plugin),
     ...retiredTokenHandoutIssues(plugin),
     ...resourceCreatingToolIssues(plugin),
+    ...resourceRevealingToolIssues(plugin),
     ...gitRemoteIssues(plugin),
     ...toolReasonIssues(plugin.unboundTools, declaredToolNames(plugin), 'unboundTools'),
     ...excludedToolIssues(plugin),
@@ -279,6 +280,36 @@ function resourceCreatingToolIssues(plugin: ServicePlugin): string[] {
       issues.push(`resourceCreatingTools: '${String(tool)}' is not a tool of this plugin`);
     } else if (seen.has(tool)) {
       issues.push(`resourceCreatingTools: '${tool}' is listed twice`);
+    }
+    seen.add(tool);
+  }
+  return issues;
+}
+
+/**
+ * `resourceRevealingTools` names MCP tools of the plugin, once each, none of
+ * them a creating tool : a creating tool already triggers the discovery, and
+ * its answer adds to the mission what a revealing tool's never does.
+ */
+function resourceRevealingToolIssues(plugin: ServicePlugin): string[] {
+  const declared: unknown = plugin.resourceRevealingTools;
+  if (declared === undefined) return [];
+  if (!isList(declared) || declared.length === 0) {
+    return ['resourceRevealingTools: expected a non-empty list of tool names when present'];
+  }
+  const mcp = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
+  const creating = new Set<unknown>(
+    isList(plugin.resourceCreatingTools) ? plugin.resourceCreatingTools : [],
+  );
+  const issues: string[] = [];
+  const seen = new Set<unknown>();
+  for (const tool of declared) {
+    if (typeof tool !== 'string' || !mcp.has(tool)) {
+      issues.push(`resourceRevealingTools: '${String(tool)}' is not a tool of this plugin`);
+    } else if (seen.has(tool)) {
+      issues.push(`resourceRevealingTools: '${tool}' is listed twice`);
+    } else if (creating.has(tool)) {
+      issues.push(`resourceRevealingTools: '${tool}' is a creating tool already`);
     }
     seen.add(tool);
   }

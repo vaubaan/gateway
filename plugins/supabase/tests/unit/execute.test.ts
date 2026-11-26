@@ -80,8 +80,15 @@ describe('executeSupabase — list_projects', () => {
       displayName: 'Acme / app',
       metadata: { region: 'eu-west-3' },
     };
+    const branch: Resource = {
+      service: 'supabase',
+      ref: 'hrrzrckpczvaugzjrlie',
+      env: 'preview',
+      displayName: 'Acme / app-staging / feature/login',
+      metadata: { parent_project_ref: REF, git_branch: 'feature/login', persistent: false },
+    };
     const result = await supabasePlugin.execute(
-      { credential, fetch, resources: [project, other, located] },
+      { credential, fetch, resources: [project, other, located, branch] },
       'supabase__list_projects',
       {},
     );
@@ -102,9 +109,179 @@ describe('executeSupabase — list_projects', () => {
           region: 'eu-west-3',
           url: 'https://abcdefghijklmnopqrst.supabase.co',
         },
+        {
+          ref: 'hrrzrckpczvaugzjrlie',
+          name: 'Acme / app-staging / feature/login',
+          environment: 'preview',
+          region: null,
+          url: 'https://hrrzrckpczvaugzjrlie.supabase.co',
+          branch_of: REF,
+          git_branch: 'feature/login',
+        },
       ],
-      note: "The Supabase projects of this mission on this account; the account's other projects are left out. Name one in `project_ref` by its ref or its name.",
+      note: "The Supabase projects of this mission on this account; the account's other projects are left out. A preview branch is listed as a project of its own, with `branch_of` naming its parent. Name one in `project_ref` by its ref or its name.",
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preview branches (ADR preview-branches-are-discovered-resources)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('executeSupabase — preview branches', () => {
+  const BRANCH_REF = 'hrrzrckpczvaugzjrlie';
+  const branch: Resource = {
+    service: 'supabase',
+    ref: BRANCH_REF,
+    env: 'preview',
+    displayName: 'Acme / app-staging / feature/login',
+    metadata: { parent_project_ref: REF, git_branch: 'feature/login', persistent: false },
+  };
+  const withBranch = (fetch: typeof globalThis.fetch): ExecuteContext => ({
+    credential,
+    fetch,
+    resources: [project, branch],
+  });
+  const listed = [
+    { project_ref: REF, name: 'main', is_default: true, status: 'FUNCTIONS_DEPLOYED' },
+    {
+      project_ref: BRANCH_REF,
+      name: 'feature/login',
+      git_branch: 'feature/login',
+      pr_number: 89,
+      is_default: false,
+      persistent: false,
+      status: 'MIGRATIONS_FAILED',
+      latest_check_run_id: 1,
+    },
+  ];
+  const branchesRoute: MockRoute = { method: 'GET', url: `${MGMT}/branches`, body: listed };
+
+  test("list_branches on the parent answers each branch's ref, git branch, pull request and status", async () => {
+    const fetch = mockFetch([branchesRoute]);
+    const result = await supabasePlugin.execute(withBranch(fetch), 'supabase__list_branches', {
+      project_ref: REF,
+    });
+    expect(resultJson(result)).toEqual([
+      {
+        ref: REF,
+        name: 'main',
+        git_branch: null,
+        pr_number: null,
+        is_default: true,
+        persistent: false,
+        status: 'FUNCTIONS_DEPLOYED',
+        created_at: null,
+        updated_at: null,
+      },
+      {
+        ref: BRANCH_REF,
+        name: 'feature/login',
+        git_branch: 'feature/login',
+        pr_number: 89,
+        is_default: false,
+        persistent: false,
+        status: 'MIGRATIONS_FAILED',
+        created_at: null,
+        updated_at: null,
+      },
+    ]);
+  });
+
+  test('get_branch never returns the database password nor the JWT secret', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${SUPABASE_API_BASE}/branches/${BRANCH_REF}`,
+        body: {
+          ref: BRANCH_REF,
+          status: 'ACTIVE_HEALTHY',
+          db_host: `db.${BRANCH_REF}.supabase.co`,
+          db_port: 5432,
+          db_user: 'postgres',
+          db_pass: 'hunter2',
+          jwt_secret: 'super-secret',
+        },
+      },
+    ]);
+    const result = await supabasePlugin.execute(withBranch(fetch), 'supabase__get_branch', {
+      project_ref: BRANCH_REF,
+    });
+    expect(resultJson(result)).toEqual({
+      ref: BRANCH_REF,
+      status: 'ACTIVE_HEALTHY',
+      db_host: `db.${BRANCH_REF}.supabase.co`,
+      db_port: 5432,
+      db_user: 'postgres',
+      db_pass: '[redacted by Vaubaan]',
+      jwt_secret: '[redacted by Vaubaan]',
+    });
+  });
+
+  test('delete_branch checks at Supabase that the ref is a branch of its parent, then deletes it', async () => {
+    const fetch = mockFetch([
+      { ...branchesRoute, times: 1 },
+      {
+        method: 'DELETE',
+        url: `${SUPABASE_API_BASE}/branches/${BRANCH_REF}`,
+        body: { message: 'ok' },
+        times: 1,
+      },
+    ]);
+    const result = await supabasePlugin.execute(withBranch(fetch), 'supabase__delete_branch', {
+      project_ref: BRANCH_REF,
+    });
+    expect(resultJson(result)).toEqual({ message: 'ok' });
+    expect(fetch.calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      `GET ${MGMT}/branches`,
+      `DELETE ${SUPABASE_API_BASE}/branches/${BRANCH_REF}`,
+    ]);
+  });
+
+  test('reset_branch POSTs /branches/:ref/reset once the branch is confirmed', async () => {
+    const fetch = mockFetch([
+      { ...branchesRoute, times: 1 },
+      {
+        method: 'POST',
+        url: `${SUPABASE_API_BASE}/branches/${BRANCH_REF}/reset`,
+        body: { workflow_run_id: 'run_1', message: 'ok' },
+        times: 1,
+      },
+    ]);
+    const result = await supabasePlugin.execute(withBranch(fetch), 'supabase__reset_branch', {
+      project_ref: BRANCH_REF,
+    });
+    expect(resultJson(result)).toEqual({ workflow_run_id: 'run_1', message: 'ok' });
+    expect(fetch.calls[1]!.json).toEqual({});
+  });
+
+  test('a ref Supabase no longer lists as a branch of its parent, or lists as its default, is deleted nowhere', async () => {
+    for (const body of [
+      listed.filter((b) => b.project_ref !== BRANCH_REF),
+      listed.map((b) => (b.project_ref === BRANCH_REF ? { ...b, is_default: true } : b)),
+    ]) {
+      const fetch = mockFetch([{ method: 'GET', url: `${MGMT}/branches`, body, times: 1 }]);
+      const result = await supabasePlugin.execute(withBranch(fetch), 'supabase__delete_branch', {
+        project_ref: BRANCH_REF,
+      });
+      expect(result.isError).toBe(true);
+      expect(resultText(result)).toContain('is not a preview branch');
+      expect(fetch.calls).toHaveLength(1);
+    }
+  });
+
+  test('a project is never deleted as a branch: refused before any request', async () => {
+    const fetch = mockFetch([]);
+    for (const tool of [
+      'supabase__delete_branch',
+      'supabase__reset_branch',
+      'supabase__get_branch',
+    ]) {
+      const result = await supabasePlugin.execute(withBranch(fetch), tool, { project_ref: REF });
+      expect(result.isError).toBe(true);
+      expect(resultText(result)).toContain('is not a preview branch');
+    }
+    expect(fetch.calls).toEqual([]);
   });
 });
 
@@ -460,7 +637,7 @@ describe('executeSupabase — the target project is resolved like the classifier
       project_ref: OTHER_REF,
     });
     expect(resultText(result)).toBe(
-      `supabase project '${OTHER_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${REF}) — supabase__list_projects lists them.`,
+      `supabase project '${OTHER_REF}' is not a resource of this mission. Projects of this mission: Acme / app-staging (${REF}) — supabase__list_projects lists them. A preview branch opened a moment ago becomes known once supabase__list_branches on its project has listed it.`,
     );
   });
 

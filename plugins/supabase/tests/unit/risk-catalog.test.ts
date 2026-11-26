@@ -36,8 +36,18 @@ const staging: Resource = {
   displayName: 'Staging',
 };
 
+/** A preview branch of the staging project, as discovery describes it. */
+const BRANCH_REF = 'hrrzrckpczvaugzjrlie';
+const branch: Resource = {
+  service: 'supabase',
+  ref: BRANCH_REF,
+  env: 'preview',
+  displayName: 'Acme / app-staging / feature/login',
+  metadata: { parent_project_ref: STAGING_REF, persistent: false },
+};
+
 function risksFor(tool: string, args: Record<string, unknown>): string[] {
-  const r = classifySupabase(tool, args, [staging]);
+  const r = classifySupabase(tool, args, [staging, branch]);
   if ('denied' in r) throw new Error(`${tool} denied: ${r.denied}`);
   return risksTouchedByAll(r.slices, INDEXED);
 }
@@ -52,12 +62,12 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares service `supabase`, a version and a date', () => {
     expect(CATALOG.service).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(10);
-    expect(CATALOG.catalog_date).toBe('2026-11-19');
+    expect(CATALOG.catalog_version).toBe(11);
+    expect(CATALOG.catalog_date).toBe('2026-11-26');
   });
 
-  test('exposes 26 named risks plus the fallback', () => {
-    expect(CATALOG.risks.length).toBe(27);
+  test('exposes 28 named risks plus the fallback', () => {
+    expect(CATALOG.risks.length).toBe(29);
   });
 
   test('every entry has the required fields and a five-axis vector', () => {
@@ -159,6 +169,10 @@ describe('risk-catalog.yaml — coverage lint', () => {
     supabase__list_migrations: p,
     supabase__get_advisors: p,
     supabase__apply_migration: { ...p, name: 'm', query: 'CREATE TABLE x(id int);' },
+    supabase__list_branches: p,
+    supabase__get_branch: { project_ref: BRANCH_REF },
+    supabase__delete_branch: { project_ref: BRANCH_REF },
+    supabase__reset_branch: { project_ref: BRANCH_REF },
     supabase__execute_sql: { ...p, query: 'select 1' },
     supabase__list_buckets: p,
     supabase__get_storage_config: p,
@@ -218,6 +232,19 @@ describe('risk-catalog.yaml — coverage lint', () => {
         'supabase.uncategorized-write',
       );
     }
+  });
+
+  test('a branch is listed and read as data, deleted or reset under its own permission', () => {
+    expect(risksFor('supabase__list_branches', p)).toEqual(['supabase.read-data']);
+    expect(risksFor('supabase__get_branch', { project_ref: BRANCH_REF })).toEqual([
+      'supabase.read-data',
+    ]);
+    expect(risksFor('supabase__delete_branch', { project_ref: BRANCH_REF })).toEqual([
+      'supabase.branch-delete',
+    ]);
+    expect(risksFor('supabase__reset_branch', { project_ref: BRANCH_REF })).toEqual([
+      'supabase.branch-reset',
+    ]);
   });
 
   test.each<[string, Record<string, unknown>, string[]]>([

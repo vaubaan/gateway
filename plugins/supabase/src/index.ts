@@ -17,7 +17,7 @@ import { supabaseCredential } from './credential.ts';
 import { supabaseDataModel } from './data-model.ts';
 import { discoverSupabaseResources, executeSupabase } from './execute.ts';
 import { SUPABASE_ICON, SUPABASE_ICON_COLOR } from './icon.ts';
-import { SERVICE_ID } from './identity.ts';
+import { SERVICE_ID, TOOL } from './identity.ts';
 import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
 import { supabaseExamples } from './examples.ts';
@@ -32,11 +32,11 @@ export const supabasePlugin = definePlugin({
   icon: SUPABASE_ICON,
   iconColor: SUPABASE_ICON_COLOR,
   resourceNoun: { one: 'project', other: 'projects' },
-  version: '6.3.0',
+  version: '6.4.0',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
   summary:
-    'One account is one personal access token of the Management API, scoped to the whole organization; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the owner of the account labels each project (staging, prod, …) and the permissions tied to an environment apply to the projects carrying that label.',
+    'One account is one personal access token of the Management API, scoped to the whole organization; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the owner of the account labels each project (staging, prod, …) and the permissions tied to an environment apply to the projects carrying that label. A preview branch opened for a pull request is a resource of its own, labelled preview by Vaubaan.',
   manualRevocation:
     'Delete the token in Supabase, signed in as the account that created it: Account preferences, Access tokens.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/services/supabase.md',
@@ -49,6 +49,9 @@ export const supabasePlugin = definePlugin({
   classify: classifySupabase,
   execute: executeSupabase,
   discoverResources: discoverSupabaseResources,
+  // A listing of preview branches reveals the branches opened since the last
+  // discovery (ADR preview-branches-are-discovered-resources).
+  resourceRevealingTools: [TOOL.listBranches],
 });
 
 export default supabasePlugin;
@@ -67,9 +70,11 @@ export { SERVICE_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
 export {
   AUTH_CONFIG_PUBLIC_FIELDS,
   FUNCTION_SECRET_PUBLIC_FIELDS,
+  BRANCH_CONFIG_PUBLIC_FIELDS,
   REDACTED_VALUE,
   redactAuthConfig,
+  redactBranchConfig,
   redactFunctionSecrets,
 } from './redact.ts';
 export { supabaseBearerOf, verifySupabaseToken, SUPABASE_TOKEN_FIELD } from './credential.ts';
-export { EXAMPLE_STAGING_PROJECT, supabaseExamples } from './examples.ts';
+export { EXAMPLE_PREVIEW_BRANCH, EXAMPLE_STAGING_PROJECT, supabaseExamples } from './examples.ts';

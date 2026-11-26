@@ -4,8 +4,8 @@
  * kit and the site classifies when it builds (ADR
  * plugin-contract-and-credential-spec, amendment 2026-11-05).
  *
- * Every sample runs on one staging project ; the ones the classifier must
- * refuse say so.
+ * Every sample runs on one staging project, the branch tools on that project
+ * and one of its preview branches ; the ones the classifier must refuse say so.
  */
 import { samplesOn, type Resource, type ToolSamples } from '@vaubaan/plugin-sdk';
 
@@ -22,6 +22,21 @@ export const EXAMPLE_STAGING_PROJECT: Resource = {
 };
 
 const p = { project_ref: STAGING_REF };
+
+const BRANCH_REF = 'hrrzrckpczvaugzjrlie';
+
+/** A preview branch of the staging project, as discovery describes it : labelled `preview`. */
+export const EXAMPLE_PREVIEW_BRANCH: Resource = {
+  service: SERVICE_ID,
+  ref: BRANCH_REF,
+  env: 'preview',
+  displayName: 'Acme / app-staging / feature/login',
+  metadata: { parent_project_ref: STAGING_REF, git_branch: 'feature/login', persistent: false },
+};
+
+/** The staging project and its preview branch. */
+const withBranch = [EXAMPLE_STAGING_PROJECT, EXAMPLE_PREVIEW_BRANCH];
+const b = { project_ref: BRANCH_REF };
 
 export const supabaseExamples: ToolSamples = samplesOn([EXAMPLE_STAGING_PROJECT], {
   [TOOL.listProjects]: [{ args: {} }, { args: p, expectDenied: true }],
@@ -54,6 +69,20 @@ export const supabaseExamples: ToolSamples = samplesOn([EXAMPLE_STAGING_PROJECT]
       args: { ...p, projectRef: STAGING_REF, name: 'alias', query: 'select 1;' },
       expectDenied: true,
     },
+  ],
+  [TOOL.listBranches]: [{ args: p, resources: withBranch }],
+  [TOOL.getBranch]: [
+    { args: b, resources: withBranch },
+    // The parent project is not a branch.
+    { args: p, resources: withBranch, expectDenied: true },
+  ],
+  [TOOL.deleteBranch]: [
+    { args: b, resources: withBranch },
+    { args: p, resources: withBranch, expectDenied: true },
+  ],
+  [TOOL.resetBranch]: [
+    { args: b, resources: withBranch },
+    { args: p, resources: withBranch, expectDenied: true },
   ],
   [TOOL.listBuckets]: [{ args: p }],
   [TOOL.getStorageConfig]: [{ args: p }],

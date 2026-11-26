@@ -1,5 +1,5 @@
 /**
- * MCP tools of the `supabase` service — 45 tools over the Management API
+ * MCP tools of the `supabase` service — 49 tools over the Management API
  * and the per-project data plane (GoTrue admin, Storage).
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
@@ -95,6 +95,70 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
         query: { type: 'string', description: 'The SQL migration body.' },
       },
       required: ['project_ref', 'name', 'query'],
+    },
+  },
+
+  // ─── preview branches ──────────────────────────────────────────────────────
+  {
+    name: TOOL.listBranches,
+    description:
+      "List the preview branches of a project : each branch's own project ref, git branch, pull request, whether it is persistent, and the status of its migrations. Backed by GET /v1/projects/{ref}/branches. A branch is a resource of its own, labelled `preview` (a persistent branch is labelled by the account's owner) : name it by its ref in `project_ref` to query it. A branch listed here that the gateway did not know yet is known a few seconds later. A recreated branch has a new ref : find it by its git branch.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_ref: {
+          type: 'string',
+          description:
+            'The parent project (ref or name, as `supabase__list_projects` lists it), never a branch.',
+        },
+      },
+      required: ['project_ref'],
+    },
+  },
+  {
+    name: TOOL.getBranch,
+    description:
+      'Get the database settings of a preview branch : its ref, status, Postgres version, database host, port and user. Backed by GET /v1/branches/{ref}. The database password and the JWT secret are never returned ; `supabase__get_anon_key` on the branch gives its API URL and anon key.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_ref: {
+          type: 'string',
+          description: 'The branch, by its own ref as `supabase__list_branches` lists it.',
+        },
+      },
+      required: ['project_ref'],
+    },
+  },
+  {
+    name: TOOL.deleteBranch,
+    description:
+      "Delete a preview branch : its database, storage and functions are gone. Backed by DELETE /v1/branches/{ref}. Never a project's default branch. With the GitHub integration, closing and reopening the pull request creates the branch again, under a new ref.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_ref: {
+          type: 'string',
+          description:
+            'The branch to delete, by its own ref as `supabase__list_branches` lists it.',
+        },
+      },
+      required: ['project_ref'],
+    },
+  },
+  {
+    name: TOOL.resetBranch,
+    description:
+      "Reset a preview branch's database : Supabase rebuilds it from the project's migrations, and the data it held is lost. Backed by POST /v1/branches/{ref}/reset ; the answer names the workflow run, and `supabase__list_branches` shows the branch's status. Never a project's default branch.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_ref: {
+          type: 'string',
+          description: 'The branch to reset, by its own ref as `supabase__list_branches` lists it.',
+        },
+      },
+      required: ['project_ref'],
     },
   },
 

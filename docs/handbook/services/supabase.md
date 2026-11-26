@@ -3,13 +3,14 @@ title: Supabase plugin
 tracks:
   - plugins/supabase/src/
   - plugins/supabase/README.md
-last_reviewed: 2026-11-22
+last_reviewed: 2026-11-26
 ---
 
 # Supabase plugin — handbook
 
 `@vaubaan/plugin-supabase`: Management API plus each project's data plane (auth, storage), one
-resource per project, the owner's label as environment.
+resource per project, the owner's label as environment; one resource per preview branch too,
+labelled `preview` by the plugin.
 
 ## Start here
 
@@ -61,12 +62,35 @@ resource per project, the owner's label as environment.
   `dblink`). The managed-schema list lives once, in `src/data-model.ts`.
 - `read-managed-schemas` (macro-action `query`) asks first at Careful: reading identities and
   secrets is deliberate, a person approves it.
+- **Preview branches** ([ADR](../../decisions/preview-branches-are-discovered-resources.md)):
+  discovery lists `GET /projects/{ref}/branches` for every project, after the projects, under the
+  same cap. A branch is a resource of its own (its `project_ref`), `env: 'preview'` unless
+  `persistent` (then the owner labels it), metadata `parent_project_ref`, `git_branch`,
+  `pr_number`. The default branch (`is_default`, the project itself) is never a resource. A
+  project whose branches cannot be listed (branching off, a token without Branching) adds none
+  and fails nothing.
+- **A branch is judged as itself**: `get_branch`, `delete_branch`, `reset_branch` and every other
+  tool take the branch's own ref, so the call lands in the branch's set and environment, never
+  the parent's. `list_branches` alone takes the parent. `branchParentOf` (classify) refuses the
+  branch tools on a resource without a valid `parent_project_ref`; `delete_branch` and
+  `reset_branch` then ask Supabase again (`confirmBranch`: listed under that parent, not default).
+- `list_branches` is the plugin's `resourceRevealingTools`: after it, the host runs one discovery,
+  so a branch opened since the last refresh is reachable seconds later.
 - **Answers that carry secrets** (function secrets, auth config) are redacted by an **allow-list**
   of non-secret fields: any other field with a value, one added upstream tomorrow included, becomes
   `[redacted by Vaubaan]`; `null` / `''` stay so an agent sees whether a secret is set. The
-  `service_role` key is never returned; `get_anon_key` strips it.
+  `service_role` key is never returned; `get_anon_key` strips it. `get_branch` redacts the
+  branch's `db_pass` and `jwt_secret` the same way.
 
 ## Traps
+
+- A recreated branch (closed and reopened pull request) has a **new ref**: the old resource goes
+  stale, the new one is a new resource. Find it by `git_branch` (`list_branches`, `list_projects`).
+- The branch `status` of `GET /projects/{ref}/branches` is deprecated upstream ("list action
+  runs"); still answered as Supabase sends it. Whether `reset` replays the seed is not documented:
+  check a branch's migrations after a reset.
+- A mission reaches a new branch only through a `preview` set with future resources on (or an
+  edit): a branch is never reached through its parent.
 
 - A project's name is the discovered display name, `Organization / project`
   (`discoverSupabaseResources`), not Supabase's bare project name: `app` does not match `Acme / app`.
@@ -82,11 +106,14 @@ resource per project, the owner's label as environment.
 
 - A Management API **personal access token** (`sbp_…`), scoped (a "Legacy" token has full account
   access). Dashboard permissions per tool group: Project Settings, API Keys, API Key Secrets (the
-  data plane reads the service role key), Database, Migrations, Advisors, Storage Config, Auth
-  Config, Edge Functions, Secrets; the last three not confirmed endpoint by endpoint.
+  data plane reads the service role key), Database, Migrations, Advisors, Branching (also read by
+  discovery), Storage Config, Auth Config, Edge Functions, Secrets; the last three and Branching
+  not confirmed endpoint by endpoint (the OpenAPI names `branching_development_*`).
 
 ## Debug
 
 - A migration asks for all five write risks → one statement is off the allow-list; split it.
 - `execute_sql` on an application table asks for `read-managed-schemas` → the query is unread.
 - "acceptable only in [preview, staging]" → a bulk write on prod (schema changes and RLS only).
+- A preview branch refused `resource-not-in-mission` → the mission has no `preview` set with
+  future resources, or the branch is not discovered yet: `list_branches` on its project.

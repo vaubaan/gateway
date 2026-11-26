@@ -4,12 +4,13 @@
  * Handbook : docs/handbook/services/supabase.md, Invariants, "Answers
  * that carry secrets".
  *
- * Two reads answer with the project's secrets in clear : `GET
- * /projects/{ref}/secrets` (every edge-function secret with its `value` —
- * `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` among them) and `GET
- * /projects/{ref}/config/auth` (OAuth client secrets, SMTP password, hook
- * secrets, SMS provider tokens…). Both are priced as `supabase.read-data`,
- * the risk most missions hold, so neither may return a secret value ; nor
+ * Three reads answer with secrets in clear : `GET /projects/{ref}/secrets`
+ * (every edge-function secret with its `value` — `SUPABASE_SERVICE_ROLE_KEY`
+ * and `SUPABASE_DB_URL` among them), `GET /projects/{ref}/config/auth` (OAuth
+ * client secrets, SMTP password, hook secrets, SMS provider tokens…) and `GET
+ * /branches/{ref}` (a preview branch's database password and JWT secret). All
+ * are priced as `supabase.read-data`, the risk most missions hold, so none
+ * may return a secret value ; nor
  * may the answer of `PATCH /config/auth`, which is the whole config again.
  *
  * The rule is an **allow-list** : a field is returned as it is only when it
@@ -267,4 +268,24 @@ export function redactFunctionSecrets(payload: unknown): unknown {
 /** `GET` / `PATCH /projects/{ref}/config/auth` : settings, never a secret. */
 export function redactAuthConfig(payload: unknown): unknown {
   return isEmpty(payload) ? payload : redactObject(payload, AUTH_CONFIG_PUBLIC_FIELDS);
+}
+
+/**
+ * Fields of a branch's config (`GET /v1/branches/{ref}`, `BranchDetailResponse`)
+ * returned as they are : `db_pass` and `jwt_secret` are not among them.
+ */
+export const BRANCH_CONFIG_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
+  'ref',
+  'postgres_version',
+  'postgres_engine',
+  'release_channel',
+  'status',
+  'db_host',
+  'db_port',
+  'db_user',
+]);
+
+/** `GET /v1/branches/{ref}` : the database settings, never the password nor the JWT secret. */
+export function redactBranchConfig(payload: unknown): unknown {
+  return isEmpty(payload) ? payload : redactObject(payload, BRANCH_CONFIG_PUBLIC_FIELDS);
 }

@@ -130,6 +130,16 @@ export const supabaseDataModel: DataModel = {
             'version timestamp).',
         },
         {
+          name: 'branch',
+          parent: 'project',
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A preview branch, as its project sees it : listed under the parent, read, ' +
+            'deleted or reset under the branch itself, which is a project of its own ' +
+            '(its own ref, labelled `preview`). The acts are the virtual leaves ' +
+            '`delete` and `reset`.',
+        },
+        {
           name: 'project-settings',
           parent: 'project',
           cardinalities: ['one'],

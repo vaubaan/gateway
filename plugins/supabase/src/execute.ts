@@ -69,6 +69,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import {
+  branchParentOf,
   classifySupabase,
   missionProjects,
   readIdentifiers,
@@ -78,10 +79,10 @@ import {
 import { supabaseBearerOf } from './credential.ts';
 import { SERVICE_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
 import { projectRefIdent, tableSchemas } from './identifiers.ts';
-import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
+import { redactAuthConfig, redactBranchConfig, redactFunctionSecrets } from './redact.ts';
 import { SUPABASE_DATA_PLANE_TOOLS, SUPABASE_TOOL_NAMES } from './tools.ts';
 
-/** Upper bound on the projects one account may expose ; the owner labels them one by one. */
+/** Upper bound on the resources (projects, then preview branches) one account may expose. */
 export const MAX_DISCOVERED_PROJECTS = 200;
 
 /** What a call without an answer body returns to the agent (a `204`, a `DELETE`). */
@@ -113,7 +114,13 @@ export async function executeSupabase(
   const read = readIdentifiers(tool, args);
   if ('denied' in read) return refusalResult(read.denied);
   const token = supabaseBearerOf(SERVICE_ID, ctx.credential);
-  const call: SupabaseCall = { io: ctx, token, projectRef: target.ref, id: read.id };
+  const call: SupabaseCall = {
+    io: ctx,
+    token,
+    projectRef: target.ref,
+    branchParent: branchParentOf(target.ref, ctx.resources),
+    id: read.id,
+  };
   return declining(async () => {
     const payload = DATA_PLANE_TOOLS.has(tool)
       ? await callDataPlane(call, tool, args)
@@ -129,6 +136,8 @@ interface SupabaseCall {
   readonly token: string;
   /** The project `resolveProjectRef` answered. */
   readonly projectRef: string;
+  /** Its parent project when discovery described it as a preview branch (`branchParentOf`). */
+  readonly branchParent: string | null;
   /** The identifiers `readIdentifiers` answered, each within the grammar of its kind. */
   readonly id: ToolIdentifiers;
 }
@@ -173,7 +182,7 @@ export async function discoverSupabaseResources(ctx: AccountContext): Promise<re
       cap: MAX_DISCOVERED_PROJECTS,
     });
   }
-  return all.slice(0, MAX_DISCOVERED_PROJECTS).map(({ ref, project }) => {
+  const discovered = all.slice(0, MAX_DISCOVERED_PROJECTS).map(({ ref, project }) => {
     const orgKey =
       stringField(project, 'organization_slug') ?? stringField(project, 'organization_id') ?? null;
     const orgName = orgKey ? (orgNames.get(orgKey) ?? orgKey) : null;
@@ -190,8 +199,156 @@ export async function discoverSupabaseResources(ctx: AccountContext): Promise<re
         ...(region ? { region } : {}),
         ...(status ? { status } : {}),
       },
-    };
+    } satisfies Resource;
   });
+  const branches = await discoverBranches(ctx, token, discovered);
+  const room = Math.max(0, MAX_DISCOVERED_PROJECTS - discovered.length);
+  if (branches.length > room) {
+    ctx.logger?.warn(
+      `${SERVICE_ID}: more preview branches than the discovery cap, list truncated`,
+      {
+        total: branches.length,
+        cap: room,
+      },
+    );
+  }
+  return [...discovered, ...branches.slice(0, room)];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Preview branches (ADR preview-branches-are-discovered-resources)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** How many projects' branches discovery lists at a time. */
+const BRANCH_LISTING_CONCURRENCY = 4;
+
+/** One branch of `GET /projects/{ref}/branches`, read field by field. */
+interface BranchEntry {
+  readonly ref: string;
+  readonly isDefault: boolean;
+  readonly record: Readonly<Record<string, unknown>>;
+}
+
+/** The branches of a project, each with a ref within the ref grammar ; others are left out. */
+async function branchesOf(io: UpstreamIo, token: string, ref: string): Promise<BranchEntry[]> {
+  const listed = await managementJson(io, token, `/projects/${ref}/branches`, isRecordList);
+  return listed.flatMap((record) => {
+    const branchRef = projectRefIdent(record.project_ref);
+    return branchRef === null
+      ? []
+      : [{ ref: branchRef, isDefault: record.is_default === true, record }];
+  });
+}
+
+/** What `list_branches` answers of one branch : no field Supabase may add tomorrow. */
+function branchView({ ref, isDefault, record }: BranchEntry): Record<string, unknown> {
+  return {
+    ref,
+    name: record.name ?? null,
+    git_branch: record.git_branch ?? null,
+    pr_number: record.pr_number ?? null,
+    is_default: isDefault,
+    persistent: record.persistent === true,
+    status: record.status ?? null,
+    created_at: record.created_at ?? null,
+    updated_at: record.updated_at ?? null,
+  };
+}
+
+/**
+ * The project's branches as resources : every branch but the default one (the
+ * project itself), named after the project and the git branch. A branch that
+ * lives with one pull request is labelled `preview` by the plugin ; a
+ * persistent branch is left for the owner to label. A project whose branches
+ * cannot be listed (branching off, a token without the Branching permission)
+ * contributes none : the projects are still discovered.
+ */
+async function discoverBranches(
+  ctx: AccountContext,
+  token: string,
+  projects: readonly Resource[],
+): Promise<Resource[]> {
+  const found: Resource[][] = [];
+  const known = new Set(projects.map((p) => p.ref));
+  let failures = 0;
+  for (let start = 0; start < projects.length; start += BRANCH_LISTING_CONCURRENCY) {
+    const batch = projects.slice(start, start + BRANCH_LISTING_CONCURRENCY);
+    const answers = await Promise.allSettled(batch.map((p) => branchesOf(ctx, token, p.ref)));
+    answers.forEach((answer, k) => {
+      const parent = batch[k];
+      if (parent === undefined) return;
+      if (answer.status === 'rejected') {
+        failures += 1;
+        return;
+      }
+      found.push(
+        answer.value
+          .filter((b) => !b.isDefault && !known.has(b.ref))
+          .map((b) => branchResource(parent, b)),
+      );
+    });
+  }
+  if (failures > 0) {
+    ctx.logger?.info(`${SERVICE_ID}: preview branches not listed for some projects`, {
+      projects: failures,
+    });
+  }
+  return found.flat();
+}
+
+function branchResource(parent: Resource, { ref, record }: BranchEntry): Resource {
+  const gitBranch = stringField(record, 'git_branch');
+  const name = gitBranch ?? stringField(record, 'name') ?? ref;
+  const persistent = record.persistent === true;
+  const prNumber = typeof record.pr_number === 'number' ? record.pr_number : undefined;
+  const status = stringField(record, 'status');
+  return {
+    service: SERVICE_ID,
+    ref,
+    displayName: `${parent.displayName} / ${name}`,
+    ...(persistent ? {} : { env: PREVIEW_ENV }),
+    metadata: {
+      ...pick(parent.metadata, ['organization', 'organization_name', 'region']),
+      parent_project_ref: parent.ref,
+      ...(gitBranch ? { git_branch: gitBranch } : {}),
+      ...(prNumber !== undefined ? { pr_number: prNumber } : {}),
+      persistent,
+      ...(status ? { status } : {}),
+    },
+  };
+}
+
+/** The named fields of a parent's metadata a branch shares (its organization, its region). */
+function pick(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) if (metadata?.[key] !== undefined) out[key] = metadata[key];
+  return out;
+}
+
+/** The environment of a branch that lives with one pull request. */
+const PREVIEW_ENV = 'preview';
+
+/**
+ * Before deleting or resetting : Supabase lists the call's ref among the
+ * branches of the parent discovery named, and not as its default branch. The
+ * classifier already refused a resource discovery did not describe as a
+ * branch ; this check holds when the description is out of date.
+ */
+async function confirmBranch(call: SupabaseCall): Promise<void> {
+  const parent = call.branchParent;
+  if (parent === null) {
+    throw new ExecutorRefusal(`project_ref: '${call.projectRef}' is not a preview branch.`);
+  }
+  const branches = await branchesOf(call.io, call.token, parent);
+  const branch = branches.find((b) => b.ref === call.projectRef);
+  if (branch === undefined || branch.isDefault) {
+    throw new ExecutorRefusal(
+      `project_ref: '${call.projectRef}' is not a preview branch of '${parent}' at Supabase now. ${TOOL.listBranches} on '${parent}' lists them.`,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -306,6 +463,19 @@ async function callManagement(
         name: args.name,
         query: args.query,
       });
+
+    // ─── preview branches ───────────────────────────────────────────────────
+    case TOOL.listBranches:
+      return (await branchesOf(call.io, call.token, ref)).map(branchView);
+    // The branch's database password and JWT secret : `redactBranchConfig` keeps the rest.
+    case TOOL.getBranch:
+      return redactBranchConfig(await mgmt(`/branches/${ref}`));
+    case TOOL.deleteBranch:
+      await confirmBranch(call);
+      return mgmt(`/branches/${ref}`, 'DELETE');
+    case TOOL.resetBranch:
+      await confirmBranch(call);
+      return mgmt(`/branches/${ref}/reset`, 'POST', {});
 
     // ─── storage (Management API side) ──────────────────────────────────────
     case TOOL.listBuckets:
