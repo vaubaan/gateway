@@ -31,7 +31,7 @@ export const asanaPlugin = definePlugin({
   iconColor: ASANA_ICON_COLOR,
   resourceNoun: { one: 'project', other: 'projects' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.0',
+  version: '0.1.1',
   description:
     'Read the projects, sections, tasks and comments of an Asana account; create, change, comment on and delete tasks.',
   summary:

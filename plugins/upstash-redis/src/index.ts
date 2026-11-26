@@ -70,7 +70,7 @@ export const upstashRedisPlugin = definePlugin({
   icon: UPSTASH_REDIS_ICON,
   iconColor: UPSTASH_REDIS_ICON_COLOR,
   resourceNoun: { one: 'database', other: 'databases' },
-  version: '4.1.0',
+  version: '4.1.1',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:

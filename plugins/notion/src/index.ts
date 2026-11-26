@@ -31,7 +31,7 @@ export const notionPlugin = definePlugin({
   iconColor: NOTION_ICON_COLOR,
   resourceNoun: { one: 'page or database', other: 'pages and databases' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.2.0',
+  version: '0.2.1',
   description:
     'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal account.',
   summary:

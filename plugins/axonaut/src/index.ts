@@ -32,7 +32,7 @@ export const axonautPlugin = definePlugin({
   icon: AXONAUT_ICON,
   iconColor: AXONAUT_ICON_COLOR,
   resourceNoun: { one: 'account', other: 'accounts' },
-  version: '0.1.0',
+  version: '0.1.1',
   description:
     'CRM and sales of an Axonaut account: companies, contacts, pipeline, quotations, ' +
     'invoices, payments, projects, tasks and tickets.',

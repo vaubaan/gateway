@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-axonaut",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Axonaut — CRM, quotes, invoices, payments, projects and tickets of one Axonaut account",

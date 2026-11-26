@@ -42,7 +42,7 @@ export const railwayPlugin = definePlugin({
   iconColor: RAILWAY_ICON_COLOR,
   resourceNoun: { one: 'project', other: 'projects' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '6.1.0',
+  version: '6.1.1',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:

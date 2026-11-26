@@ -26,7 +26,7 @@ export const githubProjectsPlugin = definePlugin({
   icon: GITHUB_PROJECTS_ICON,
   iconColor: GITHUB_PROJECTS_ICON_COLOR,
   resourceNoun: { one: 'project', other: 'projects' },
-  version: '0.1.0',
+  version: '0.1.1',
   description: "An organization's GitHub Projects board: its fields, views and items.",
   summary:
     "One account is one project of a GitHub organization, opened with a fine-grained personal access token; it is the account's one resource. A mission reads the board, adds cards, changes their fields, removes them, or creates fields and views. No environment: projects carry none.",

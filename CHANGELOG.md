@@ -32,7 +32,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `vaubaan-manifest.json` (covered by the signature), the catalog's index carries them, and the
   gateway draws them (ADR service-icons-declared-by-the-plugin, amendment 2026-11-26). A plugin
   shows its icon once a version built with this CLI is in the catalog; an older gateway ignores
-  the two fields.
+  the two fields. The nineteen catalog plugins are rebuilt for it, with no other change: Asana
+  0.1.1, Axonaut 0.1.1, CalDAV 0.2.1, Cloudflare DNS 4.1.1, Context7 0.2.1, Fly 0.4.3, GitHub
+  5.5.1, GitHub Projects 0.1.1, Gmail 2.0.1, Google Calendar 0.4.3, Miro 0.5.4, Notion 0.2.1,
+  Outlook 0.1.3, Railway 6.1.1, Resend 0.6.3, Stripe 0.5.3, Supabase 6.4.1, Upstash Redis 4.1.1
+  and Vercel 4.3.1.
 
 - **Supabase (plugin 6.4.0): an agent reaches the preview branches of its projects** (ADR
   preview-branches-are-discovered-resources). Each preview branch a pull request opens is a

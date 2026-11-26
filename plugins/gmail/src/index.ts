@@ -84,7 +84,7 @@ import {
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export const GMAIL_PLUGIN_VERSION = '2.0.0';
+export const GMAIL_PLUGIN_VERSION = '2.0.1';
 
 export function createGmailPlugin(options: GmailRuntimeOptions = {}): ServicePlugin {
   const runtime = createGmailRuntime(options);

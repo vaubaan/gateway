@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-railway",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for Railway — rewrap of mcp.railway.com plus GraphQL variable tools, a workspace token pasted by hand",
