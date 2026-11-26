@@ -27,15 +27,9 @@ export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 /** Upper bound of `ServicePlugin.summary` : a paragraph, not a handbook. */
 export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
 
-/**
- * `ServicePlugin.icon` : the `d` attribute of one SVG path — a drawing
- * command first, then commands, numbers and separators only. No markup, no
- * `url(…)`, nothing a page could not put inside `<path d="…">` as it is.
- */
-export const SVG_PATH_DATA_PATTERN = /^[Mm][0-9A-Za-z.,\s+-]*$/;
+import { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from './mark.ts';
 
-/** `ServicePlugin.iconColor` : one sRGB colour as six hex digits, `#RRGGBB`, nothing a stylesheet could misread. */
-export const HEX_COLOUR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+export { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN };
 
 /** Upper bound of one `ServicePlugin.toolTitles` entry : a headline, not a description. */
 export const TOOL_TITLE_MAX_LENGTH = 60;

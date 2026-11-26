@@ -19,6 +19,8 @@ import { createHash } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { isRecord } from '../guards.ts';
 
+export { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from '../mark.ts';
+
 /** The file of an archive that lists the digest of every other file. */
 export const ARCHIVE_MANIFEST_FILE = 'vaubaan-manifest.json';
 /** The format of {@link ARCHIVE_MANIFEST_FILE}. */

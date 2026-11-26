@@ -40,13 +40,14 @@ import { pathToFileURL } from 'node:url';
 import {
   ARCHIVE_MANIFEST_FILE,
   ARCHIVE_MANIFEST_FORMAT,
+  HEX_COLOUR_PATTERN,
   manifestOfFiles,
   outsideManifest,
   packArchive,
+  SVG_PATH_DATA_PATTERN,
   type ArchiveManifest,
   type ArchiveMark,
 } from '@vaubaan/plugin-sdk/archive';
-import { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
 import { sdkBuildRange } from '@vaubaan/plugin-sdk/version';
 
 import type * as Esbuild from 'esbuild';
