@@ -65,9 +65,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Plugin SDK: the scope cap `calls_per_session_max` is removed.** It capped the calls of a
   mission's whole life, which the mission's budget already bounds, and nothing enforced it. A
   catalog that still writes it loads; the key is dropped.
-- **The activity of a mission is at `/missions/<id>/activity`**, named after its title; the older
-  `/missions/<id>/session` answers with a permanent redirect, so a saved link still opens it. The
-  interface no longer calls a mission's history its "session": the Timeline, the edit page and a
+- **The activity of a mission is at `/missions/<id>/activity`**, named after its title;
+  `/missions/<id>/session` is gone, with no redirect. The interface no longer calls a mission's history its "session": the Timeline, the edit page and a
   restored version say "mission log". A web session (signing in) keeps its name.
 
 ## [2.0.0-alpha.31] - 2026-11-24

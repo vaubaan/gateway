@@ -146,9 +146,6 @@ export const LEGACY_REDIRECTS: readonly {
     source: '/account/:page(create|reset|forgot)',
     destination: '/sign-in-account/:page',
   },
-  // The activity of one mission was `/session` before the mission's living history was
-  // called its mission log; the page is named after its title, "Activity of <mission>".
-  { source: '/missions/:id/session', destination: '/missions/:id/activity' },
 ];
 
 const nextConfig: NextConfig = {
