@@ -73,6 +73,7 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'accounts.handlers.revoke',
   'accounts.handlers.updateResource',
   'accounts.handlers.setDefaultEnv',
+  'accounts.handlers.rename',
   // `transfer` (accounts) and the share acts (`src/server/shares/handlers.ts`): `guardMutation`
   // first, like the others.
   'accounts.handlers.transfer',

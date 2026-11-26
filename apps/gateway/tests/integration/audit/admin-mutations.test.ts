@@ -435,6 +435,14 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.accounts.service.setDefaultEnv(rig.alice, account.id, 'staging'),
     writes: { act: 'account-default-env-set', object: 'account', actor: 'alice' },
   },
+  'AccountService.rename': {
+    kind: 'mutation',
+    target: accounts,
+    prepare: (rig) => rig.connectByKey(),
+    drive: (rig, account: AccountRecord) =>
+      rig.root.accounts.service.rename(rig.alice, account.id, 'Renamed'),
+    writes: { act: 'account-renamed', object: 'account', actor: 'alice' },
+  },
   'AccountService.callbackUrl': READ,
   'AccountService.start': {
     kind: 'mutation',
@@ -1816,6 +1824,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'account-created',
       'account-default-env-set',
       'account-reassigned',
+      'account-renamed',
       'account-revoked',
       'account-transferred',
       'administrator-granted',

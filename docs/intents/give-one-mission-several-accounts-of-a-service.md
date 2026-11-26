@@ -33,6 +33,16 @@ requires: mission, account
 anchors: packages/gateway-core/src/pipeline.ts, apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 
+## Rename an account to tell it apart
+
+status: implemented
+requires: account
+anchors: apps/gateway/src/server/accounts/service.ts, apps/gateway/src/app/(app)/accounts/[id]/account-view.tsx, apps/gateway/src/app/(app)/accounts/[id]/rename/route.ts, apps/gateway/src/server/accounts/service.test.ts
+acceptance:
+
+- An owner renames an account from its page; the new name reads in the lists, the mission cards and the activity
+- A blank name, another person's account or a disconnected one is refused; the rename is recorded with the name before and after
+
 ## Let a tool that names no resource answer every account
 
 status: proposed

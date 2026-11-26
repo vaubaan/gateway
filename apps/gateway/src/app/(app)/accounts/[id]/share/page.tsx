@@ -150,7 +150,7 @@ export default async function GiveAccessPage({
       data={data}
       actor={actor}
       notice={notice}
-      unfolded={{ access: null, resource: null }}
+      unfolded={{ access: null, resource: null, rename: false }}
       note={
         context.unshareable ? (
           <Callout tone="bad" title="Nobody can be given access to this account">

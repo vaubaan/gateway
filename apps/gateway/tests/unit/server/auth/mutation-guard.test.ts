@@ -280,6 +280,14 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.seeded.github.account.id,
     ),
   ),
+  'accounts.handlers.rename': form('user', 303, (rig, headers) =>
+    rig.root.accounts.handlers.rename(
+      post(`/accounts/${rig.seeded.github.account.id}/rename`, headers, {
+        display_name: 'Renamed',
+      }),
+      rig.seeded.github.account.id,
+    ),
+  ),
   'accounts.handlers.transfer': form('user', 303, (rig, headers) =>
     rig.root.accounts.handlers.transfer(
       post(`/accounts/${rig.seeded.github.account.id}/transfer`, headers, {

@@ -127,6 +127,9 @@ export type AdminAct =
    *  unlabelled resources. Object: the account; `before` / `after` carry
    *  `default_env` (a label or null). */
   | 'account-default-env-set'
+  /** The owner renamed the account. Object: the account; `before` / `after` carry
+   *  `display_name`. */
+  | 'account-renamed'
   | 'share-created'
   | 'share-revoked'
   | 'mission-issued'

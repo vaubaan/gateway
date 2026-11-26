@@ -12,6 +12,7 @@
  *   POST /accounts/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /accounts/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
+ *   POST /accounts/<id>/rename                    the owner's name for the account
  *   GET  /reference/<service>/connect/<file>        a screenshot of the connect guide
  *                                                    (signed-in users; read-only)
  *   POST /api/accounts/refresh                    JSON `{ account_ids }`: a page that
@@ -115,6 +116,7 @@ export interface AccountHandlers {
   reassign(request: Request, accountId: string): Promise<Response>;
   updateResource(request: Request, accountId: string, resourceId: string): Promise<Response>;
   setDefaultEnv(request: Request, accountId: string): Promise<Response>;
+  rename(request: Request, accountId: string): Promise<Response>;
   /**
    * `POST /api/missions/:id/resources/check` — body `{ account_id }`: runs the
    * discovery of that account of the mission (its creator, or an owner of the
@@ -539,6 +541,32 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
           who.principal,
           missing ? ACCOUNTS_PATH : accountPath(accountId),
           failureNotice(err, 'Default environment not saved'),
+        );
+      }
+    },
+
+    async rename(request, accountId) {
+      const who = await userOf(request);
+      if ('response' in who) return who.response;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      try {
+        const updated = await deps.accounts.rename(
+          who.actor,
+          accountId,
+          stringField(form, 'display_name'),
+        );
+        return await redirectWithNotice(who.principal, accountPath(accountId), {
+          tone: 'success',
+          title: 'Account renamed',
+          lines: [`It now reads ${updated.displayName} everywhere, in the missions too.`],
+        });
+      } catch (err) {
+        const missing = err instanceof ConnectError && err.code === 'not-found';
+        return redirectWithNotice(
+          who.principal,
+          missing ? ACCOUNTS_PATH : accountPath(accountId),
+          failureNotice(err, 'Account not renamed'),
         );
       }
     },

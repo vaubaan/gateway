@@ -39,6 +39,8 @@ import {
   Hint,
   Input,
   KeyValue,
+  MenuItem,
+  MoreMenu,
   Mono,
   PageHeader,
   Row,
@@ -108,7 +110,7 @@ import styles from '../accounts.styles';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The query parameters that unfold one row of the page. */
-export const ACCOUNT_PARAMS = { access: 'access', resource: 'resource' } as const;
+export const ACCOUNT_PARAMS = { access: 'access', resource: 'resource', rename: 'rename' } as const;
 const RESOURCES_ANCHOR = 'resources';
 const ACCESS_ANCHOR = 'who-has-access';
 /** One day, for the token expiry notice. */
@@ -361,6 +363,45 @@ function ResourceEditor({
   );
 }
 
+/** The owner's name for the account, unfolded under the header by "Rename". */
+function RenameForm({
+  action,
+  current,
+  cancelHref,
+}: {
+  action: string;
+  current: string;
+  cancelHref: string;
+}) {
+  const id = 'account-name';
+  return (
+    <form method="post" action={action} className={styles.editor} data-testid="rename-form">
+      <Field
+        label="Name"
+        shape="how it reads in the lists, the missions and the activity"
+        htmlFor={id}
+        hint="Only the name changes: the credential, the resources, who has access and the missions stay as they are."
+      >
+        <Input
+          id={id}
+          name="display_name"
+          defaultValue={current}
+          maxLength={MAX_NAME_LENGTH}
+          required
+        />
+      </Field>
+      <div className={styles.editorActions}>
+        <Button type="submit" variant="primary" size="sm">
+          {ACCOUNT_ACTIONS.save}
+        </Button>
+        <ButtonLink href={cancelHref} variant="ghost" size="sm">
+          {ACTIONS.cancel}
+        </ButtonLink>
+      </div>
+    </form>
+  );
+}
+
 /**
  * The owner's default environment for the resources without a label of their own
  * (ADR connect-driver-and-resource-curation): one of the labels the service's
@@ -505,8 +546,13 @@ export function AccountView({
   data: AccountData;
   actor: Actor;
   notice: Notice | null;
-  /** What the query string asks to unfold: the permissions of one access, the form of one resource. */
-  unfolded: { readonly access: string | null; readonly resource: string | null };
+  /** What the query string asks to unfold: the permissions of one access, the form of one
+   *  resource, the account's rename form. */
+  unfolded: {
+    readonly access: string | null;
+    readonly resource: string | null;
+    readonly rename: boolean;
+  };
   /** One more note above the lists (why the dialog did not open). */
   note?: React.ReactNode;
   /** The dialog drawn over the page ("Give access"). */
@@ -738,6 +784,7 @@ export function AccountView({
     Date.parse(detail.token_expires_at) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * MS_PER_DAY;
 
   const details = <DetailToggle key="details" />;
+  const renaming = unfolded.rename && !revoked;
   const reconnect = (
     <ButtonLink
       href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(account.service)}?account=${encodeURIComponent(account.id)}`}
@@ -763,6 +810,15 @@ export function AccountView({
         }
         lede={lede}
         secondary={ownerActs ? [details, reconnect] : [details]}
+        more={
+          revoked ? undefined : (
+            <MoreMenu testId="account-more">
+              <MenuItem href={`${base}?${ACCOUNT_PARAMS.rename}=1`}>
+                {ACCOUNT_ACTIONS.rename}
+              </MenuItem>
+            </MoreMenu>
+          )
+        }
         primary={
           ownerActs ? (
             <ButtonLink href={sharePath(account.id)} variant="primary">
@@ -779,6 +835,9 @@ export function AccountView({
         }
       />
       <NoticeBanner notice={notice} />
+      {renaming && (
+        <RenameForm action={`${base}/rename`} current={account.displayName} cancelHref={base} />
+      )}
 
       {(note ||
         (personal && !revoked) ||

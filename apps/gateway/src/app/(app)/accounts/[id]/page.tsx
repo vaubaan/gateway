@@ -5,7 +5,7 @@
  *
  * `?access=<share id>` unfolds the exact permissions of one access;
  * `?resource=<id>` opens the form of one resource (name, environment label,
- * hidden). The page itself is `account-view.tsx`, shared with the "Give
+ * hidden); `?rename=1` the account's rename form. The page itself is `account-view.tsx`, shared with the "Give
  * access" dialog (`share/page.tsx`).
  */
 import { notFound } from 'next/navigation';
@@ -52,6 +52,7 @@ export default async function AccountPage({
       unfolded={{
         access: firstParam(query[ACCOUNT_PARAMS.access]),
         resource: firstParam(query[ACCOUNT_PARAMS.resource]),
+        rename: firstParam(query[ACCOUNT_PARAMS.rename]) !== null,
       }}
     />
   );

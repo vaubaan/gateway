@@ -1054,6 +1054,34 @@ export class AccountService {
     return updated;
   }
 
+  /**
+   * The owner's name for the account: how it reads in the lists, the missions and the
+   * Record. Any owner, a personal (`host`) account included; never a disconnected one.
+   * Blank is refused; an unchanged name writes nothing. Audited (`account-renamed`).
+   */
+  async rename(actor: Actor, accountId: string, raw: string): Promise<AccountRecord> {
+    const account = await this.requireOwned(actor, accountId);
+    if (account.status === 'revoked') throw new ConnectError('account-revoked');
+    const name = cleanName(raw);
+    if (name === null) throw new ConnectError('invalid-input', 'the name cannot be empty');
+    if (name === account.displayName) return account;
+    const updated = await this.deps.store.accounts.setDisplayName(account.id, name);
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: this.nowIso(),
+      user_id: actor.user.id,
+      act: 'account-renamed',
+      object: { type: 'account', id: account.id },
+      before: { display_name: account.displayName },
+      after: { display_name: updated.displayName },
+    });
+    this.deps.logger.info('account renamed by its owner', {
+      account_id: account.id,
+      user_id: actor.user.id,
+    });
+    return updated;
+  }
+
   // ── Revoke ────────────────────────────────────────────────────────────────
 
   /**

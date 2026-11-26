@@ -498,6 +498,7 @@ export const ACCOUNT_ACTIONS = {
   closeMission: 'Close',
   connect: 'Connect',
   save: 'Save',
+  rename: 'Rename',
   /** On the Vaubaan account: the prefilled creation (ADR platform-management-is-a-plugin-on-the-execution-door). */
   createPlatformMission: 'Create the platform management mission',
 } as const;
@@ -802,6 +803,7 @@ export const ACT_WORDS = {
   'resources-discovered': 'refreshed what an account reaches',
   'resource-edited': 'edited a resource',
   'account-default-env-set': 'changed the default environment of an account',
+  'account-renamed': 'renamed an account',
   'share-created': 'gave access',
   'share-revoked': 'removed an access',
   'mission-issued': 'created a mission',

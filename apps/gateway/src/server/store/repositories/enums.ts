@@ -79,6 +79,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'resources-discovered': true,
   'resource-edited': true,
   'account-default-env-set': true,
+  'account-renamed': true,
   'share-created': true,
   'share-revoked': true,
   'mission-issued': true,

@@ -113,6 +113,8 @@ export interface AccountsRepo {
    * `null` removes it. The caller validates the label against the catalog.
    */
   setDefaultEnv(id: string, env: string | null): Promise<AccountRecord>;
+  /** The owner's rename; the caller cleans the name (`cleanName`). */
+  setDisplayName(id: string, displayName: string): Promise<AccountRecord>;
   /** Every resource, each with its effective label (`effectiveResourceEnv`). */
   listResources(accountId: string): Promise<AccountResourceRecord[]>;
   getResource(id: string): Promise<AccountResourceRecord | null>;
@@ -377,6 +379,9 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
   const setDefaultEnvStmt = db.prepare<[string | null, string, string]>(
     'UPDATE accounts SET default_env = ?, updated_at = ? WHERE id = ?',
   );
+  const setAccountNameStmt = db.prepare<[string, string, string]>(
+    'UPDATE accounts SET display_name = ?, updated_at = ? WHERE id = ?',
+  );
   const setEnv = db.prepare<[string | null, string]>(
     "UPDATE account_resources SET env = ?, env_source = 'owner' WHERE id = ?",
   );
@@ -630,6 +635,11 @@ export function createAccountsRepo(ctx: RepoContext): AccountsRepo {
     },
     async setDefaultEnv(id, env) {
       const result = setDefaultEnvStmt.run(env, nowIso(ctx), id);
+      if (result.changes === 0) throw new NotFoundError('account', id);
+      return requireAccount(id);
+    },
+    async setDisplayName(id, displayName) {
+      const result = setAccountNameStmt.run(displayName, nowIso(ctx), id);
       if (result.changes === 0) throw new NotFoundError('account', id);
       return requireAccount(id);
     },

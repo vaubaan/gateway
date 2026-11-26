@@ -834,6 +834,34 @@ describe('resources — discovery merge and owner edits', () => {
     });
   });
 
+  it('renames an account for its owner only, audited, never blank nor once disconnected', async () => {
+    const { h } = harness();
+    const alice = await h.actor('alice@example.com');
+    const bob = await h.actor('bob@example.com');
+    const { account } = connectedOf(await h.service.start(alice, 'keyco', { fields }));
+
+    await expectConnectError(h.service.rename(bob, account.id, 'Mine'), 'not-found');
+    await expectConnectError(h.service.rename(alice, account.id, '   '), 'invalid-input');
+
+    const renamed = await h.service.rename(alice, account.id, '  Client   Acme  ');
+    expect(renamed.displayName).toBe('Client Acme');
+    expect((await h.store.accounts.getById(account.id))?.displayName).toBe('Client Acme');
+    expect(h.audit.admin.filter((e) => e.act === 'account-renamed')).toEqual([
+      expect.objectContaining({
+        user_id: alice.user.id,
+        object: { type: 'account', id: account.id },
+        before: { display_name: account.displayName },
+        after: { display_name: 'Client Acme' },
+      }),
+    ]);
+    // The same name again writes nothing.
+    await h.service.rename(alice, account.id, 'Client Acme');
+    expect(h.audit.admin.filter((e) => e.act === 'account-renamed')).toHaveLength(1);
+
+    await h.service.revoke(alice, account.id);
+    await expectConnectError(h.service.rename(alice, account.id, 'Gone'), 'account-revoked');
+  });
+
   it('sets a default environment among the catalog labels, audited, that unlabelled resources carry', async () => {
     const { h, state } = harness();
     const alice = await h.actor('alice@example.com');
