@@ -13,6 +13,7 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { AuditWriter } from '@vaubaan/gateway-core';
+import type { CatalogMark } from '@vaubaan/shared';
 import { parseCatalogYaml } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
@@ -138,7 +139,7 @@ export interface PluginInstallDeps {
    */
   readonly catalogVersionOf: (pluginId: string) => string | null;
   /** The catalog's plugins this instance does not run, with the version a connection installs. */
-  readonly catalogOffer: () => readonly { id: string; released: string; name?: string }[];
+  readonly catalogOffer: () => readonly CatalogOffer[];
   /** Why the instance may not run that plugin at all (`plugins.enabled`), or `null`. */
   readonly loadRefusal: (pluginId: string) => string | null;
   /**
@@ -216,11 +217,18 @@ export interface PluginInstallService {
   followImage(pluginId: string, actor: PluginActor): Promise<PluginActResult>;
   list(): Promise<readonly PluginVersionRecord[]>;
   /** The catalog's plugins this instance does not run yet: the connect picker offers them. */
-  catalogOffer(): readonly {
-    readonly id: string;
-    readonly released: string;
-    readonly name?: string;
-  }[];
+  catalogOffer(): readonly CatalogOffer[];
+}
+
+/** A catalog plugin this instance does not run: what the connect picker and the catalog page show. */
+export interface CatalogOffer {
+  readonly id: string;
+  /** The version a connection or a click installs. */
+  readonly released: string;
+  /** The service's name, from the catalog's index or this release's known versions. */
+  readonly name?: string;
+  /** The service's mark from the same source, `null` when it gives none (lettered fallback). */
+  readonly icon: CatalogMark | null;
 }
 
 export function createPluginInstallService(deps: PluginInstallDeps): PluginInstallService {

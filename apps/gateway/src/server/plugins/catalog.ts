@@ -23,6 +23,9 @@ export interface KnownCatalogVersion {
   readonly name: string;
   readonly version: string;
   readonly sha256: string;
+  /** The service's icon and colour, as the catalog's index gave them (`catalogMarkOf` reads them). */
+  readonly icon?: string;
+  readonly iconColor?: string;
 }
 
 /**

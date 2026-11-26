@@ -3,7 +3,12 @@
  * plugins-bundled-or-pinned-by-the-operator): nothing about the instance left it, so
  * everything Administration › Plugins shows is computed here. Pure.
  */
-import type { CatalogIndex, VersionsFeed } from '@vaubaan/shared';
+import {
+  catalogMarkOf,
+  type CatalogIndex,
+  type CatalogMark,
+  type VersionsFeed,
+} from '@vaubaan/shared';
 import { lt, satisfies, valid, validRange } from 'semver';
 
 import type { PluginInventoryEntry } from '../plugins';
@@ -39,6 +44,8 @@ export interface CatalogPlugin {
   readonly name?: string;
   /** The sha256 of that version's archive (the index's). */
   readonly sha256?: string;
+  /** The service's mark, when the index gives one an instance draws (`catalogMarkOf`). */
+  readonly mark?: CatalogMark;
 }
 
 /** An advisory whose affected range holds the version this instance runs. */
@@ -114,10 +121,11 @@ export function compare(
   const { gatewayVersion, inventory } = input;
   const catalog: Record<string, CatalogPlugin> = index
     ? Object.fromEntries(
-        Object.entries(index.plugins).map(([id, { name, version, sha256 }]) => [
-          id,
-          { version, name, sha256 },
-        ]),
+        Object.entries(index.plugins).map(([id, entry]) => {
+          const { name, version, sha256 } = entry;
+          const mark = catalogMarkOf(entry);
+          return [id, mark === null ? { version, name, sha256 } : { version, name, sha256, mark }];
+        }),
       )
     : Object.fromEntries(
         Object.entries(feed.plugins).map(([id, { latest }]) => [id, { version: latest }]),

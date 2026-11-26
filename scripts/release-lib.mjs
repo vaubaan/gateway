@@ -543,7 +543,7 @@ export function catalogVersionsFrom(index, comment, compiled) {
   if (!isRecord(index) || index.schema !== 1 || !isRecord(index.plugins)) {
     throw new ReleaseError('the catalog index is not { schema: 1, plugins }');
   }
-  /** @type {Record<string, { name: string, version: string, sha256: string }>} */
+  /** @type {Record<string, { name: string, version: string, sha256: string, icon?: string, iconColor?: string }>} */
   const plugins = {};
   for (const id of Object.keys(index.plugins).sort()) {
     if (compiled.includes(id)) continue;
@@ -557,10 +557,26 @@ export function catalogVersionsFrom(index, comment, compiled) {
     ) {
       throw new ReleaseError(`the catalog index entry '${id}' is not { name, version, sha256 }`);
     }
+    // The service's mark, when the archive declared one (ADR service-icons-declared-by-the-
+    // plugin, amendment 2026-11-26): kept only as definePlugin accepts it, else left out.
+    const icon =
+      typeof entry.icon === 'string' &&
+      entry.icon.length <= 8192 &&
+      /^[Mm][0-9A-Za-z.,\s+-]*$/.test(entry.icon)
+        ? entry.icon
+        : undefined;
+    const iconColor =
+      icon !== undefined &&
+      typeof entry.iconColor === 'string' &&
+      /^#[0-9A-Fa-f]{6}$/.test(entry.iconColor)
+        ? entry.iconColor
+        : undefined;
     plugins[id] = {
       name: entry.name,
       version: parseVersion(String(entry.version)).raw,
       sha256: entry.sha256,
+      ...(icon !== undefined ? { icon } : {}),
+      ...(iconColor !== undefined ? { iconColor } : {}),
     };
   }
   return { $comment: comment, plugins };

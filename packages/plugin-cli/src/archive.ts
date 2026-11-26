@@ -12,7 +12,8 @@
  *                          and the SDK range it was built against (peerDependencies)
  *   LICENSE, README.md     when the plugin has them (or the licence file given)
  *   docs/connect/          the connect guide's screenshots, served by the host
- *   vaubaan-manifest.json  the sha256 of every other file: what a signature covers
+ *   vaubaan-manifest.json  the sha256 of every other file, and the service's icon and colour
+ *                          when the plugin declares them: what a signature covers
  *
  * and the same files packed beside it as `<out>.tgz` (`@vaubaan/plugin-sdk/archive`), the
  * one file an administrator uploads.
@@ -43,7 +44,9 @@ import {
   outsideManifest,
   packArchive,
   type ArchiveManifest,
+  type ArchiveMark,
 } from '@vaubaan/plugin-sdk/archive';
+import { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
 import { sdkBuildRange } from '@vaubaan/plugin-sdk/version';
 
 import type * as Esbuild from 'esbuild';
@@ -123,9 +126,26 @@ export function filesOf(dir: string): Map<string, Uint8Array> {
   return files;
 }
 
-/** The manifest of an archive directory, every file hashed. */
-export function manifestOf(dir: string, id: string, version: string): ArchiveManifest {
-  return manifestOfFiles(filesOf(dir), id, version);
+/** The manifest of an archive directory, every file hashed, with the service's mark if any. */
+export function manifestOf(
+  dir: string,
+  id: string,
+  version: string,
+  mark: ArchiveMark = {},
+): ArchiveManifest {
+  return manifestOfFiles(filesOf(dir), id, version, mark);
+}
+
+/**
+ * The service's mark of a loaded plugin, for the manifest: its `icon` and `iconColor` when
+ * they are what `definePlugin` accepts, nothing otherwise. Pure.
+ */
+export function markOf(loaded: { icon?: unknown; iconColor?: unknown }): ArchiveMark {
+  const { icon, iconColor } = loaded;
+  if (typeof icon !== 'string' || !SVG_PATH_DATA_PATTERN.test(icon)) return {};
+  return typeof iconColor === 'string' && HEX_COLOUR_PATTERN.test(iconColor)
+    ? { icon, iconColor }
+    : { icon };
 }
 
 /**
@@ -151,17 +171,24 @@ export function resolveSdkVersion(pluginDir: string): string {
   }
 }
 
-function smoke(entry: string): { id: unknown; version: unknown } {
+interface Loaded {
+  readonly id: unknown;
+  readonly version: unknown;
+  readonly icon?: unknown;
+  readonly iconColor?: unknown;
+}
+
+function smoke(entry: string): Loaded {
   const code =
     'const m = await import(process.argv[1]);' +
     "const p = m.default; if (!p || typeof p !== 'object') throw new Error('no default export');" +
-    'process.stdout.write(JSON.stringify({ id: p.id, version: p.version }));';
+    'process.stdout.write(JSON.stringify({ id: p.id, version: p.version, icon: p.icon, iconColor: p.iconColor }));';
   const out = execFileSync(
     process.execPath,
     ['--input-type=module', '-e', code, pathToFileURL(entry).href],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  return JSON.parse(out) as { id: unknown; version: unknown };
+  return JSON.parse(out) as Loaded;
 }
 
 export interface BuildArchiveOptions {
@@ -244,7 +271,7 @@ export async function buildArchive(options: BuildArchiveOptions): Promise<BuildA
     cpSync(join(source, CONNECT_DIR), join(target, CONNECT_DIR), { recursive: true });
   }
 
-  let loaded: { id: unknown; version: unknown };
+  let loaded: Loaded;
   try {
     loaded = smoke(entry);
   } catch (err) {
@@ -261,7 +288,7 @@ export async function buildArchive(options: BuildArchiveOptions): Promise<BuildA
   }
   writeFileSync(
     join(target, ARCHIVE_MANIFEST_FILE),
-    `${JSON.stringify(manifestOf(target, loaded.id, manifest.version), null, 2)}\n`,
+    `${JSON.stringify(manifestOf(target, loaded.id, manifest.version, markOf(loaded)), null, 2)}\n`,
   );
   const archive = `${target}.tgz`;
   writeFileSync(archive, packArchive(filesOf(target)));

@@ -37,6 +37,26 @@ describe('the connect picker and the catalog', () => {
     expect(html.indexOf('service-github')).toBeLessThan(html.indexOf('catalog-service-notion'));
   });
 
+  it('draws a catalog plugin with its own mark before it is installed, else its letter', () => {
+    const html = renderToStaticMarkup(
+      <ServicePicker
+        services={[]}
+        available={[
+          {
+            id: 'notion',
+            released: '0.2.0',
+            name: 'Notion',
+            icon: { path: 'M1 2z', color: '#123456' },
+          },
+          { id: 'asana', released: '0.1.0', name: 'Asana', icon: null },
+        ]}
+      />,
+    );
+    expect(html).toContain('d="M1 2z"');
+    expect(html).toContain('#123456');
+    expect(html.match(/<path /g) ?? []).toHaveLength(1);
+  });
+
   it('installs by a form that posts, and says why an installation failed', () => {
     const html = renderToStaticMarkup(
       <InstallFirst serviceId="notion" version="0.2.0" problem="did-not-load" detail="boom" />,

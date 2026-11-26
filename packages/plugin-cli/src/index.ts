@@ -12,6 +12,7 @@ export {
   buildArchive,
   filesOf,
   manifestOf,
+  markOf,
   notBundleableReason,
   outsideManifest,
   resolveSdkVersion,

@@ -5,7 +5,7 @@
  * enumerated here. A service waits for no administrator, except one connected
  * through an OAuth broker none is configured for: it says it is not configured.
  */
-import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
+import { PickCard, PickGrid, ServiceMark, type ServiceMarkIcon } from '@/components/ui';
 import { ACCOUNT_WORDS, INSTALL_WORDS } from '@/lib/vocabulary';
 import { NEW_ACCOUNT_PATH, type ConnectableService } from '@/server/accounts';
 
@@ -35,6 +35,8 @@ export interface CatalogService {
   readonly id: string;
   readonly released: string;
   readonly name?: string;
+  /** Its mark from the catalog's index, `null`: the lettered fallback. */
+  readonly icon?: ServiceMarkIcon | null;
 }
 
 export function ServicePicker({
@@ -71,7 +73,7 @@ export function ServicePicker({
           <PickCard
             key={plugin.id}
             href={`${NEW_ACCOUNT_PATH}/${encodeURIComponent(plugin.id)}${suffix}`}
-            lead={<ServiceMark name={plugin.name ?? plugin.id} icon={null} />}
+            lead={<ServiceMark name={plugin.name ?? plugin.id} icon={plugin.icon ?? null} />}
             title={plugin.name ?? plugin.id}
             description={INSTALL_WORDS.fromCatalog}
             testId={`catalog-service-${plugin.id}`}

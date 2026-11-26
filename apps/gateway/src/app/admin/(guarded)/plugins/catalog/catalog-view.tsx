@@ -6,7 +6,17 @@
  * runs"). Pure: a unit test renders it over invented views.
  */
 import styles from '@/components/settings/settings.styles';
-import { Button, Hint, Mono, PageHeader, Row, Rows, Section, ServiceMark } from '@/components/ui';
+import {
+  Button,
+  Hint,
+  Mono,
+  PageHeader,
+  Row,
+  Rows,
+  Section,
+  ServiceMark,
+  type ServiceMarkIcon,
+} from '@/components/ui';
 import { PIN_A_PLUGIN_DOC } from '@/lib/project-docs';
 import { DOC_PAGES, PLUGIN_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import { PLUGIN_ACTIONS, PLUGINS_PAGE, UPDATE_FIELD } from '@/server/plugins/handlers';
@@ -19,6 +29,8 @@ export interface CatalogView {
     readonly id: string;
     readonly released: string;
     readonly name?: string;
+    /** Its mark from the catalog's index, `null`: the lettered fallback. */
+    readonly icon?: ServiceMarkIcon | null;
   }[];
   readonly install: InstallView;
 }
@@ -47,7 +59,7 @@ export function CatalogPage({ view }: { view: CatalogView }) {
               <Row
                 key={plugin.id}
                 testId={`available-plugin-${plugin.id}`}
-                lead={<ServiceMark name={plugin.name ?? plugin.id} icon={null} />}
+                lead={<ServiceMark name={plugin.name ?? plugin.id} icon={plugin.icon ?? null} />}
                 title={plugin.name ?? plugin.id}
                 description={
                   <>

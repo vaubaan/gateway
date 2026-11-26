@@ -2,8 +2,9 @@ import { isRecord } from './guards.ts';
 /**
  * The catalog's index (`index.json` on the catalog repository's GitHub Pages; ADR
  * plugin-catalog-rebuilt-from-source, amendment 2026-11-19): every plugin the catalog
- * published, its service's name, its latest version and the sha256 of that version's
- * archive. Written by the catalog's release workflow after each release, read by an
+ * published, its service's name, its latest version, the sha256 of that version's
+ * archive and, when its archive's manifest declares one, its service's mark (ADR
+ * service-icons-declared-by-the-plugin, amendment 2026-11-26). Written by the catalog's release workflow after each release, read by an
  * instance at its versions check and by `npm run release:prepare` at a gateway release.
  *
  * Untrusted on the reading side, like the versions feed: every string is bounded, and an
@@ -23,6 +24,10 @@ export interface CatalogIndexEntry {
   readonly version: string;
   /** The sha256 of that version's archive, lowercase hex. */
   readonly sha256: string;
+  /** The `d` of the service's icon on a 24-unit grid, from that version's archive manifest. */
+  readonly icon?: string;
+  /** The colour the icon is drawn in, `#RRGGBB`. */
+  readonly iconColor?: string;
 }
 
 export interface CatalogIndex {
@@ -34,11 +39,43 @@ export interface CatalogIndex {
 }
 
 /** Bounds of an untrusted index: anything beyond is not an index this instance reads. */
-export const CATALOG_INDEX_LIMITS = { plugins: 500, name: 80, short: 200 } as const;
+export const CATALOG_INDEX_LIMITS = { plugins: 500, name: 80, short: 200, icon: 8192 } as const;
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+/** `SVG_PATH_DATA_PATTERN` and `HEX_COLOUR_PATTERN` of the plugin SDK, which `definePlugin` applies. */
+const SVG_PATH_DATA = /^[Mm][0-9A-Za-z.,\s+-]*$/;
+const HEX_COLOUR = /^#[0-9A-Fa-f]{6}$/;
+
+/** A service's mark as an index gives it: the icon's path and its colour (`null`: the ink). */
+export interface CatalogMark {
+  readonly path: string;
+  readonly color: string | null;
+}
+
+/**
+ * The mark of an index entry, or `null` when it declares none or one an instance does not
+ * draw (beyond `CATALOG_INDEX_LIMITS.icon`, not a path's data): a malformed icon drops the
+ * icon, never the entry. A colour that is not `#RRGGBB` drops the colour alone.
+ */
+export function catalogMarkOf(entry: {
+  readonly icon?: unknown;
+  readonly iconColor?: unknown;
+}): CatalogMark | null {
+  const { icon, iconColor } = entry;
+  if (
+    typeof icon !== 'string' ||
+    icon.length > CATALOG_INDEX_LIMITS.icon ||
+    !SVG_PATH_DATA.test(icon)
+  ) {
+    return null;
+  }
+  return {
+    path: icon,
+    color: typeof iconColor === 'string' && HEX_COLOUR.test(iconColor) ? iconColor : null,
+  };
+}
 
 /** Whether `x` is one entry of the index. */
 export function isCatalogIndexEntry(x: unknown): x is CatalogIndexEntry {

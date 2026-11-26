@@ -111,6 +111,30 @@ describe('compare', () => {
     }
   });
 
+  it('carries the mark the catalog index gives a plugin, and none for a malformed one', () => {
+    const SHA = 'a'.repeat(64);
+    const result = compare(
+      FEED,
+      { gatewayVersion: '2.0.0-alpha.17', inventory: [] },
+      {
+        schema: 1,
+        generated_at: '2026-11-26T10:00:00Z',
+        plugins: {
+          vercel: {
+            name: 'Vercel',
+            version: '4.2.2',
+            sha256: SHA,
+            icon: 'M0 0z',
+            iconColor: '#000000',
+          },
+          asana: { name: 'Asana', version: '0.1.0', sha256: SHA, icon: '<svg/>' },
+        },
+      },
+    );
+    expect(result.catalog['vercel']?.mark).toEqual({ path: 'M0 0z', color: '#000000' });
+    expect(result.catalog['asana']).toEqual({ name: 'Asana', version: '0.1.0', sha256: SHA });
+  });
+
   it('lists the pins older than the bundled version they replace', () => {
     const result = compare(FEED, { gatewayVersion: '2.0.0-alpha.17', inventory });
     expect(result.olderPins).toEqual([

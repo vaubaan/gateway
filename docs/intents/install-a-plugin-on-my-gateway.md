@@ -46,6 +46,18 @@ acceptance:
 - A plugin the catalog published after this release is offered by its service's name, never its id
 - The versions feed names each catalog plugin with its service's name, and an older gateway still reads the feed
 
+### Recognise a catalog service by its mark before installing it
+
+status: proposed
+requires: plugin
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- The connect picker and Administration › Plugins › Catalog draw a catalog plugin that is not installed with its own icon in its colour, as they do once it is installed
+- A catalog version whose archive declares no icon still shows the lettered fallback, and an index without icons is still read
+- A gateway release with no network shows the icons of the catalog versions it knows (`catalog-versions.json`)
+- An older gateway installs an archive that declares its icon
+
 ### Browse the catalog apart from what runs
 
 status: implemented

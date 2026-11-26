@@ -369,6 +369,26 @@ describe('Administration › Plugins › Catalog', () => {
     expect(inMemory).not.toContain('install-catalog-');
   });
 
+  it('draws each catalog plugin with the mark its index gives, before it is installed', () => {
+    const html = renderToStaticMarkup(
+      <CatalogPage
+        view={{
+          offer: [
+            {
+              id: 'notion',
+              released: '1.0.0',
+              name: 'Notion',
+              icon: { path: 'M3 4z', color: '#654321' },
+            },
+          ],
+          install: INSTALL,
+        }}
+      />,
+    );
+    expect(html).toContain('d="M3 4z"');
+    expect(html).toContain('#654321');
+  });
+
   it('says when the gateway already runs the whole catalog', () => {
     const html = renderToStaticMarkup(<CatalogPage view={{ offer: [], install: INSTALL }} />);
     expect(text(html)).toContain('This gateway already runs every plugin of the catalog it read.');

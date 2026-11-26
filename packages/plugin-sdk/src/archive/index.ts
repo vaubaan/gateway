@@ -43,6 +43,21 @@ export interface ArchiveManifest {
   readonly version: string;
   /** Path inside the archive (`/`-separated) → hex sha256, sorted by path. */
   readonly files: Readonly<Record<string, string>>;
+  /**
+   * The service's mark as the plugin declares it (`ServicePlugin.icon`, `iconColor`), when it
+   * does: what the catalog's index carries, read as data, so a plugin not installed is drawn
+   * with its own icon (ADR service-icons-declared-by-the-plugin, amendment 2026-11-26).
+   * Covered by the signature like the rest of the manifest; a reader that does not know the
+   * two fields ignores them.
+   */
+  readonly icon?: string;
+  readonly iconColor?: string;
+}
+
+/** The service's mark an archive's manifest carries. */
+export interface ArchiveMark {
+  readonly icon?: string;
+  readonly iconColor?: string;
 }
 
 /** An archive read and checked against its manifest. */
@@ -82,12 +97,22 @@ export function manifestOfFiles(
   files: ReadonlyMap<string, Uint8Array>,
   id: string,
   version: string,
+  mark: ArchiveMark = {},
 ): ArchiveManifest {
   const digests: Record<string, string> = {};
   for (const path of [...files.keys()].filter((p) => !outsideManifest(p)).sort()) {
     digests[path] = sha256Hex(files.get(path) as Uint8Array);
   }
-  return { format: ARCHIVE_MANIFEST_FORMAT, id, version, files: digests };
+  return {
+    format: ARCHIVE_MANIFEST_FORMAT,
+    id,
+    version,
+    files: digests,
+    ...(mark.icon !== undefined ? { icon: mark.icon } : {}),
+    ...(mark.icon !== undefined && mark.iconColor !== undefined
+      ? { iconColor: mark.iconColor }
+      : {}),
+  };
 }
 
 /** Why a path cannot be in an archive, or `null`. Pure. */

@@ -48,3 +48,36 @@ Tried first (2026-10-23): grey logos all look alike and are not recognised at a 
 
 A field no plugin author would fill correctly; the luminance rule gives the same result for every
 near-black brand.
+
+## Amendment 2026-11-26: the catalog carries the icon of a plugin not installed
+
+### Context
+
+The connect picker and Administration › Plugins › Catalog offer catalog plugins an instance has
+not installed. Their icon was only in the plugin's code, so they showed the lettered fallback
+until installed; and the catalog's index job runs no plugin code.
+
+### Decision
+
+`vaubaan-plugin build` reads `icon` and `iconColor` from the plugin it already imports for the
+smoke test and writes them in the archive's `vaubaan-manifest.json`, covered by the signature.
+The catalog's index job reads them from each published archive, as data, into `index.json`; a
+gateway release copies them into `catalog-versions.json`. The gateway validates them like
+`definePlugin` does, and draws the mark of a plugin not installed from them.
+
+### Consequences
+
+- Still one source: the plugin. The declaration in the catalog carries no icon.
+- An archive built before this shows no icon until its next version; an older gateway ignores
+  the two fields and installs it.
+- The index stays untrusted: a malformed icon drops the icon, never the entry.
+
+### Rejected alternatives
+
+#### `icon` and `iconColor` in the catalog declaration
+
+A second copy beside the plugin's, that drifts.
+
+#### The index job imports the plugin
+
+It would run untrusted code in the job that deploys the index.

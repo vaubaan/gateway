@@ -39,10 +39,11 @@ export type { AdvisorySubject, VersionsFeed, VersionsFeedAdvisory } from './vers
 export {
   CATALOG_INDEX_LIMITS,
   CATALOG_INDEX_SCHEMA,
+  catalogMarkOf,
   isCatalogIndex,
   isCatalogIndexEntry,
 } from './catalog-index.ts';
-export type { CatalogIndex, CatalogIndexEntry } from './catalog-index.ts';
+export type { CatalogIndex, CatalogIndexEntry, CatalogMark } from './catalog-index.ts';
 export type {
   JsonRpcError,
   JsonRpcSuccess,

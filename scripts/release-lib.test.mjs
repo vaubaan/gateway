@@ -589,6 +589,41 @@ describe('the catalog versions a gateway release knows, from the catalog index',
     });
   });
 
+  it('keeps the icon and colour an archive declared, and drops a malformed one', () => {
+    const marked = {
+      schema: 1,
+      generated_at: '2026-11-26T10:00:00Z',
+      plugins: {
+        vercel: {
+          name: 'Vercel',
+          version: '4.2.2',
+          sha256: SHA,
+          icon: 'M24 22.5H0L12 1.5z',
+          iconColor: '#000000',
+        },
+        asana: {
+          name: 'Asana',
+          version: '0.1.0',
+          sha256: SHA,
+          icon: '<svg/>',
+          iconColor: '#F06A6A',
+        },
+        fly: { name: 'Fly.io', version: '1.0.0', sha256: SHA, icon: 'M0 0z', iconColor: 'purple' },
+      },
+    };
+    expect(catalogVersionsFrom(marked, 'why', []).plugins).toEqual({
+      asana: { name: 'Asana', version: '0.1.0', sha256: SHA },
+      fly: { name: 'Fly.io', version: '1.0.0', sha256: SHA, icon: 'M0 0z' },
+      vercel: {
+        name: 'Vercel',
+        version: '4.2.2',
+        sha256: SHA,
+        icon: 'M24 22.5H0L12 1.5z',
+        iconColor: '#000000',
+      },
+    });
+  });
+
   it('refuses an index that is not one', () => {
     expect(() => catalogVersionsFrom({ schema: 2, plugins: {} }, '', [])).toThrow(ReleaseError);
     expect(() =>

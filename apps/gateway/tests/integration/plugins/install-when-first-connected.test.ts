@@ -45,7 +45,10 @@ describe('a catalog plugin installed at its first connection', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  async function start(env: Record<string, string> = {}): Promise<GatewayRoot> {
+  async function start(
+    env: Record<string, string> = {},
+    index: unknown = null,
+  ): Promise<GatewayRoot> {
     await root?.close();
     root = await buildRoot({
       loadConfig: () =>
@@ -61,7 +64,10 @@ describe('a catalog plugin installed at its first connection', () => {
       requestRestart: () => undefined,
       // The image without notion: only an installed version can bring it.
       bundled: REPOSITORY_PLUGINS.filter((plugin) => plugin.id !== 'notion'),
-      updatesFetch: async () => new Response(JSON.stringify(FEED)),
+      updatesFetch: async (url) =>
+        String(url).endsWith('/index.json')
+          ? new Response(JSON.stringify(index), { status: index === null ? 404 : 200 })
+          : new Response(JSON.stringify(FEED)),
       updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
       catalogFetch: async () => new Response(Buffer.from(NOTION)),
     });
@@ -104,6 +110,32 @@ describe('a catalog plugin installed at its first connection', () => {
     const next = await start();
     expect(next.registry.get('notion')?.plugin.version).toBe('0.2.0');
     expect(next.plugins.entries.find((e) => e.id === 'notion')?.origin).toBe('installed');
+  });
+
+  it('offers it in the connect picker with the mark the catalog index gives, before any install', async () => {
+    const r = await start(
+      {},
+      {
+        schema: 1,
+        generated_at: '2026-11-26T10:00:00Z',
+        plugins: {
+          notion: {
+            name: 'Notion',
+            version: '0.2.0',
+            sha256: 'a'.repeat(64),
+            icon: 'M4 4h16v16H4z',
+            iconColor: '#000000',
+          },
+        },
+      },
+    );
+    expect(r.registry.has('notion')).toBe(false);
+    expect(r.pluginInstall.service.catalogOffer().find((p) => p.id === 'notion')).toEqual({
+      id: 'notion',
+      released: '0.2.0',
+      name: 'Notion',
+      icon: { path: 'M4 4h16v16H4z', color: '#000000' },
+    });
   });
 
   it('refuses a plugin the configuration does not enable, and installs nothing', async () => {

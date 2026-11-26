@@ -51,6 +51,23 @@ describe('plugin archive', () => {
     expect(Object.keys(read.manifest.files)).not.toContain(ARCHIVE_MANIFEST_FILE);
   });
 
+  it('carries the service’s mark in its manifest, which a reader that ignores it still accepts', () => {
+    const files = build();
+    const manifest = manifestOfFiles(files, 'acme', '1.0.0', {
+      icon: 'M0 0h24v24H0z',
+      iconColor: '#112233',
+    });
+    expect(manifest).toMatchObject({ icon: 'M0 0h24v24H0z', iconColor: '#112233' });
+    expect(manifestOfFiles(files, 'acme', '1.0.0', { iconColor: '#112233' })).not.toHaveProperty(
+      'iconColor',
+    );
+    files.set(ARCHIVE_MANIFEST_FILE, text(JSON.stringify(manifest)));
+    expect(readArchive(packArchive(files)).manifest).toMatchObject({
+      id: 'acme',
+      version: '1.0.0',
+    });
+  });
+
   it('packs one content into one byte stream, whatever the insertion order', () => {
     const a = packArchive(build());
     const b = packArchive(new Map([...build()].reverse()));

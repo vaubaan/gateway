@@ -54,7 +54,7 @@ const CATALOG_INDEX_URL = 'https://vaubaan.github.io/gateway-plugins/index.json'
 /** The plugins compiled into the server: never in the catalog. */
 const COMPILED = ['vaubaan', 'ssh'];
 const CATALOG_VERSIONS_COMMENT =
-  "The catalog versions this release of the gateway was tested with, each with the service's name and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed), written by npm run release:prepare from the catalog's index. Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the catalog index names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it.";
+  "The catalog versions this release of the gateway was tested with, each with the service's name (and its icon when the archive declares one) and pinned by the sha256 of its archive (ADR plugins-installed-when-first-needed), written by npm run release:prepare from the catalog's index. Nothing here is preinstalled: an instance downloads a version when it needs it — at a person's first connection of the service when the catalog index names no newer one, and at a start for the plugins its accounts need — and keeps it only if the sha256 matches and the catalog signed it.";
 
 function parseArguments(argv) {
   const positional = [];

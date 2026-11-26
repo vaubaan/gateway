@@ -18,6 +18,7 @@ import {
   buildArchive,
   filesOf,
   manifestOf,
+  markOf,
   notBundleableReason,
   outsideManifest,
   parseCommand,
@@ -31,7 +32,7 @@ import {
   SIGNATURE_FILE,
   verifyManifestSignature,
 } from '@vaubaan/plugin-sdk/archive';
-import { sdkBuildRange } from '@vaubaan/plugin-sdk';
+import { HEX_COLOUR_PATTERN, sdkBuildRange, SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
 
 const TEMPLATE = fileURLToPath(new URL('../../../../plugins/_template', import.meta.url));
 const SDK_VERSION = (
@@ -96,6 +97,15 @@ describe('buildArchive', () => {
     }
   });
 
+  it('carries the service’s icon and colour in its manifest, for the catalog to show before an install', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(out, 'template', ARCHIVE_MANIFEST_FILE), 'utf8'),
+    ) as ArchiveManifest;
+    // The template declares both (plugins/_template/src/icon.ts).
+    expect(manifest.icon).toMatch(SVG_PATH_DATA_PATTERN);
+    expect(manifest.iconColor).toMatch(HEX_COLOUR_PATTERN);
+  });
+
   it('signs the archive with a company key and packs the signature with it', async () => {
     const lines: string[] = [];
     const io = { cwd: out, log: (l: string) => lines.push(l), error: (l: string) => lines.push(l) };
@@ -151,6 +161,17 @@ describe('archive helpers', () => {
       'native addon',
     );
     expect(notBundleableReason({ vaubaan: { bundleable: false } })).toBe('declared not bundleable');
+  });
+
+  it('keeps only a mark definePlugin would accept, and no colour without an icon', () => {
+    expect(markOf({ icon: 'M0 0h24v24H0z', iconColor: '#112233' })).toEqual({
+      icon: 'M0 0h24v24H0z',
+      iconColor: '#112233',
+    });
+    expect(markOf({ icon: 'M0 0z', iconColor: 'red' })).toEqual({ icon: 'M0 0z' });
+    expect(markOf({ icon: '<script>', iconColor: '#112233' })).toEqual({});
+    expect(markOf({ iconColor: '#112233' })).toEqual({});
+    expect(markOf({})).toEqual({});
   });
 
   it('leaves the manifest and signatures out of the manifest', () => {

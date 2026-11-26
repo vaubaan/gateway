@@ -26,6 +26,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `github.comment-write` (catalog version 17): a mission that ticks Read and Propose has them
   without being edited. Token permissions: Issues and Pull requests, already asked.
 
+- **A catalog plugin shows its own icon before it is installed.** The connect picker and
+  Administration › Plugins › Catalog drew a lettered square until the plugin was installed. Now
+  `vaubaan-plugin build` writes the plugin's `icon` and `iconColor` in the archive's
+  `vaubaan-manifest.json` (covered by the signature), the catalog's index carries them, and the
+  gateway draws them (ADR service-icons-declared-by-the-plugin, amendment 2026-11-26). A plugin
+  shows its icon once a version built with this CLI is in the catalog; an older gateway ignores
+  the two fields.
+
 ### Changed
 
 - **The living history of a mission is its mission log, in the store and the code** (ADR

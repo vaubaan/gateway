@@ -13,6 +13,7 @@
  * deployment can build the same root from another HTTP host.
  */
 import { MemoryCacheClient, STARTUP_ACTOR_ID } from '@vaubaan/gateway-core';
+import { catalogMarkOf } from '@vaubaan/shared';
 import {
   createRegistry,
   SDK_VERSION,
@@ -99,7 +100,11 @@ import type { PluginVersionRecord } from '../store/repositories/plugin-versions'
 import type { InstalledAdmission } from '../plugins/installed';
 import { admissionProblem, trustOf } from '../plugins/trust';
 import { createPluginHandlers, type PluginHandlers } from '../plugins/handlers';
-import { createPluginInstallService, type PluginInstallService } from '../plugins/install-service';
+import {
+  createPluginInstallService,
+  type CatalogOffer,
+  type PluginInstallService,
+} from '../plugins/install-service';
 import { CATALOG_INDEX_URL, fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
 import { catalogVersionFloor } from '../plugins/catalog-floor';
 import {
@@ -363,7 +368,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
           catalogVersions().find((available) => available.id === pluginId)?.released,
           KNOWN_CATALOG_VERSIONS.get(pluginId),
         ),
-      catalogOffer: (): readonly { id: string; released: string; name?: string }[] => {
+      catalogOffer: (): readonly CatalogOffer[] => {
         const offered = new Map<string, string>();
         for (const p of catalogVersions()) {
           const version = catalogVersionFloor(p.released, KNOWN_CATALOG_VERSIONS.get(p.id));
@@ -375,8 +380,13 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
         return [...offered]
           .filter(([id]) => !registry.has(id))
           .map(([id, released]) => {
-            const name = catalogPlugins()[id]?.name ?? KNOWN_CATALOG_VERSIONS.get(id)?.name;
-            return name === undefined ? { id, released } : { id, released, name };
+            const indexed = catalogPlugins()[id];
+            const known = KNOWN_CATALOG_VERSIONS.get(id);
+            const name = indexed?.name ?? known?.name;
+            // The index's mark, else the one this release knows (no index read, or an
+            // archive built before archives carried their mark).
+            const icon = indexed?.mark ?? (known ? catalogMarkOf(known) : null);
+            return name === undefined ? { id, released, icon } : { id, released, name, icon };
           })
           .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
       },
