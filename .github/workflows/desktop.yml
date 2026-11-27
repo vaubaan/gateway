@@ -33,6 +33,12 @@ name: desktop
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  secret: its password
 #   DESKTOP_UPDATER_PUBKEY              variable (Settings > Variables): the .pub file's content
 #
+# Vaubaan's installed-app OAuth clients (ADR local-instance-carries-installed-oauth-clients):
+#   VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET  secret: the Google "Desktop app" client's secret
+#   VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET  secret: the GitHub OAuth App's secret
+# frozen into the gateway at its build; without one, the app offers neither that sign-in
+# nor that service.
+#
 # Actions are pinned by commit; the comment gives the version. Bump both together.
 
 on:
@@ -59,6 +65,8 @@ on:
       APPLE_API_PRIVATE_KEY: { required: false }
       TAURI_SIGNING_PRIVATE_KEY: { required: false }
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: { required: false }
+      VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET: { required: false }
+      VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET: { required: false }
 
 # Called by release.yml, the run takes the caller's group: a release is never cancelled.
 concurrency:
@@ -111,6 +119,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build the gateway
+        env:
+          VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET: ${{ secrets.VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET }}
+          VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET: ${{ secrets.VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET }}
         run: npm run build --workspace @vaubaan/gateway-app
 
       - name: Assemble the gateway and Node for ${{ matrix.target }}

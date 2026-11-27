@@ -191,6 +191,11 @@ jobs:
           push: false
           load: true
           tags: vaubaan-gateway:release-${{ matrix.arch }}
+          # Vaubaan's installed-app client secrets, frozen into the gateway at its build
+          # (deploy/docker/Dockerfile; ADR local-instance-carries-installed-oauth-clients).
+          secrets: |
+            desktop_google_client_secret=${{ secrets.VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET }}
+            desktop_github_client_secret=${{ secrets.VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET }}
           provenance: false
           sbom: false
           # A release never starts from the layers of another run: no
@@ -272,6 +277,11 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ needs.plan.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          # Vaubaan's installed-app client secrets, frozen into the gateway at its build
+          # (deploy/docker/Dockerfile; ADR local-instance-carries-installed-oauth-clients).
+          secrets: |
+            desktop_google_client_secret=${{ secrets.VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET }}
+            desktop_github_client_secret=${{ secrets.VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=release-${{ github.run_id }}-${{ matrix.arch }}
@@ -514,6 +524,8 @@ jobs:
       APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET: ${{ secrets.VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET }}
+      VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET: ${{ secrets.VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET }}
 
   # Attaches the .dmg files to the release, signed and notarized only: an unsigned app
   # stays an artifact of the run (Gatekeeper would refuse it on a person's Mac). With the

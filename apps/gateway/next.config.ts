@@ -105,6 +105,11 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
     NEXT_PUBLIC_GATEWAY_VERSION: resolveVersion(),
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    // Vaubaan's installed-app OAuth client secrets, not confidential for an installed
+    // application but kept out of the repository: frozen from the CI secrets, read by
+    // server code only (src/server/config/installed-clients.ts). Empty: not offered.
+    VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET: process.env.VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET ?? '',
+    VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET: process.env.VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET ?? '',
   },
   // apps/gateway imports TS source directly from sibling workspace packages.
   // Tell Next.js to transpile those packages on the server side.

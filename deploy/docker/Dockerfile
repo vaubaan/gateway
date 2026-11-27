@@ -59,7 +59,15 @@ USER node
 # under a workspace when two majors of a package coexist (apps/gateway/node_modules).
 COPY --from=deps --chown=node:node /app ./
 COPY --chown=node:node . .
-RUN npm run build --workspace @vaubaan/gateway-app
+# Vaubaan's installed-app client secrets, frozen into the gateway by `next build` for a
+# local instance (apps/gateway/src/server/config/installed-clients.ts; ADR
+# local-instance-carries-installed-oauth-clients): build secrets, never a layer or an
+# argument. Absent (a build of one's own), those sign-ins are not offered.
+RUN --mount=type=secret,id=desktop_google_client_secret,uid=1000 \
+    --mount=type=secret,id=desktop_github_client_secret,uid=1000 \
+    VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET="$(cat /run/secrets/desktop_google_client_secret 2>/dev/null || true)" \
+    VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET="$(cat /run/secrets/desktop_github_client_secret 2>/dev/null || true)" \
+    npm run build --workspace @vaubaan/gateway-app
 
 # ---------------------------------------------------------------------------
 # runner: the traced standalone output only, non-root, /data volume.
