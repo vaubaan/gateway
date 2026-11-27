@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-sdk",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": false,
   "type": "module",
   "description": "The contract, test kit and transport helpers of a Vaubaan Gateway plugin: classify a call into slices, execute it with the credential the gateway hands over",

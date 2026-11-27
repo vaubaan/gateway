@@ -185,7 +185,8 @@ What an operator or a plugin author reads first; every point is detailed below.
   `prepack` rewrites it: `npm install @vaubaan/plugin-cli` (0.2.0, 0.3.0) or
   `@vaubaan/plugin-sdk` (1.0.0, 1.1.0) failed on `@vaubaan/shared`, which is not published. The
   job now packs the tarball, refuses one that still names a workspace dependency, and stages it.
-  The tarballs themselves were right; the next version of each package installs.
+  The tarballs themselves were right. `@vaubaan/plugin-sdk` 1.1.1 and `@vaubaan/plugin-cli` 0.3.1,
+  the same code, are the first to install.
 
 - **The account connected in place of a disconnected one takes the repository's calls.** In a
   mission that still carries the disconnected account, both held the same repository and every

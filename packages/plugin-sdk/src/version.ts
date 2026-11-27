@@ -11,7 +11,7 @@
  * checks it) : bump both together (docs/handbook/plugin-sdk.md "Versions of
  * the SDK").
  */
-export const SDK_VERSION = '1.1.0';
+export const SDK_VERSION = '1.1.1';
 
 /**
  * The first SDK whose run-time contract this one keeps (ADR
