@@ -9,6 +9,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Google Drive (plugin 0.1.0) and OneDrive (plugin 0.1.0): an agent reads and adds files.**
+  Five tools each: list a folder, search by name and content, read a file as text (Google Docs as
+  Markdown, Sheets as CSV, Slides as plain text; OneDrive text files), upload a text file and
+  create a folder. No tool shares, deletes or changes permissions. Reading what files are called
+  and reading what they hold are two permissions; uploading is costly to undo and asks first at
+  Careful and Trusting. Both sign in through the client serving `google` or `microsoft`: on an
+  instance on your computer, Vaubaan's own (ADR local-instance-carries-installed-oauth-clients).
+  `drive` is a restricted Google scope: until Google's review, its consent screen warns of an
+  unverified app. The OAuth provider table admits `drive` and `Files.ReadWrite`.
+
 ## [2.0.0-alpha.32] - 2026-11-27
 
 ### Highlights

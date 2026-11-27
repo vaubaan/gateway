@@ -16,8 +16,10 @@ import githubPlugin from '@vaubaan/plugin-github';
 import githubProjectsPlugin from '@vaubaan/plugin-github-projects';
 import gmailPlugin from '@vaubaan/plugin-gmail';
 import googleCalendarPlugin from '@vaubaan/plugin-google-calendar';
+import googleDrivePlugin from '@vaubaan/plugin-google-drive';
 import miroPlugin from '@vaubaan/plugin-miro';
 import notionPlugin from '@vaubaan/plugin-notion';
+import oneDrivePlugin from '@vaubaan/plugin-onedrive';
 import outlookPlugin from '@vaubaan/plugin-outlook';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
@@ -50,6 +52,8 @@ export const REPOSITORY_PLUGINS: readonly ServicePlugin[] = [
   axonautPlugin,
   outlookPlugin,
   githubProjectsPlugin,
+  googleDrivePlugin,
+  oneDrivePlugin,
   vaubaanPlugin,
 ];
 

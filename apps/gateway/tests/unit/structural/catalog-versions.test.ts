@@ -25,6 +25,14 @@ const repositoryVersion = (id: string): string | undefined => {
   }
 };
 
+/**
+ * New plugins of the repository the catalog has not published yet: their
+ * catalog pull request names a commit of `main`, so they reach `main` before
+ * the catalog can sign them, and `release:prepare` lists them at the first
+ * gateway release after that.
+ */
+const AWAITING_FIRST_CATALOG_RELEASE: ReadonlySet<string> = new Set(['google-drive', 'onedrive']);
+
 describe('the catalog versions this release knows', () => {
   it('pins each archive by its sha256', () => {
     for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
@@ -51,6 +59,13 @@ describe('the catalog versions this release knows', () => {
     }
   });
 
+  it('names none of the plugins awaiting their first catalog release', () => {
+    // Once the catalog published one, `release:prepare` lists it: take it off the list below.
+    for (const id of AWAITING_FIRST_CATALOG_RELEASE) {
+      expect([...KNOWN_CATALOG_VERSIONS.keys()], id).not.toContain(id);
+    }
+  });
+
   it('covers every plugin of the repository the catalog declares, never vaubaan nor ssh', () => {
     const ids = [...KNOWN_CATALOG_VERSIONS.keys()];
     expect(ids).not.toContain('vaubaan');
@@ -58,7 +73,7 @@ describe('the catalog versions this release knows', () => {
     const repository = readdirSync(PLUGINS, { withFileTypes: true })
       .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
       .map((d) => d.name)
-      .filter((id) => id !== 'vaubaan' && id !== 'ssh');
+      .filter((id) => id !== 'vaubaan' && id !== 'ssh' && !AWAITING_FIRST_CATALOG_RELEASE.has(id));
     for (const id of repository) expect(ids, `plugins/${id}`).toContain(id);
   });
 });

@@ -73,6 +73,8 @@ describe('shipped plugins through the generic connect driver', () => {
     expect(Object.fromEntries(declared)).toEqual({
       'google-calendar': 'broker',
       outlook: 'broker',
+      'google-drive': 'broker',
+      onedrive: 'broker',
     });
     for (const plugin of REPOSITORY_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
@@ -125,23 +127,29 @@ describe('shipped plugins through the generic connect driver', () => {
       'miro',
       'google-calendar',
       'outlook',
+      'google-drive',
+      'onedrive',
     ]);
     for (const plugin of REPOSITORY_PLUGINS) {
       const spec = plugin.credential;
       if (spec.kind !== 'oauth2') continue;
       if (isBrokeredSpec(spec)) {
         expect(spec.broker.provider, plugin.id).toBe(
-          plugin.id === 'outlook' ? 'microsoft' : 'google',
+          plugin.id === 'outlook' || plugin.id === 'onedrive' ? 'microsoft' : 'google',
         );
       } else expect(spec.clientRegistration.registrationUrl, plugin.id).toMatch(/^https:\/\//);
     }
     expect(before.filter((p) => p.unavailable !== null).map((p) => p.id)).toEqual([
       'google-calendar',
       'outlook',
+      'google-drive',
+      'onedrive',
     ]);
     expect(before.filter((p) => p.viaBroker).map((p) => p.id)).toEqual([
       'google-calendar',
       'outlook',
+      'google-drive',
+      'onedrive',
     ]);
   });
 

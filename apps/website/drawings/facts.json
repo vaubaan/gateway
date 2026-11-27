@@ -1,9 +1,9 @@
 {
   "totals": {
-    "services": 21,
-    "planes": 29,
-    "permissions": 281,
-    "macroActions": 85
+    "services": 23,
+    "planes": 31,
+    "permissions": 289,
+    "macroActions": 89
   },
   "services": {
     "github": {

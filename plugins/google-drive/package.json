@@ -1,0 +1,17 @@
+{
+  "name": "@vaubaan/plugin-google-drive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vaubaan Gateway plugin for Google Drive, through Google's Drive REST API v3 and an OAuth client the instance reaches",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  }
+}

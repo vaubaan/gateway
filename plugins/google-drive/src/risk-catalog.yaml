@@ -1,0 +1,126 @@
+# Google Drive risk catalog — loaded by `@vaubaan/plugin-sdk`
+# (`loadCatalogFile`) at gateway boot.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
+# ADR      : docs/decisions/local-instance-carries-installed-oauth-clients.md.
+# Handbook : docs/handbook/services/google-drive.md.
+#
+# 4 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
+# instead). A drive has no environment: no risk is env-scoped.
+#
+# Reading what a file is called (`folder[f].R`, `file[*].R`) and reading
+# what it holds (`file[id].content.R`) are two risks. Writes create only:
+# a new folder (`folder.W`) or a new file (`file.W`). No tool shares,
+# deletes or changes permissions (the plugin's excluded tools).
+service: google-drive
+catalog_version: 1
+catalog_date: 2026-11-27
+
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
+
+  - id: google-drive.file-list
+    label: 'List folders and search files (names, types, dates, links)'
+    reason: >-
+      What the account's files are called, where they sit, when they changed
+      and who can follow their link: a listing says what a person works on,
+      not what the files hold. Names are written by others, a path for prompt
+      injection.
+    matches:
+      - 'google-drive.drive[*].folder[*].R'
+      - 'google-drive.drive[*].file[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+  - id: google-drive.file-read
+    label: 'Read what a file holds'
+    reason: >-
+      The text of a document, a sheet, a presentation or a text file lands in
+      the agent's context: whatever the account can open, its own files and
+      the ones others shared with it. Nothing is modified.
+    matches: 'google-drive.drive[*].file[*].content.R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+
+  # ─── WRITES ────────────────────────────────────────────────────────────
+
+  - id: google-drive.folder-create
+    label: 'Create a folder'
+    reason: >-
+      An empty folder, seen by whoever can open its parent. The agent cannot
+      delete it; a person removes it in a click.
+    matches: 'google-drive.drive[*].folder.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+  - id: google-drive.file-upload
+    label: 'Upload a file'
+    reason: >-
+      A new file written by the agent, at once visible to everyone who can
+      open its folder, which may be shared outside the company. Its text is
+      the agent's: whatever it read can leave this way. The agent cannot
+      delete it afterwards, and a person who read it cannot unread it.
+    matches: 'google-drive.drive[*].file.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+
+  # Fallback — must exist, exactly once. Touched only by writes no other entry
+  # covers, so it belongs to no macro-action.
+  - id: google-drive.uncategorized-write
+    label: 'Uncategorized write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission creator who
+      includes it allows the writes this catalog has not reviewed.
+    matches: 'google-drive.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: team
+
+macro_actions:
+  - id: read
+    label: 'Read files'
+    description: 'List folders, search files and read them.'
+    narrative: >-
+      Browsing the account's Drive: listing folders, searching by name and content, and reading
+      documents, sheets, presentations and text files. Nothing changes, but files hold what a
+      company keeps, and their text was written by others. Reading what a file holds is a
+      permission apart from listing what files are called.
+    entries:
+      - risk_id: google-drive.file-list
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: google-drive.file-read
+        quota: 300
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: write
+    label: 'Add files'
+    description: 'Create folders and upload new files.'
+    narrative: >-
+      Putting new files and folders in the account's Drive. Nothing existing is changed, shared
+      or deleted. A new file is seen at once by everyone who can open its folder, and the agent
+      cannot take it back, so uploading asks first unless the mission is trusted with it.
+    entries:
+      - risk_id: google-drive.folder-create
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: google-drive.file-upload
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }

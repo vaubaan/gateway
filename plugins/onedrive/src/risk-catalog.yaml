@@ -1,0 +1,125 @@
+# OneDrive risk catalog — loaded by `@vaubaan/plugin-sdk`
+# (`loadCatalogFile`) at gateway boot.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
+# ADR      : docs/decisions/local-instance-carries-installed-oauth-clients.md.
+# Handbook : docs/handbook/services/onedrive.md.
+#
+# 4 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
+# instead). A drive has no environment: no risk is env-scoped.
+#
+# Reading what a file is called (`folder[f].R`, `file[*].R`) and reading
+# what it holds (`file[id].content.R`) are two risks. Writes create only:
+# a new folder (`folder.W`) or a new file (`file.W`). No tool shares,
+# deletes or changes permissions (the plugin's excluded tools).
+service: onedrive
+catalog_version: 1
+catalog_date: 2026-11-27
+
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
+
+  - id: onedrive.file-list
+    label: 'List folders and search files (names, types, dates, links)'
+    reason: >-
+      What the account's files are called, where they sit, when they changed
+      and who can follow their link: a listing says what a person works on,
+      not what the files hold. Names are written by others, a path for prompt
+      injection.
+    matches:
+      - 'onedrive.drive[*].folder[*].R'
+      - 'onedrive.drive[*].file[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+  - id: onedrive.file-read
+    label: 'Read what a file holds'
+    reason: >-
+      The text of a file of the drive lands in the agent's context. Nothing
+      is modified.
+    matches: 'onedrive.drive[*].file[*].content.R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+
+  # ─── WRITES ────────────────────────────────────────────────────────────
+
+  - id: onedrive.folder-create
+    label: 'Create a folder'
+    reason: >-
+      An empty folder, seen by whoever can open its parent. The agent cannot
+      delete it; a person removes it in a click.
+    matches: 'onedrive.drive[*].folder.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+  - id: onedrive.file-upload
+    label: 'Upload a file'
+    reason: >-
+      A new file written by the agent, at once visible to everyone who can
+      open its folder, which may be shared outside the company or by link. Its text is
+      the agent's: whatever it read can leave this way. The agent cannot
+      delete it afterwards, and a person who read it cannot unread it.
+    matches: 'onedrive.drive[*].file.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+
+  # Fallback — must exist, exactly once. Touched only by writes no other entry
+  # covers, so it belongs to no macro-action.
+  - id: onedrive.uncategorized-write
+    label: 'Uncategorized write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission creator who
+      includes it allows the writes this catalog has not reviewed.
+    matches: 'onedrive.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: moderate
+      visibility: team
+
+macro_actions:
+  - id: read
+    label: 'Read files'
+    description: 'List folders, search files and read them.'
+    narrative: >-
+      Browsing the account's OneDrive: listing folders, searching by name and content, and
+      reading text files. Nothing changes, but files hold what a person or a company keeps, and
+      their text may have been written by others. Reading what a file holds is a permission
+      apart from listing what files are called.
+    entries:
+      - risk_id: onedrive.file-list
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: onedrive.file-read
+        quota: 300
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: write
+    label: 'Add files'
+    description: 'Create folders and upload new files.'
+    narrative: >-
+      Putting new files and folders in the account's OneDrive. Nothing existing is changed, shared
+      or deleted. A new file is seen at once by everyone who can open its folder, and the agent
+      cannot take it back, so uploading asks first unless the mission is trusted with it.
+    entries:
+      - risk_id: onedrive.folder-create
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: onedrive.file-upload
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
