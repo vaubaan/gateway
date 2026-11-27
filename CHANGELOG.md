@@ -68,7 +68,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Plugin SDK 1.1.0: `resourceRevealingTools`**, the tools whose success may reveal resources
   the account does not know yet (a listing of preview branches). After one succeeds, the gateway
   runs the account's discovery once, off the request path; it adds nothing to the mission by
-  itself. A gateway older than 1.1 ignores it.
+  itself. A gateway older than 1.1 ignores it. It also exports `SVG_PATH_DATA_PATTERN` and
+  `HEX_COLOUR_PATTERN` from `@vaubaan/plugin-sdk/archive`, and refuses a risk catalog that still
+  names the retired cap `calls_per_session_max`.
+
+- **`@vaubaan/plugin-cli` 0.3.0: the archive carries the service's mark.** `vaubaan-plugin build`
+  writes the plugin's `icon` and `iconColor` in `vaubaan-manifest.json`, so a catalog shows the
+  icon before the plugin is installed. It needs `@vaubaan/plugin-sdk` 1.1.0.
 
 ### Changed
 
