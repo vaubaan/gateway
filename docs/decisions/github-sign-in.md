@@ -43,3 +43,7 @@ Renamable and reusable: an identity takeover.
 ### Any verified address, or every team synced as groups
 
 Would let a person pick the address that passes the domain rule; needs `read:org` for everybody.
+
+## History
+
+- 2026-11-27: in local mode the GitHub provider uses Vaubaan's OAuth App, back on the loopback ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

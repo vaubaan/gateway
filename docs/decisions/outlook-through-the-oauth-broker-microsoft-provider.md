@@ -63,3 +63,7 @@ the broker stays the way for whoever does not want to register an app.
 
 Two consents and two connections for the same token, and a mission could not tell they are one
 account.
+
+## History
+
+- 2026-11-27: in local mode, Outlook connects with Vaubaan's installed-app Microsoft client (public client, no secret), no broker ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

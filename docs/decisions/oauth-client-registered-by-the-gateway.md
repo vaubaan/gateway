@@ -56,3 +56,4 @@ anyway.
   offers dynamic registration; for a service that offers neither a key nor registration, it is one
   of the two sources an administrator may choose in Settings
   ([oauth-brokers-managed-in-settings-with-two-client-sources](oauth-brokers-managed-in-settings-with-two-client-sources.md)).
+- 2026-11-27: "a client registered once by Vaubaan and shipped in the image" is admitted for a local instance only, as an installed-app client whose secret is not confidential and whose redirect is the loopback ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

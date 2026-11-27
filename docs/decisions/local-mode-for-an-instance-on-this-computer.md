@@ -50,3 +50,7 @@ instance first.
 
 A certificate trusted by the system for `localhost` is installed with administrator rights and
 must be renewed; Chrome and Firefox users of the docker command gain nothing.
+
+## History
+
+- 2026-11-27: a local instance signs in with Google, Microsoft and GitHub and connects their services through installed-app clients it carries ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

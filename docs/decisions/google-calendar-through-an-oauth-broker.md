@@ -71,3 +71,4 @@ Gmail's scopes are restricted (yearly CASA); Gmail stays on IMAP.
 - 2026-11-05: the broker contract now serves a second provider, `microsoft`, for the `outlook`
   plugin; revocation at the provider became optional, since Microsoft has no endpoint for it
   ([outlook-through-the-oauth-broker-microsoft-provider](outlook-through-the-oauth-broker-microsoft-provider.md)).
+- 2026-11-27: in local mode, Google Calendar connects with Vaubaan's installed-app Google client, no broker ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

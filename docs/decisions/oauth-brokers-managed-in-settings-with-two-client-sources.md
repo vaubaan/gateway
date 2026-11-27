@@ -82,3 +82,7 @@ calendar; every other administration act moved to the interface
 
 A client secret in every credential, orphan apps at the service on each revoke (already rejected in
 [oauth-client-registered-by-the-gateway](oauth-client-registered-by-the-gateway.md)).
+
+## History
+
+- 2026-11-27: a local instance has a third source, Vaubaan's installed-app client, serving `google` and `microsoft` by default ([local-instance-carries-installed-oauth-clients](local-instance-carries-installed-oauth-clients.md)).

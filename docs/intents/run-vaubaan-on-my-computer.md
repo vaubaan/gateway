@@ -96,6 +96,77 @@ acceptance:
 - In the app, "Forgot your password?" asks Touch ID or my Mac's password, then the new password, with no key file to find
 - The app reads the key from the Keychain only after that check, and the reset leaves the same audit entry, banner and notification as with the key file
 
+## Use my Google, Microsoft and GitHub accounts with no client of my own
+
+The instance carries Vaubaan's installed-app clients, one per provider, for signing in and for the
+services, back on the loopback ([ADR](../decisions/local-instance-carries-installed-oauth-clients.md)).
+
+### Sign in with Google, Microsoft or GitHub on my computer
+
+status: proposed
+requires: instance
+creates: web-session
+relieves: a-lost-evening-on-pre-release-software
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#6-security
+acceptance:
+
+- The setup and the sign-in page offer Google, Microsoft, GitHub and email with a password; the setup's second screen creates the first administrator with whichever I choose
+- In the desktop app the provider's page opens in my default browser; once I consent, the browser says to go back to Vaubaan and the app's window is signed in
+- Signing in asks only my identity (Google `openid email`, Microsoft `openid email profile`, GitHub `read:user user:email`), never a calendar or a mailbox
+- A flow finished in another browser than the one that started it, or replayed, signs nobody in
+- A build without a provider's client shows no button for that provider
+
+### Connect Google Calendar and Outlook with no client of my own
+
+status: proposed
+requires: instance
+creates: account
+relieves: my-own-google-client-to-create
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- With no broker and nothing in Settings, Connect an account connects Google Calendar and Outlook, and my agent lists that account's events and mail
+- The consent asks the plugin's scopes only, even when I signed in with the same Google or Microsoft account
+- The refresh token stays on my computer, sealed under the master key; the account page says it signed in through Vaubaan's client on this computer
+- Gmail still connects with an app password over IMAP
+
+### Reach my Google Drive
+
+status: proposed
+requires: instance
+creates: account
+relieves: my-own-google-client-to-create
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- A `google-drive` plugin connects with Vaubaan's Google client; its agent lists a folder, searches, reads a file (a Google Doc, Sheet or Slides as text), uploads a file and creates a folder
+- No tool shares or deletes a file
+- Until Google's review, the consent screen warns of an unverified app; the plugin's page says so before I connect
+
+### Reach my OneDrive
+
+status: proposed
+requires: instance
+creates: account
+spec: ../spec/vaubaan-gateway.md#42-human-surface
+acceptance:
+
+- A `onedrive` plugin connects with Vaubaan's Microsoft client, personal or work account; its agent lists a folder, searches, reads a file, uploads a file and creates a folder
+- No tool shares or deletes a file
+
+### Open the app when port 3100 is taken
+
+status: proposed
+requires: instance
+relieves: a-lost-evening-on-pre-release-software
+acceptance:
+
+- With port 3100 taken, the app starts on another free port instead of refusing, and keeps that port at the next launches while it stays free
+- The page that gives my agent its configuration shows the port the app answers on
+- Signing in and connecting accounts work on that port without changing anything at Google, Microsoft or GitHub
+
 ## Reach my agent's first call in one path
 
 status: proposed

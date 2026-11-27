@@ -8,8 +8,10 @@ last_reviewed: 2026-11-22
 
 # Connect Google Calendar without my own Google client
 
-As a user of any instance, a desktop one included, I want to sign in to Google Calendar through
-Vaubaan's broker, so that I connect my agenda without creating an OAuth client at Google.
+As a user of a hosted instance, I want to sign in to Google Calendar through
+Vaubaan's broker, so that I connect my agenda without creating an OAuth client at Google. An instance on my
+computer needs no broker: it carries Vaubaan's own Google client
+([run Vaubaan on my computer](run-vaubaan-on-my-computer.md)).
 
 ## Sign in to Google Calendar through Vaubaan's broker
 
@@ -32,7 +34,7 @@ requires: instance, broker
 spec: ../spec/oauth-broker.md#4-trust-model
 acceptance:
 
-- A new instance, a desktop one included, connects Google Calendar with no step by its administrator or by the operator
+- A new hosted instance connects Google Calendar with no step by its administrator or by the operator
 - The broker restarts or redeploys without ending any enrolled instance's account
 - A call with a key the broker never issued is refused with `invalid_key`, and never reaches another instance's flow
 
