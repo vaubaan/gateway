@@ -47,6 +47,8 @@ import { DEFAULT_LOCAL_SIGN_IN_PROVIDER_ID } from '../config/sign-in';
 import { WELCOME_PAGE } from '../master-key/handlers';
 import { SignInAccountError } from '../auth/errors';
 import type { LocalLinkKind } from '../store';
+import type { IdentityClaims } from '../auth/claims';
+import type { SignInProvider } from '../config/sign-in';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { BootstrapService } from '../auth/bootstrap';
 import type { SecondFactorService } from '../auth/second-factor';
@@ -127,6 +129,18 @@ export interface UserAdminHandlers {
    * session — one form instead of Setup's steps (spec §7.1).
    */
   localSetup(request: Request): Promise<Response>;
+  /**
+   * The same second screen through Google, Microsoft or GitHub (ADR
+   * local-instance-carries-installed-oauth-clients): the identity a flow of an installed
+   * client returned becomes the administrator, the setup ends and their session opens.
+   * Only in the window whose setup session started the flow (`starterSessionId`).
+   */
+  localSetupWith(
+    request: Request,
+    signInProvider: SignInProvider,
+    identity: IdentityClaims,
+    starterSessionId: string | null,
+  ): Promise<Response>;
 }
 
 /** Why the setup cannot end yet, or `null`. */
@@ -606,6 +620,50 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           login: { email: signInAccount.email, groups: [], signInProvider: local.id },
         });
         deps.logger.info('local setup finished: the first person is signed in');
+        return seeOther('/', [ended, session.setCookie]);
+      } catch (err) {
+        return redirectWithNotice(principal.sessionId, WELCOME_PAGE, failure(err, 'Not created'));
+      }
+    },
+
+    async localSetupWith(request, signInProvider, identity, starterSessionId) {
+      const seeOther = (location: string, cookies: readonly string[] = []): Response => {
+        const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
+        for (const cookie of cookies) headers.append('Set-Cookie', cookie);
+        return new Response(null, { status: 303, headers });
+      };
+      if (deps.local !== true) return new Response(null, { status: 404 });
+      // The binder proved the window; its session must still be the setup's that started it.
+      const principal = await deps.authenticator.authenticate(request.headers);
+      if (
+        principal?.kind !== 'bootstrap' ||
+        principal.sessionId !== starterSessionId ||
+        (await deps.bootstrap.state()).status !== 'active'
+      ) {
+        return seeOther('/');
+      }
+      if ((await deps.masterKey.state()).handoverPending) return seeOther(WELCOME_PAGE);
+      try {
+        const actor = auditActorId(principal);
+        await deps.users.refuseNewUser();
+        const user = await deps.users.ensureIdentity({
+          issuer: identity.issuer,
+          subject: identity.subject,
+          email: identity.email,
+        });
+        await deps.administrators.grantUser(user.id, actor, 'setup');
+        const problem = await setupCannotFinish(deps);
+        if (problem) throw new Error(problem);
+        await endSetup(actor);
+        const ended = await deps.sessions.destroy(request.headers);
+        const session = await deps.sessions.create({
+          kind: 'user',
+          userId: user.id,
+          login: { email: identity.email, groups: [], signInProvider: signInProvider.id },
+        });
+        deps.logger.info('local setup finished: the first person is signed in', {
+          signInProvider: signInProvider.id,
+        });
         return seeOther('/', [ended, session.setCookie]);
       } catch (err) {
         return redirectWithNotice(principal.sessionId, WELCOME_PAGE, failure(err, 'Not created'));

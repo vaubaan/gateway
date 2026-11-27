@@ -3,17 +3,21 @@
  * local-mode-for-an-instance-on-this-computer; spec §7.1): two screens instead of
  * Setup's checklist. First the key (download it, say it is kept), then the person's
  * email and password, which `POST /api/admin/setup/local` turns into the
- * administrator's sign-in account before ending the setup and signing them in.
+ * administrator's sign-in account before ending the setup and signing them in — or their
+ * Google, Microsoft or GitHub account, through the installed-app clients the build carries
+ * (`InstalledSignIn`, purpose `setup`).
  * Only for the holder of the setup link while the setup is open; absent otherwise.
  */
 import { notFound, redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import styles from '@/components/auth/auth.styles';
+import { InstalledSignIn } from '@/components/auth/InstalledSignIn';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Button, Callout, Checkbox, Field, Input } from '@/components/ui';
 import { takeNotice } from '@/lib/accounts/session';
 import { currentPrincipal } from '@/lib/auth/session';
+import { isLoginErrorCode, LOGIN_ERROR_MESSAGES } from '@/server/auth';
 import { PASSWORD_MIN_LENGTH } from '@/server/crypto/password';
 import {
   CONFIRMED_FIELD,
@@ -48,6 +52,15 @@ export default async function WelcomePage({ searchParams }: Props) {
   const keyProblem =
     problemParam === 'not-confirmed' || problemParam === 'sign-in-again' ? problemParam : null;
   const { handoverPending } = await root.masterKey.service.state();
+  // Google, Microsoft and GitHub through Vaubaan's installed-app clients, when this build
+  // carries them (ADR local-instance-carries-installed-oauth-clients).
+  const installed = (await root.auth.signInProviders.views())
+    .filter((signInProvider) => signInProvider.source === 'installed')
+    .map(({ id, name }) => ({ id, name }));
+  const errorParam = params.error;
+  const errorCode = Array.isArray(errorParam) ? errorParam[0] : errorParam;
+  const flowFailed =
+    errorCode !== undefined && isLoginErrorCode(errorCode) ? LOGIN_ERROR_MESSAGES[errorCode] : null;
 
   return (
     <AuthPage instance={await root.instance.name.identity()} footer={<BuildFooter />}>
@@ -85,8 +98,20 @@ export default async function WelcomePage({ searchParams }: Props) {
       ) : (
         <>
           <AuthHeading title="2 of 2 · Create your account">
-            The email and the password you sign in to Vaubaan with.
+            {installed.length > 0
+              ? `With your ${installed.map((p) => p.name).join(', ')} account, or an email and a password.`
+              : 'The email and the password you sign in to Vaubaan with.'}
           </AuthHeading>
+          {flowFailed && (
+            <div className={styles.block}>
+              <Callout tone="bad" title="Not created" testId="welcome-flow-problem">
+                {flowFailed}
+              </Callout>
+            </div>
+          )}
+          {installed.length > 0 && (
+            <InstalledSignIn providers={installed} purpose="setup" returnTo="/" />
+          )}
           {notice && (
             <div className={styles.block}>
               <Callout tone="bad" title={notice.title} testId="welcome-account-problem">

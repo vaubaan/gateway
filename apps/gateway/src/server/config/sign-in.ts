@@ -12,6 +12,7 @@
  * providers by address (`OPEN_ISSUERS`, `GITHUB_DOT_COM`, `isGithubDotComHost`): what makes them
  * open is a fact about those services, not a setting.
  */
+import type { InstalledProvider } from './installed-clients';
 import type { IdpClaimMapping } from './types';
 
 export const SIGN_IN_KINDS = ['oidc', 'github', 'local'] as const;
@@ -65,6 +66,12 @@ interface SignInProviderBase {
   readonly allowedEmailDomains: readonly string[];
   /** Only invited addresses (and the administrators) are admitted, whatever the domain. */
   readonly invitationOnly: boolean;
+  /**
+   * Set on the sign-in providers a local instance carries (ADR
+   * local-instance-carries-installed-oauth-clients): Vaubaan's installed-app client of this
+   * provider, back on the loopback (`auth/loopback.ts`), never on `/auth/callback/<id>`.
+   */
+  readonly installed?: InstalledProvider;
 }
 
 export interface OidcSignInProvider extends SignInProviderBase {
@@ -128,8 +135,11 @@ export function localSignInProviderOf(id: string, name: string): LocalSignInProv
   };
 }
 
-/** Where a sign-in provider comes from: the mounted configuration (read-only) or Settings → Sign-in. */
-export type SignInProviderSource = 'file' | 'store';
+/**
+ * Where a sign-in provider comes from: the mounted configuration (read-only), Settings →
+ * Sign-in, or the installed-app clients a local instance carries (read-only, always on).
+ */
+export type SignInProviderSource = 'file' | 'store' | 'installed';
 
 /**
  * The issuer a user of this sign-in provider is recorded under (`users.issuer` is compared

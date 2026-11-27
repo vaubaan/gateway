@@ -13,6 +13,7 @@
  * other caller — the operator commands — gets the error through
  * `loadInstanceConfig()`.
  */
+import { installedClients } from './installed-clients';
 import { isTelemetryLevel, TELEMETRY_LEVELS, type TelemetryLevel } from '@vaubaan/telemetry';
 
 import { KEY_BYTES } from '../crypto/aead';
@@ -501,6 +502,7 @@ function validate(
 
   return {
     local,
+    installedClients: local ? installedClients() : [],
     publicUrl,
     instanceName,
     trustedProxies,

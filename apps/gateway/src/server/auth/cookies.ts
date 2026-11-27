@@ -92,7 +92,13 @@ export function clearCookie(name: string, path = '/', secure = true): string {
 }
 
 /** The cookies the instance sets, by their name without prefix. */
-export type CookieBase = 'vbn_session' | 'vbn_login' | 'vbn_recover' | 'vbn_recovery';
+export type CookieBase =
+  | 'vbn_session'
+  | 'vbn_login'
+  | 'vbn_recover'
+  | 'vbn_recovery'
+  /** Binds a flow of an installed-app client to the window that started it (`loopback.ts`). */
+  | 'vbn_loopback';
 
 /**
  * `host`: `__Host-` names, `Secure` (an https public URL). `loopback`: plain names,

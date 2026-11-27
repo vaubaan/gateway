@@ -16,6 +16,12 @@ import { AdministratorsService } from './administrators';
 import { SecondFactorService } from './second-factor';
 import { RecoveryService } from './recovery';
 import { createRecoveryHandlers, type RecoveryHandlers } from './recovery-handlers';
+import { LoopbackService } from './loopback';
+import {
+  createLoopbackHandlers,
+  type CompleteSetup,
+  type LoopbackHandlers,
+} from './loopback-handlers';
 import { Authenticator } from './authenticator';
 import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
@@ -75,13 +81,17 @@ export interface AuthModule {
   readonly relyingParties: RelyingPartyFactory;
   readonly authenticator: Authenticator;
   /** The sign-in endpoints, the forms of the sign-in accounts and the recovery page included. */
-  readonly handlers: AuthHandlers & LocalAuthHandlers & RecoveryHandlers;
+  readonly handlers: AuthHandlers & LocalAuthHandlers & RecoveryHandlers & LoopbackHandlers;
   /** Recovery by the master key, loudly (ADR administrators-live-in-the-instance §9). */
   readonly recovery: RecoveryService;
   /** The accounts of a sign-in provider of kind `local`, and their links. */
   readonly signInAccounts: SignInAccountsService;
   /** Whether the instance sends the mails of the links (a mailer was configured). */
   readonly sendsMail: boolean;
+  /** The flows of the installed-app clients, back on the loopback (local mode). */
+  readonly loopback: LoopbackService;
+  /** How a setup's flow makes the first administrator: the users' handlers, once built. */
+  completeSetupWith(complete: CompleteSetup): void;
 }
 
 export function createAuthModule(deps: AuthModuleDeps): AuthModule {
@@ -208,6 +218,27 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
     finishSignIn,
   });
+  const loopback = new LoopbackService({
+    store: deps.sessions,
+    flows,
+    cookies,
+    clock,
+    logger: logger.child({ component: 'loopback' }),
+  });
+  let completeSetup: CompleteSetup | null = null;
+  const loopbackHandlers = createLoopbackHandlers({
+    publicUrl: deps.config.publicUrl,
+    loopback,
+    signInProviders,
+    administrators,
+    authenticator,
+    bootstrap,
+    finishSignIn,
+    completeSetup: () => completeSetup,
+    rateLimiter: deps.rateLimiter,
+    clientIp,
+    logger,
+  });
   const recoveryHandlers = createRecoveryHandlers({
     publicUrl: deps.config.publicUrl,
     recovery,
@@ -228,9 +259,13 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     bootstrap,
     relyingParties,
     authenticator,
-    handlers: { ...handlers, ...localHandlers, ...recoveryHandlers },
+    handlers: { ...handlers, ...localHandlers, ...recoveryHandlers, ...loopbackHandlers },
     signInAccounts,
     sendsMail: deps.mailer !== undefined,
+    loopback,
+    completeSetupWith(complete) {
+      completeSetup = complete;
+    },
   };
 }
 
@@ -253,6 +288,15 @@ export {
   type ResolvedAdministrators,
 } from './administrators';
 export { admit, type AdmissionContext, type AdmissionReason } from './admission';
+export {
+  LOOPBACK_DONE_PATH,
+  LOOPBACK_START_PATH,
+  LOOPBACK_STATUS_PATH,
+  SIGNED_IN_ELSEWHERE_PAGE,
+  type CompleteSetup,
+} from './loopback-handlers';
+export { LOOPBACK_PATH, loopbackRedirectUri } from './loopback-uri';
+export { installedProviderOf } from './installed-sign-in';
 export { GithubSignIn, readableTeams } from './github';
 export {
   CHALLENGE_COOKIE,

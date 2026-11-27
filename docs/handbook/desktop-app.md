@@ -32,6 +32,7 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 - **The setup link never reaches the log**: the shell keeps it from the gateway's output and writes a placeholder line.
 - **The webview saves no download by itself**: WKWebView drops a response with `Content-Disposition: attachment` (the key on `/welcome` and in Settings) unless the shell takes it. `on_download` saves it in `~/Downloads` under a free name and reveals it in the Finder.
 - **Only the gateway stays in the window**: any other address (a service's sign-in page, the docs) opens in the default browser (`is_inside`).
+- **Signing in with Google, Microsoft or GitHub happens in the default browser**: the window's page sends itself to the consent page, `is_inside` opens it in the browser instead, and the page polls `/auth/loopback/status` until Google, Microsoft or GitHub has sent the browser back to `127.0.0.1:<port>/oauth/loopback` (handbook [authentication](authentication.md)). The browser then shows "Go back to Vaubaan"; the shell has no code of its own for it.
 - **No page calls the shell**: the capability grants nothing, so neither the gateway's pages nor the start page can reach the dialog or updater plugins; only the Rust code uses them.
 - **Nothing is downloaded before a yes**: the check reads the manifest only; a declined version is not offered again until the app restarts.
 - **The bundle's version is the gateway's whole version** (`2.0.0-alpha.33`), `CFBundleVersion` its numeric core: the updater compares the full version with the manifest's (semver, pre-release included), and `tauri build` writes it in the archive's signature, which the plugin checks against the manifest (`requireSignedVersion`).
@@ -69,6 +70,7 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 
   Keep the private key and its password in the password manager: losing it means every installed app must be reinstalled by hand to take a new key.
 
+- **Installed-app client secrets**: `VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET` and `VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET` reach `next build` in the job; without one, the app offers no such sign-in.
 - **Signing secrets**: the six `APPLE_*` secrets listed in the workflow's header, all or none. Without them the job builds an unsigned `.dmg` and warns.
 - **A release**: the tag's run attaches the signed `.dmg` files to the GitHub release (job `desktop-assets` of `release.yml`); the bundle's version is the numeric core of the gateway's (`2.0.0` for `2.0.0-alpha.31`), the file name carries the whole version.
 - **A release, for updates**: with the updater key, the run also attaches `Vaubaan-<version>-<arch>.app.tar.gz`, its `.sig` and `latest.json`, the manifest last. Check it with `curl -sL https://vaubaan.com/desktop/latest.json | jq .version` once the site is deployed and the release job is green.

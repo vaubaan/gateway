@@ -6,6 +6,7 @@
  * object (or a slice of it) through the composition root.
  */
 
+import type { InstalledClient } from './installed-clients';
 import type { TelemetryLevel } from '@vaubaan/telemetry';
 
 import type { ClientIpHeader } from '../http/client-ip';
@@ -287,6 +288,12 @@ export interface InstanceConfig {
    * the computer it runs on. Code that depends on the mode reads this, never the scheme.
    */
   readonly local: boolean;
+  /**
+   * Vaubaan's installed-app OAuth clients this build carries (`installed-clients.ts`), in
+   * local mode only (ADR local-instance-carries-installed-oauth-clients): Google, Microsoft
+   * and GitHub sign-in back on the loopback. Absent or empty elsewhere.
+   */
+  readonly installedClients?: readonly InstalledClient[];
   /**
    * Public origin of the instance, no trailing slash: https, or on a loopback host in
    * local mode (where it may be http).

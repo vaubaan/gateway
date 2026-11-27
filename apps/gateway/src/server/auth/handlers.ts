@@ -49,6 +49,7 @@ import type { FinishSignIn } from './local-handlers';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import type { PendingLogin, SessionService } from './session-service';
 import type { SignInFlows } from './sign-in-flows';
+import { installedProviderOf } from './installed-sign-in';
 import { createThrottle } from './throttle';
 import {
   signInAuditObjectId,
@@ -245,6 +246,11 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       try {
         const effective = await deps.signInProviders.resolve(id);
         if (!effective) return loginError('sign-in-provider-unknown');
+        // An installed client comes back on the loopback: the sign-in page starts it
+        // (`POST /auth/loopback/start`), never this redirect.
+        if (installedProviderOf(effective.signInProvider) !== null) {
+          return redirect(`${LOGIN_PAGE}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`);
+        }
         if (!(await deps.signInProviders.state(id)).enabled)
           return loginError('sign-in-provider-disabled');
         const administrators = await deps.administrators.current();

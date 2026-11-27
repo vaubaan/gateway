@@ -1027,6 +1027,10 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     ceilings: limits,
   });
+  // A local setup's flow through Google, Microsoft or GitHub ends as the form does.
+  auth.completeSetupWith((request, signInProvider, identity, starter) =>
+    users.handlers.localSetupWith(request, signInProvider, identity, starter),
+  );
   // The gateway's own management tools, bound to the mission service through ports
   // (`compose/vaubaan.ts`); the execution door runs them like any plugin's.
   const vaubaan = wireVaubaanPlugin({

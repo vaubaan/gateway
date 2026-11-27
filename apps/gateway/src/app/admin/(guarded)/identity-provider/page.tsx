@@ -367,6 +367,8 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
                 )}
                 {signInProvider.source === 'file' ? (
                   <Tag>{CONFIG_WORDS.file}</Tag>
+                ) : signInProvider.source === 'installed' ? (
+                  <Tag>Built into Vaubaan</Tag>
                 ) : (
                   <>
                     <ButtonLink

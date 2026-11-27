@@ -31,7 +31,7 @@ export default async function SignInProviderPage({ params, searchParams }: Props
   const query = await searchParams;
   const problems = ([] as string[]).concat(query.problem ?? []);
   const signInProvider = await root.auth.signInProviders.view(decodeURIComponent(id));
-  if (!signInProvider || signInProvider.source === 'file') notFound();
+  if (!signInProvider || signInProvider.source !== 'store') notFound();
   const github = signInProvider.kind === 'github';
   // A sign-in provider saved from a preset is edited with the preset's fields (the Entra tenant).
   const tenant = signInProvider.kind === 'oidc' ? entraTenantOf(signInProvider.issuer) : null;

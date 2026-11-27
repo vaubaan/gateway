@@ -1226,6 +1226,18 @@ const RULES: Readonly<Record<string, Rule>> = {
     'reads the identity from GitHub; what the sign-in writes is completeLogin’s, audited there',
   ),
   'GithubSignIn.scopes': READ,
+  'InstalledOidcSignIn.start': exempt(
+    'a sign-in attempt of an installed-app client: nothing is written, the loopback record is LoopbackService.start’s',
+  ),
+  'InstalledOidcSignIn.finish': exempt(
+    'reads the identity from the provider’s ID token; what the sign-in writes is completeLogin’s, audited there',
+  ),
+  'LoopbackService.start': exempt(SESSION_STATE),
+  'LoopbackService.callback': exempt(SESSION_STATE),
+  'LoopbackService.take': exempt(SESSION_STATE),
+  'LoopbackService.outcomeOf': READ,
+  'LoopbackService.redirectUri': READ,
+  'LoopbackService.clearCookie': READ,
   'InvitationService.list': READ,
   'InvitationService.isInvited': READ,
   'InvitationService.invite': {

@@ -2,10 +2,13 @@
  * The sign-in providers of the instance (spec §0 "Identity provider", §4.2
  * Settings → Sign-in, §4.3; docs/handbook/authentication.md).
  *
- * Two sources, merged by id:
+ * Three sources, merged by id:
  *
  * - `file` — the mounted configuration and the environment (`sign_in.<id>.*`).
  *   Read-only in the interface; it wins over a saved sign-in provider of the same id.
+ * - `installed` — in local mode, Vaubaan's installed-app clients (`google`, `microsoft`,
+ *   `github`; ADR local-instance-carries-installed-oauth-clients): read-only, always on,
+ *   after a `file` provider of the same id.
  * - `store` — saved by an administrator in Settings → Sign-in: `sign_in.<id>` (its
  *   settings, as JSON) and `sign_in.<id>.client_secret` (sealed by the `Encryptor`,
  *   associated data `instance_config:sign_in.<id>.client_secret`). The settings an
@@ -16,6 +19,7 @@
  * request (which sign-in providers exist, their issuers) and what the pages show.
  * `resolve(id)` returns the sign-in provider with its client secret, for a sign-in.
  */
+import { installedSignInProviders } from './installed-sign-in';
 import {
   admissionProblem,
   DEFAULT_CLAIM_MAPPING,
@@ -427,8 +431,11 @@ export class SignInProvidersService {
   /** The instance's address: what a saved or tested provider is recorded as set up for. */
   private readonly publicUrl: URL;
 
+  /** The sign-in providers of the installed-app clients a local instance carries. */
+  private readonly installed: readonly SignInProvider[];
+
   constructor(
-    config: Pick<InstanceConfig, 'signIn' | 'publicUrl'>,
+    config: Pick<InstanceConfig, 'signIn' | 'publicUrl' | 'installedClients'>,
     /**
      * The groups designated without a sign-in provider (a bare `admin.group` carried over from
      * the configuration): they name the group of the one sign-in provider, so a change of the
@@ -441,12 +448,20 @@ export class SignInProvidersService {
   ) {
     this.file = config.signIn;
     this.publicUrl = config.publicUrl;
+    // A sign-in provider of the configuration keeps its id: the installed one stands aside.
+    const taken = new Set(config.signIn.map((p) => p.id));
+    this.installed = installedSignInProviders(config.installedClients ?? []).filter(
+      (p) => !taken.has(p.id),
+    );
   }
 
   /** Every sign-in provider, the file's first, without secrets. */
   async views(): Promise<SignInProviderView[]> {
-    const fromFile = this.file.map((p) => viewOf(p, 'file'));
-    const fileIds = new Set(this.file.map((p) => p.id));
+    const fromFile = [
+      ...this.file.map((p) => viewOf(p, 'file')),
+      ...this.installed.map((p) => viewOf(p, 'installed')),
+    ];
+    const fileIds = new Set([...this.file, ...this.installed].map((p) => p.id));
     const fromStore = (await this.storedSignInProviders(false)).filter((p) => !fileIds.has(p.id));
     const stored: SignInProviderView[] = [];
     for (const p of fromStore) {
@@ -529,6 +544,8 @@ export class SignInProvidersService {
   async resolve(id: string): Promise<EffectiveSignInProvider | null> {
     const fromFile = this.file.find((p) => p.id === id);
     if (fromFile) return { signInProvider: fromFile, source: 'file' };
+    const installed = this.installed.find((p) => p.id === id);
+    if (installed) return { signInProvider: installed, source: 'installed' };
     const stored = (await this.storedSignInProviders(true)).find((p) => p.id === id);
     return stored ? { signInProvider: stored, source: 'store' } : null;
   }
@@ -541,7 +558,7 @@ export class SignInProvidersService {
   }
 
   isReadOnly(id: string): boolean {
-    return this.file.some((p) => p.id === id);
+    return this.file.some((p) => p.id === id) || this.installed.some((p) => p.id === id);
   }
 
   /**

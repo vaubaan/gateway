@@ -44,6 +44,7 @@ import { toIso, type Clock } from '../store/clock';
 import type { SignInAccountRecord } from '../store';
 import type { AdministratorsService } from './administrators';
 import { waiverApplies, type SecondFactorService } from './second-factor';
+import { installedProviderOf } from './installed-sign-in';
 import { admit } from './admission';
 import type { Authenticator, UserPrincipal } from './authenticator';
 import type { IdentityClaims } from './claims';
@@ -132,7 +133,9 @@ export interface LocalAuthHandlerDeps extends ThrottleDeps {
   readonly mailer?: LinkMailer;
   /**
    * Local mode: a sign-in account without a second factor signs in with its password,
-   * administrators included (ADR local-accounts-sign-in-provider, amendment 2026-11-25).
+   * administrators included (ADR local-accounts-sign-in-provider, amendment 2026-11-25); so
+   * does a person through an installed-app client (ADR
+   * local-instance-carries-installed-oauth-clients).
    */
   readonly local?: boolean;
   /** The recovery by the master key: its session lets the key's holder set a password. */
@@ -301,8 +304,13 @@ export function createLocalAuthHandlers(
     }
     const { waiver } = await deps.signInProviders.state(signInProvider.id);
     const enrolNow =
-      !(deps.local === true && signInProvider.kind === 'local') &&
-      !waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr });
+      // Local mode: whoever reaches the sign-in sits at this computer. Neither a sign-in
+      // account nor one of the installed-app clients (whose provider asks its own second
+      // factor) enrols one by force; a factor someone enrolled is still asked.
+      !(
+        deps.local === true &&
+        (signInProvider.kind === 'local' || installedProviderOf(signInProvider) !== null)
+      ) && !waiverApplies(waiver, { isOperator: outcome.isOperator, amr: identity.amr });
     if (enrolNow) {
       const enrolment = deps.secondFactors.beginEnrolment(deps.instanceLabel, identity.email);
       const step = await deps.sessions.createLocalStep({

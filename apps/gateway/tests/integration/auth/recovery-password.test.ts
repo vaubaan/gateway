@@ -91,7 +91,7 @@ describe('a forgotten password, chosen again with the encryption key', () => {
       form(former, { email: EMAIL, password: FORMER, password_again: FORMER }),
     );
     absorb(former, done);
-    const [local] = await root.auth.signInProviders.views();
+    const local = (await root.auth.signInProviders.views()).find((p) => p.kind === 'local');
     providerId = local!.id;
     accountId = (await root.auth.signInAccounts.signInAccountOf(providerId, EMAIL))!.id;
     // The password is forgotten a while after the setup.

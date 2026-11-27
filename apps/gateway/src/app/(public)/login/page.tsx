@@ -18,6 +18,7 @@ import { redirect } from 'next/navigation';
 
 import { AuthHeading, AuthPage } from '@/components/auth/AuthPage';
 import styles from '@/components/auth/auth.styles';
+import { InstalledSignIn } from '@/components/auth/InstalledSignIn';
 import { PasswordSignInForm } from '@/components/auth/PasswordForm';
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import { BuildFooter } from '@/components/shell/BuildFooter';
@@ -109,7 +110,13 @@ export default async function LoginPage({ searchParams }: Props) {
     (signInProvider) => signInProvider.enabled,
   );
   const local = signInProviders.find((signInProvider) => signInProvider.kind === 'local') ?? null;
-  const redirecting = signInProviders.filter((signInProvider) => signInProvider.kind !== 'local');
+  // Vaubaan's installed-app clients (local mode) start from the page, back on the loopback.
+  const installed = signInProviders.filter(
+    (signInProvider) => signInProvider.kind !== 'local' && signInProvider.source === 'installed',
+  );
+  const redirecting = signInProviders.filter(
+    (signInProvider) => signInProvider.kind !== 'local' && signInProvider.source !== 'installed',
+  );
   const resetDone = first(params[RESET_DONE_PARAM]) === 'done';
   const bootstrap = await root.auth.bootstrap.state();
   const instance = await root.instance.name.identity();
@@ -123,7 +130,7 @@ export default async function LoginPage({ searchParams }: Props) {
           ? principal.kind === 'user'
             ? 'The attempt below failed; the session you already had is still open.'
             : 'This session sets the gateway up; it is not a person’s.'
-          : local && redirecting.length > 0
+          : local && redirecting.length + installed.length > 0
             ? 'With your email address and password, or through a sign-in provider you already have an account at.'
             : local
               ? 'With the email address and the password of your account on this gateway.'
@@ -157,6 +164,14 @@ export default async function LoginPage({ searchParams }: Props) {
               action={`/auth/local/${encodeURIComponent(local.id)}`}
               returnTo={returnTo}
               heading={local.name}
+            />
+          )}
+          {installed.length > 0 && (
+            <InstalledSignIn
+              providers={installed.map(({ id, name }) => ({ id, name }))}
+              purpose="sign-in"
+              returnTo={returnTo}
+              primary={!local}
             />
           )}
           <div className={styles.act} data-testid="sign-in-providers">

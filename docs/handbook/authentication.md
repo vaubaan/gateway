@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/crypto/password.ts
   - apps/gateway/src/server/backup/copy.ts
   - apps/gateway/src/app/admin/
-last_reviewed: 2026-11-26
+last_reviewed: 2026-11-27
 ---
 
 # Authentication — handbook
@@ -84,6 +84,27 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   session there; the server checklist never shows. Its sign-ins enrol no second factor by force
   (`local` in `LocalAuthHandlerDeps`); a factor someone enrolled is still asked.
 
+- **A local instance carries Google, Microsoft and GitHub** (ADR
+  [local-instance-carries-installed-oauth-clients](../decisions/local-instance-carries-installed-oauth-clients.md)):
+  sign-in providers of source `installed` (`installed-sign-in.ts`), read-only and always on,
+  built from `config.installedClients` (`config/installed-clients.ts`: the ids in the code, the
+  Google and GitHub secrets frozen by `next build`). They never use `/auth/login/<id>` nor
+  `/auth/callback/<id>`: the page posts `/auth/loopback/start`, the sign-in provider comes back on
+  `http://127.0.0.1:<port>/oauth/loopback`, which has none of `localhost`'s cookies, so the
+  record `loopback:<state>` (`loopback.ts`) carries the flow and its outcome, and only the
+  window holding the `vbn_loopback` binder takes it (`/auth/loopback/done` in the same browser,
+  `/auth/loopback/status` polled by the desktop app's window). Google and Microsoft are read
+  from the ID token of the token endpoint, its signature unchecked (TLS, OpenID Connect Core
+  §3.1.3.7): no discovery, since Microsoft's `common` tokens name the person's tenant as
+  issuer. Purpose `setup` makes the first administrator (`localSetupWith`), only in the
+  window whose setup session started the flow. In local mode these sign-ins, like sign-in
+  accounts, enrol no second factor by force.
+
+- **Microsoft never says an address is verified**: a personal account's (tenant
+  `9188040d-…`) is taken as verified; a work address only with the optional claim `xms_edov`
+  in the ID token, else `email-not-verified` at admission (the first administrator of a setup
+  is not admitted, so not refused).
+
 - **A forgotten password without mail is chosen again with the master key**: the forgot
   page (`/sign-in-account/forgot`) shows `RecoverWithKey` when the instance sends no mail (or
   on `?with=key`), the same proof as `/admin/recover`; once this browser holds a recovery
@@ -138,6 +159,16 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   builds (`idp.*`, then `/auth/callback`) is an ordinary one since 2026-10-31:
   its stored settings are moved at boot (`auth/single-sign-in-provider-upgrade.ts`), its callback is
   `/auth/callback/idp`.
+
+- **Vaubaan's installed-app clients** (local mode): Google Cloud project `vaubaan-desktop`
+  (brand vaubaan.com, client "Desktop app"), the Microsoft Entra application
+  `0f3f084a-…` (public client, redirects `http://localhost/oauth/loopback` and
+  `http://127.0.0.1/oauth/loopback`), the GitHub OAuth App of the vaubaan organisation (callback
+  `http://127.0.0.1/oauth/loopback`). Their secrets are the Actions secrets
+  `VAUBAAN_DESKTOP_GOOGLE_CLIENT_SECRET` and `VAUBAAN_DESKTOP_GITHUB_CLIENT_SECRET`, passed to
+  `next build` by `desktop.yml` and, as build secrets, by the image build of `release.yml`; a
+  build without them offers neither sign-in. For Microsoft work accounts, the Entra
+  application must add the optional ID-token claim `xms_edov` (Token configuration).
 
 ## Procedures
 

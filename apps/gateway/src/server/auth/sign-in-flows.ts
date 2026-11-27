@@ -14,6 +14,8 @@ import { issuerKey, type AdminGroup, type SignInProvider } from '../config/sign-
 import { mapClaims, type IdentityClaims } from './claims';
 import { LoginError } from './errors';
 import { GithubSignIn } from './github';
+import { InstalledOidcSignIn, installedProviderOf } from './installed-sign-in';
+import { loopbackRedirectUri } from './loopback-uri';
 import {
   callbackUrl,
   type CustomFetch,
@@ -43,6 +45,8 @@ export interface SignInFlows {
   for(signInProvider: SignInProvider, adminGroups: readonly AdminGroup[]): SignInFlow;
   /** The callback to register at the sign-in provider. */
   callbackUrl(signInProviderId: string): URL;
+  /** Where an installed client comes back: `http://127.0.0.1:<port>/oauth/loopback`. */
+  loopbackUri(): URL;
 }
 
 export interface SignInFlowsDeps {
@@ -54,8 +58,24 @@ export interface SignInFlowsDeps {
 export function createSignInFlows(deps: SignInFlowsDeps): SignInFlows {
   return {
     callbackUrl: (signInProviderId) => callbackUrl(deps.publicUrl, signInProviderId),
+    loopbackUri: () => loopbackRedirectUri(deps.publicUrl),
     for(signInProvider, adminGroups) {
-      const redirectUri = callbackUrl(deps.publicUrl, signInProvider.id);
+      // An installed client comes back on the loopback, at the public URL's port
+      // (ADR local-instance-carries-installed-oauth-clients).
+      const installed = installedProviderOf(signInProvider);
+      const redirectUri = installed
+        ? loopbackRedirectUri(deps.publicUrl)
+        : callbackUrl(deps.publicUrl, signInProvider.id);
+      if (signInProvider.kind === 'oidc' && (installed === 'google' || installed === 'microsoft')) {
+        const flow = new InstalledOidcSignIn(signInProvider, installed, {
+          redirectUri,
+          fetch: deps.fetch,
+        });
+        return {
+          start: () => flow.start(),
+          finish: (callback, checks) => flow.finish(callback, checks),
+        };
+      }
       if (signInProvider.kind === 'local') {
         // Sign-in accounts sign in on the form of the sign-in page (`local-handlers.ts`),
         // never through a redirect: nothing to start, nothing to finish.

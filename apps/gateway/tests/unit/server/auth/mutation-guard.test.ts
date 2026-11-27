@@ -673,6 +673,16 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  // The flows of the installed-app clients (ADR local-instance-carries-installed-oauth-clients):
+  // the rig is no local instance, so it carries none (404); the status binds nothing.
+  'auth.handlers.loopbackStart': form('origin-only', 404, (rig, headers) =>
+    rig.root.auth.handlers.loopbackStart(
+      post('/auth/loopback/start', headers, { signInProvider: 'google', purpose: 'sign-in' }),
+    ),
+  ),
+  'auth.handlers.loopbackStatus': form('origin-only', 200, (rig, headers) =>
+    rig.root.auth.handlers.loopbackStatus(post('/auth/loopback/status', headers, {})),
+  ),
   'auth.handlers.enrolAtSignIn': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.enrolAtSignIn(
       post('/auth/local/local/enrol', headers, { code: '000000' }),
@@ -711,6 +721,12 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
 const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginStart': 'GET; starts a sign-in, the pending login is bound to a cookie',
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
+  'auth.handlers.loopbackCallback':
+    'GET from the provider on the loopback; protected by the single-use state, the nonce and PKCE, and writes only the flow’s outcome',
+  'users.handlers.localSetupWith':
+    'no route of its own: the end of a setup flow of an installed-app client, reached through loopbackDone or loopbackStatus, which bind the window',
+  'auth.handlers.loopbackDone':
+    'GET; completes only the flow the binding cookie of this browser names (a secret only the starting window holds)',
   'accounts.handlers.callback':
     'GET from the sign-in provider; protected by the single-use state bound to the user (guardSession)',
   'accounts.handlers.connectFile':

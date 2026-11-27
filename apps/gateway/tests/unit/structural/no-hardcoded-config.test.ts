@@ -38,6 +38,8 @@ const ALLOWED: Record<string, string> = {
   'deploy/README.md': 'points its readers to the procedures published on the documentation site',
   'deploy/railway.md':
     'points its readers to the Railway procedure published on the documentation site',
+  'apps/gateway/src/server/auth/installed-sign-in.ts':
+    "the fixed endpoints and issuers of Google and Microsoft, which Vaubaan's installed-app clients sign in with (ADR local-instance-carries-installed-oauth-clients)",
   'apps/gateway/src/server/config/sign-in.ts':
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (docs/handbook/authentication.md)',
   'apps/gateway/src/server/accounts/attestation-gcp.ts':

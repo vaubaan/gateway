@@ -89,7 +89,10 @@ describe('the setup of a local instance', () => {
       post(bootstrap, { email: EMAIL, password: PASSWORD, password_again: PASSWORD }),
     );
     expect(early.headers.get('location')).toBe('/welcome');
-    expect(await root.auth.signInProviders.views()).toEqual([]);
+    // Only the installed-app clients the build carries (ADR local-instance-carries-installed-oauth-clients).
+    expect(
+      (await root.auth.signInProviders.views()).filter((p) => p.source !== 'installed'),
+    ).toEqual([]);
 
     await root.masterKey.service.confirmHandover();
     const done = await root.users.handlers.localSetup(
@@ -97,7 +100,7 @@ describe('the setup of a local instance', () => {
     );
     expect(done.headers.get('location')).toBe('/');
     expect((await root.auth.bootstrap.state()).status).toBe('revoked');
-    const [local] = await root.auth.signInProviders.views();
+    const local = (await root.auth.signInProviders.views()).find((p) => p.kind === 'local');
     expect(local).toMatchObject({ kind: 'local', enabled: true });
     const account = await root.auth.signInAccounts.signInAccountOf(local?.id ?? '', EMAIL);
     expect(account).not.toBeNull();

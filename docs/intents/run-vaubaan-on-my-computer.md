@@ -114,7 +114,7 @@ acceptance:
 - The setup and the sign-in page offer Google, Microsoft, GitHub and email with a password; the setup's second screen creates the first administrator with whichever I choose
 - In the desktop app the provider's page opens in my default browser; once I consent, the browser says to go back to Vaubaan and the app's window is signed in
 - Signing in asks only my identity (Google `openid email`, Microsoft `openid email profile`, GitHub `read:user user:email`), never a calendar or a mailbox
-- A flow finished in another browser than the one that started it, or replayed, signs nobody in
+- Only the window that started a flow is signed in by it: the browser where I consented is not, and a replayed or expired flow signs nobody in
 - A build without a provider's client shows no button for that provider
 
 ### Connect Google Calendar and Outlook with no client of my own
