@@ -164,6 +164,12 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       '1',
     ),
   ),
+  'missions.handlers.firstCall': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.firstCall(
+      post(`/api/missions/${rig.mission.id}/first-call`, headers, {}),
+      rig.mission.id,
+    ),
+  ),
   'missions.handlers.previewEdit': json('user', 200, async (rig, headers) => {
     const view = await rig.root.missions.service.editView(rig.seeded.ada, rig.mission.id);
     return rig.root.missions.handlers.previewEdit(

@@ -10,8 +10,11 @@
  *   POST /api/missions/:id/tokens/:tokenId/revoke   the holder, or the creator, revokes one token
  *   POST /api/missions/:id/tokens/:tokenId/replace  the creator replaces a machine key, in one act
  *   POST /api/missions/:id/leave                    a teammate leaves (their token is revoked)
+ *   POST /api/missions/:id/first-call               `{ called_at }` — when the reader's own key was
+ *                                                   last used; `null`: never (spec §7.4). A read, asked
+ *                                                   like the others: the page that shows the key polls it.
  *
- * Every one is a mutation, and two reveal a secret: valid user session, origin
+ * Every other one is a mutation, and two reveal a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). The secret of a token is in the
  * answer of the request that generated it and nowhere else: `tokens/mine`
  * answers the member who asked, never the creator.
@@ -33,6 +36,7 @@ export interface TeamHandlers {
   revokeToken(request: Request, missionId: string, tokenId: string): Promise<Response>;
   replaceNamedToken(request: Request, missionId: string, tokenId: string): Promise<Response>;
   leave(request: Request, missionId: string): Promise<Response>;
+  firstCall(request: Request, missionId: string): Promise<Response>;
 }
 
 function json(status: number, body: unknown): Response {
@@ -89,6 +93,14 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
   }
 
   return {
+    async firstCall(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const team = await deps.team.team(principal.user, missionId);
+      if (!team) return json(404, NOT_FOUND);
+      return json(200, { called_at: team.my_token?.last_used_at ?? null });
+    },
+
     async addMember(request, missionId) {
       const principal = await userOf(request);
       if (principal instanceof Response) return principal;

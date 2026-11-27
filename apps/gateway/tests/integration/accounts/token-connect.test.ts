@@ -185,6 +185,10 @@ describe('a GitHub account connected with a token', () => {
       credentialExpiresAt: '2027-01-15T10:30:00.000Z',
     });
     expect(account?.metadata).toMatchObject({ credential_kind: 'api-key', account: 'acme-bot' });
+    // Alice has created no mission yet: she lands on the creation form filled in for
+    // this account, its starter mission (spec §7.2, §7.4).
+    expect(landing.pathname).toBe('/missions/new');
+    expect(landing.searchParams.get('account')).toBe(account!.id);
     // One account, one repository: whatever else the token reads is not listed.
     expect(
       (await root.store.accounts.listResources(account!.id)).map((r) => [
@@ -219,9 +223,20 @@ describe('a GitHub account connected with a token', () => {
     if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
     const key = issued.token.secret;
 
+    // The page that shows the key waits for its first call: none yet.
+    const firstCall = async (): Promise<unknown> => {
+      const answer = await root.missions.handlers.firstCall(
+        post(`/api/missions/${issued.mission.id}/first-call`, alice.cookie, {}),
+        issued.mission.id,
+      );
+      return (await answer.json()) as unknown;
+    };
+    expect(await firstCall()).toEqual({ called_at: null });
+
     const listed = await rpc(key, 'tools/list', {});
     const names = (listed.result?.tools ?? []).map((t) => t.name);
     expect(names).toContain('github__list_branches');
+    expect(JSON.stringify(await firstCall())).toMatch(/^\{"called_at":"\d{4}-/);
 
     const branches = await rpc(key, 'tools/call', {
       name: 'github__list_branches',
@@ -238,6 +253,20 @@ describe('a GitHub account connected with a token', () => {
     });
     expect(JSON.stringify(rejected)).toContain('account-unavailable');
     expect((await root.store.accounts.getById(account!.id))?.status).toBe('expired');
+
+    // Reconnecting it, now that she has a mission, lands on the account's page.
+    rejectToken = false;
+    const again = await root.accounts.handlers.connect(
+      post('/accounts/connect/github', alice.cookie, {
+        account_id: account!.id,
+        'field.token': PAT,
+        'field.repository': 'acme/app',
+      }),
+      'github',
+    );
+    expect(new URL(again.headers.get('location') ?? '', PUBLIC_URL).pathname).toBe(
+      `/accounts/${account!.id}`,
+    );
 
     // Removing it asks GitHub nothing and says where to delete the token.
     const calls = github.calls.length;

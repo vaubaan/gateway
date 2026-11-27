@@ -15,6 +15,7 @@ import { currentUser } from '@/lib/auth/session';
 import { nowDepsOf, readNow, readSetup, setupDepsOf } from '@/server/now';
 
 import { FirstRun } from './_now/first-run';
+import { PLATFORM_SERVICE } from './missions/new/form-state';
 import { NowView } from './_now/now-view';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +37,20 @@ export default async function HomePage() {
     // A local instance's setup ended on `/welcome`: its one person reads no server checklist.
     const setup =
       principal.isOperator && !root.config.local ? await readSetup(setupDepsOf(root)) : null;
-    return <FirstRun view={view} name={firstName(user.displayName)} setup={setup} />;
+    // The first mission starts filled in for an account the person may use (spec §7.4),
+    // their own before one shared with them; a Vaubaan account has its own first mission.
+    const usable = (await root.missions.service.issuanceContext(user)).filter(
+      (account) => account.service !== PLATFORM_SERVICE,
+    );
+    const starter = usable.find((account) => account.basis === 'owner') ?? usable[0];
+    return (
+      <FirstRun
+        view={view}
+        name={firstName(user.displayName)}
+        setup={setup}
+        starterAccountId={starter?.id ?? null}
+      />
+    );
   }
   // The proposal to receive notifications needs the key a browser subscribes with.
   const push =

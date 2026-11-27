@@ -78,6 +78,7 @@ import type { RiskPlanes } from '@/lib/services/planes';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
+import { FirstCallWait } from '../first-call-wait';
 import { messageOf } from '@/lib/http/message-of';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import styles from '../missions.styles';
@@ -120,8 +121,8 @@ export interface InitialDraft {
   /** What could not be carried over from the source (a permission no longer held, a vanished resource). */
   readonly issues: readonly PreviewIssue[];
   readonly sourceName: string;
-  /** A copy of a mission, or the platform management mission on a Vaubaan account. */
-  readonly origin: 'copy' | 'platform';
+  /** A copy of a mission, the platform management mission on a Vaubaan account, or an account's starter mission. */
+  readonly origin: 'copy' | 'platform' | 'starter';
 }
 
 /** "Raise this limit" on the mission page: the edit opens on the Custom modal of a macro-action. */
@@ -456,6 +457,27 @@ export function MissionForm({
             Your {initial.sourceName} account with every macro-action at Careful: the agent reads
             your setup freely and asks you before it prepares, re-keys or stops a mission. Change
             anything before you create it. A mission it prepares never holds a Vaubaan account.
+          </Callout>
+        </div>
+      )}
+
+      {initial && !edit && initial.origin === 'starter' && (
+        <div className={styles.block}>
+          <Callout
+            tone={initial.issues.length > 0 ? 'warn' : 'info'}
+            title="A mission to start with"
+            testId="starter-mission"
+          >
+            Your {initial.sourceName} account, filled in for a first mission: the agent reads freely
+            and waits for your yes before it writes, sends or deletes anything. What cannot be
+            repaired is left out. Change anything, then create it.
+            {initial.issues.length > 0 && (
+              <ul className={styles.issueList}>
+                {initial.issues.map((i) => (
+                  <li key={i.message}>{issueSentence(i, context)}</li>
+                ))}
+              </ul>
+            )}
           </Callout>
         </div>
       )}
@@ -840,6 +862,9 @@ function CreatedView({
       />
       <Section first title="Your key" note={MISSION_WORDS.keyShownOnce}>
         <KeyReveal secret={created.secret} kit={created.kit} />
+        <div className="mt-4">
+          <FirstCallWait missionId={created.missionId} />
+        </div>
       </Section>
       <Section title="Working with others?">
         <Rows>

@@ -4,18 +4,22 @@
  * checked again against what they may allow today. `?platform=<account id>`
  * starts from the platform management mission on the reader's Vaubaan account
  * (`platformMissionDraft`): a prefill they see and may change, never issued by
- * itself. The header, the form and
+ * itself. `?account=<account id>` starts from the starter mission of that account
+ * (`starterMissionDraft`, spec §7.4): what a person lands on after connecting their
+ * first account. The header, the form and
  * what follows the creation (the key, shown once) are `MissionForm`.
  */
 import { AutoRefresh } from '@/components/accounts/AutoRefresh';
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { NoticeBanner } from '@/components/accounts/parts';
+import { takeNotice } from '@/lib/accounts/session';
 import { currentUser } from '@/lib/auth/session';
 import { serviceIconOf } from '@vaubaan/plugin-sdk';
 
 import type { ServiceMarkIcon } from '@/components/ui';
 import { riskPlanesOf, type RiskPlanes } from '@/lib/services/planes';
 
-import { PLATFORM_SERVICE, platformMissionDraft } from './form-state';
+import { PLATFORM_SERVICE, platformMissionDraft, starterMissionDraft } from './form-state';
 import { MissionForm, type InitialDraft } from './mission-form';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +35,8 @@ export default async function NewMissionPage({ searchParams }: Props) {
   const params = await searchParams;
   const from = typeof params.from === 'string' ? params.from : null;
   const platform = typeof params.platform === 'string' ? params.platform : null;
+  const starter = typeof params.account === 'string' ? params.account : null;
+  const notice = await takeNotice(session.root, session.principal.sessionId, params);
 
   const context = await service.issuanceContext(session.user);
   // The picker shows what is stored at once; the stale accounts refresh themselves.
@@ -78,14 +84,30 @@ export default async function NewMissionPage({ searchParams }: Props) {
         origin: 'platform',
       };
     }
+  } else if (starter) {
+    const account = context.find((c) => c.id === starter);
+    if (account) {
+      const draft = starterMissionDraft(account);
+      const preview = await service.preview(session.user, draft);
+      initial = {
+        name: draft.name,
+        period: draft.period,
+        resolved: preview.resolved,
+        issues: preview.issues,
+        sourceName: `${account.service_label} · ${account.display_name}`,
+        origin: 'starter',
+      };
+    }
   }
 
   return (
     <>
       <AutoRefresh accountIds={stale} quiet />
+      {/* "Connected": what the connection that led here has to say (spec §7.2). */}
+      <NoticeBanner notice={notice} />
       <MissionForm
         // A copy of another mission is another form: its state starts again.
-        key={from ?? (platform ? `platform:${platform}` : 'new')}
+        key={from ?? (platform ? `platform:${platform}` : starter ? `account:${starter}` : 'new')}
         context={context}
         missions={mine.map((m) => ({ id: m.mission.id, name: m.mission.name }))}
         initial={initial}

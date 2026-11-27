@@ -276,6 +276,8 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads the period anchor and length only, to know which period is the current one',
       'accounts/discovery.ts':
         'reads the creator and the accounts of a mission only, to authorize "check now" (`checkForMission`); never the status: a discovery of an account is the owner’s act whatever the mission’s state',
+      'accounts/index.ts':
+        'counts the missions a person created only (`hasCreatedMission`), to lead a first account to its starter mission; never a status',
       'import-v4/importer.ts':
         'reads the names of the owner’s missions and the stored `revoked` only, to recognise what an earlier import issued; an orphaned mission is still that mission and is not issued twice',
     };

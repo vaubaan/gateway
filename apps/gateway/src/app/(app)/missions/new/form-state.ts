@@ -27,6 +27,7 @@ import {
   expandMacroAction,
   knownTrustLevels,
   macroActionOfRisk,
+  prefillOfTrustLevels,
   type MacroActionTrustLevels,
   type TrustLevel,
 } from '@/lib/missions/macro-actions';
@@ -495,6 +496,41 @@ export function platformMissionDraft(account: IssuanceAccount): MissionDraft {
     period: periodOf(DEFAULT_PERIOD),
     expires_at: null,
     accounts: [{ account_id: account.id, resources: { scope: 'all' }, trust_levels: trustLevels }],
+  };
+}
+
+/**
+ * The starter mission of an account (spec §7.4): the prefill a person lands on after
+ * connecting their first account. The whole account, every macro-action of its catalog
+ * at Careful; then each line that reads passes on its own and each line that writes or
+ * destroys waits for the creator. What Careful leaves out (row 4) stays out. A draft
+ * the person sees in the creation form and may change; nothing is issued from here.
+ */
+export function starterMissionDraft(account: IssuanceAccount): MissionDraft {
+  const trustLevels: Record<string, TrustLevel> = Object.fromEntries(
+    account.macro_actions
+      .filter((action) => action.id !== ANYTHING_ELSE)
+      .map((action) => [action.id, 'careful']),
+  );
+  const kindOf = new Map(account.risks.map((risk) => [risk.risk_id, risk.kind]));
+  const { lines } = prefillOfTrustLevels(account, trustLevels, account.resources);
+  return {
+    name: `${account.service_label} · ${account.display_name}`,
+    period: periodOf(DEFAULT_PERIOD),
+    expires_at: null,
+    accounts: [
+      {
+        account_id: account.id,
+        resources: { scope: 'all' },
+        trust_levels: trustLevels,
+        policy: lines.map((line) => ({
+          risk_id: line.risk_id,
+          quota: line.quota,
+          rate_limit: line.rate_limit,
+          gate: kindOf.get(line.risk_id) === 'read' ? 'auto' : 'approval',
+        })),
+      },
+    ],
   };
 }
 

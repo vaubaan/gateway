@@ -63,6 +63,8 @@ discovering and curating its resources. Spec:
 
 ## Traps
 
+- **Where connecting an account lands** is `landingOf` (`handlers.ts`), for the pasted key and the callback alike: the `return_to` it was started with, else the starter mission of the new account for someone who created no mission yet (`/missions/new?account=<id>`, handbook missions), else the account's page. A test that connects an account as a person without a mission must expect the mission form.
+
 - **An account never refreshes on its own** → `accounts.refresh_interval: 0`, the account is `expired`/`revoked` or a host account, or it is backed off after failures (log `resource discovery failed`; the back-off is in memory, a restart clears it). On a page, an account never refreshed (no `metadata.discovery`) is not refreshed on open: the tick takes it.
 - `expiry: person-types` (Supabase, Fly, Upstash): the person picked a date the service never says back, so the account page reads "no expiry known" and cannot warn; only `service-reports` ways (GitHub, Cloudflare, Vercel) get the 14-day notice. `CredentialCheck.granted` is not stored yet.
 - A `verify` failure the plugin did not word as a `CredentialRefusal` reaches the person as "the service rejected the credential (HTTP 401)" (`failure-reason.ts`): a plugin names every cause it can.

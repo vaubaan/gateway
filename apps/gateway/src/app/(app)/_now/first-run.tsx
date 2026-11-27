@@ -89,12 +89,15 @@ export function FirstRun({
   view,
   name,
   setup,
+  starterAccountId = null,
 }: {
   view: NowView;
   /** What to call the person; `null` when the identity provider gave no name. */
   name: string | null;
   /** The checklist, for an administrator; `null` for anyone else. */
   setup: SetupView | null;
+  /** The account the first mission starts filled in for (spec §7.4); `null`: the blank form. */
+  starterAccountId?: string | null;
 }) {
   const [shared] = view.shared_accounts;
   const hasAccount = view.totals.accounts > 0 || shared !== undefined;
@@ -167,7 +170,11 @@ export function FirstRun({
             end={
               hasAccount ? (
                 <ButtonLink
-                  href={ROUTES.newMission}
+                  href={
+                    starterAccountId
+                      ? `${ROUTES.newMission}?account=${encodeURIComponent(starterAccountId)}`
+                      : ROUTES.newMission
+                  }
                   size="sm"
                   variant={stepsTakeAccent ? 'primary' : 'secondary'}
                 >

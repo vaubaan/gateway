@@ -3,7 +3,7 @@ title: Run Vaubaan on my computer
 status: proposed
 actors: [developer, consultant]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-26
+last_reviewed: 2026-11-27
 ---
 
 # Run Vaubaan on my computer
@@ -169,16 +169,47 @@ acceptance:
 
 ## Reach my agent's first call in one path
 
+From the download to my agent's first governed call in six actions of mine, counted as in plate 7
+of the 2026-11-19 research: install, first access, connect an account, create the mission, add it
+to my agent, first call.
+
+### Start from a mission filled in for the account I just connected
+
+status: implemented
+requires: account
+creates: mission, mission-token
+relieves: a-lost-evening-on-pre-release-software
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+anchors: apps/gateway/src/app/(app)/missions/new/form-state.ts, apps/gateway/src/app/(app)/missions/new/page.tsx, apps/gateway/tests/integration/missions/starter-mission.test.ts
+
+### Be led from my first account to my first mission
+
+status: implemented
+requires: instance, account
+relieves: a-lost-evening-on-pre-release-software
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#72-connect-an-account
+anchors: apps/gateway/src/server/accounts/handlers.ts, apps/gateway/src/app/(app)/_now/first-run.tsx, apps/gateway/tests/integration/accounts/token-connect.test.ts
+
+### See my agent's first call arrive
+
+status: implemented
+requires: mission, mission-token
+delivers: my-first-governed-call-in-minutes
+spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+anchors: apps/gateway/src/app/(app)/missions/first-call-wait.tsx, apps/gateway/src/server/missions/team-handlers.ts, apps/gateway/tests/integration/accounts/token-connect.test.ts
+
+### Count six actions from the download to the first call
+
 status: proposed
 requires: instance
-creates: account, mission, mission-token
 relieves: a-lost-evening-on-pre-release-software, four-copy-pastes-per-project
 delivers: my-first-governed-call-in-minutes
 spec: ../spec/vaubaan-gateway.md#7-workflows
 acceptance:
 
-- After the first launch, the interface leads from connecting an account to creating a mission to adding it to my agent, each step opening the next
-- From download to my agent's first governed call takes at most six actions of mine, counted as in plate 7 of the 2026-11-19 research
+- From download to my agent's first governed call takes at most six actions of mine, with a service that takes a pasted key and with one that signs in; a test walks the path and fails beyond six
 - A step one person does not need (giving access, labelling environments no permission uses) is skipped, not shown
 
 ## Let my agent reach the instance on my computer

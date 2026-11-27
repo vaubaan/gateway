@@ -164,6 +164,8 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
       const owned = await service.listFor(actor);
       return new Set([...reached.map((a) => a.id), ...owned.map((v) => v.account.id)]);
     },
+    hasCreatedMission: async (actor) =>
+      (await deps.store.missions.listForCreator(actor.user.id)).length > 0,
     connectFile: (serviceId, file) =>
       readConnectFile(
         {

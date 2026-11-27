@@ -90,9 +90,15 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // One account, one repository: the form names it.
   await page.getByLabel(/^Repository/).fill(REPOSITORY);
   await page.getByRole('button', { name: 'Check and connect' }).click();
-  await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
-  await expect(page.getByRole('heading', { name: ACCOUNT, level: 1 })).toBeVisible();
+  // A first account, no mission yet: the person lands on the creation form filled in for
+  // it, its starter mission (spec §7.2, §7.4). The account's own page is one link away.
+  await expect(page).toHaveURL(/\/missions\/new\?account=[0-9a-f-]{36}/);
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('starter-mission')).toContainText(ACCOUNT);
+  await snap(page, 'cutover-starter-mission');
+  const accountId = new URL(page.url()).searchParams.get('account') ?? '';
+  await page.goto(`/accounts/${accountId}`);
+  await expect(page.getByRole('heading', { name: ACCOUNT, level: 1 })).toBeVisible();
   // The normal state is not labelled; the header says whose it is.
   await expect(page.getByText('you own it').first()).toBeVisible();
   // The account's one repository is its one resource; what else the token reads is not listed.
@@ -137,6 +143,12 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(kit.getByTestId('kit-instructions')).toContainText(`\`${REPOSITORY}\``);
   await expect(kit.getByTestId('kit-instructions')).not.toContainText(`\`${LEFT_OUT}\``);
   await snap(page, 'cutover-bootstrap-kit');
+  // The page waits for the first call made with the key, and says when it arrived,
+  // with no reload (spec §7.4).
+  await expect(kit.getByTestId('first-call-waiting')).toBeVisible();
+  expect((await kitToolsList(token)).status).toBe(200);
+  await expect(kit.getByTestId('first-call-arrived')).toBeVisible({ timeout: 15_000 });
+  await snap(page, 'cutover-first-call');
   await openCreatedMission(page, MISSION);
   await expect(page).toHaveURL(/\/missions\/[0-9a-f-]{36}$/);
   const missionId = new URL(page.url()).pathname.split('/').pop() ?? '';

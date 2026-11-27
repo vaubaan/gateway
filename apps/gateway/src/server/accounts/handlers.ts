@@ -48,6 +48,7 @@ import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
 import type { RateLimiter } from '../compose/ports';
 import type { ConnectFile } from '../plugins';
+import { VAUBAAN_SERVICE } from '../vaubaan/acts';
 import type { AccountRefresher } from './account-refresh';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
@@ -105,6 +106,8 @@ export interface AccountHandlerDeps {
   readonly reachOf: (actor: Actor) => Promise<ReadonlySet<string>>;
   /** A screenshot of a plugin's connect guide, or `null` (`readConnectFile` of `../plugins`). */
   readonly connectFile: (serviceId: string, file: string) => Promise<ConnectFile | null>;
+  /** Whether the person has created a mission, ever: until then, a new account leads to its starter mission. */
+  readonly hasCreatedMission: (actor: Actor) => Promise<boolean>;
 }
 
 export interface AccountHandlers {
@@ -198,6 +201,22 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       status: SEE_OTHER,
       headers: { Location: location, 'Cache-Control': 'no-store' },
     });
+  }
+
+  /**
+   * Where a connection lands (spec §7.2): the page it was asked to return to; else,
+   * for someone who created no mission yet, the creation form filled in for the new
+   * account (its starter mission, spec §7.4); else the account's page. A reconnection,
+   * a Vaubaan account (its page offers the platform management mission) and an
+   * account whose resources could not be read yet land on the account's page.
+   */
+  async function landingOf(actor: Actor, result: Connected): Promise<string> {
+    if (result.returnTo) return result.returnTo;
+    const own = accountPath(result.account.id);
+    if (result.reconnected || !result.discovery?.ok) return own;
+    if (result.account.service === VAUBAAN_SERVICE) return own;
+    if (await deps.hasCreatedMission(actor)) return own;
+    return starterMissionPath(result.account.id);
   }
 
   async function redirectWithNotice(
@@ -311,7 +330,7 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
         if (result.kind === 'redirect') return redirect(result.url);
         return await redirectWithNotice(
           who.principal,
-          result.returnTo ?? accountPath(result.account.id),
+          await landingOf(who.actor, result),
           connectedNotice(result),
         );
       } catch (err) {
@@ -368,14 +387,15 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       if (!guard.ok) return redirect(LOGIN_PAGE);
       const { principal } = guard;
       try {
+        const actor = actorOf(principal);
         const result = await deps.accounts.complete(
-          actorOf(principal),
+          actor,
           serviceId,
           new URL(request.url).searchParams,
         );
         return await redirectWithNotice(
           principal,
-          result.returnTo ?? accountPath(result.account.id),
+          await landingOf(actor, result),
           connectedNotice(result),
         );
       } catch (err) {
@@ -571,6 +591,11 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       }
     },
   };
+}
+
+/** The creation form filled in for one account: its starter mission (spec §7.4). */
+export function starterMissionPath(accountId: string): string {
+  return `/missions/new?account=${encodeURIComponent(accountId)}`;
 }
 
 export function accountPath(accountId: string): string {

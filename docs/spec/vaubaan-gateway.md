@@ -1235,6 +1235,10 @@ token is checked before it is stored, never shown back, its expiry warned 14 day
 connected a way its plugin no longer offers runs nothing until its owner reconnects it, keeping
 resources and shares.
 
+A person who has created no mission yet lands, once the account is connected, on the creation form
+filled in for it (§7.4, the starter mission), whichever way the account signs in; anyone else lands
+on the account's page.
+
 ### 7.3 Give access
 
 The owner picks a person or team and ticks permissions; the target sees the account under "Shared
@@ -1246,6 +1250,15 @@ confirmed their list.
 Accounts, resources, macro-actions at a trust level per account, adjustments, period (default daily) and end (default
 never), then "Create mission", with no confirmation (the explicit list is what is sent and checked
 again); the key is revealed once with the setup kit.
+
+The **starter mission** is the creation form filled in for one account
+(`/missions/new?account=<id>`): a name from the account, the whole account, every macro-action of
+its catalog ticked at Careful, then each line that reads set to `auto` and each line that writes or
+destroys set to `approval`; what Careful leaves out (row 4) stays out and the form says so; the
+default period and end. A prefill the person sees and may change, never issued by itself. After the
+key is shown, the page waits for the first call made with that key and says when it arrived,
+with no reload, leading to the mission's activity; a call the gateway refused counts, and the
+activity says why.
 
 ### 7.4 bis Edit a mission
 

@@ -202,10 +202,12 @@ describe('accounts: registered client, connect, resources, revoke', () => {
     const callbackQuery = `/connections/callback/oauthco?code=auth-code-1&state=${state}`;
     const landed = await handlers.callback(get(callbackQuery, alice), 'oauthco');
     const target = location(landed);
-    const accountId = target.pathname.split('/').pop()!;
-    expect(target.pathname).toBe(`/accounts/${accountId}`);
-    // The URL carries an opaque notice id, never a message.
-    expect([...target.searchParams.keys()]).toEqual([NOTICE_PARAM]);
+    // Alice has created no mission yet: she lands on the starter mission of the account.
+    const accountId = target.searchParams.get('account')!;
+    expect(target.pathname).toBe('/missions/new');
+    expect((await root.store.accounts.getById(accountId))?.displayName).toBe('Staging account');
+    // The URL carries the account and an opaque notice id, never a message.
+    expect([...target.searchParams.keys()].sort()).toEqual(['account', NOTICE_PARAM].sort());
     expect(await noticeOf(landed, alice)).toMatchObject({ tone: 'success', title: 'Connected' });
     expect(await noticeOf(landed, alice)).toBeNull(); // read once
 
@@ -379,7 +381,7 @@ describe('accounts: registered client, connect, resources, revoke', () => {
       }),
       'keyco',
     );
-    const keyId = location(keyRes).pathname.split('/').pop()!;
+    const keyId = location(keyRes).searchParams.get('account')!;
     expect(await noticeOf(keyRes, alice)).toMatchObject({ tone: 'success' });
     expect(await root.store.accounts.listResources(keyId)).toMatchObject([
       { ref: 'acct:live', env: 'live', envSource: 'plugin' },
