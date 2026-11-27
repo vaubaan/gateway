@@ -3,7 +3,9 @@
 /**
  * The key and the setup kit (spec §4.4).
  *
- * - `KitSteps` — what an agent needs to start: three snippets to copy and a
+ * - `KitSteps` — what an agent needs to start: one line for Claude Code or for
+ *   Codex (ADR mission-key-reaches-an-agent-through-its-own-secret-store), or the
+ *   variable and the configuration for any other client; then the instructions and a
  *   check. With the key in the first snippet right after it was made; with
  *   its masked form on a page opened later.
  * - `KeyReveal` — the key, whole, in the one filled box of the view, then the
@@ -14,7 +16,7 @@
  * The commands, the variable and the MCP configuration keep the names the
  * protocol gives them; the words around them are the interface's.
  */
-import { Button, CodeBlock, Dialog, SecretBox, StepMark } from '@/components/ui';
+import { Button, ButtonLink, CodeBlock, Dialog, SecretBox, StepMark } from '@/components/ui';
 import { MISSION_ACTIONS, MISSION_WORDS } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 
@@ -30,7 +32,8 @@ function KitStep({
   wrap = false,
   testId,
 }: {
-  n: number;
+  /** The step's number; absent on an alternative to the step above ("Or…"). */
+  n?: number;
   title: string;
   hint: string;
   text: string;
@@ -41,7 +44,7 @@ function KitStep({
   return (
     <div className={styles.kitStep}>
       <div className={styles.kitHead}>
-        <StepMark n={n} />
+        {n !== undefined && <StepMark n={n} />}
         <h3 className={styles.kitTitle}>{title}</h3>
         <span className={styles.kitHint}>{hint}</span>
       </div>
@@ -53,11 +56,48 @@ function KitStep({
 }
 
 export function KitSteps({ kit }: { kit: BootstrapKit }) {
+  // The key is shown once: on a page opened later the lines carry its masked form.
+  const whereKey = (file: string): string =>
+    kit.reveals_secret
+      ? `one line; the key goes in ${file}, outside your project. Revoke it from the mission`
+      : 'the key was shown once: replace it to get a line that works';
   return (
     <div className={styles.kit} data-testid="kit">
       <KitStep
         n={1}
-        title="Put the key in the agent’s environment"
+        title="Add it to Claude Code"
+        hint={whereKey('~/.claude.json')}
+        text={kit.claude_code}
+        label="Command for Claude Code"
+        wrap
+        testId="kit-claude-code"
+      />
+      <KitStep
+        title="Or add it to Codex"
+        hint={whereKey('~/.codex/config.toml')}
+        text={kit.codex}
+        label="Command for Codex"
+        wrap
+        testId="kit-codex"
+      />
+      {kit.claude_desktop !== null && (
+        <div className={styles.kitStep}>
+          <div className={styles.kitHead}>
+            <h3 className={styles.kitTitle}>Or add it to Claude Desktop</h3>
+            <span className={styles.kitHint}>
+              no terminal; Claude Desktop keeps the key in your system’s secret store
+            </span>
+          </div>
+          <p className={styles.kitHint} data-testid="kit-claude-desktop">
+            <ButtonLink href={kit.claude_desktop} size="sm">
+              Download the file for Claude Desktop
+            </ButtonLink>{' '}
+            Open it, choose Install, and paste the key above when it asks. The file holds no key.
+          </p>
+        </div>
+      )}
+      <KitStep
+        title="Or, for another agent, put the key in its environment"
         hint={
           kit.reveals_secret
             ? 'never in a file you commit'
@@ -68,15 +108,14 @@ export function KitSteps({ kit }: { kit: BootstrapKit }) {
         testId="kit-env"
       />
       <KitStep
-        n={2}
-        title="Point the agent at the gateway"
-        hint="any MCP client; it names the variable, never the key"
+        title="…and point it at the gateway"
+        hint="any MCP client, and a file your team commits: it names the variable, never the key"
         text={kit.mcp_json}
         label="MCP configuration"
         testId="kit-mcp"
       />
       <KitStep
-        n={3}
+        n={2}
         title="Tell the agent what it has"
         hint="the gateway hands it a short form when it connects; paste this for the whole text"
         text={kit.agent_instructions}
@@ -86,7 +125,7 @@ export function KitSteps({ kit }: { kit: BootstrapKit }) {
       />
       {kit.git !== null ? (
         <KitStep
-          n={4}
+          n={3}
           title="Use the gateway as the git remote"
           hint="clone and push with plain git; the key stays in the variable"
           text={kit.git}
@@ -95,7 +134,7 @@ export function KitSteps({ kit }: { kit: BootstrapKit }) {
         />
       ) : null}
       <KitStep
-        n={kit.git !== null ? 5 : 4}
+        n={kit.git !== null ? 4 : 3}
         title="Check it works"
         hint="lists the tools this key can call"
         text={kit.verify}

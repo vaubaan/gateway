@@ -84,6 +84,8 @@ export interface BootstrapKitInput {
   /** `InstanceConfig.publicUrl`, as an origin (plus sub-path), no trailing slash. */
   readonly instanceUrl: string;
   readonly mission: {
+    /** The mission's id: where its Claude Desktop file is served. Absent: no such step. */
+    readonly id?: string;
     readonly name: string;
     readonly period: DraftPeriod;
     readonly expires_at: string | null;
@@ -112,6 +114,19 @@ export interface BootstrapKit {
   readonly env: string;
   /** 2. */
   readonly mcp_json: string;
+  /**
+   * One line that adds the mission to Claude Code (ADR
+   * mission-key-reaches-an-agent-through-its-own-secret-store): `claude mcp add` at its
+   * default scope, which writes the key in `~/.claude.json`, outside the project.
+   */
+  readonly claude_code: string;
+  /** The same for Codex: a table appended to `~/.codex/config.toml`, the key in its header. */
+  readonly codex: string;
+  /**
+   * Where the file Claude Desktop installs is served (`/missions/<id>/claude-desktop.mcpb`,
+   * no key inside); `null` when the kit was built without the mission's id.
+   */
+  readonly claude_desktop: string | null;
   /** 3. */
   readonly agent_instructions: string;
   /**
@@ -360,6 +375,21 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
 }
 
 /**
+ * The server's name in Codex's configuration, which is one file for every project: the
+ * mission's name as a bare TOML key (`vaubaan-read-code`), so two missions stay two tables.
+ */
+export function codexServerName(missionName: string): string {
+  const slug = missionName
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  return slug ? `${MCP_SERVER_NAME}-${slug}` : MCP_SERVER_NAME;
+}
+
+/**
  * The most the short form may be (spec §4.4). A client may cut a server's instructions
  * at 4,096 characters; the margin is for what a client adds around them.
  */
@@ -441,6 +471,18 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     endpoint,
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
+    claude_code: `claude mcp add --transport http ${MCP_SERVER_NAME} ${shellQuote(endpoint)} --header ${shellQuote(`Authorization: Bearer ${tokenValue}`)}`,
+    codex: [
+      `mkdir -p ~/.codex && cat >> ~/.codex/config.toml <<'VAUBAAN'`,
+      '',
+      `[mcp_servers.${codexServerName(input.mission.name)}]`,
+      `url = ${JSON.stringify(endpoint)}`,
+      `http_headers = { "Authorization" = ${JSON.stringify(`Bearer ${tokenValue}`)} }`,
+      'VAUBAAN',
+    ].join('\n'),
+    claude_desktop: input.mission.id
+      ? `/missions/${encodeURIComponent(input.mission.id)}/claude-desktop.mcpb`
+      : null,
     agent_instructions: agentInstructions(input, endpoint),
     agent_instructions_short: shortInstructions(input, endpoint),
     git: gitRemotes.length > 0 ? gitSnippet(gitRemotes) : null,

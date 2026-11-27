@@ -22,7 +22,15 @@
  * answer of the request that generated it and nowhere else: `tokens/mine`
  * answers the member who asked, never the creator.
  */
-import { guardMutation, refusalResponse, type Authenticator, type UserPrincipal } from '../auth';
+import {
+  guardMutation,
+  guardSession,
+  refusalResponse,
+  type Authenticator,
+  type UserPrincipal,
+} from '../auth';
+import { EXECUTION_DOOR_PATH } from './bootstrap-kit';
+import { buildClaudeDesktopBundle, bundleNameOf } from './claude-desktop-bundle';
 import type { IssuedTokenResult, MissionTeamService } from './team-service';
 
 /** The first call of a mission as the page that waits for it says it (spec §7.4). */
@@ -38,6 +46,8 @@ export interface TeamHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
   readonly team: MissionTeamService;
+  /** The gateway's version: the version of the extension Claude Desktop installs. */
+  readonly version: string;
   /** The oldest call the audit keeps for one token of a mission; `null`: none yet. */
   readonly firstCallOf: (missionId: string, tokenId: string) => Promise<FirstCall | null>;
 }
@@ -51,6 +61,11 @@ export interface TeamHandlers {
   replaceNamedToken(request: Request, missionId: string, tokenId: string): Promise<Response>;
   leave(request: Request, missionId: string): Promise<Response>;
   firstCall(request: Request, missionId: string): Promise<Response>;
+  /**
+   * `GET /missions/:id/claude-desktop.mcpb` — the file Claude Desktop installs to reach
+   * the mission (`claude-desktop-bundle.ts`): no key inside, for anyone of the mission.
+   */
+  claudeDesktopBundle(request: Request, missionId: string): Promise<Response>;
 }
 
 function json(status: number, body: unknown): Response {
@@ -107,6 +122,27 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
   }
 
   return {
+    async claudeDesktopBundle(request, missionId) {
+      const guard = await guardSession(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, REFUSALS);
+      const team = await deps.team.team(guard.principal.user, missionId);
+      if (!team) return json(404, NOT_FOUND);
+      const endpoint = `${deps.publicUrl.href.replace(/\/+$/, '')}${EXECUTION_DOOR_PATH}`;
+      const bundle = buildClaudeDesktopBundle({
+        missionName: team.mission.name,
+        endpoint,
+        version: deps.version,
+      });
+      return new Response(new Uint8Array(bundle), {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${bundleNameOf(team.mission.name)}.mcpb"`,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+    },
+
     async firstCall(request, missionId) {
       const principal = await userOf(request);
       if (principal instanceof Response) return principal;

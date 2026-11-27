@@ -9,6 +9,7 @@ import {
   AGENT_LABEL_MAX_LENGTH,
   AGENT_LABEL_PUNCTUATION,
   buildBootstrapKit,
+  codexServerName,
   SHORT_INSTRUCTIONS_MAX,
   MISSION_TOKEN_ENV,
   REFUSAL_GUIDANCE,
@@ -387,5 +388,44 @@ describe('the short form handed in the MCP handshake (spec §4.4)', () => {
   it('says so when the mission holds no account', () => {
     const none = buildBootstrapKit({ ...INPUT, accounts: [] }).agent_instructions_short;
     expect(none).toContain('this mission holds no account now');
+  });
+});
+
+describe('the one line per coding agent (ADR mission-key-reaches-an-agent-through-its-own-secret-store)', () => {
+  const kit = buildBootstrapKit(INPUT);
+
+  it('adds the mission to Claude Code at its default scope, the key in the header, no project file', () => {
+    expect(kit.claude_code).toBe(
+      `claude mcp add --transport http vaubaan '${kit.endpoint}' --header 'Authorization: Bearer ${SECRET}'`,
+    );
+    // The default scope writes in ~/.claude.json: the line never asks for the project's.
+    expect(kit.claude_code).not.toContain('--scope');
+  });
+
+  it('appends a table to Codex’s own configuration, named after the mission', () => {
+    expect(kit.codex).toContain("cat >> ~/.codex/config.toml <<'VAUBAAN'");
+    expect(kit.codex).toContain(`[mcp_servers.${codexServerName(INPUT.mission.name)}]`);
+    expect(kit.codex).toContain(`url = "${kit.endpoint}"`);
+    expect(kit.codex).toContain(`http_headers = { "Authorization" = "Bearer ${SECRET}" }`);
+    expect(kit.codex.endsWith('\nVAUBAAN')).toBe(true);
+  });
+
+  it('names a Codex server by a bare TOML key, whatever the mission is called', () => {
+    expect(codexServerName('Read code')).toBe('vaubaan-read-code');
+    expect(codexServerName('  Été — déploiement "prod" [1] ')).toMatch(/^vaubaan-[a-z0-9-]+$/);
+    expect(codexServerName('…')).toBe('vaubaan');
+    expect(codexServerName('x'.repeat(200)).length).toBeLessThanOrEqual(48);
+  });
+
+  it('shows the key once: a page opened later carries its masked form in both lines', () => {
+    const later = buildBootstrapKit({ ...INPUT, token: { prefix: 'AbCd1234' } });
+    for (const line of [later.claude_code, later.codex]) {
+      expect(line).not.toContain(SECRET);
+      expect(line).toContain('AbCd1234');
+    }
+  });
+
+  it('keeps the key out of the configuration a team commits', () => {
+    expect(kit.mcp_json).not.toContain(SECRET);
   });
 });

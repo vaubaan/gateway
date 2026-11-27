@@ -1070,6 +1070,14 @@ command, in the interface's words (commands, variable, tool names and codes keep
 A generic page served without authentication documents the same for any agent, with no mission's
 values.
 
+Before those snippets, the interface offers each agent its own way in
+([ADR](../decisions/mission-key-reaches-an-agent-through-its-own-secret-store.md)): one line to
+run for Claude Code and one for Codex, which put the key in the agent's own configuration in the
+person's home, never in a file of the project, the interface naming that file and saying the key
+is revoked from the mission; for Claude Desktop, a file to open and the key to paste once, kept by
+the system's secret store. The configuration of step 2 names the variable, never the key: it is
+the one a team may commit. The gateway writes into no file of another application.
+
 The door also hands the agent its instructions itself, so that nothing has to be pasted: the MCP
 handshake answers with a **short form** of the instruction block (the `instructions` of the
 server), and the catalog (§4.1) carries the whole block in `instructions`. The short form says what

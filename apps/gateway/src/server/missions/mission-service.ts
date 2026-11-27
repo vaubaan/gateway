@@ -1657,6 +1657,7 @@ export class MissionService {
     return buildBootstrapKit({
       instanceUrl: this.deps.publicUrl.href,
       mission: {
+        id: mission.id,
         name: mission.name,
         period: statedPeriodOf(mission),
         expires_at: mission.expiresAt,

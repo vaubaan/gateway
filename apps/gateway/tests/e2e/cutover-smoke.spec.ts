@@ -139,6 +139,32 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   const kit = page.getByTestId('created');
   await expect(kit.getByTestId('kit-mcp')).toContainText(`${PUBLIC_URL}/mcp`);
   await expect(kit.getByTestId('kit-mcp')).not.toContainText(token);
+  // Each agent's own way in (ADR mission-key-reaches-an-agent-through-its-own-secret-store):
+  // one line for Claude Code and for Codex, the key in it and never in a project file;
+  // one file for Claude Desktop, with no key inside.
+  await expect(kit.getByTestId('kit-claude-code')).toContainText(
+    `claude mcp add --transport http vaubaan '${PUBLIC_URL}/mcp' --header 'Authorization: Bearer ${token}'`,
+  );
+  await expect(kit.getByTestId('kit-codex')).toContainText('~/.codex/config.toml');
+  await expect(kit.getByTestId('kit-codex')).toContainText(`Bearer ${token}`);
+  const bundleHref = await kit
+    .getByTestId('kit-claude-desktop')
+    .getByRole('link', { name: 'Download the file for Claude Desktop' })
+    .getAttribute('href');
+  // Fetched by the page itself: the browser reaches the instance through the test's route.
+  const bundle = await page.evaluate(async (href) => {
+    const response = await fetch(href);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return {
+      status: response.status,
+      disposition: response.headers.get('content-disposition') ?? '',
+      text: Array.from(bytes, (byte) => String.fromCharCode(byte)).join(''),
+    };
+  }, bundleHref ?? '');
+  expect(bundle.status).toBe(200);
+  expect(bundle.disposition).toMatch(/filename="vaubaan-[a-z0-9-]+\.mcpb"/);
+  expect(bundle.text).toContain('manifest.json');
+  expect(bundle.text).not.toContain(token);
   await expect(kit.getByTestId('kit-verify')).toContainText('tools/list');
   await expect(kit.getByTestId('kit-instructions')).toContainText(`\`${REPOSITORY}\``);
   await expect(kit.getByTestId('kit-instructions')).not.toContainText(`\`${LEFT_OUT}\``);

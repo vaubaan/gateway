@@ -880,6 +880,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     config,
     store,
     registry,
+    version: build.version,
     authenticator: auth.authenticator,
     authority: authority.service,
     grounds: authority.grounds,

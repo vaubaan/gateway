@@ -76,6 +76,8 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'accounts.handlers.callback',
   // `GET /reference/<id>/connect/<file>`: `guardSession` with the role `user` first.
   'accounts.handlers.connectFile',
+  // `GET /missions/<id>/claude-desktop.mcpb`: `guardSession` with the role `user` first.
+  'missions.handlers.claudeDesktopBundle',
   'accounts.handlers.discover',
   'accounts.handlers.revoke',
   'accounts.handlers.updateResource',

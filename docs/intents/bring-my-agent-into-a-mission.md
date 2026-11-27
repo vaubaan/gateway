@@ -13,10 +13,10 @@ configuration or relaying answers by hand, so that it works alone within what I 
 
 ## Add a mission to my agent in one step
 
-The key never sits in clear in a file, and Vaubaan writes into no file of another application
-([ADR, proposed](../decisions/mission-key-reaches-an-agent-through-its-own-secret-store.md)).
+Each agent is added by its own mechanism, and Vaubaan writes into no file of another application
+([ADR](../decisions/mission-key-reaches-an-agent-through-its-own-secret-store.md)).
 
-### Add a mission to Claude Code with one line
+### Add a mission to Claude Code or Codex with one line
 
 status: proposed
 relieves: four-copy-pastes-per-project
@@ -24,10 +24,11 @@ requires: mission, mission-token
 spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
 acceptance:
 
-- The page that shows the key gives one line to run; after it, Claude Code lists the mission's tools, with no file edited and no variable exported by hand
-- In the desktop app, the key is in the macOS Keychain and in no file: neither the line nor Claude Code's configuration holds it
-- Running the line twice changes nothing; replacing or revoking the key ends what the Keychain held
-- Outside the desktop app, the line names the environment variable and the key stays out of every file
+- The page that shows the key gives one line for Claude Code and one for Codex; after it, the agent lists the mission's tools, with no file edited and no variable exported
+- The line writes in the agent's own configuration in my home, never in a file of the project; the page names that file, says the key is in it and that I revoke it from the mission
+- On a page opened later the line shows the key masked: the key is shown once
+- The configuration naming an environment variable stays offered, for a file my team commits
+- Built and tested without the agents; stays proposed until both lines were run on a Mac (handbook desktop-app, "Test the first-call path")
 
 ### Connect a desktop assistant without editing a config file
 
@@ -41,16 +42,7 @@ acceptance:
 - The key is kept by the operating system's secret store, and the file I opened holds none
 - The assistant's first call lists the mission's tools; revoking the mission ends its access
 - Two missions added this way stay two servers in the assistant, each named after its mission
-
-### Add a mission to Cursor from the page
-
-status: proposed
-relieves: four-copy-pastes-per-project
-requires: mission, mission-token
-spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
-acceptance:
-
-- One link on the page adds the mission's server to Cursor, the key never in clear in its configuration
+- Built and tested with a stand-in for Claude Desktop; stays proposed until the file was installed in Claude Desktop on a Mac
 
 ## Tell my agent what its mission is without pasting anything
 

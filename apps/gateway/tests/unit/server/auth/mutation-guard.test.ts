@@ -731,6 +731,8 @@ const READS: Readonly<Record<string, string>> = {
     'GET from the sign-in provider; protected by the single-use state bound to the user (guardSession)',
   'accounts.handlers.connectFile':
     'GET; a screenshot of a connect guide, read from the plugin folder (guardSession)',
+  'missions.handlers.claudeDesktopBundle':
+    'GET; the file Claude Desktop installs for a mission, built from its name and no key (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
 };

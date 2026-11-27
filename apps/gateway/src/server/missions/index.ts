@@ -41,6 +41,8 @@ export interface MissionsModuleDeps {
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
+  /** The gateway's version (`BuildInfo.version`), for what it hands to an agent; absent in a test. */
+  readonly version?: string;
   /** Defaults to a `AccountAuthorityService` over the store; the root injects its own. */
   readonly authority?: AuthorityService;
   /** Derives `orphaned` on every mission read (handbook authority). */
@@ -97,6 +99,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
       publicUrl: deps.config.publicUrl,
       authenticator: deps.authenticator,
       team,
+      version: deps.version ?? '0.0.0',
       // The audit keeps every call with the token it presented, a refusal before the
       // mission log was touched included; oldest first.
       firstCallOf: async (missionId, tokenId) => {
