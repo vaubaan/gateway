@@ -1256,9 +1256,10 @@ The **starter mission** is the creation form filled in for one account
 its catalog ticked at Careful, then each line that reads set to `auto` and each line that writes or
 destroys set to `approval`; what Careful leaves out (row 4) stays out and the form says so; the
 default period and end. A prefill the person sees and may change, never issued by itself. After the
-key is shown, the page waits for the first call made with that key and says when it arrived,
-with no reload, leading to the mission's activity; a call the gateway refused counts, and the
-activity says why.
+key is shown, the page waits for the first call made with that key and says what became of it,
+with no reload: the agent is connected (it listed its tools), then its first call was allowed,
+waits for the creator's yes, or arrived and was refused, with the reason in one sentence and the
+way to the mission's activity. A refusal is never announced as a plain arrival.
 
 ### 7.4 bis Edit a mission
 

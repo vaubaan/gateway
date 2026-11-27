@@ -231,12 +231,28 @@ describe('a GitHub account connected with a token', () => {
       );
       return (await answer.json()) as unknown;
     };
-    expect(await firstCall()).toEqual({ called_at: null });
+    expect(await firstCall()).toEqual({ called_at: null, first: null });
 
     const listed = await rpc(key, 'tools/list', {});
     const names = (listed.result?.tools ?? []).map((t) => t.name);
     expect(names).toContain('github__list_branches');
+    // The key was used, no tool called yet: connected, no first call to speak of.
+    expect(await firstCall()).toMatchObject({ first: null });
     expect(JSON.stringify(await firstCall())).toMatch(/^\{"called_at":"\d{4}-/);
+
+    // The first call is one the mission does not allow: said as refused, with its code.
+    const refusedFirst = await rpc(key, 'tools/call', {
+      name: 'github__create_branch',
+      arguments: { owner: 'acme', repo: 'app', branch: 'x', sha: 'a'.repeat(40) },
+    });
+    expect(JSON.stringify(refusedFirst)).toContain('risk-not-accepted');
+    expect(await firstCall()).toMatchObject({
+      first: {
+        outcome: 'refused',
+        tool: 'github__create_branch',
+        refusal_code: 'risk-not-accepted',
+      },
+    });
 
     const branches = await rpc(key, 'tools/call', {
       name: 'github__list_branches',

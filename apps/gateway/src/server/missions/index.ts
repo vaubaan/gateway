@@ -97,6 +97,20 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
       publicUrl: deps.config.publicUrl,
       authenticator: deps.authenticator,
       team,
+      // The audit keeps every call with the token it presented, a refusal before the
+      // mission log was touched included; oldest first.
+      firstCallOf: async (missionId, tokenId) => {
+        const calls = await deps.store.audit.list({ missionId, kind: 'call', limit: 200 });
+        const call = calls.find((entry) => entry.kind === 'call' && entry.token_id === tokenId);
+        return call?.kind === 'call'
+          ? {
+              at: call.ts,
+              outcome: call.decision === 'allowed' ? 'allowed' : 'refused',
+              tool: call.tool,
+              refusal_code: call.refusal_code,
+            }
+          : null;
+      },
     }),
   };
   return { authority, service, team, handlers };

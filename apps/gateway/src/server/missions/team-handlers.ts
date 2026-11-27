@@ -10,9 +10,12 @@
  *   POST /api/missions/:id/tokens/:tokenId/revoke   the holder, or the creator, revokes one token
  *   POST /api/missions/:id/tokens/:tokenId/replace  the creator replaces a machine key, in one act
  *   POST /api/missions/:id/leave                    a teammate leaves (their token is revoked)
- *   POST /api/missions/:id/first-call               `{ called_at }` — when the reader's own key was
- *                                                   last used; `null`: never (spec §7.4). A read, asked
- *                                                   like the others: the page that shows the key polls it.
+ *   POST /api/missions/:id/first-call               `{ called_at, first }` — when the reader's own key
+ *                                                   was last used (`null`: never) and the first call made
+ *                                                   with it, allowed or refused with its code (`null`: the
+ *                                                   key only listed its tools so far) (spec §7.4). A read,
+ *                                                   asked like the others: the page that shows the key
+ *                                                   polls it.
  *
  * Every other one is a mutation, and two reveal a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). The secret of a token is in the
@@ -22,10 +25,21 @@
 import { guardMutation, refusalResponse, type Authenticator, type UserPrincipal } from '../auth';
 import type { IssuedTokenResult, MissionTeamService } from './team-service';
 
+/** The first call of a mission as the page that waits for it says it (spec §7.4). */
+export interface FirstCall {
+  readonly at: string;
+  readonly outcome: 'allowed' | 'refused';
+  readonly tool: string | null;
+  /** The protocol's refusal code of a refused call. */
+  readonly refusal_code: string | null;
+}
+
 export interface TeamHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
   readonly team: MissionTeamService;
+  /** The oldest call the audit keeps for one token of a mission; `null`: none yet. */
+  readonly firstCallOf: (missionId: string, tokenId: string) => Promise<FirstCall | null>;
 }
 
 export interface TeamHandlers {
@@ -98,7 +112,10 @@ export function createTeamHandlers(deps: TeamHandlerDeps): TeamHandlers {
       if (principal instanceof Response) return principal;
       const team = await deps.team.team(principal.user, missionId);
       if (!team) return json(404, NOT_FOUND);
-      return json(200, { called_at: team.my_token?.last_used_at ?? null });
+      const mine = team.my_token;
+      const calledAt = mine?.last_used_at ?? null;
+      const first = mine && calledAt ? await deps.firstCallOf(missionId, mine.id) : null;
+      return json(200, { called_at: calledAt, first });
     },
 
     async addMember(request, missionId) {

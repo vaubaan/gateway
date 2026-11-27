@@ -143,11 +143,23 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(kit.getByTestId('kit-instructions')).toContainText(`\`${REPOSITORY}\``);
   await expect(kit.getByTestId('kit-instructions')).not.toContainText(`\`${LEFT_OUT}\``);
   await snap(page, 'cutover-bootstrap-kit');
-  // The page waits for the first call made with the key, and says when it arrived,
-  // with no reload (spec §7.4).
+  // The page waits for the first call made with the key and says what became of it, with
+  // no reload (spec §7.4): connected once the agent listed its tools, then a first call
+  // the mission does not allow is said as arrived and refused, with its reason.
   await expect(kit.getByTestId('first-call-waiting')).toBeVisible();
   expect((await kitToolsList(token)).status).toBe(200);
-  await expect(kit.getByTestId('first-call-arrived')).toBeVisible({ timeout: 15_000 });
+  await expect(kit.getByTestId('first-call-connected')).toBeVisible({ timeout: 15_000 });
+  const stray = await connectAgent(token, AGENT_LABEL);
+  const refused = await stray.call('github__create_release', {
+    owner: OWNER,
+    repo: REPO,
+    tag_name: 'v0.0.0',
+  });
+  await stray.close();
+  expect(refused.outcome).toBe('refused');
+  await expect(kit.getByTestId('first-call-refused')).toContainText('was refused', {
+    timeout: 15_000,
+  });
   await snap(page, 'cutover-first-call');
   await openCreatedMission(page, MISSION);
   await expect(page).toHaveURL(/\/missions\/[0-9a-f-]{36}$/);
