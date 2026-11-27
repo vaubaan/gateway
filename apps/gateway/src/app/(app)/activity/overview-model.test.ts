@@ -3,13 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CatalogRisk } from '@/lib/missions/model';
 import { formatBytes, percentOf } from '@/lib/vocabulary';
 
-import {
-  actionUsages,
-  isRecordAddress,
-  overviewHref,
-  recordHref,
-  timelineHref,
-} from './overview-model';
+import { actionUsages, overviewHref, recordHref, timelineHref } from './overview-model';
 
 function risk(riskId: string, baseId: string, label: string): CatalogRisk {
   return { risk_id: riskId, base_id: baseId, label } as CatalogRisk;
@@ -133,13 +127,6 @@ describe('the links of the Overview', () => {
       '/activity/timeline?mission=mis_1&holder=member%3Ausr_1',
     );
     expect(overviewHref('30d')).toBe('/activity?period=30d');
-  });
-
-  it('sends an older address of the Record on, never the Overview’s own', () => {
-    expect(isRecordAddress({ mission: 'mis_1' })).toBe(true);
-    expect(isRecordAddress({ period: 'today', decision: 'refused' })).toBe(true);
-    expect(isRecordAddress({ period: '30d' })).toBe(false);
-    expect(isRecordAddress({})).toBe(false);
   });
 });
 

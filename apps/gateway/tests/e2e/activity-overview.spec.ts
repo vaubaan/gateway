@@ -98,7 +98,4 @@ test('the period is a link, and an older address of the Record still opens the R
   await expect(
     page.getByTestId(`overview-mission-${day.mission_id}`).getByTestId('figure-allowed'),
   ).toHaveText('4');
-
-  await page.goto(`/activity?mission=${day.mission_id}`);
-  await expect(page).toHaveURL(new RegExp(`/activity/record\\?mission=${day.mission_id}$`));
 });

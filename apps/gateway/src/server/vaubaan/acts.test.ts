@@ -1188,7 +1188,7 @@ describe('views', () => {
       orphan: { cause: 'account-revoked', can_come_back: false },
       lost_accounts: [{ account_id: 'conn-acme', cause: 'account-revoked', final: true }],
       period: { kind: 'recurring', length_seconds: 3600 },
-      session: null,
+      mission_log: null,
       issued_via: {
         mission_id: 'mission-other',
         mission_name: 'Other',

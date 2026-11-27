@@ -68,10 +68,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   MCP transport's sessions keep their names; no tool answer changes.
 - **Plugin SDK: the scope cap `calls_per_session_max` is removed.** It capped the calls of a
   mission's whole life, which the mission's budget already bounds, and nothing enforced it. A
-  catalog that still writes it loads; the key is dropped.
+  catalog that still writes it is refused (unknown key).
 - **The activity of a mission is at `/missions/<id>/activity`**, named after its title;
   `/missions/<id>/session` is gone, with no redirect. The interface no longer calls a mission's history its "session": the Timeline, the edit page and a
   restored version say "mission log". A web session (signing in) keeps its name.
+- **No redirect from an old page path any more.** `/connections`, `/requests`, `/audit`,
+  `/services`, `/shares`, `/delegations`, `/settings/connected-apps`, `/admin/connections`,
+  `/account/*` and `/activity?<Record filters>` answer as unknown pages; the style guide now says
+  an older path is removed, not redirected. Protocol paths keep their names.
+- **Vaubaan (plugin 0.6.0): `vaubaan__list_my_missions` answers `mission_log`**, no longer
+  `session`, for the current period of a mission; the tool descriptions say "mission log".
 
 ## [2.0.0-alpha.31] - 2026-11-24
 

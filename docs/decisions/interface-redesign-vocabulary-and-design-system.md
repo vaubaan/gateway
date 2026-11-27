@@ -26,8 +26,8 @@ documentation for people and the bootstrap kit's prose, nothing else.
 
 - A missing component is added to `components/ui`, never in a page; no page carries its own
   palette or modal.
-- Two vocabularies coexist; ids print in mono as the protocol spells them. Routes follow the words,
-  and old page paths answer 308 for as long as anything points to them.
+- Two vocabularies coexist; ids print in mono as the protocol spells them. Routes follow the words;
+  an old page path is removed, not redirected (amended 2026-11-27: only the team uses it).
 - Every default view follows the attention budget of the style guide
   ([style-guide](../spec/style-guide.md)); contrast is held by a test over the token sheet.
 

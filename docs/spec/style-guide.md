@@ -85,8 +85,8 @@ One word per thing; a person never learns the protocol's word. The word list is
 - **The five facts are words**, behind "why?" in the Reference only: Undo, Blast radius, Data,
   Cost, Visible to.
 - **A state is a word**, never colour alone; the normal state is plain or unsaid.
-- **Routes follow the words**; an older path answers with a permanent redirect; a protocol path
-  keeps its name.
+- **Routes follow the words**; an older path is removed, never redirected; a protocol path keeps
+  its name.
 - **One list of words**: words and sentence patterns come from one place.
 
 ## 3. Tokens
@@ -191,7 +191,7 @@ guide and the design system are extended, then the screen is built. Rules a comp
   definitions hold the same values.
 - No dead or unknown token, no raw colour outside the token sheet.
 - The column budget of a table is enforced where it is built.
-- Every page sits under one navigation entry; every old path redirects to a page that exists.
+- Every page sits under one navigation entry.
 - A gallery renders every component in every state, light and dark, walked by a browser test. Looks
   are judged by eye against it.
 

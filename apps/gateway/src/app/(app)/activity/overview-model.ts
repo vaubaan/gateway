@@ -106,16 +106,3 @@ export function timelineHref(mission: string, holder?: OverviewHolder['holder'])
 export function overviewHref(period: string): string {
   return `${ROUTES.activity}?${new URLSearchParams({ [OVERVIEW_PARAMS.period]: period }).toString()}`;
 }
-
-/**
- * Whether an address of `/activity` carries the Record's filters (an older link to the
- * Record, from when `/activity` was the Record): it then leads to the Record. The
- * Overview's own `period` is not one.
- */
-export function isRecordAddress(
-  query: Readonly<Record<string, string | readonly string[] | undefined>>,
-): boolean {
-  return Object.keys(query).some(
-    (name) => name !== OVERVIEW_PARAMS.period && query[name] !== undefined,
-  );
-}

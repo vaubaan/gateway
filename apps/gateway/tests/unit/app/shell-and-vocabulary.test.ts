@@ -11,7 +11,6 @@ import { fileURLToPath } from 'node:url';
 import { REFUSAL_CODES } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
-import { LEGACY_REDIRECTS } from '../../../next.config';
 import { isCurrentSection, sectionOf } from '../../../src/components/shell/nav';
 import { activityNav } from '../../../src/components/shell/activity-nav';
 import { ADMIN_PAGES, settingsNav } from '../../../src/components/shell/settings-nav';
@@ -151,65 +150,9 @@ describe('the routes follow the words', () => {
     expect(SERVICES_PATH).toBe(ROUTES.reference);
   });
 
-  it('redirects every old page path to a page or a route that exists', () => {
-    const concrete: Readonly<Record<string, string>> = {
-      ':first': 'new',
-      ':rest*': 'github',
-      ':path*': 'github',
-      ':page': 'create',
-      ':id': '[id]',
-    };
-    for (const { source, destination } of LEGACY_REDIRECTS) {
-      // A destination may name a region of its page by a fragment.
-      const target = destination
-        .split('#')[0]!
-        .replace(/:[a-z]+\*?/g, (param) => concrete[param] ?? 'x');
-      // `/accounts/new/github`, `/reference/github`, `/waiting/<id>`…
-      const probe = target.startsWith('/waiting/') ? '/waiting/[id]' : target;
-      const path = probe.replace('/reference/github', '/reference/[id]');
-      expect(
-        served(path.replace('/accounts/new/github', '/accounts/new/[service]')),
-        `${source} → ${destination}`,
-      ).toBe(true);
-    }
-    const sources = LEGACY_REDIRECTS.map((rule) => rule.source);
-    for (const old of ['/connections', '/requests', '/audit', '/services']) {
-      expect(sources, old).toContain(old);
-    }
-    // The two pages that were folded into another: what a colleague gave access to is a
-    // region of Accounts; connected apps were retired, their addresses lead to Settings.
-    const byOld = new Map(LEGACY_REDIRECTS.map((rule) => [rule.source, rule.destination]));
-    expect(byOld.get('/shares')).toBe(ROUTES.accounts);
-    expect(byOld.get('/delegations/:path*')).toBe(ROUTES.settings);
-    expect(byOld.get('/settings/connected-apps/:path*')).toBe(ROUTES.settings);
-    expect(byOld.get('/admin/connections')).toBe(`${ROUTES.accounts}#without-owner`);
-  });
-
-  it('never redirects the callback a service was given: it is part of the protocol', () => {
+  it('serves the callback a service was given: it is part of the protocol', () => {
     expect(CONNECT_CALLBACK_PATH).toBe('/connections/callback');
     expect(served('/connections/callback/[service]')).toBe(true);
-    const first = LEGACY_REDIRECTS.filter((rule) => rule.source.includes(':first'));
-    expect(first.length).toBe(2);
-    for (const rule of first) {
-      // The pattern of the first segment, as the router compiles it into the whole path.
-      const pattern = rule.source.slice(
-        rule.source.indexOf(':first(') + ':first('.length,
-        rule.source.lastIndexOf(')'),
-      );
-      expect(pattern, rule.source).toBe('(?!callback(?:/|$))[^/]+');
-      const whole = new RegExp(`^/connections/(${pattern})(?:/.*)?$`);
-      expect(whole.test('/connections/callback')).toBe(false);
-      expect(whole.test('/connections/callback/github')).toBe(false);
-      expect(whole.test('/connections/new')).toBe(true);
-      expect(whole.test('/connections/new/github')).toBe(true);
-      expect(whole.test('/connections/callbacks')).toBe(true);
-    }
-    // Nothing under /api, /mcp, /r or /oauth is touched.
-    for (const { source } of LEGACY_REDIRECTS) {
-      expect(source).toMatch(
-        /^\/(admin\/connections|connections|requests|audit|services|shares|delegations|settings\/connected-apps|account)\b/,
-      );
-    }
   });
 });
 

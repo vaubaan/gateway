@@ -1,15 +1,13 @@
 /**
  * The frame every page shares, in a browser, against the ephemeral instance:
  * the side navigation and its collapsed form, the theme toggle (three states,
- * kept across a reload, rendered by the server so nothing flashes), the
- * permanent redirects from the paths the interface had before its words
- * changed, Settings with its local navigation, and the gallery of `/design`.
+ * kept across a reload, rendered by the server so nothing flashes), Settings with its local navigation, and the gallery of `/design`.
  */
 import { expect, test, type Page } from '@playwright/test';
 
 import { DOC_PAGES } from '../../src/lib/vocabulary';
 import { passSecondFactor, routeToInstance, signInAs } from './browser';
-import { E2E_OPERATOR, E2E_USER, localOrigin, PUBLIC_URL } from './instance';
+import { E2E_OPERATOR, E2E_USER, PUBLIC_URL } from './instance';
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
 async function snap(page: Page, name: string): Promise<void> {
@@ -331,57 +329,6 @@ test('the theme has three states, is kept across a reload and is rendered by the
   await page.getByTestId('settings-theme').getByRole('button', { name: 'System' }).click();
   await expect(html).not.toHaveAttribute('data-theme');
   expect((await context.cookies()).some((c) => c.name === 'vaubaan_theme')).toBe(false);
-});
-
-test('every old path answers with a permanent redirect to the page that replaced it', async ({
-  page,
-  request,
-}) => {
-  await signIn(page, '/missions');
-
-  // What the server answers, hop by hop: 308, so a form post keeps its method.
-  for (const [from, to] of [
-    ['/connections', '/accounts'],
-    ['/connections/new', '/accounts/new'],
-    ['/connections/new/github', '/accounts/new/github'],
-    ['/requests', '/waiting'],
-    [
-      '/requests/00000000-0000-0000-0000-000000000000',
-      '/waiting/00000000-0000-0000-0000-000000000000',
-    ],
-    ['/audit?decision=refused', '/activity/record?decision=refused'],
-    ['/services', '/reference'],
-    ['/services/github', '/reference/github'],
-    // What was shared with a person is a region of Accounts; connected apps were retired
-    // with the management door, their addresses lead to Settings.
-    ['/shares', '/accounts'],
-    ['/delegations', '/settings'],
-    ['/settings/connected-apps', '/settings'],
-  ] as const) {
-    const response = await request.get(`${localOrigin()}${from}`, { maxRedirects: 0 });
-    expect(response.status(), from).toBe(308);
-    expect(response.headers().location, from).toBe(to);
-  }
-  // The callback a service was given is part of the protocol: it is served, not redirected.
-  const callback = await request.get(`${localOrigin()}/connections/callback/github`, {
-    maxRedirects: 0,
-  });
-  expect(callback.status()).not.toBe(308);
-  expect(callback.headers().location ?? '').not.toContain('/accounts/callback');
-
-  // In a browser: an old bookmark and an old deep link land on the new pages.
-  await page.goto('/connections');
-  await expect(page).toHaveURL(/\/accounts$/);
-  await expect(page.getByRole('heading', { name: 'Accounts', level: 1 })).toBeVisible();
-  await page.goto('/services/github#risk-github.read-code');
-  await expect(page).toHaveURL(/\/reference\/github/);
-  await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'GitHub', level: 2 })).toBeVisible();
-  await page.goto('/shares');
-  await expect(page).toHaveURL(/\/accounts$/);
-  await page.goto('/audit');
-  await expect(page).toHaveURL(/\/activity\/record$/);
-  await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
 });
 
 test('Settings leads a person to their own pages and an administrator to the gateway’s', async ({

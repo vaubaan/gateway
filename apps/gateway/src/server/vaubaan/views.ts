@@ -441,9 +441,11 @@ export interface MissionView {
   readonly created_at: string;
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
-  /** The current period of the mission log; `end` is `null` for a one-off mission. The
-   *  agents read the field as `session`: their protocol keeps the name. */
-  readonly session: { readonly period_start: string; readonly period_end: string | null } | null;
+  /** The current period of the mission log; `end` is `null` for a one-off mission. */
+  readonly mission_log: {
+    readonly period_start: string;
+    readonly period_end: string | null;
+  } | null;
   /** `null` when the user issued it themselves in the interface. */
   readonly issued_via: IssuedViaView | null;
   /**
@@ -514,7 +516,7 @@ export function missionView(
       mission.periodSeconds === null
         ? { kind: 'one-off' }
         : { kind: 'recurring', length_seconds: mission.periodSeconds },
-    session: serving
+    mission_log: serving
       ? { period_start: serving.period.start, period_end: serving.period.end }
       : null,
     issued_via: issuedViaView(overview.issued_via, viewer),

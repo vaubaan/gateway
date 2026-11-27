@@ -15,7 +15,6 @@
  * address was the Record) still opens them on the Record.
  */
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 
 import { isOperatorPrincipal } from '@/components/auth/principal';
 import {
@@ -68,7 +67,6 @@ import styles from './activity.styles';
 import ov from './overview.styles';
 import {
   actionUsages,
-  isRecordAddress,
   overviewHref,
   recordHref,
   timelineHref,
@@ -92,14 +90,6 @@ export default async function OverviewPage({ searchParams }: Props) {
   // Like every page of the surface: no session, no address of the record.
   const { root, principal } = await requirePrincipal();
   const query = await searchParams;
-  if (isRecordAddress(query)) {
-    const params = new URLSearchParams();
-    for (const [name, value] of Object.entries(query)) {
-      const values = Array.isArray(value) ? value : value === undefined ? [] : [value];
-      for (const one of values) params.append(name, one);
-    }
-    redirect(`${ROUTES.activityRecord}?${params.toString()}`);
-  }
   const period = parseOverviewPeriod(query);
   const overview = await root.audit.overview.overview(principal, period);
   const now = new Date(overview.now);

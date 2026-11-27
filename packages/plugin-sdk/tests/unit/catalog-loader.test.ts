@@ -379,15 +379,6 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
       bytes_per_call_max: 1024,
       calls_per_minute_max: 30,
     });
-    // A retired key, written by a catalog for an earlier SDK, is accepted and dropped.
-    const retired = doc();
-    (retired.risks as Record<string, unknown>[])[0]!.infra_limits = {
-      calls_per_minute_max: 30,
-      calls_per_session_max: 5,
-    };
-    expect(validateCatalog(retired).catalog.risks[0]!.infra_limits).toEqual({
-      calls_per_minute_max: 30,
-    });
     // An empty mapping is kept as an empty mapping.
     const empty = doc();
     (empty.risks as Record<string, unknown>[])[0]!.caps = {};
@@ -399,12 +390,17 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
       pages_max: 3,
       bytes_per_call_max: null,
     };
-    (bad.risks as Record<string, unknown>[])[0]!.infra_limits = { calls_per_minute_max: 0 };
+    // The removed whole-life cap is an unknown key like any other.
+    (bad.risks as Record<string, unknown>[])[0]!.infra_limits = {
+      calls_per_minute_max: 0,
+      calls_per_session_max: 5,
+    };
     (bad.risks as Record<string, unknown>[])[1]!.caps = [1];
     expect(issuesOf(() => validateCatalog(bad))).toEqual([
       'risks[0].caps.pages_max: unknown key',
       'risks[0].caps.items_per_call_max: expected a positive integer',
       'risks[0].caps.bytes_per_call_max: expected a positive integer',
+      'risks[0].infra_limits.calls_per_session_max: unknown key',
       'risks[0].infra_limits.calls_per_minute_max: expected a positive integer',
       'risks[1].caps: expected a mapping',
     ]);

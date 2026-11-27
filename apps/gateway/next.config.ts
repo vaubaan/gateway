@@ -96,64 +96,11 @@ const NEVER_SHIPPED = [
   './tsconfig.tsbuildinfo',
 ];
 
-/**
- * The paths the interface had before its words changed (ADR
- * interface-redesign-vocabulary-and-design-system): connection → account,
- * request → waiting for you, audit → activity, service → reference. Every old
- * path answers with a permanent redirect (308: the method and the body of a
- * form post are kept, the query string too), so bookmarks, links in tickets and
- * the address an agent was handed keep working.
- *
- * One path is NOT redirected: `/connections/callback/<service>`. It is
- * registered at the service as the callback of the company's app — part of
- * the protocol, like `/r/<id>`, `/mcp` and `/api/**`, which keep their names.
- *
- * `tests/unit/app/legacy-redirects.test.ts` holds each rule to a page or a
- * route that exists.
- */
-export const LEGACY_REDIRECTS: readonly {
-  readonly source: string;
-  readonly destination: string;
-}[] = [
-  { source: '/connections', destination: '/accounts' },
-  // A first segment that is not `callback`, then anything under it.
-  { source: '/connections/:first((?!callback(?:/|$))[^/]+)', destination: '/accounts/:first' },
-  {
-    source: '/connections/:first((?!callback(?:/|$))[^/]+)/:rest*',
-    destination: '/accounts/:first/:rest*',
-  },
-  { source: '/requests', destination: '/waiting' },
-  { source: '/requests/:path*', destination: '/waiting/:path*' },
-  { source: '/audit', destination: '/activity/record' },
-  { source: '/services', destination: '/reference' },
-  { source: '/services/:path*', destination: '/reference/:path*' },
-  // What a colleague gave access to is the second region of Accounts ("Shared with you").
-  { source: '/shares', destination: '/accounts' },
-  // Connected apps ("delegations") were retired with the management door (ADR
-  // platform-management-is-a-plugin-on-the-execution-door): their old addresses lead to
-  // Settings.
-  { source: '/delegations/:path*', destination: '/settings' },
-  { source: '/settings/connected-apps/:path*', destination: '/settings' },
-  // The accounts without owner are the last region of Accounts (see
-  // docs/handbook/web-app.md); the reassign action stays under /admin.
-  { source: '/admin/connections', destination: '/accounts#without-owner' },
-  // The reassign action of an account without owner (a form post: 308 keeps it).
-  { source: '/admin/connections/:id/reassign', destination: '/admin/accounts/:id/reassign' },
-  // The pages of a sign-in account moved when "account" came to mean an account at a
-  // service (ADR one-word-per-thing-account-service-plugin): a link mailed before the
-  // upgrade still opens its page.
-  {
-    source: '/account/:page(create|reset|forgot)',
-    destination: '/sign-in-account/:page',
-  },
-];
-
 const nextConfig: NextConfig = {
   // `npm run type-check` has checked this app when VAUBAAN_BUILD_TYPECHECKED=1
   // (`npm run ci`, the CI jobs that build): the build skips its second tsc pass.
   // Any other build (the image, a developer's) type-checks as usual.
   typescript: { ignoreBuildErrors: process.env.VAUBAAN_BUILD_TYPECHECKED === '1' },
-  redirects: async () => LEGACY_REDIRECTS.map((rule) => ({ ...rule, permanent: true })),
   env: {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
     NEXT_PUBLIC_GATEWAY_VERSION: resolveVersion(),

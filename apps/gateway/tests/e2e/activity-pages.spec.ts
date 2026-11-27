@@ -114,9 +114,8 @@ test('a position typed in the address opens the record there', async ({ page, re
   const ts = (await tenth.getAttribute('datetime')) ?? '';
   const eleventh = await lineId(page, 10);
 
-  // An older link (`/activity?cursor=`) still opens it, on the Record.
-  await page.goto(`/activity?cursor=${encodeCursor({ ts, id })}`);
-  await expect(page).toHaveURL(/\/activity\/record\?cursor=/);
+  // A link to that position opens the Record there.
+  await page.goto(`/activity/record?cursor=${encodeCursor({ ts, id })}`);
   await expect(entries.first().locator('[id^="entry-"]')).toHaveAttribute('id', eleventh);
   // Without its number, the page says how many lines it shows.
   await expect(page.getByTestId('lines-shown')).toHaveText(`${PAGE} lines`);

@@ -53,13 +53,7 @@ const SCOPE_CAP_KEYS = [
   'bytes_per_call_max',
   'calls_per_minute_max',
 ] as const satisfies readonly (keyof ScopeCaps)[];
-/**
- * Retired keys a catalog written for an earlier SDK may still hold: accepted, then dropped.
- * `calls_per_session_max` capped the calls of a mission's whole life, which its budget already
- * bounds (ADR scope-caps-amplification-axis).
- */
-const RETIRED_CAP_KEYS = ['calls_per_session_max'] as const;
-const CAP_KEYS: ReadonlySet<string> = new Set([...SCOPE_CAP_KEYS, ...RETIRED_CAP_KEYS]);
+const CAP_KEYS: ReadonlySet<string> = new Set(SCOPE_CAP_KEYS);
 
 type Axis = keyof RiskVector;
 /** The five axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */

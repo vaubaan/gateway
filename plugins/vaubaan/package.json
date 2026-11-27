@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-vaubaan",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway plugin for the gateway itself — prepare, change, rotate and revoke missions from a mission (host account, bundled only)",

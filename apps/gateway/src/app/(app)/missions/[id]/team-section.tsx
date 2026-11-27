@@ -327,8 +327,6 @@ export function TeamSection({
 
   return (
     <DetailScope id={`mission:${team.mission.id}:people`}>
-      {/* The anchor of links made before the section was named "Keys". */}
-      <span id="people" aria-hidden="true" />
       <Section
         id="keys"
         title={SECTIONS.keys}
