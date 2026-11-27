@@ -105,7 +105,12 @@ import {
   type CatalogOffer,
   type PluginInstallService,
 } from '../plugins/install-service';
-import { CATALOG_INDEX_URL, fetchCatalogArchive, KNOWN_CATALOG_VERSIONS } from '../plugins/catalog';
+import {
+  CATALOG_INDEX_URL,
+  fetchCatalogArchive,
+  KNOWN_CATALOG_VERSIONS,
+  type KnownCatalogVersion,
+} from '../plugins/catalog';
 import { catalogVersionFloor } from '../plugins/catalog-floor';
 import {
   KEY_BESIDE_STORE_WARNING,
@@ -234,6 +239,11 @@ export interface RootDeps {
   /** Downloads of the catalog's archives (one-click install); the global `fetch` by default. */
   readonly catalogFetch?: typeof fetch;
   /**
+   * The catalog versions this release knows (`KNOWN_CATALOG_VERSIONS` by default): the floor
+   * of an offer and the pins of an install. Tests pin the versions of their fixture archives.
+   */
+  readonly knownCatalogVersions?: ReadonlyMap<string, KnownCatalogVersion>;
+  /**
    * Where the versions check reads the catalog's index (`CATALOG_INDEX_URL` by default);
    * `null` reads none, the versions feed then names the plugins (tests).
    */
@@ -303,6 +313,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   const bundled = deps.bundled ?? SHIPPED_PLUGINS;
+  const knownCatalogVersions = deps.knownCatalogVersions ?? KNOWN_CATALOG_VERSIONS;
   try {
     const { registry, inventory, installedDir } = await buildPlugins(
       config,
@@ -366,22 +377,22 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       catalogVersionOf: (pluginId) =>
         catalogVersionFloor(
           catalogVersions().find((available) => available.id === pluginId)?.released,
-          KNOWN_CATALOG_VERSIONS.get(pluginId),
+          knownCatalogVersions.get(pluginId),
         ),
       catalogOffer: (): readonly CatalogOffer[] => {
         const offered = new Map<string, string>();
         for (const p of catalogVersions()) {
-          const version = catalogVersionFloor(p.released, KNOWN_CATALOG_VERSIONS.get(p.id));
+          const version = catalogVersionFloor(p.released, knownCatalogVersions.get(p.id));
           if (version !== null) offered.set(p.id, version);
         }
-        for (const [id, known] of KNOWN_CATALOG_VERSIONS) {
+        for (const [id, known] of knownCatalogVersions) {
           if (!offered.has(id)) offered.set(id, known.version);
         }
         return [...offered]
           .filter(([id]) => !registry.has(id))
           .map(([id, released]) => {
             const indexed = catalogPlugins()[id];
-            const known = KNOWN_CATALOG_VERSIONS.get(id);
+            const known = knownCatalogVersions.get(id);
             const name = indexed?.name ?? known?.name;
             // The index's mark, else the one this release knows (no index read, or an
             // archive built before archives carried their mark).
@@ -410,7 +421,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       catalog: (pluginId, version) => {
         // The digest the index or this release gives for that very version, if any.
         const indexed = catalogPlugins()[pluginId];
-        const known = KNOWN_CATALOG_VERSIONS.get(pluginId);
+        const known = knownCatalogVersions.get(pluginId);
         const sha256 =
           indexed?.version === version && indexed.sha256 !== undefined
             ? indexed.sha256

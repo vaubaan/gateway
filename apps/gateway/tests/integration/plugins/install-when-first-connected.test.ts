@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
+import { WITH_NOTION_FIXTURE } from '../../support/plugins/catalog-fixture';
 import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
@@ -69,6 +70,7 @@ describe('a catalog plugin installed at its first connection', () => {
           ? new Response(JSON.stringify(index), { status: index === null ? 404 : 200 })
           : new Response(JSON.stringify(FEED)),
       updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
+      knownCatalogVersions: WITH_NOTION_FIXTURE,
       catalogFetch: async () => new Response(Buffer.from(NOTION)),
     });
     await root.updates.refresh();

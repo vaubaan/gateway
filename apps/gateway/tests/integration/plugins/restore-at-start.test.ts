@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../support/config/testing';
+import { WITH_NOTION_FIXTURE } from '../../support/plugins/catalog-fixture';
 import { REPOSITORY_PLUGINS } from '../../support/plugins/repository';
 
 const NOTION = readFileSync(new URL('../../fixtures/sigstore/notion-v0.2.0.tgz', import.meta.url));
@@ -51,6 +52,7 @@ describe('a plugin the accounts need, restored at a start', () => {
       requestRestart: () => undefined,
       bundled,
       catalogFetch,
+      knownCatalogVersions: WITH_NOTION_FIXTURE,
     });
     return root;
   }
