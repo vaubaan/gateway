@@ -9,7 +9,69 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.32] - 2026-11-27
+
+### Highlights
+
+- **Vaubaan for macOS**: one app to open, the encryption key kept in the Keychain, a setup in two
+  screens, sign-in with Google, Microsoft or GitHub. From this version on, it updates itself when
+  you accept.
+- **From a first account to the agent's first call in one path**: a mission filled in for the
+  account, the agent told its mission at connection, and the page says when the first call
+  arrives.
+
 ### Added
+
+- **Vaubaan for macOS** (ADR desktop-app-tauri-shell-over-the-node-standalone-server):
+  `Vaubaan-<version>-<arm64|x64>.dmg`, signed and notarized, beside each release. The app makes
+  the encryption key on its very first start, keeps it in the Keychain, runs the gateway on
+  `127.0.0.1` (port 3100, or the next free one up to 3199) and opens its window on it; any other
+  address goes to the default browser, a download from the window lands in Downloads, and
+  quitting the app stops the server.
+
+- **A local instance is set up in two screens**: keep the encryption key, then one form for the
+  person's email and password (or a Google, Microsoft or GitHub sign-in), who becomes the
+  administrator and is signed in. The setup link is handed over by the app or the `docker run`
+  output, never a token to copy; no second factor is enrolled by force in local mode.
+
+- **A local instance signs in with Google, Microsoft or GitHub** (ADR
+  local-instance-carries-installed-oauth-clients), through Vaubaan's installed-app clients, back
+  on `http://127.0.0.1:<port>/oauth/loopback`. In the desktop app the consent happens in the
+  default browser and the app's window takes the outcome.
+
+- **A forgotten password is chosen again with the encryption key.** "Forgot your password?" leads
+  to the key on an instance that sends no mail ("Use my encryption key" on one that does): the
+  key proven in the browser, the page sets a new password, ends every former session and signs
+  the person in. As loud as an administrator's naming: audited `password-recovered`, a banner for
+  thirty days, the administrators told.
+
+- **A first account leads to a mission filled in for it.** After connecting a first account,
+  `/missions/new?account=<id>` opens the form with every macro-action at Careful (reads
+  automatic, writes and deletions on approval); nothing is issued until the person saves. Under
+  the key just shown, the page waits for the agent: connected, first call allowed, waiting for a
+  yes, or refused with its reason, and the way to the activity.
+
+- **The agent is told its mission at connection**: the MCP handshake answers with a short form of
+  the mission's instructions (under 3,500 characters whatever the mission holds), so nothing is
+  pasted in the agent's own instructions. `GET /mcp/catalog` carries the whole block; the kit
+  keeps it for clients that read no server instructions.
+
+- **A mission is added to its agent in that agent's own way**: one line of `claude mcp add` for
+  Claude Code (the key in `~/.claude.json`, never in a project file), one line for Codex that
+  appends the mission's table to `~/.codex/config.toml` only once, and for Claude Desktop an
+  extension built per mission (`/missions/<id>/claude-desktop.mcpb`) that asks for the key in a
+  sensitive field. The gateway writes no file of another application; the variable and the
+  configuration that names it stay for any other client.
+
+- **Google Calendar and Outlook connect on a local instance**, through Vaubaan's client on this
+  computer: the consent asks the plugin's scopes only and comes back on the loopback; refresh
+  and revocation go to the provider. Gmail stays on IMAP.
+
+- **An owner renames an account from its page** ("···" › Rename), audited `account-renamed` with
+  both names.
+
+- **vaubaan.com publishes the desktop app's Microsoft application**
+  (`/.well-known/microsoft-identity-association.json`), for Microsoft's publisher check.
 
 - **The macOS app updates itself, when you accept** (ADR
   desktop-app-updated-by-the-tauri-updater-from-the-github-release). Once Vaubaan answers, then
@@ -3457,7 +3519,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.31...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.32...HEAD
+[2.0.0-alpha.32]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.31...v2.0.0-alpha.32
 [2.0.0-alpha.31]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.30...v2.0.0-alpha.31
 [2.0.0-alpha.30]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.29...v2.0.0-alpha.30
 [2.0.0-alpha.29]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.28...v2.0.0-alpha.29
