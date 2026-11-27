@@ -227,275 +227,288 @@ const SPACES = ['scratch', 'app-staging', 'app-prod'] as const;
 const LABELLED_SPACES = ['app-staging', 'app-prod'] as const;
 const SPACE_TOOLS = ['depot__read_item', 'depot__write_item', 'depot__purge'] as const;
 
-describe('structural: a telemetry report contains none of the forbidden fields (spec §9)', () => {
-  let instance: ExecutionInstance | null = null;
+/**
+ * This file boots an instance and runs a random pipeline per seed, about 3 s idle: past the 5 s default on a loaded machine (several
+ * worktrees testing at once), never through an assertion.
+ */
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
 
-  afterEach(async () => {
-    await instance?.close();
-    instance = null;
-  });
+describe(
+  'structural: a telemetry report contains none of the forbidden fields (spec §9)',
+  { timeout: HEAVY_TEST_TIMEOUT_MS },
+  () => {
+    let instance: ExecutionInstance | null = null;
 
-  it.each(SEEDS)('holds over %i random pipeline outcomes (seed)', async (seed) => {
-    const rng = prng(seed);
-    const wire: Wire[] = [];
-    instance = await executionInstance({
-      env: {
-        VAUBAAN_TELEMETRY_ENABLED: 'true',
-        VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL,
-      },
-      deps: {
-        telemetryFetch: async (input: string | URL | Request, init?: RequestInit) => {
-          wire.push({
-            url: String(input),
-            headers: JSON.stringify(init?.headers ?? {}),
-            body: String(init?.body ?? ''),
-          });
-          return new Response(null, { status: 201 });
+    afterEach(async () => {
+      await instance?.close();
+      instance = null;
+    });
+
+    it.each(SEEDS)('holds over %i random pipeline outcomes (seed)', async (seed) => {
+      const rng = prng(seed);
+      const wire: Wire[] = [];
+      instance = await executionInstance({
+        env: {
+          VAUBAAN_TELEMETRY_ENABLED: 'true',
+          VAUBAAN_TELEMETRY_COLLECTOR_URL: COLLECTOR_URL,
         },
-      },
-    });
-    const { root, depot } = instance;
-    const mission = await instance.issue({
-      policy: [
-        line('depot.read', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
-        line('depot[staging].write', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
-        line('depot[prod].write', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
-        line('depot.purge', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
-        line('depot.profile', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
-      ],
-      spaces: ['scratch', 'app-staging', 'app-prod'],
-    });
+        deps: {
+          telemetryFetch: async (input: string | URL | Request, init?: RequestInit) => {
+            wire.push({
+              url: String(input),
+              headers: JSON.stringify(init?.headers ?? {}),
+              body: String(init?.body ?? ''),
+            });
+            return new Response(null, { status: 201 });
+          },
+        },
+      });
+      const { root, depot } = instance;
+      const mission = await instance.issue({
+        policy: [
+          line('depot.read', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
+          line('depot[staging].write', 100_000, {
+            rate_limit: { max: 100_000, window_seconds: 60 },
+          }),
+          line('depot[prod].write', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
+          line('depot.purge', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
+          line('depot.profile', 100_000, { rate_limit: { max: 100_000, window_seconds: 60 } }),
+        ],
+        spaces: ['scratch', 'app-staging', 'app-prod'],
+      });
 
-    // Three holders on the one mission: its creator, a member and a named token. Each
-    // call below is made with one of them, so the attribution the audit keeps (holder
-    // id, holder email, token name, token id) travels through every stage that could
-    // hand it to telemetry.
-    const memberEmail = `${rng.poison('member')}@holder.example`;
-    const member = await root.store.users.upsertFromIdp({
-      issuer: 'http://idp.test',
-      subject: rng.poison('subject'),
-      email: memberEmail,
-    });
-    const added = await root.missions.team.addMember(instance.ada, mission.mission.id, {
-      email: memberEmail,
-    });
-    if (!added.ok) throw new Error(`add refused: ${added.reason}`);
-    const memberToken = await root.missions.team.generateToken(member, mission.mission.id);
-    const tokenName = `runner ${rng.poison('named').replace(/[^A-Za-z0-9]/g, '')}`;
-    const namedToken = await root.missions.team.createNamedToken(
-      instance.ada,
-      mission.mission.id,
-      tokenName,
-    );
-    if (!memberToken.ok || !namedToken.ok) throw new Error('token refused');
-    const holders = [
-      mission,
-      { ...mission, token: memberToken.token.secret, prefix: memberToken.token.prefix },
-      { ...mission, token: namedToken.token.secret, prefix: namedToken.token.prefix },
-    ];
-    const callsPerHolder = holders.map(() => 0);
+      // Three holders on the one mission: its creator, a member and a named token. Each
+      // call below is made with one of them, so the attribution the audit keeps (holder
+      // id, holder email, token name, token id) travels through every stage that could
+      // hand it to telemetry.
+      const memberEmail = `${rng.poison('member')}@holder.example`;
+      const member = await root.store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: rng.poison('subject'),
+        email: memberEmail,
+      });
+      const added = await root.missions.team.addMember(instance.ada, mission.mission.id, {
+        email: memberEmail,
+      });
+      if (!added.ok) throw new Error(`add refused: ${added.reason}`);
+      const memberToken = await root.missions.team.generateToken(member, mission.mission.id);
+      const tokenName = `runner ${rng.poison('named').replace(/[^A-Za-z0-9]/g, '')}`;
+      const namedToken = await root.missions.team.createNamedToken(
+        instance.ada,
+        mission.mission.id,
+        tokenName,
+      );
+      if (!memberToken.ok || !namedToken.ok) throw new Error('token refused');
+      const holders = [
+        mission,
+        { ...mission, token: memberToken.token.secret, prefix: memberToken.token.prefix },
+        { ...mission, token: namedToken.token.secret, prefix: namedToken.token.prefix },
+      ];
+      const callsPerHolder = holders.map(() => 0);
 
-    // The universe of values a report may contain, fixed before any call.
-    const declaredTools = depot.plugin.tools.map((t) => t.name);
-    const allowedErrorClasses = new Set<string>(Object.values(ERROR_CLASSES_BY_OUTCOME).flat());
-    const isAllowedValue = (key: string, value: unknown): boolean => {
-      switch (key) {
-        case 'plugin':
-          return value === depot.plugin.id;
-        case 'plugin_version':
-          return value === depot.plugin.version;
-        case 'gateway_version':
-          return value === root.build.version;
-        case 'tool':
-          return typeof value === 'string' && declaredTools.includes(value);
-        case 'outcome':
-          return (REPORT_OUTCOMES as readonly unknown[]).includes(value);
-        case 'duration_bucket':
-          return (DURATION_BUCKETS as readonly unknown[]).includes(value);
-        case 'error_class':
-          return (
-            value === null ||
-            (typeof value === 'string' &&
-              (allowedErrorClasses.has(value) || REPORT_FIELD_PATTERNS.httpErrorClass.test(value)))
-          );
-        default:
-          return false;
-      }
-    };
-
-    // What must never be on the wire, whatever happens.
-    const forbidden = new Set<string>([
-      mission.mission.id,
-      mission.token,
-      mission.prefix,
-      instance.ada.id,
-      instance.ada.email,
-      instance.account.id,
-      instance.account.displayName,
-      DEPOT_API_KEY,
-      new URL(TEST_PUBLIC_URL).host,
-      ...instance.resources.flatMap((r) => [r.id, r.ref]),
-      // Who holds the tokens, and the tokens themselves.
-      member.id,
-      member.subject,
-      memberEmail,
-      tokenName,
-      ...holders.flatMap((holder) => [holder.token, holder.prefix]),
-      ...(await root.store.missions.listTokens(mission.mission.id)).map((token) => token.id),
-    ]);
-
-    const expected: { tool: string; outcome: ReportOutcome; error_class: string | null }[] = [];
-    let refusedBeforeThePlugin = 0;
-
-    for (let i = 0; i < ITERATIONS; i += 1) {
-      const agentLabel = rng.poison('agent');
-      const callerIp = `203.0.113.${rng.int(250) + 1}`;
-      const userAgent = rng.poison('user-agent');
-      const headers = {
-        'x-vaubaan-agent': agentLabel,
-        'x-forwarded-for': callerIp,
-        'x-real-ip': callerIp,
-        'user-agent': userAgent,
+      // The universe of values a report may contain, fixed before any call.
+      const declaredTools = depot.plugin.tools.map((t) => t.name);
+      const allowedErrorClasses = new Set<string>(Object.values(ERROR_CLASSES_BY_OUTCOME).flat());
+      const isAllowedValue = (key: string, value: unknown): boolean => {
+        switch (key) {
+          case 'plugin':
+            return value === depot.plugin.id;
+          case 'plugin_version':
+            return value === depot.plugin.version;
+          case 'gateway_version':
+            return value === root.build.version;
+          case 'tool':
+            return typeof value === 'string' && declaredTools.includes(value);
+          case 'outcome':
+            return (REPORT_OUTCOMES as readonly unknown[]).includes(value);
+          case 'duration_bucket':
+            return (DURATION_BUCKETS as readonly unknown[]).includes(value);
+          case 'error_class':
+            return (
+              value === null ||
+              (typeof value === 'string' &&
+                (allowedErrorClasses.has(value) ||
+                  REPORT_FIELD_PATTERNS.httpErrorClass.test(value)))
+            );
+          default:
+            return false;
+        }
       };
-      [agentLabel, callerIp, userAgent].forEach((value) => forbidden.add(value));
 
-      // One call in ten is refused by the gateway before the plugin runs.
-      if (rng.int(10) === 0) {
-        const args = { space: rng.poison('foreign-space'), item: rng.poison('item') };
-        Object.values(args).forEach((value) => forbidden.add(value));
+      // What must never be on the wire, whatever happens.
+      const forbidden = new Set<string>([
+        mission.mission.id,
+        mission.token,
+        mission.prefix,
+        instance.ada.id,
+        instance.ada.email,
+        instance.account.id,
+        instance.account.displayName,
+        DEPOT_API_KEY,
+        new URL(TEST_PUBLIC_URL).host,
+        ...instance.resources.flatMap((r) => [r.id, r.ref]),
+        // Who holds the tokens, and the tokens themselves.
+        member.id,
+        member.subject,
+        memberEmail,
+        tokenName,
+        ...holders.flatMap((holder) => [holder.token, holder.prefix]),
+        ...(await root.store.missions.listTokens(mission.mission.id)).map((token) => token.id),
+      ]);
+
+      const expected: { tool: string; outcome: ReportOutcome; error_class: string | null }[] = [];
+      let refusedBeforeThePlugin = 0;
+
+      for (let i = 0; i < ITERATIONS; i += 1) {
+        const agentLabel = rng.poison('agent');
+        const callerIp = `203.0.113.${rng.int(250) + 1}`;
+        const userAgent = rng.poison('user-agent');
+        const headers = {
+          'x-vaubaan-agent': agentLabel,
+          'x-forwarded-for': callerIp,
+          'x-real-ip': callerIp,
+          'user-agent': userAgent,
+        };
+        [agentLabel, callerIp, userAgent].forEach((value) => forbidden.add(value));
+
+        // One call in ten is refused by the gateway before the plugin runs.
+        if (rng.int(10) === 0) {
+          const args = { space: rng.poison('foreign-space'), item: rng.poison('item') };
+          Object.values(args).forEach((value) => forbidden.add(value));
+          forbidden.add(fingerprintArguments(args));
+          depot.script(null);
+          const body = await instance.call(rng.pick(holders), rng.pick(SPACE_TOOLS), args, headers);
+          expect(body.error, 'a call outside the mission is refused').toBeDefined();
+          refusedBeforeThePlugin += 1;
+          continue;
+        }
+
+        const whoami = rng.int(6) === 0;
+        const tool = whoami ? 'depot__whoami' : rng.pick(SPACE_TOOLS);
+        const args: Record<string, unknown> = whoami
+          ? { note: rng.poison('note') }
+          : {
+              // A write is accepted on the labelled spaces only (`depot[staging|prod].write`).
+              space: rng.pick(tool === 'depot__write_item' ? LABELLED_SPACES : SPACES),
+              item: rng.poison('item'),
+              query: rng.poison('select'),
+            };
+        for (const value of Object.values(args)) {
+          if (typeof value === 'string' && !(SPACES as readonly string[]).includes(value)) {
+            forbidden.add(value);
+          }
+        }
         forbidden.add(fingerprintArguments(args));
-        depot.script(null);
-        const body = await instance.call(rng.pick(holders), rng.pick(SPACE_TOOLS), args, headers);
-        expect(body.error, 'a call outside the mission is refused').toBeDefined();
-        refusedBeforeThePlugin += 1;
-        continue;
+
+        const drawn = drawOutcome(rng, args);
+        drawn.poisons.forEach((value) => forbidden.add(value));
+        depot.script(drawn.execute);
+        const before = depot.calls.length;
+        const holder = rng.int(holders.length);
+        callsPerHolder[holder] = (callsPerHolder[holder] ?? 0) + 1;
+        const answer = await instance.call(holders[holder] ?? mission, tool, args, headers);
+        expect(
+          depot.calls.length,
+          `iteration ${i}: ${tool} did not reach the plugin: ${answer.error?.message}`,
+        ).toBe(before + 1);
+        expected.push({ tool, ...drawn.expected });
       }
 
-      const whoami = rng.int(6) === 0;
-      const tool = whoami ? 'depot__whoami' : rng.pick(SPACE_TOOLS);
-      const args: Record<string, unknown> = whoami
-        ? { note: rng.poison('note') }
-        : {
-            // A write is accepted on the labelled spaces only (`depot[staging|prod].write`).
-            space: rng.pick(tool === 'depot__write_item' ? LABELLED_SPACES : SPACES),
-            item: rng.poison('item'),
-            query: rng.poison('select'),
-          };
-      for (const value of Object.values(args)) {
-        if (typeof value === 'string' && !(SPACES as readonly string[]).includes(value)) {
-          forbidden.add(value);
+      // The mission log exists by now: its id is forbidden too.
+      const missionLog = await root.store.missionLogs.getByMission(mission.mission.id);
+      if (missionLog) forbidden.add(missionLog.id);
+
+      await root.telemetry.profileNow();
+      let overview = await root.telemetry.overview();
+      for (let guard = 0; overview.queue.queued > 0 && guard < ITERATIONS; guard += 1) {
+        await root.telemetry.flush();
+        overview = await root.telemetry.overview();
+      }
+
+      const bodies = wire.map((request) => JSON.parse(request.body) as Record<string, unknown[]>);
+      const reports = bodies.flatMap((body) => body.plugin_health ?? []);
+      const decisions = bodies.flatMap((body) => body.decisions ?? []);
+      const profiles = bodies.flatMap((body) => body.instance_profiles ?? []);
+      // One decision per audited call that has a decision word (allowed, or a refusal code).
+      const audited = (await root.store.audit.list({ kind: 'call', missionId: mission.mission.id }))
+        .filter((e) => e.kind === 'call')
+        .filter((e) => e.decision === 'allowed' || e.refusal_code !== null);
+      expect(decisions).toHaveLength(audited.length);
+      expect(profiles).toHaveLength(1);
+      expect(overview.queue).toMatchObject({
+        queued: 0,
+        dropped: 0,
+        delivered: expected.length + decisions.length + profiles.length,
+      });
+
+      // Every holder made calls, and the instance itself did record who: the property
+      // below is about what leaves it, not about attribution being absent.
+      expect(callsPerHolder.every((count) => count > 20)).toBe(true);
+      const attributed = await root.store.audit.tokenHolderActivity(mission.mission.id, {
+        since: mission.mission.createdAt,
+        until: null,
+      });
+      expect(attributed.map((a) => a.holder).sort()).toEqual(
+        [instance.ada.id, member.id, tokenName].sort(),
+      );
+
+      // 4. One report per call that reached the plugin, in order, with the expected class.
+      expect(refusedBeforeThePlugin).toBeGreaterThan(10);
+      expect(reports).toHaveLength(expected.length);
+      expect(
+        reports.map((r) => {
+          const { tool, outcome, error_class } = r as Record<string, unknown>;
+          return { tool, outcome, error_class };
+        }),
+      ).toEqual(expected);
+      // Every outcome class was drawn at least once.
+      expect(new Set(expected.map((e) => e.outcome))).toEqual(new Set(REPORT_OUTCOMES));
+
+      for (const report of reports) {
+        // 1. Exactly the seven keys.
+        expect(Object.keys(report as object).sort()).toEqual([...PLUGIN_REPORT_KEYS].sort());
+        expect(isPluginReport(report)).toBe(true);
+        // 2. Every value from the universe fixed before the first call.
+        for (const [key, value] of Object.entries(report as object)) {
+          expect(isAllowedValue(key, value), `${key}=${String(value)}`).toBe(true);
         }
       }
-      forbidden.add(fingerprintArguments(args));
 
-      const drawn = drawOutcome(rng, args);
-      drawn.poisons.forEach((value) => forbidden.add(value));
-      depot.script(drawn.execute);
-      const before = depot.calls.length;
-      const holder = rng.int(holders.length);
-      callsPerHolder[holder] = (callsPerHolder[holder] ?? 0) + 1;
-      const answer = await instance.call(holders[holder] ?? mission, tool, args, headers);
-      expect(
-        depot.calls.length,
-        `iteration ${i}: ${tool} did not reach the plugin: ${answer.error?.message}`,
-      ).toBe(before + 1);
-      expected.push({ tool, ...drawn.expected });
-    }
-
-    // The mission log exists by now: its id is forbidden too.
-    const missionLog = await root.store.missionLogs.getByMission(mission.mission.id);
-    if (missionLog) forbidden.add(missionLog.id);
-
-    await root.telemetry.profileNow();
-    let overview = await root.telemetry.overview();
-    for (let guard = 0; overview.queue.queued > 0 && guard < ITERATIONS; guard += 1) {
-      await root.telemetry.flush();
-      overview = await root.telemetry.overview();
-    }
-
-    const bodies = wire.map((request) => JSON.parse(request.body) as Record<string, unknown[]>);
-    const reports = bodies.flatMap((body) => body.plugin_health ?? []);
-    const decisions = bodies.flatMap((body) => body.decisions ?? []);
-    const profiles = bodies.flatMap((body) => body.instance_profiles ?? []);
-    // One decision per audited call that has a decision word (allowed, or a refusal code).
-    const audited = (await root.store.audit.list({ kind: 'call', missionId: mission.mission.id }))
-      .filter((e) => e.kind === 'call')
-      .filter((e) => e.decision === 'allowed' || e.refusal_code !== null);
-    expect(decisions).toHaveLength(audited.length);
-    expect(profiles).toHaveLength(1);
-    expect(overview.queue).toMatchObject({
-      queued: 0,
-      dropped: 0,
-      delivered: expected.length + decisions.length + profiles.length,
-    });
-
-    // Every holder made calls, and the instance itself did record who: the property
-    // below is about what leaves it, not about attribution being absent.
-    expect(callsPerHolder.every((count) => count > 20)).toBe(true);
-    const attributed = await root.store.audit.tokenHolderActivity(mission.mission.id, {
-      since: mission.mission.createdAt,
-      until: null,
-    });
-    expect(attributed.map((a) => a.holder).sort()).toEqual(
-      [instance.ada.id, member.id, tokenName].sort(),
-    );
-
-    // 4. One report per call that reached the plugin, in order, with the expected class.
-    expect(refusedBeforeThePlugin).toBeGreaterThan(10);
-    expect(reports).toHaveLength(expected.length);
-    expect(
-      reports.map((r) => {
-        const { tool, outcome, error_class } = r as Record<string, unknown>;
-        return { tool, outcome, error_class };
-      }),
-    ).toEqual(expected);
-    // Every outcome class was drawn at least once.
-    expect(new Set(expected.map((e) => e.outcome))).toEqual(new Set(REPORT_OUTCOMES));
-
-    for (const report of reports) {
-      // 1. Exactly the seven keys.
-      expect(Object.keys(report as object).sort()).toEqual([...PLUGIN_REPORT_KEYS].sort());
-      expect(isPluginReport(report)).toBe(true);
-      // 2. Every value from the universe fixed before the first call.
-      for (const [key, value] of Object.entries(report as object)) {
-        expect(isAllowedValue(key, value), `${key}=${String(value)}`).toBe(true);
+      for (const decision of decisions) {
+        const d = decision as Record<string, unknown>;
+        expect(Object.keys(d)).toEqual([...DECISION_REPORT_KEYS]);
+        expect(d.plugin).toBe(depot.plugin.id);
+        expect(d.tool === null || declaredTools.includes(String(d.tool))).toBe(true);
+        expect((DECISION_OUTCOMES as readonly unknown[]).includes(d.decision)).toBe(true);
+        expect((DECISION_GATES as readonly unknown[]).includes(d.gate)).toBe(true);
+        expect(d.gateway_version).toBe(root.build.version);
+        // Account-scoped risks of the plugin only: never an environment label.
+        for (const risk of d.risks as string[]) expect(risk).toMatch(/^depot\.[a-z][a-z0-9-]*$/);
       }
-    }
+      for (const profile of profiles) {
+        expect(Object.keys(profile as object)).toEqual([...INSTANCE_PROFILE_KEYS]);
+        expect(createInstanceProfile(profile as InstanceProfileInput)).not.toBeNull();
+      }
 
-    for (const decision of decisions) {
-      const d = decision as Record<string, unknown>;
-      expect(Object.keys(d)).toEqual([...DECISION_REPORT_KEYS]);
-      expect(d.plugin).toBe(depot.plugin.id);
-      expect(d.tool === null || declaredTools.includes(String(d.tool))).toBe(true);
-      expect((DECISION_OUTCOMES as readonly unknown[]).includes(d.decision)).toBe(true);
-      expect((DECISION_GATES as readonly unknown[]).includes(d.gate)).toBe(true);
-      expect(d.gateway_version).toBe(root.build.version);
-      // Account-scoped risks of the plugin only: never an environment label.
-      for (const risk of d.risks as string[]) expect(risk).toMatch(/^depot\.[a-z][a-z0-9-]*$/);
-    }
-    for (const profile of profiles) {
-      expect(Object.keys(profile as object)).toEqual([...INSTANCE_PROFILE_KEYS]);
-      expect(createInstanceProfile(profile as InstanceProfileInput)).not.toBeNull();
-    }
-
-    // 3. Nothing forbidden anywhere on the wire: URL, headers, body.
-    forbidden.add('[staging]').add('[prod]');
-    expect(wire.length).toBeGreaterThan(1);
-    const everythingSent = wire.map((w) => `${w.url}\n${w.headers}\n${w.body}`).join('\n');
-    const leaked = [...forbidden].filter((value) => everythingSent.includes(value));
-    expect(leaked).toEqual([]);
-    for (const request of wire) {
-      expect(new URL(request.url).host).toBe(COLLECTOR_HOST);
-      expect(new URL(request.url).search).toBe('');
-      expect(Object.keys(JSON.parse(request.headers) as object).sort()).toEqual([
-        'apikey',
-        'authorization',
-        'content-type',
-        'prefer',
-        'user-agent',
-      ]);
-    }
-    expect(forbidden.size).toBeGreaterThan(ITERATIONS * 4);
-    expect(DEPOT).toBe(depot.plugin.id);
-  });
-});
+      // 3. Nothing forbidden anywhere on the wire: URL, headers, body.
+      forbidden.add('[staging]').add('[prod]');
+      expect(wire.length).toBeGreaterThan(1);
+      const everythingSent = wire.map((w) => `${w.url}\n${w.headers}\n${w.body}`).join('\n');
+      const leaked = [...forbidden].filter((value) => everythingSent.includes(value));
+      expect(leaked).toEqual([]);
+      for (const request of wire) {
+        expect(new URL(request.url).host).toBe(COLLECTOR_HOST);
+        expect(new URL(request.url).search).toBe('');
+        expect(Object.keys(JSON.parse(request.headers) as object).sort()).toEqual([
+          'apikey',
+          'authorization',
+          'content-type',
+          'prefer',
+          'user-agent',
+        ]);
+      }
+      expect(forbidden.size).toBeGreaterThan(ITERATIONS * 4);
+      expect(DEPOT).toBe(depot.plugin.id);
+    });
+  },
+);

@@ -30,7 +30,13 @@ class CountingPasswords implements PasswordHasher {
   }
 }
 
-describe('the cost of a password check', () => {
+/**
+ * This file runs real argon2id hashes (64 MiB each): past the 5 s default on a loaded machine (several
+ * worktrees testing at once), never through an assertion.
+ */
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
+
+describe('the cost of a password check', { timeout: HEAVY_TEST_TIMEOUT_MS }, () => {
   let test: TestStore;
   let passwords: CountingPasswords;
   let accounts: SignInAccountsService;

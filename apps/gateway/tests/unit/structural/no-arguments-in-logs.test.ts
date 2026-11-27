@@ -236,73 +236,83 @@ function offencesOf(file: string, text?: string): Offence[] {
   return found;
 }
 
-describe('no log line is handed call arguments or a secret', () => {
-  const files = SCANNED.flatMap((dir) => sourceFiles(join(REPO, dir)));
+/**
+ * This file walks the whole source tree: past the 5 s default on a loaded machine (several
+ * worktrees testing at once), never through an assertion.
+ */
+const HEAVY_TEST_TIMEOUT_MS = 30_000;
 
-  it('scans the server and the packages it runs, and finds their log calls', () => {
-    expect(files.length).toBeGreaterThan(150);
-    const calls = files.reduce((count, file) => count + logCallsOf(file).calls.length, 0);
-    expect(calls).toBeGreaterThan(80);
-  });
+describe(
+  'no log line is handed call arguments or a secret',
+  { timeout: HEAVY_TEST_TIMEOUT_MS },
+  () => {
+    const files = SCANNED.flatMap((dir) => sourceFiles(join(REPO, dir)));
 
-  it('no logger call names call arguments, a request body or a secret', () => {
-    expect(files.flatMap((file) => offencesOf(file))).toEqual([]);
-  });
+    it('scans the server and the packages it runs, and finds their log calls', () => {
+      expect(files.length).toBeGreaterThan(150);
+      const calls = files.reduce((count, file) => count + logCallsOf(file).calls.length, 0);
+      expect(calls).toBeGreaterThan(80);
+    });
 
-  it('the scan sees what it is meant to see (a planted offence is reported)', () => {
-    const planted = join(REPO, 'apps/gateway/src/server/__planted__.ts');
-    // Through the same functions as the real scan: what is a log call, then what it names.
-    const offences = (code: string): string[] =>
-      offencesOf(planted, code).map((offence) => `${offence.why}:${offence.name}`);
+    it('no logger call names call arguments, a request body or a secret', () => {
+      expect(files.flatMap((file) => offencesOf(file))).toEqual([]);
+    });
 
-    expect(offences(`logger.info('call', { args });`)).toEqual(['arguments:args']);
-    expect(offences(`logger.info('call', { tool, detail: call.args });`)).toEqual([
-      'arguments:args',
-    ]);
-    expect(offences(`this.deps.logger.warn('x', { token: bearer });`)).toEqual([
-      'secret:token',
-      'secret:bearer',
-    ]);
-    expect(offences(`logger.info('x', { client_secret: s });`)).toEqual(['secret:client_secret']);
+    it('the scan sees what it is meant to see (a planted offence is reported)', () => {
+      const planted = join(REPO, 'apps/gateway/src/server/__planted__.ts');
+      // Through the same functions as the real scan: what is a log call, then what it names.
+      const offences = (code: string): string[] =>
+        offencesOf(planted, code).map((offence) => `${offence.why}:${offence.name}`);
 
-    // The message, when it is built from values.
-    expect(offences('logger.info(`call ${JSON.stringify(args)}`);')).toEqual(['arguments:args']);
-    expect(offences(`logger.warn('bad ' + token);`)).toEqual(['secret:token']);
-    // A name bound to a log method, and a child logger's bindings.
-    expect(
-      offences(
-        `const log = replay ? logger.warn.bind(logger) : logger.info.bind(logger); log('x', { args });`,
-      ),
-    ).toEqual(['arguments:args']);
-    expect(offences(`const scoped = logger.child({ token });`)).toEqual(['secret:token']);
-    // The objects that carry them, handed over whole.
-    expect(offences(`logger.info('x', { headers });`)).toEqual(['carrier:headers']);
-    expect(offences(`logger.info('x', { ...call });`)).toEqual(['carrier:call']);
-    expect(offences(`logger.info('x', { detail: request });`)).toEqual(['carrier:request']);
-    expect(offences(`logger.info('x', ctx);`)).toEqual(['carrier:ctx']);
-    // A key named like a derivative does not vouch for a value named like the secret.
-    expect(offences(`logger.info('x', { token_prefix: bearer });`)).toEqual(['secret:bearer']);
-    // The reason of a refused call.
-    expect(offences(`logger.info('call refused', { reason: outcome.reason });`)).toEqual([
-      'reason:reason',
-      'reason:reason',
-    ]);
+      expect(offences(`logger.info('call', { args });`)).toEqual(['arguments:args']);
+      expect(offences(`logger.info('call', { tool, detail: call.args });`)).toEqual([
+        'arguments:args',
+      ]);
+      expect(offences(`this.deps.logger.warn('x', { token: bearer });`)).toEqual([
+        'secret:token',
+        'secret:bearer',
+      ]);
+      expect(offences(`logger.info('x', { client_secret: s });`)).toEqual(['secret:client_secret']);
 
-    // What may be shown of them passes.
-    expect(
-      offences(`logger.info('x', { token_prefix: token.prefix, arguments_hash: h });`),
-    ).toEqual([]);
-    expect(offences(`logger.info('x', { token_prefix: prefixOf(token) });`)).toEqual([]);
-    expect(offences(`logger.info('x', { mission_id: mission.id, refusal_code: r.code });`)).toEqual(
-      [],
-    );
-    expect(offences(`logger.info('x', { method: request.method, path: ctx.path });`)).toEqual([]);
-    // A callback's parameter is a local name; what it returns is read.
-    expect(offences(`logger.info('x', { ids: all.map((request) => request.id) });`)).toEqual([]);
-    expect(offences(`logger.info('x', { ids: all.map((call) => call.args) });`)).toEqual([
-      'arguments:args',
-    ]);
-    // Not a logger: nothing to report.
-    expect(offences(`audit.info('x', { args });`)).toEqual([]);
-  });
-});
+      // The message, when it is built from values.
+      expect(offences('logger.info(`call ${JSON.stringify(args)}`);')).toEqual(['arguments:args']);
+      expect(offences(`logger.warn('bad ' + token);`)).toEqual(['secret:token']);
+      // A name bound to a log method, and a child logger's bindings.
+      expect(
+        offences(
+          `const log = replay ? logger.warn.bind(logger) : logger.info.bind(logger); log('x', { args });`,
+        ),
+      ).toEqual(['arguments:args']);
+      expect(offences(`const scoped = logger.child({ token });`)).toEqual(['secret:token']);
+      // The objects that carry them, handed over whole.
+      expect(offences(`logger.info('x', { headers });`)).toEqual(['carrier:headers']);
+      expect(offences(`logger.info('x', { ...call });`)).toEqual(['carrier:call']);
+      expect(offences(`logger.info('x', { detail: request });`)).toEqual(['carrier:request']);
+      expect(offences(`logger.info('x', ctx);`)).toEqual(['carrier:ctx']);
+      // A key named like a derivative does not vouch for a value named like the secret.
+      expect(offences(`logger.info('x', { token_prefix: bearer });`)).toEqual(['secret:bearer']);
+      // The reason of a refused call.
+      expect(offences(`logger.info('call refused', { reason: outcome.reason });`)).toEqual([
+        'reason:reason',
+        'reason:reason',
+      ]);
+
+      // What may be shown of them passes.
+      expect(
+        offences(`logger.info('x', { token_prefix: token.prefix, arguments_hash: h });`),
+      ).toEqual([]);
+      expect(offences(`logger.info('x', { token_prefix: prefixOf(token) });`)).toEqual([]);
+      expect(
+        offences(`logger.info('x', { mission_id: mission.id, refusal_code: r.code });`),
+      ).toEqual([]);
+      expect(offences(`logger.info('x', { method: request.method, path: ctx.path });`)).toEqual([]);
+      // A callback's parameter is a local name; what it returns is read.
+      expect(offences(`logger.info('x', { ids: all.map((request) => request.id) });`)).toEqual([]);
+      expect(offences(`logger.info('x', { ids: all.map((call) => call.args) });`)).toEqual([
+        'arguments:args',
+      ]);
+      // Not a logger: nothing to report.
+      expect(offences(`audit.info('x', { args });`)).toEqual([]);
+    });
+  },
+);
