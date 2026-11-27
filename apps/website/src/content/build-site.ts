@@ -35,9 +35,6 @@ import { privacyMarkdown } from './privacy';
 import { referenceDocs } from './references';
 import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL, trustMarkdown } from './trust';
 
-/** The desktop app's Microsoft Entra application (public client id). */
-const DESKTOP_MICROSOFT_CLIENT_ID = '0f3f084a-4622-4f80-a6e4-03a06d8c0f3d';
-
 export const DOCS_DIR_FROM_REPO = 'apps/website/content/docs';
 export const KNOWN_LIMITATIONS = 'docs/handbook/known-limitations.md';
 export const CONSULTANTS_TITLE = 'Vaubaan for consultants';
@@ -269,12 +266,6 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   files.set('sitemap.xml', sitemapXml(pages));
   files.set('robots.txt', robotsTxt());
   files.set('.well-known/security.txt', securityTxt());
-  // Proves vaubaan.com is the publisher domain of the desktop app's Microsoft Entra
-  // application (ADR local-instance-carries-installed-oauth-clients).
-  files.set(
-    '.well-known/microsoft-identity-association.json',
-    `${JSON.stringify({ associatedApplications: [{ applicationId: DESKTOP_MICROSOFT_CLIENT_ID }] }, null, 2)}\n`,
-  );
 
   const data: SiteData = {
     thresholds,
