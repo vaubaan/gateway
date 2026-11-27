@@ -44,6 +44,8 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 
 ## Traps
 
+- **The handshake hands over the short instructions** (spec §4.4). `handleMcp` builds them only when the request `mayBeHandshake` (a POST that is neither `tools/call` nor `tools/list`), through `instructionsOf` → `MissionService.kitOf` → `shortInstructions` (`missions/bootstrap-kit.ts`), and passes them as the SDK server's `instructions`; the catalog answers the whole block in `instructions`. The short form is built to stay under `SHORT_INSTRUCTIONS_MAX` (3,500): fixed sentences first, then as many account lines as fit, the rest counted. A sentence added to it eats the accounts' room: `bootstrap-kit.test.ts` holds the limit with a 200-account mission. Claude Code cuts a server's instructions at 4,096 characters; what Claude Desktop and Cursor do with them is not documented.
+
 - **The surface rate limit is per mission on purpose**: a per-token window would multiply the ceiling by the token count. One holder can exhaust it for the others (threat model, A26); the audit names the holder.
 - **A stopped key is a 401, not a refusal.** `token-rotated`, `token-revoked`, `holder-removed`, `holder-deactivated` (`AUTH_FAILURE_REASONS`) are given only when the secret was proven, before the pipeline: no credit, no call entry. `mission-inactive` would be false, the mission may serve other holders.
 - **`last_used_at`** is the door's only write outside the pipeline, at most once per token per 60 s; a failure is logged, never refuses.

@@ -1070,6 +1070,15 @@ command, in the interface's words (commands, variable, tool names and codes keep
 A generic page served without authentication documents the same for any agent, with no mission's
 values.
 
+The door also hands the agent its instructions itself, so that nothing has to be pasted: the MCP
+handshake answers with a **short form** of the instruction block (the `instructions` of the
+server), and the catalog (§4.1) carries the whole block in `instructions`. The short form says what
+a mission is, the accounts it holds, how to read a refusal, how to wait for the creator's yes, that
+a refusal is never worked around, and where the whole text is. It stays under 3,500 characters
+whatever the mission holds (a client may cut a server's instructions at 4,096): accounts that do
+not fit are counted and left to the catalog. The pasted block stays for clients that read no
+server instructions.
+
 ## 5. Composition
 
 - **[gateway-risk-model](./gateway-risk-model.md)** — plugins, risk catalogs, slices, scope caps,

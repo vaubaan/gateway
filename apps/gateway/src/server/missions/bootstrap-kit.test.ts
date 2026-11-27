@@ -9,6 +9,7 @@ import {
   AGENT_LABEL_MAX_LENGTH,
   AGENT_LABEL_PUNCTUATION,
   buildBootstrapKit,
+  SHORT_INSTRUCTIONS_MAX,
   MISSION_TOKEN_ENV,
   REFUSAL_GUIDANCE,
   TOKEN_STOPPED_GUIDANCE,
@@ -345,5 +346,46 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain(`Bearer \${${MISSION_TOKEN_ENV}}`);
     expect(page).not.toMatch(/https?:\/\/[a-z0-9.-]+\.[a-z]{2,}/);
     expect(page).not.toMatch(/vbn_live_[A-Za-z0-9]{8}_/);
+  });
+});
+
+describe('the short form handed in the MCP handshake (spec §4.4)', () => {
+  it('says what a mission is, its accounts, how to read a refusal, how to wait for a yes, and where the whole text is', () => {
+    const short = buildBootstrapKit(INPUT).agent_instructions_short;
+    expect(short).toContain(`You are working on the Vaubaan mission "${INPUT.mission.name}"`);
+    expect(short).toContain('A mission is what a person allows you to do');
+    for (const account of INPUT.accounts) expect(short).toContain(account.display_name);
+    expect(short).toContain('`approval-required`');
+    expect(short).toContain('wait for their yes');
+    expect(short).toContain('Never work around a refusal');
+    expect(short).toContain('/mcp/catalog');
+    expect(short).toContain('`instructions`');
+    expect(short.length).toBeLessThanOrEqual(SHORT_INSTRUCTIONS_MAX);
+  });
+
+  it('stays under its limit, with margin under 4,096, whatever the mission holds', () => {
+    expect(SHORT_INSTRUCTIONS_MAX).toBeLessThanOrEqual(3_500);
+    const huge = buildBootstrapKit({
+      ...INPUT,
+      mission: { ...INPUT.mission, name: 'N'.repeat(500) },
+      accounts: Array.from({ length: 200 }, (_, i) => ({
+        service_label: `Service ${'s'.repeat(80)} ${i}`,
+        display_name: `Account ${'a'.repeat(200)} ${i}`,
+        resources: Array.from({ length: 50 }, (_, r) => ({
+          ref: `organisation-${i}/repository-${'r'.repeat(120)}-${r}`,
+          env: 'production',
+        })),
+      })),
+    }).agent_instructions_short;
+    expect(huge.length).toBeLessThanOrEqual(SHORT_INSTRUCTIONS_MAX);
+    // What does not fit is counted and left to the catalog; the guidance is never cut.
+    expect(huge).toMatch(/- and \d+ more: see the catalog\./);
+    expect(huge).toContain('Never work around a refusal');
+    expect(huge).toContain('`approval-required`');
+  });
+
+  it('says so when the mission holds no account', () => {
+    const none = buildBootstrapKit({ ...INPUT, accounts: [] }).agent_instructions_short;
+    expect(none).toContain('this mission holds no account now');
   });
 });

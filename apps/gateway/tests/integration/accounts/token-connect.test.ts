@@ -233,6 +233,26 @@ describe('a GitHub account connected with a token', () => {
     };
     expect(await firstCall()).toEqual({ called_at: null, first: null });
 
+    // The handshake hands the agent its instructions, with nothing pasted (spec §4.4):
+    // the short form, under the limit a client may cut at; the catalog carries the whole.
+    const hello = (await rpc(key, 'initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '0' },
+    })) as { result?: { instructions?: string } };
+    const short = hello.result?.instructions ?? '';
+    expect(short).toContain('You are working on the Vaubaan mission "Read code"');
+    expect(short).toContain('`acme/app`');
+    expect(short).toContain('`approval-required`');
+    expect(short.length).toBeLessThan(3_500);
+    const catalog = (await (
+      await root.execution.handlers.catalog(
+        new Request(`${PUBLIC_URL}/mcp/catalog`, { headers: { authorization: `Bearer ${key}` } }),
+      )
+    ).json()) as { instructions?: string };
+    expect(catalog.instructions).toContain('### When a call is refused');
+    expect(catalog.instructions?.length).toBeGreaterThan(short.length);
+
     const listed = await rpc(key, 'tools/list', {});
     const names = (listed.result?.tools ?? []).map((t) => t.name);
     expect(names).toContain('github__list_branches');

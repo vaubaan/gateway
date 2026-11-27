@@ -3,7 +3,7 @@ title: Bring my agent into a mission
 status: proposed
 actors: [developer, consultant, teammate]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-22
+last_reviewed: 2026-11-27
 ---
 
 # Bring my agent into a mission
@@ -32,6 +32,14 @@ acceptance:
 
 - A person adds a mission to Claude Desktop from the mission page, with no file to edit
 - The assistant's first call lists the mission's tools; revoking the mission ends its access
+
+## Tell my agent what its mission is without pasting anything
+
+status: implemented
+relieves: four-copy-pastes-per-project
+requires: mission, mission-token
+anchors: apps/gateway/src/server/missions/bootstrap-kit.ts, apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/missions/bootstrap-kit.test.ts, apps/gateway/tests/integration/accounts/token-connect.test.ts
+spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
 
 ## Let my agent know my answer
 

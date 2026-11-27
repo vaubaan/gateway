@@ -171,6 +171,10 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     webSessions: deps.auth.sessions,
     budget: deps.budget,
     pipeline,
+    instructionsOf: async (mission, prefix) => {
+      const kit = await deps.missions.service.kitOf(mission, { prefix });
+      return { short: kit.agent_instructions_short, full: kit.agent_instructions };
+    },
     // What a creating call made joins the mission on the request path (local writes),
     // then the account's discovery runs off it (ADRs created-resources-join-the-mission,
     // created-resources-join-the-mission).

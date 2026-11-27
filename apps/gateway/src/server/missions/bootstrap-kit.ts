@@ -114,6 +114,11 @@ export interface BootstrapKit {
   readonly mcp_json: string;
   /** 3. */
   readonly agent_instructions: string;
+  /**
+   * The short form of 3, handed in the MCP handshake (spec §4.4): under
+   * `SHORT_INSTRUCTIONS_MAX` characters whatever the mission holds.
+   */
+  readonly agent_instructions_short: string;
   /** 4. git's configuration and the remotes; `null` when the mission has no repository the instance serves. */
   readonly git: string | null;
   /** Verification command. */
@@ -354,6 +359,67 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
   ].join('\n');
 }
 
+/**
+ * The most the short form may be (spec §4.4). A client may cut a server's instructions
+ * at 4,096 characters; the margin is for what a client adds around them.
+ */
+export const SHORT_INSTRUCTIONS_MAX = 3_500;
+
+/** One account in a line of the short form: its resources, or how many when they are many. */
+function shortAccountLine(account: KitAccount): string {
+  const all = account.resource_sets?.length
+    ? account.resource_sets.flatMap((set) => set.resources)
+    : account.resources;
+  const shown = all.slice(0, 5).map(resourceLine).join(', ');
+  const rest = all.length > 5 ? ` and ${all.length - 5} more` : '';
+  const what = all.length === 0 ? 'the account itself' : `${shown}${rest}`;
+  return `- ${account.service_label} "${account.display_name}": ${what}`;
+}
+
+/**
+ * The short form of the instruction block, handed to the agent in the MCP handshake
+ * (spec §4.4): what a mission is, the accounts it holds, how to read a refusal, how to
+ * wait for the creator's yes, and where the whole text is. Fixed sentences first; the
+ * accounts fill what is left under `SHORT_INSTRUCTIONS_MAX`, and those that do not fit
+ * are counted and left to the catalog.
+ */
+export function shortInstructions(input: BootstrapKitInput, endpoint: string): string {
+  const name = input.mission.name.slice(0, 80);
+  const head = [
+    `You are working on the Vaubaan mission "${name}". A mission is what a person allows you to do on their cloud accounts: which accounts and resources, which actions, how many, and which ones need their yes first. You reach those accounts only through the tools of this server; you hold no credential of those services and must not look for one. Everything you do is recorded under the name of the person who holds this key.`,
+    '',
+    'Accounts of this mission:',
+  ];
+  const tail = [
+    '',
+    `Call \`tools/list\` for the tools you may call. \`GET ${endpoint}/catalog\` (same key) gives the resources, the limits left and, in \`instructions\`, the whole text these lines are cut from: read it before a long task.`,
+    '',
+    'When a call is refused, it changed nothing. The error carries a `code` and a `hint`: read the hint and do what it says.',
+    '- `approval-required`: the person asked to be asked first. Give them `approval_url`, wait for their yes, then send the same call again with exactly the same arguments.',
+    '- `risk-not-accepted`: the mission does not allow this action. If your task needs it, call `vaubaan__request_permission` with the `refusal_id` and a reason, give `request_url` to the person and wait; otherwise stop this action.',
+    '- `budget-exhausted`: a limit is reached. Give `claim_url` to the person and go on with what does not need it; do not retry in a loop.',
+    '- `rate-limited`: wait `retry_after_seconds`, then retry once.',
+    '- Any other code: follow its hint, and tell the person.',
+    '',
+    `${NEVER_WORK_AROUND} When a refusal carries a URL, give it to the person as it is. Asking does not hold your call open: go on with other work, and call again once they answered.`,
+  ];
+  const fixed = [...head, ...tail].join('\n').length;
+  const lines: string[] = [];
+  let used = fixed;
+  let left = input.accounts.length;
+  for (const account of input.accounts) {
+    const line = shortAccountLine(account).slice(0, 300);
+    // Room is kept for the line that counts what did not fit.
+    if (used + line.length + 1 > SHORT_INSTRUCTIONS_MAX - 80) break;
+    lines.push(line);
+    used += line.length + 1;
+    left -= 1;
+  }
+  if (input.accounts.length === 0) lines.push('- none: this mission holds no account now.');
+  if (left > 0) lines.push(`- and ${left} more: see the catalog.`);
+  return [...head, ...lines, ...tail].join('\n');
+}
+
 export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
   const instance = input.instanceUrl.replace(/\/+$/, '');
   const endpoint = `${instance}${EXECUTION_DOOR_PATH}`;
@@ -376,6 +442,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
     agent_instructions: agentInstructions(input, endpoint),
+    agent_instructions_short: shortInstructions(input, endpoint),
     git: gitRemotes.length > 0 ? gitSnippet(gitRemotes) : null,
     verify: [
       `curl -sS ${shellQuote(endpoint)} \\`,

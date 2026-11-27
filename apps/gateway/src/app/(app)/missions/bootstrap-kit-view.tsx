@@ -78,7 +78,7 @@ export function KitSteps({ kit }: { kit: BootstrapKit }) {
       <KitStep
         n={3}
         title="Tell the agent what it has"
-        hint="paste into its instructions"
+        hint="the gateway hands it a short form when it connects; paste this for the whole text"
         text={kit.agent_instructions}
         label="Instructions for the agent"
         wrap

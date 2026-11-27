@@ -136,11 +136,21 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
    * plugin's version never falls inside a call (`plugins/call-gate.ts`); absent: nothing held.
    */
   readonly callGate?: PluginCallGate;
+  /**
+   * The mission's instruction block for its agent (spec §4.4): the short form the MCP
+   * handshake hands over, and the whole text the catalog carries. Absent: neither.
+   */
+  readonly instructionsOf?: (
+    mission: Admitted['mission'],
+    tokenPrefix: string,
+  ) => Promise<{ readonly short: string; readonly full: string }>;
 }
 
 /** What one authenticated request carries to the handlers. */
 interface RequestScope {
   readonly ctx: MissionContext;
+  /** The short instructions, on a request that may be the handshake; absent on a call. */
+  readonly instructions?: string;
   readonly headers: Headers;
   readonly client: ClientOrigin;
 }
@@ -175,10 +185,17 @@ export class ExecutionDoor {
   async handleMcp(request: Request): Promise<Response> {
     const gate = await this.admit(request);
     if (gate instanceof Response) return gate;
+    // The handshake hands the agent its instructions (spec §4.4). A call or a listing
+    // answers none: the block is not built for them.
+    const instructions =
+      this.deps.instructionsOf && (await mayBeHandshake(request))
+        ? (await this.deps.instructionsOf(gate.mission, gate.ctx.token.prefix)).short
+        : undefined;
     const scope: RequestScope = {
       ctx: gate.ctx,
       headers: request.headers,
       client: gate.client,
+      ...(instructions ? { instructions } : {}),
     };
     const authInfo: AuthInfo = {
       // The SDK wants a token string; it gets the masked prefix, never the bearer.
@@ -215,11 +232,16 @@ export class ExecutionDoor {
       this.deps.gitRemote ?? null,
     );
     const tool = this.deps.permissionTool;
+    // The whole instruction block the handshake's short form is cut from (spec §4.4).
+    const instructions = this.deps.instructionsOf
+      ? { instructions: (await this.deps.instructionsOf(gate.mission, gate.ctx.token.prefix)).full }
+      : {};
     return json(
       200,
       tool
         ? {
             ...catalog,
+            ...instructions,
             tools: [
               ...catalog.tools,
               {
@@ -231,7 +253,7 @@ export class ExecutionDoor {
             ],
             callable_tools: [...catalog.callable_tools, tool.name],
           }
-        : catalog,
+        : { ...catalog, ...instructions },
     );
   }
 
@@ -303,7 +325,10 @@ export class ExecutionDoor {
     const { ctx } = scope;
     const server = new Server(
       { name: MCP_SERVER_INFO_NAME, version: this.deps.build.version },
-      { capabilities: { tools: {} } },
+      {
+        capabilities: { tools: {} },
+        ...(scope.instructions ? { instructions: scope.instructions } : {}),
+      },
     );
 
     server.setRequestHandler('tools/list', async () => {
@@ -501,6 +526,21 @@ function scopeOf(authInfo: AuthInfo | undefined): RequestScope | undefined {
  * a clone, so the SDK still reads the body itself. Anything else — a batch,
  * another method, an unreadable body — is served as JSON.
  */
+/**
+ * Whether a request may be the MCP handshake: anything but a tool call or a tool listing
+ * (the two requests an agent repeats). An unreadable body is left to the SDK to refuse.
+ */
+async function mayBeHandshake(request: Request): Promise<boolean> {
+  if (request.method !== 'POST') return false;
+  let body: unknown;
+  try {
+    body = await request.clone().json();
+  } catch {
+    return false;
+  }
+  return isRecord(body) && body.method !== TOOLS_CALL_METHOD && body.method !== 'tools/list';
+}
+
 async function asksForProgress(request: Request): Promise<boolean> {
   let body: unknown;
   try {
