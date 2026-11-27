@@ -120,7 +120,10 @@ export interface BootstrapKit {
    * default scope, which writes the key in `~/.claude.json`, outside the project.
    */
   readonly claude_code: string;
-  /** The same for Codex: a table appended to `~/.codex/config.toml`, the key in its header. */
+  /**
+   * The same for Codex (`codexLine`): one line that appends a table to
+   * `~/.codex/config.toml`, the key in its header, and changes nothing when run again.
+   */
   readonly codex: string;
   /**
    * Where the file Claude Desktop installs is served (`/missions/<id>/claude-desktop.mcpb`,
@@ -390,6 +393,33 @@ export function codexServerName(missionName: string): string {
 }
 
 /**
+ * One line that adds the mission to Codex, safe to run again: it appends the server's
+ * table to `~/.codex/config.toml` only when no table of that name is there; when one
+ * is, it says whether it already holds this key or another one, and writes nothing.
+ * (`codex mcp add` takes a bearer token only by the name of a variable.)
+ */
+export function codexLine(server: string, endpoint: string, token: string): string {
+  const table = `[mcp_servers.${server}]`;
+  const header = `Bearer ${token}`;
+  const body = [
+    table,
+    `url = ${JSON.stringify(endpoint)}`,
+    `http_headers = { "Authorization" = ${JSON.stringify(header)} }`,
+  ];
+  const file = '~/.codex/config.toml';
+  return [
+    `mkdir -p ~/.codex;`,
+    `if grep -qF ${shellQuote(table)} ${file} 2>/dev/null;`,
+    `then if grep -qF ${shellQuote(header)} ${file};`,
+    `then echo 'Vaubaan: this mission is already in Codex.';`,
+    `else echo ${shellQuote(`Vaubaan: ${file} already holds ${table} with another key. Remove that table, then run this line again.`)};`,
+    `fi;`,
+    `else printf '\\n%s\\n%s\\n%s\\n' ${body.map(shellQuote).join(' ')} >> ${file} && echo 'Vaubaan: mission added to Codex.';`,
+    `fi`,
+  ].join(' ');
+}
+
+/**
  * The most the short form may be (spec §4.4). A client may cut a server's instructions
  * at 4,096 characters; the margin is for what a client adds around them.
  */
@@ -472,14 +502,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
     claude_code: `claude mcp add --transport http ${MCP_SERVER_NAME} ${shellQuote(endpoint)} --header ${shellQuote(`Authorization: Bearer ${tokenValue}`)}`,
-    codex: [
-      `mkdir -p ~/.codex && cat >> ~/.codex/config.toml <<'VAUBAAN'`,
-      '',
-      `[mcp_servers.${codexServerName(input.mission.name)}]`,
-      `url = ${JSON.stringify(endpoint)}`,
-      `http_headers = { "Authorization" = ${JSON.stringify(`Bearer ${tokenValue}`)} }`,
-      'VAUBAAN',
-    ].join('\n'),
+    codex: codexLine(codexServerName(input.mission.name), endpoint, tokenValue),
     claude_desktop: input.mission.id
       ? `/missions/${encodeURIComponent(input.mission.id)}/claude-desktop.mcpb`
       : null,

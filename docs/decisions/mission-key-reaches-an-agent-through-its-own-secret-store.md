@@ -28,7 +28,7 @@ another application.
 
 - **Claude Code and Codex**: the page that shows the key gives one line to run. The key goes, in
   clear, into the agent's own configuration in the person's home (`~/.claude.json`, by
-  `claude mcp add` at its default scope; `~/.codex/config.toml`, by a table the line appends), never
+  `claude mcp add` at its default scope; `~/.codex/config.toml`, by a table the line appends once and never rewrites), never
   into a file of the project. The page says which file holds the key and that it is revoked from
   the mission.
 - **Claude Desktop**: the instance serves, per mission, a `.mcpb` (named after the mission, a

@@ -1,9 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { AUTH_FAILURE_REASONS } from '@vaubaan/gateway-core';
 import { REFUSAL_CODES } from '@vaubaan/shared';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   AGENT_LABEL_MAX_LENGTH,
@@ -402,12 +405,68 @@ describe('the one line per coding agent (ADR mission-key-reaches-an-agent-throug
     expect(kit.claude_code).not.toContain('--scope');
   });
 
-  it('appends a table to Codex’s own configuration, named after the mission', () => {
-    expect(kit.codex).toContain("cat >> ~/.codex/config.toml <<'VAUBAAN'");
+  it('adds the mission to Codex with one line, in Codex’s own configuration', () => {
+    expect(kit.codex).not.toContain('\n');
     expect(kit.codex).toContain(`[mcp_servers.${codexServerName(INPUT.mission.name)}]`);
-    expect(kit.codex).toContain(`url = "${kit.endpoint}"`);
-    expect(kit.codex).toContain(`http_headers = { "Authorization" = "Bearer ${SECRET}" }`);
-    expect(kit.codex.endsWith('\nVAUBAAN')).toBe(true);
+    expect(kit.codex).toContain('~/.codex/config.toml');
+    expect(kit.codex).toContain(`Bearer ${SECRET}`);
+  });
+
+  describe('the Codex line, run in a shell', () => {
+    let home: string;
+    const run = (line: string): string =>
+      execFileSync('sh', ['-c', line], {
+        env: { ...process.env, HOME: home },
+        encoding: 'utf8',
+      }).trim();
+    const config = (): string => readFileSync(join(home, '.codex', 'config.toml'), 'utf8');
+
+    beforeEach(() => {
+      home = mkdtempSync(join(tmpdir(), 'vaubaan-codex-'));
+    });
+    afterEach(() => {
+      rmSync(home, { recursive: true, force: true });
+    });
+
+    it('writes the table once, and running it again changes nothing', () => {
+      expect(run(kit.codex)).toBe('Vaubaan: mission added to Codex.');
+      const written = config();
+      expect(written).toBe(
+        [
+          '',
+          `[mcp_servers.${codexServerName(INPUT.mission.name)}]`,
+          `url = "${kit.endpoint}"`,
+          `http_headers = { "Authorization" = "Bearer ${SECRET}" }`,
+          '',
+        ].join('\n'),
+      );
+      expect(run(kit.codex)).toBe('Vaubaan: this mission is already in Codex.');
+      expect(config()).toBe(written);
+    });
+
+    it('keeps what Codex already holds, and adds a second mission beside the first', () => {
+      mkdirSync(join(home, '.codex'));
+      writeFileSync(join(home, '.codex', 'config.toml'), 'model = "o"\n');
+      run(kit.codex);
+      const other = buildBootstrapKit({
+        ...INPUT,
+        mission: { ...INPUT.mission, name: 'Another mission' },
+      });
+      expect(run(other.codex)).toBe('Vaubaan: mission added to Codex.');
+      expect(config().startsWith('model = "o"\n')).toBe(true);
+      expect(config().match(/^\[mcp_servers\./gm)).toHaveLength(2);
+    });
+
+    it('says so, and writes nothing, when the table is there with another key', () => {
+      run(kit.codex);
+      const written = config();
+      const replaced = buildBootstrapKit({
+        ...INPUT,
+        token: { secret: 'vbn_live_ZzZz9999_0123456789abcdefghijABCDEFGHIJ99' },
+      });
+      expect(run(replaced.codex)).toContain('with another key. Remove that table');
+      expect(config()).toBe(written);
+    });
   });
 
   it('names a Codex server by a bare TOML key, whatever the mission is called', () => {
