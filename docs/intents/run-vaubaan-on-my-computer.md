@@ -200,6 +200,15 @@ delivers: my-first-governed-call-in-minutes
 spec: ../spec/vaubaan-gateway.md#74-create-a-mission
 anchors: apps/gateway/src/app/(app)/missions/first-call-wait.tsx, apps/gateway/src/server/missions/team-handlers.ts, apps/gateway/tests/integration/accounts/token-connect.test.ts
 
+### Count four actions from a first account to the first call
+
+status: implemented
+requires: instance
+relieves: a-lost-evening-on-pre-release-software, four-copy-pastes-per-project
+delivers: my-first-governed-call-in-minutes
+anchors: apps/gateway/tests/e2e/first-call-path.spec.ts
+spec: ../spec/vaubaan-gateway.md#7-workflows
+
 ### Count six actions from the download to the first call
 
 status: proposed
@@ -209,8 +218,9 @@ delivers: my-first-governed-call-in-minutes
 spec: ../spec/vaubaan-gateway.md#7-workflows
 acceptance:
 
-- From download to my agent's first governed call takes at most six actions of mine, with a service that takes a pasted key and with one that signs in; a test walks the path and fails beyond six
-- A step one person does not need (giving access, labelling environments no permission uses) is skipped, not shown
+- On a Mac, from the download to my agent's first governed call takes six actions of mine: install, first access, connect an account, create the mission, add it to my agent, first call
+- It holds with a service that takes a pasted key and with one that signs in (Google, Microsoft or GitHub), and with Claude Code, Codex and Claude Desktop
+- Walked by hand with the handbook's "Test the first-call path"; the four actions after the setup are held by a test
 
 ## Let my agent reach the instance on my computer
 

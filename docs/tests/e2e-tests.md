@@ -48,6 +48,7 @@ last_reviewed: 2026-11-15
 
 ## Known gaps
 
+- ⚠️ **The first-call path is counted from the home, not from the download** (`first-call-path.spec.ts`): the install and the two setup screens of a local instance, a service that signs in instead of taking a pasted key, and the real agents (Claude Code, Codex, Claude Desktop) are walked by hand on a Mac (handbook desktop-app, "Test the first-call path"). The spec stands in for the agent with an MCP client built from the line the page gives.
 - ⚠️ **The manual acceptance run** (spec [§10](../spec/vaubaan-gateway.md#10-tests)) — not run yet; it is the instance owner's.
 - ⚠️ **Claude Code against a running instance behind TLS** (spec [§4.4](../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance)) — never done; the official MCP client stands in. Part of the manual run.
 - ⚠️ **Bootstrap, Settings → Sign-in and the instance name in a browser** (spec [§7.1](../spec/vaubaan-gateway.md#71-install-an-instance)) — integration (`FakeIdp`) and by hand only.

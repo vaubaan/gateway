@@ -91,6 +91,13 @@ export const E2E_CUTOVER_USER = {
   name: 'Margaret',
 } as const;
 
+/** Who the first-call path spec signs in as: nobody else uses her, she starts with nothing. */
+export const E2E_FIRST_CALL_USER = {
+  sub: 'idp|radia',
+  email: 'radia@example.com',
+  name: 'Radia',
+} as const;
+
 /**
  * The share spec's cast: Ines owns a GitHub account of her own, Joan receives a share
  * of it, and the operator (the instance's admin rule names their email) keeps the local
