@@ -3,7 +3,7 @@ title: Install a plugin on my gateway
 status: proposed
 actors: [team-lead, developer, consultant]
 spec: ../spec/vaubaan-gateway.md
-last_reviewed: 2026-11-22
+last_reviewed: 2026-11-27
 ---
 
 # Install a plugin on my gateway
@@ -48,15 +48,10 @@ acceptance:
 
 ### Recognise a catalog service by its mark before installing it
 
-status: proposed
+status: implemented
 requires: plugin
+anchors: packages/plugin-cli/src/archive.ts, packages/shared/src/catalog-index.ts, apps/gateway/src/server/updates/compare.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/src/components/accounts/ServicePicker.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, scripts/release-lib.mjs, packages/plugin-cli/tests/unit/archive.test.ts, packages/shared/src/catalog-index.test.ts, apps/gateway/tests/unit/components/service-picker-catalog.test.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
 spec: ../spec/vaubaan-gateway.md#42-human-surface
-acceptance:
-
-- The connect picker and Administration › Plugins › Catalog draw a catalog plugin that is not installed with its own icon in its colour, as they do once it is installed
-- A catalog version whose archive declares no icon still shows the lettered fallback, and an index without icons is still read
-- A gateway release with no network shows the icons of the catalog versions it knows (`catalog-versions.json`)
-- An older gateway installs an archive that declares its icon
 
 ### Browse the catalog apart from what runs
 
