@@ -13,25 +13,44 @@ configuration or relaying answers by hand, so that it works alone within what I 
 
 ## Add a mission to my agent in one step
 
+The key never sits in clear in a file, and Vaubaan writes into no file of another application
+([ADR, proposed](../decisions/mission-key-reaches-an-agent-through-its-own-secret-store.md)).
+
+### Add a mission to Claude Code with one line
+
 status: proposed
 relieves: four-copy-pastes-per-project
-requires: mission
+requires: mission, mission-token
 spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
 acceptance:
 
-- One action on the mission page writes the MCP configuration, the token variable, the instruction block and the git helper into a project, for Claude Code and for Cursor
-- Running it twice changes nothing; the token never lands in a file tracked by git
+- The page that shows the key gives one line to run; after it, Claude Code lists the mission's tools, with no file edited and no variable exported by hand
+- In the desktop app, the key is in the macOS Keychain and in no file: neither the line nor Claude Code's configuration holds it
+- Running the line twice changes nothing; replacing or revoking the key ends what the Keychain held
+- Outside the desktop app, the line names the environment variable and the key stays out of every file
 
-## Connect a desktop assistant without editing a config file
+### Connect a desktop assistant without editing a config file
 
 status: proposed
 relieves: a-configuration-file-to-edit
-requires: mission
+requires: mission, mission-token
 spec: ../spec/vaubaan-gateway.md#41-execution-surface
 acceptance:
 
-- A person adds a mission to Claude Desktop from the mission page, with no file to edit
+- From the page that shows the key, I open a file Claude Desktop installs, and paste the key once where it asks: no file to edit, no terminal
+- The key is kept by the operating system's secret store, and the file I opened holds none
 - The assistant's first call lists the mission's tools; revoking the mission ends its access
+- Two missions added this way stay two servers in the assistant, each named after its mission
+
+### Add a mission to Cursor from the page
+
+status: proposed
+relieves: four-copy-pastes-per-project
+requires: mission, mission-token
+spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
+acceptance:
+
+- One link on the page adds the mission's server to Cursor, the key never in clear in its configuration
 
 ## Tell my agent what its mission is without pasting anything
 
