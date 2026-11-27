@@ -39,8 +39,8 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
 
 ## Traps
 
-- **Port 3100 is fixed**: agents' configurations and the OAuth clients registered at services hold it. A docker run on 3100, or a gateway left running, makes the app refuse to start with a sentence.
-- **A killed shell leaves its server running** (SIGTERM or a crash skips the exit hook): the next start finds port 3100 taken. Quit with Cmd-Q; `pkill -f apps/gateway/server.js` frees it.
+- **The port moves only when it must**: agents' configurations hold it, so the shell tries the port of the last start (`port` in the data folder), then 3100, then the next free one up to 3199, and passes it in `VAUBAAN_PUBLIC_URL`. A port is free when nothing answers on it _and_ it binds on loopback: on macOS a bind succeeds beside a docker run published on every interface. An agent configured on the former port must take the new one from the app.
+- **A killed shell leaves its server running** (SIGTERM or a crash skips the exit hook): the next start reads `gateway.pid` in the data folder and stops that process, only if its command line is this app's `server.js`, before choosing a port.
 - **The crate does not compile on Linux without a macOS SDK** (`objc2-exception-helper` needs Apple's headers): the macOS job is the compiler. Run it by hand (Actions › desktop › Run workflow) before pushing a change to `main.rs`.
 - **argon2 ships no darwin-x64 prebuild**: on an Intel Mac npm compiles it into `build/Release/`, which `next.config.ts` traces; `assemble.mjs` fails when neither binary is in the tree.
 - **Node is a resource, not a sidecar** (`resources/runtime/node`, not Tauri's `externalBin`): a binary in `Contents/MacOS` is taken for an app of the bundle and shows in the Dock as `node` with a terminal icon.

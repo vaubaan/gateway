@@ -4,7 +4,8 @@
 //! 1. reads the master key from the system's credential store, or makes one on the
 //!    very first start (never over a store that holds data);
 //! 2. starts the bundled Node binary on the gateway's standalone server, in local mode,
-//!    listening on 127.0.0.1 only, the key written to its standard input and closed;
+//!    listening on 127.0.0.1 only, the key written to its standard input and closed —
+//!    on the port of the last start, else 3100, else the next free one up to 3199;
 //! 3. waits for `/healthz`, then shows the gateway in the window — the setup link the
 //!    gateway prints while its setup is open, else the home page;
 //! 4. sends every address that is not the gateway's to the default browser (a
@@ -19,9 +20,10 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -32,9 +34,17 @@ use base64::Engine;
 use tauri::webview::DownloadEvent;
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-/// The port the gateway answers on. Fixed: it is in every agent's configuration and
-/// in the OAuth clients the gateway registers at services.
-const PORT: u16 = 3100;
+/// The port the gateway answers on when it is free. It is in every agent's configuration,
+/// so the port of the last start is tried first (`PORT_FILE`); when it is taken, the next
+/// free port up to `LAST_PORT` serves, and the gateway's public URL carries it. Sign-in
+/// and services come back on the loopback at any port (ADR
+/// local-instance-carries-installed-oauth-clients).
+const PREFERRED_PORT: u16 = 3100;
+const LAST_PORT: u16 = 3199;
+const PORT_FILE: &str = "port";
+/// The process id of the server this shell started: a shell killed without its exit
+/// hook leaves it running, and the next start stops it before choosing a port.
+const PID_FILE: &str = "gateway.pid";
 const KEYCHAIN_SERVICE: &str = "com.vaubaan.desktop";
 const KEYCHAIN_ACCOUNT: &str = "master-key";
 const STORE_FILE: &str = "gateway.db";
@@ -42,6 +52,13 @@ const LOG_FILE: &str = "gateway.log";
 const SETUP_LINK_MARK: &str = "/admin/bootstrap#token=";
 const START_TIMEOUT: Duration = Duration::from_secs(60);
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The port of the running gateway, chosen at each start.
+static PORT: AtomicU16 = AtomicU16::new(PREFERRED_PORT);
+
+fn port() -> u16 {
+    PORT.load(Ordering::Relaxed)
+}
 
 struct Gateway {
     child: Mutex<Option<Child>>,
@@ -143,7 +160,7 @@ fn main() {
 }
 
 fn origin() -> String {
-    format!("http://localhost:{PORT}")
+    format!("http://localhost:{}", port())
 }
 
 /// Starts the gateway and shows it; every failure is a sentence for the window.
@@ -157,11 +174,9 @@ fn start(
     fs::create_dir_all(data_dir).map_err(|e| format!("Cannot create {}: {e}", data_dir.display()))?;
     let store = data_dir.join(STORE_FILE);
     let key = master_key(&store)?;
-    if TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], PORT)), Duration::from_millis(300)).is_ok() {
-        return Err(format!(
-            "Port {PORT} is already in use on this computer. Vaubaan answers on it: stop what uses it (another Vaubaan, a docker run), then open Vaubaan again."
-        ));
-    }
+    let server = resources.join("apps").join("gateway").join("server.js");
+    stop_left_over(data_dir, &server);
+    PORT.store(choose_port(data_dir)?, Ordering::Relaxed);
 
     let log_path = data_dir.join(LOG_FILE);
     let log = OpenOptions::new()
@@ -172,13 +187,12 @@ fn start(
     if !node.exists() {
         return Err(format!("The bundled Node is missing ({})", node.display()));
     }
-    let server = resources.join("apps").join("gateway").join("server.js");
     let mut child = Command::new(node)
         .arg(&server)
         .current_dir(resources)
         .env_clear()
         .env("NODE_ENV", "production")
-        .env("PORT", PORT.to_string())
+        .env("PORT", port().to_string())
         // Only this computer: the server listens on loopback, unlike in a container.
         .env("HOSTNAME", "127.0.0.1")
         .env("VAUBAAN_LOCAL", "true")
@@ -201,6 +215,7 @@ fn start(
         // Dropped here: the gateway reads to the end of its input.
     }
     let stdout = child.stdout.take().ok_or("the gateway has no standard output")?;
+    let _ = fs::write(data_dir.join(PID_FILE), child.id().to_string());
     *gateway.child.lock().map_err(|_| "the gateway's handle is poisoned")? = Some(child);
 
     let setup_link: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
@@ -215,6 +230,74 @@ fn start(
     let url = Url::parse(&target).map_err(|e| e.to_string())?;
     window.navigate(url).map_err(|e| e.to_string())
 }
+
+/// The port of the last start if it is free, else the first free one from 3100 to 3199;
+/// the choice is kept for the next start.
+fn choose_port(data_dir: &Path) -> Result<u16, String> {
+    let file = data_dir.join(PORT_FILE);
+    let saved = fs::read_to_string(&file)
+        .ok()
+        .and_then(|text| text.trim().parse::<u16>().ok())
+        .filter(|p| (PREFERRED_PORT..=LAST_PORT).contains(p));
+    let port = saved
+        .into_iter()
+        .chain(PREFERRED_PORT..=LAST_PORT)
+        .find(|p| is_free(*p))
+        .ok_or_else(|| {
+            format!(
+                "Every port from {PREFERRED_PORT} to {LAST_PORT} is in use on this computer. Close what uses them (other Vaubaans, docker runs), then open Vaubaan again."
+            )
+        })?;
+    if saved != Some(port) {
+        fs::write(&file, port.to_string()).map_err(|e| format!("Cannot write {}: {e}", file.display()))?;
+    }
+    Ok(port)
+}
+
+/// Nothing answers on the port and it can be bound on loopback. Both checks: Rust binds
+/// with `SO_REUSEADDR`, which on macOS succeeds beside a server bound to every interface
+/// (a docker run's published port).
+fn is_free(port: u16) -> bool {
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_err() && TcpListener::bind(address).is_ok()
+}
+
+/// Stops the server a previous shell started and left running (killed without its exit
+/// hook), only when its command line is this app's server.
+#[cfg(unix)]
+fn stop_left_over(data_dir: &Path, server: &Path) {
+    let pid_path = data_dir.join(PID_FILE);
+    let Some(pid) = fs::read_to_string(&pid_path)
+        .ok()
+        .and_then(|text| text.trim().parse::<libc::pid_t>().ok())
+        .filter(|pid| *pid > 1)
+    else {
+        return;
+    };
+    let _ = fs::remove_file(&pid_path);
+    let Ok(out) = Command::new("ps").args(["-p", &pid.to_string(), "-o", "command="]).output() else {
+        return;
+    };
+    if !String::from_utf8_lossy(&out.stdout).contains(&*server.to_string_lossy()) {
+        return;
+    }
+    unsafe {
+        libc::kill(pid, libc::SIGTERM);
+    }
+    let deadline = Instant::now() + STOP_TIMEOUT;
+    while Instant::now() < deadline {
+        if unsafe { libc::kill(pid, 0) } != 0 {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+}
+
+#[cfg(not(unix))]
+fn stop_left_over(_data_dir: &Path, _server: &Path) {}
 
 /// The key from the credential store, or a new one when there is neither a key nor a
 /// store; a store without its key is the one case the shell refuses.
@@ -287,12 +370,15 @@ fn wait_healthy(gateway: &Gateway, log_path: &Path) -> Result<(), String> {
 /// `GET /healthz` over a bare socket: no HTTP client for one status line.
 fn healthz_ok() -> bool {
     let Ok(mut stream) =
-        TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], PORT)), Duration::from_millis(500))
+        TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port())), Duration::from_millis(500))
     else {
         return false;
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let request = format!("GET /healthz HTTP/1.1\r\nHost: localhost:{PORT}\r\nConnection: close\r\n\r\n");
+    let request = format!(
+        "GET /healthz HTTP/1.1\r\nHost: localhost:{}\r\nConnection: close\r\n\r\n",
+        port()
+    );
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
@@ -326,7 +412,7 @@ fn is_inside(url: &Url) -> bool {
         "tauri" => true,
         "http" | "https" => match url.host_str() {
             Some("tauri.localhost") => true,
-            Some("localhost") => url.scheme() == "http" && url.port() == Some(PORT),
+            Some("localhost") => url.scheme() == "http" && url.port() == Some(port()),
             _ => false,
         },
         _ => false,
