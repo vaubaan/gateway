@@ -80,6 +80,34 @@ Intent: [run Vaubaan on my computer](../intents/run-vaubaan-on-my-computer.md).
   3. Quit and reopen Vaubaan: once the window shows the gateway, a dialog names N+1, the version running and the notes. Click **Later**: nothing is downloaded and it is not asked again until the next launch.
   4. Reopen, click **Install and relaunch**: the window says "Installing Vaubaan N+1…", the app closes and opens again within a minute. Check: `curl -s http://127.0.0.1:3100/healthz` answers N+1, the account and mission are there, no Keychain prompt appeared, `gateway.log` ends with `updater: installed N+1, relaunching`.
   5. Failure path (optional): cut the network after clicking **Install and relaunch** with a large download pending, or make `/Applications/Vaubaan.app` read-only (`chmod -R a-w`) before accepting: an error dialog says the running version stays, and the gateway answers again on N.
+- **Test the first-call path** (needs a Mac, Claude Code and Claude Desktop installed, one service that takes a pasted key such as GitHub; no agent can run it). One pass, in order; note at each step what differs from what is written. Steps 1 to 7 try what is on `main`; steps 8 to 11 are the trials the proposed ADR [mission-key-reaches-an-agent-through-its-own-secret-store](../decisions/mission-key-reaches-an-agent-through-its-own-secret-store.md) waits for, with stand-ins since none of it is built.
+  1. **Port in use.** Before opening the app, hold 3100: `python3 -m http.server 3100 --bind 127.0.0.1`. Start over (Debug, below), open Vaubaan: the window opens on another port, `cat ~/Library/Application\ Support/com.vaubaan.desktop/port` says which (3101 expected). Stop the python server, quit and reopen: the app keeps the port of its last start. Use that port wherever 3100 is written below.
+  2. **Setup.** Two screens: download the key (it lands in `~/Downloads`, shown in the Finder), then an email and a password. You land on the home, signed in, with no second factor asked.
+  3. **Account.** "Connect an account", GitHub, paste a fine-grained token and name one repository. You land on **New mission**, not on the account's page: a "Connected" notice, the box "A mission to start with", the name `GitHub · <account>`, every macro-action ticked. In the summary bar, what reads runs freely and what writes asks you.
+  4. **Mission.** Click **Create mission** without changing anything. The key shows once, with the kit; under it, "Waiting for your agent's first call…".
+  5. **Instructions when the agent connects.** In a terminal: `export VAUBAAN_MISSION_TOKEN='<the key>'`, then `claude mcp add --transport http vaubaan http://localhost:3100/mcp --header "Authorization: Bearer $VAUBAAN_MISSION_TOKEN"`, then `claude`. Paste nothing into its instructions. Within a few seconds the page says "Your agent is connected". Ask Claude Code: "What is your Vaubaan mission, and what do you do when a call is refused?" It names the mission and the account, and says to hand the URL to you and wait.
+  6. **A refused first call.** Ask it to create a release on the repository (the starter mission leaves out what cannot be repaired, or asks first). The page changes with no reload: "Your agent's first call waits for your yes" with a link to what waits for you, or "arrived, and was refused" with the reason in one sentence. It must never say only that the call arrived. Answer the request if there is one, and check Claude Code replays the call.
+  7. **An allowed call.** Create a second mission from the same account, connect it the same way under another name, and ask first for the repository's branches: the page says "Your agent made its first call" and names the tool; the link opens the mission's activity, where the call is.
+  8. **Where Claude Code keeps a header** (beside the ADR's list: what the plain `--header` way costs). `grep -c "$VAUBAAN_MISSION_TOKEN" ~/.claude.json`: 0 means the key is not in clear there, anything else that it is. Note which.
+  9. **A helper that reads the Keychain** (the ADR's third trial). A stand-in for the app's helper, a script that prints the header from a Keychain item:
+
+     ```sh
+     security add-generic-password -s com.vaubaan.trial -a mission-key -w "$VAUBAAN_MISSION_TOKEN"
+     cat > ~/vaubaan-trial-helper.sh <<'SH'
+     #!/bin/sh
+     key=$(security find-generic-password -s com.vaubaan.trial -a mission-key -w)
+     printf '{"Authorization":"Bearer %s"}' "$key"
+     SH
+     chmod +x ~/vaubaan-trial-helper.sh
+     claude mcp remove vaubaan
+     claude mcp add-json vaubaan-helper "{\"type\":\"http\",\"url\":\"http://localhost:3100/mcp\",\"headersHelper\":\"$HOME/vaubaan-trial-helper.sh\"}"
+     ```
+
+     Open a new terminal without the variable and run `claude`: it lists the mission's tools. Note whether macOS asked for a password, how long Claude Code took to connect (a helper has ten seconds), and that `grep -c vbn_live ~/.claude.json` answers 0. Clean up: `security delete-generic-password -s com.vaubaan.trial -a mission-key`, `rm ~/vaubaan-trial-helper.sh`, `claude mcp remove vaubaan-helper`.
+
+  10. **An unsigned `.mcpb` and its `sensitive` field** (the ADR's first and second trials). Build a trial bundle: in an empty folder, `npx @anthropic-ai/mcpb init` and declare one `user_config` field `mission_key` with `"sensitive": true`, a server that runs `npx -y mcp-remote http://localhost:3100/mcp --allow-http --header "Authorization: Bearer ${user_config.mission_key}"`, then `npx @anthropic-ai/mcpb pack` without signing. This manifest is a sketch nobody ran: `mcpb validate` says what to fix. Double-click the `.mcpb`. Note: whether Claude Desktop installs it and the exact words of any warning; whether it asks for the key; then, after pasting it, whether Keychain Access shows an entry for it and `grep -rl vbn_live ~/Library/Application\ Support/Claude` finds no file.
+  11. **Claude Desktop and the instructions** (the ADR's fourth trial). In Claude Desktop, with the extension on, ask the question of step 5. Note whether it knows the mission with nothing pasted. Then try Settings › Connectors › add a custom connector on `http://localhost:3100/mcp`: the documentation says it cannot reach your computer; note what it answers.
+  12. **Hand back**: the notes of each step, the port of step 1, and `~/Library/Application Support/com.vaubaan.desktop/gateway.log` if anything stopped.
 - **Try a build**: download the artifact `vaubaan-desktop-<target>` of a run; an unsigned app opens with right-click › Open.
 
 ## Debug
