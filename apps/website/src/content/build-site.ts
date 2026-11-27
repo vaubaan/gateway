@@ -255,7 +255,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
       group: 'trust',
       title: 'Privacy',
       description:
-        "What the project's own services do with personal data: this site, the telemetry collector, and Vaubaan's OAuth broker with your Google data.",
+        "What the project's own services do with personal data: this site, the telemetry collector, Vaubaan's OAuth broker and the app on your computer, with your Google data.",
       markdown: md('/privacy'),
       lastModified: lastModified(['apps/website/src/content/privacy.ts']),
     },

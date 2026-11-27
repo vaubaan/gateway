@@ -1,6 +1,7 @@
 /**
  * The privacy page (website spec §2.5 bis): what the project's own services do
- * with personal data — the site, the collector, and Vaubaan's OAuth broker —
+ * with personal data — the site, the collector, Vaubaan's OAuth broker and the
+ * desktop app's installed OAuth clients —
  * with the statements Google requires of an application it verifies (its
  * consent screen links here). What the broker keeps is the broker spec §3;
  * keep this page in step with it.
@@ -16,7 +17,7 @@ export const PRIVACY_PUBLISHER = 'DALAE, 200 rue de la Croix Nivert, 75015 Paris
 export function privacyMarkdown(): string {
   return `# Privacy
 
-Vaubaan collects nothing about you on this site, and the project never receives what your agents do with your accounts. This page says what each of the project's own services handles: this site, the telemetry collector and Vaubaan's OAuth broker. A Vaubaan instance is run by you or your company: what it stores belongs to whoever runs it, not to the project.
+Vaubaan collects nothing about you on this site, and the project never receives what your agents do with your accounts. This page says what each of the project's own services handles: this site, the telemetry collector, Vaubaan's OAuth broker and the Vaubaan app on your computer. A Vaubaan instance is run by you or your company: what it stores belongs to whoever runs it, not to the project.
 
 ## This site
 
@@ -49,6 +50,22 @@ Some services, Google Calendar among them, let an application sign in only throu
 **Removing access.** Disconnect the account in your instance: it asks the broker to revoke the token at Google and erases its copy. You can also remove Vaubaan from your Google account at any time (Google Account, Security, Third-party apps); your instance then shows the account as expired.
 
 **Limited Use.** ${LIMITED_USE_SENTENCE} Your Google data is used only to provide the calendar features you see in your instance; it is never sold, never used for advertising, never read by people at Vaubaan, and never used to train AI models.
+
+## The Vaubaan app on your computer and your Google data
+
+The desktop app, and an instance started with \`VAUBAAN_LOCAL=true\`, run on your own computer. They sign you in with Google, Microsoft or GitHub and connect your Google and Microsoft services through Vaubaan's own OAuth clients for installed applications, with no broker: your browser goes to the provider's consent screen and comes back to your computer (\`127.0.0.1\`), which exchanges the answer for tokens itself.
+
+**What the app asks Google for**, each only when you use the feature that needs it:
+
+- \`openid\` and \`email\`: to sign you in to the app with your Google account.
+- \`calendar.calendarlist.readonly\` and \`calendar.events\`: when you connect Google Calendar, to list your calendars, read your events and when you are busy, and to create, move or cancel the events a mission allows, after your approval when the mission asks for it.
+- \`drive\`: when you connect Google Drive, to list, search and read your files and to upload files and create folders where a mission allows; the app never shares or deletes a file.
+
+**Where your Google data goes.** From Google to **your computer** only. Your tokens are stored on your computer, encrypted with a key kept in your system's credential store; they never reach the Vaubaan project, and neither do your account, your email address, your events or your files. The app sends the project nothing about what you do with it. The same holds for your Microsoft and GitHub accounts.
+
+**Removing access.** Disconnect the account in the app: it revokes the token at Google and erases its copy. You can also remove Vaubaan from your Google account at any time (Google Account, Security, Third-party apps).
+
+**Limited Use.** ${LIMITED_USE_SENTENCE} Your Google data is used only to provide the features you see in the app; it is never sold, never used for advertising, never read by people at Vaubaan, and never used to train AI models.
 
 ## Who publishes this site
 
