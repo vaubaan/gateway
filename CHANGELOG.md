@@ -11,6 +11,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **The macOS app updates itself, when you accept** (ADR
+  desktop-app-updated-by-the-tauri-updater-from-the-github-release). Once Vaubaan answers, then
+  every six hours, the app reads `https://vaubaan.com/desktop/latest.json`; a newer release is
+  offered in a dialog with its notes, marked when it fixes a security issue. **Install and
+  relaunch** downloads it, checks its signature, stops the instance, replaces the app and opens it
+  again on the same data, key and accounts; a failed replacement starts the running version again.
+  **Later** downloads nothing. The release attaches `Vaubaan-<version>-<arm64|x64>.app.tar.gz`,
+  their signatures and `latest.json` beside the `.dmg` files, when the updater key is set. The
+  app's bundle version is now the whole version (`2.0.0-alpha.32`, not `2.0.0`). The first version
+  with the updater is installed by hand; the next ones are offered.
+
 - **GitHub (plugin 5.5.0): an agent reads the review of its pull request and answers it.** Until
   now it could open a pull request and comment on it, never read what the reviewers wrote. Five
   tools:

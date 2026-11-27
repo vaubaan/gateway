@@ -9,7 +9,9 @@
 //!    gateway prints while its setup is open, else the home page;
 //! 4. sends every address that is not the gateway's to the default browser (a
 //!    service's sign-in page, a link to the docs);
-//! 5. stops the server when the app quits.
+//! 5. stops the server when the app quits;
+//! 6. offers a new release once the gateway answers, and installs it only when the
+//!    person accepts (`update.rs`).
 //!
 //! The gateway is the same build as the image: no code path of its own here.
 
@@ -23,6 +25,8 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+
+mod update;
 
 use base64::Engine;
 use tauri::webview::DownloadEvent;
@@ -45,6 +49,8 @@ struct Gateway {
 
 fn main() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("Vaubaan")
@@ -100,9 +106,26 @@ fn main() {
             let node = resource_dir.join("runtime").join("node");
             let gateway = Arc::new(Gateway { child: Mutex::new(None) });
             app.manage(gateway.clone());
+            let handle = app.handle().clone();
             thread::spawn(move || {
                 if let Err(problem) = start(&gateway, &window, &data_dir, &resources, &node) {
                     show_problem(&window, &problem);
+                    return;
+                }
+                if update::enabled(&handle) {
+                    let hooks = update::Hooks {
+                        stop: Box::new({
+                            let gateway = gateway.clone();
+                            move || stop(&gateway)
+                        }),
+                        start: Box::new({
+                            let (gateway, window) = (gateway.clone(), window.clone());
+                            let (data_dir, resources, node) = (data_dir.clone(), resources.clone(), node.clone());
+                            move || start(&gateway, &window, &data_dir, &resources, &node)
+                        }),
+                        log: data_dir.join(LOG_FILE),
+                    };
+                    update::watch(handle, window, hooks);
                 }
             });
             Ok(())

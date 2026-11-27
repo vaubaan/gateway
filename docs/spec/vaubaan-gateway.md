@@ -1217,6 +1217,11 @@ passed sign-in provider test names them), switches a tested sign-in provider on,
 an explicit step, allowed once the key was handed over and an administrator has a way in, that
 revokes the bootstrap token.
 
+The desktop app tells the person when a release is out, with its notes and marked when it fixes a
+security issue, and installs it only when they accept: the instance stops, the app is replaced and
+opens again on the same store, key and accounts. An update that fails leaves the running version in
+place; nothing is downloaded without the person's yes.
+
 ### 7.2 Connect an account
 
 A user picks a service and lands on the one place that authorizes it

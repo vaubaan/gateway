@@ -267,6 +267,10 @@ served to anyone, cacheable, and reading it tells the site nothing about the ins
 instance compares on its side. The trust center names it among what leaves an instance: a
 request, no payload.
 
+`/desktop/latest.json` sends the desktop app to the update manifest of the released version, attached
+to its GitHub release: a temporary redirect, moved by each release, with nothing served by the site
+itself.
+
 ### 2.5 Trust center — `/trust`
 
 Each claim in the reader's words, linked to the document or code behind it: the trust proposition

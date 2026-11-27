@@ -18,11 +18,21 @@
     "category": "DeveloperTool",
     "copyright": "Copyright the Vaubaan authors. Apache-2.0.",
     "icon": ["icons/icon.png", "icons/icon.icns"],
-    "resources": { "resources/gateway/": "gateway/", "resources/runtime/": "runtime/" },
+    "resources": {
+      "resources/gateway/": "gateway/",
+      "resources/runtime/": "runtime/"
+    },
     "macOS": {
       "minimumSystemVersion": "12.0",
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://vaubaan.com/desktop/latest.json"],
+      "requireSignedVersion": true
     }
   }
 }

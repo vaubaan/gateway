@@ -7,10 +7,15 @@ name: desktop
 #   push to main touching apps/desktop or this file, or a run by hand   one .dmg per
 #   architecture, Vaubaan-<version>-<arm64|x64>.dmg, uploaded as an artifact.
 #   called by release.yml at a tag v2.x.y   the same; release.yml attaches the .dmg
-#   files to the GitHub release when they are signed (output `signed`).
+#   files to the GitHub release when they are signed (output `signed`), and the update
+#   archives with their latest.json when they are signed too (output `updatable`).
 #   With the Apple secrets set, every Mach-O is signed under the hardened runtime, and
 #   the app and the disk image around it are notarized and stapled; without them the app is signed ad hoc (Gatekeeper warns), for
 #   testing only, and never attached to a release.
+#
+# With the updater key set, the app carries its public half and each run also produces
+# Vaubaan-<version>-<arm64|x64>.app.tar.gz and its .sig, the archive an installed app
+# downloads to update itself (ADR desktop-app-updated-by-the-tauri-updater-from-the-github-release).
 #
 # Before the upload, the built app is opened: it must answer /healthz on 127.0.0.1:3100,
 # and stop its server when it is quit as a person quits it.
@@ -22,6 +27,11 @@ name: desktop
 #   APPLE_API_ISSUER            App Store Connect API: issuer id
 #   APPLE_API_KEY               App Store Connect API: key id
 #   APPLE_API_PRIVATE_KEY       App Store Connect API: the .p8 file's content
+#
+# The updater key (docs/handbook/desktop-app.md, "Updater key"), all or none:
+#   TAURI_SIGNING_PRIVATE_KEY           secret: the private key file's content
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  secret: its password
+#   DESKTOP_UPDATER_PUBKEY              variable (Settings > Variables): the .pub file's content
 #
 # Actions are pinned by commit; the comment gives the version. Bump both together.
 
@@ -37,6 +47,9 @@ on:
       signed:
         description: "'true' when the .dmg files are signed and notarized"
         value: ${{ jobs.macos.outputs.signed }}
+      updatable:
+        description: "'true' when the update archives and their signatures were built"
+        value: ${{ jobs.macos.outputs.updatable }}
     secrets:
       APPLE_CERTIFICATE: { required: false }
       APPLE_CERTIFICATE_PASSWORD: { required: false }
@@ -44,6 +57,8 @@ on:
       APPLE_API_ISSUER: { required: false }
       APPLE_API_KEY: { required: false }
       APPLE_API_PRIVATE_KEY: { required: false }
+      TAURI_SIGNING_PRIVATE_KEY: { required: false }
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: { required: false }
 
 # Called by release.yml, the run takes the caller's group: a release is never cancelled.
 concurrency:
@@ -71,6 +86,7 @@ jobs:
       contents: read
     outputs:
       signed: ${{ steps.signing.outputs.signed }}
+      updatable: ${{ steps.updater.outputs.updatable }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,8 +94,10 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # The gateway's version (root package.json) names the .dmg; the bundle takes its
-      # numeric core (2.0.0 for 2.0.0-alpha.31): macOS versions are numbers only.
+      # The gateway's version (root package.json) names the .dmg and is the bundle's
+      # version, pre-release included: the updater compares it with the manifest's, and the
+      # update's signature carries it. CFBundleVersion takes the numeric core (2.0.0 for
+      # 2.0.0-alpha.31), the number macOS expects there.
       - name: Version
         id: version
         run: |
@@ -89,6 +107,7 @@ jobs:
             echo "version=$version"
             echo "core=${version%%-*}"
             echo "file=Vaubaan-$version-$arch.dmg"
+            echo "archive=Vaubaan-$version-$arch.app.tar.gz"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build the gateway
@@ -153,6 +172,21 @@ jobs:
             --entitlements apps/desktop/src-tauri/entitlements.plist \
             --sign "$APPLE_SIGNING_IDENTITY" apps/desktop/src-tauri/resources/runtime/node
 
+      # The updater key: the app carries its public half and the bundler signs the update
+      # archive with the private one. Without it the app never looks for updates.
+      - name: Updater key
+        id: updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PUBKEY: ${{ vars.DESKTOP_UPDATER_PUBKEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ] || [ -z "$PUBKEY" ]; then
+            echo "updatable=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=No updater key::TAURI_SIGNING_PRIVATE_KEY or the variable DESKTOP_UPDATER_PUBKEY is not set: this app will never look for updates."
+            exit 0
+          fi
+          echo "updatable=true" >> "$GITHUB_OUTPUT"
+
       - name: Build the app
         working-directory: apps/desktop/src-tauri
         env:
@@ -161,8 +195,14 @@ jobs:
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           API_KEY: ${{ secrets.APPLE_API_KEY }}
           API_KEY_PATH: ${{ steps.signing.outputs.api_key_path }}
+          VERSION: ${{ steps.version.outputs.version }}
           CORE_VERSION: ${{ steps.version.outputs.core }}
           DMG: ${{ steps.version.outputs.file }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+          UPDATABLE: ${{ steps.updater.outputs.updatable }}
+          PUBKEY: ${{ vars.DESKTOP_UPDATER_PUBKEY }}
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPDATER_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Signed and notarized with the secrets; otherwise signed ad hoc ("-"), which
           # Apple silicon requires to run any binary. The bundler notarizes only when it
@@ -173,10 +213,20 @@ jobs:
           else
             export APPLE_SIGNING_IDENTITY="-"
           fi
-          npx --yes "$TAURI_CLI" build --target ${{ matrix.target }} --bundles app,dmg \
-            --config "{\"version\":\"$CORE_VERSION\"}"
+          config="$(jq -n --arg version "$VERSION" --arg core "$CORE_VERSION" \
+            '{version: $version, bundle: {macOS: {bundleVersion: $core}}}')"
+          if [ "$UPDATABLE" = "true" ]; then
+            export TAURI_SIGNING_PRIVATE_KEY="$UPDATER_KEY" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$UPDATER_KEY_PASSWORD"
+            config="$(jq --arg pubkey "$PUBKEY" \
+              '.bundle.createUpdaterArtifacts = true | .plugins.updater.pubkey = $pubkey' <<<"$config")"
+          fi
+          npx --yes "$TAURI_CLI" build --target ${{ matrix.target }} --bundles app,dmg --config "$config"
           mkdir -p "$RUNNER_TEMP/dist"
           cp target/${{ matrix.target }}/release/bundle/dmg/*.dmg "$RUNNER_TEMP/dist/$DMG"
+          if [ "$UPDATABLE" = "true" ]; then
+            cp target/${{ matrix.target }}/release/bundle/macos/Vaubaan.app.tar.gz "$RUNNER_TEMP/dist/$ARCHIVE"
+            cp target/${{ matrix.target }}/release/bundle/macos/Vaubaan.app.tar.gz.sig "$RUNNER_TEMP/dist/$ARCHIVE.sig"
+          fi
 
       # The bundler notarizes the app inside, not the disk image around it: macOS checks
       # a downloaded .dmg when it is opened, so the image is notarized and stapled too.
@@ -220,6 +270,6 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vaubaan-desktop-${{ matrix.target }}
-          path: ${{ runner.temp }}/dist/${{ steps.version.outputs.file }}
+          path: ${{ runner.temp }}/dist/
           if-no-files-found: error
           retention-days: 14

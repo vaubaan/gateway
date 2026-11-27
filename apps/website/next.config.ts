@@ -3,6 +3,7 @@ import { createMDX } from 'fumadocs-mdx/next';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { desktopUpdateRedirect } from './src/site/desktop-update';
 import { SITE_REDIRECTS } from './src/site/redirects';
 
 /**
@@ -18,6 +19,19 @@ function workspaceDependencies(): string[] {
   return Object.keys(deps ?? {}).filter((name) => name.startsWith('@vaubaan/'));
 }
 
+/** The released gateway version, from the file the release preparation writes. */
+function releasedGateway(): string {
+  const parsed: unknown = JSON.parse(
+    readFileSync(resolve(__dirname, 'src/content/releases.json'), 'utf8'),
+  );
+  const gateway =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { gateway?: unknown }).gateway
+      : undefined;
+  if (typeof gateway !== 'string') throw new Error('src/content/releases.json has no gateway');
+  return gateway;
+}
+
 const nextConfig: NextConfig = {
   // `npm run type-check` has checked this app when VAUBAAN_BUILD_TYPECHECKED=1
   // (`npm run ci`, the CI jobs that build): the build skips its second tsc pass.
@@ -25,8 +39,9 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: process.env.VAUBAAN_BUILD_TYPECHECKED === '1' },
   transpilePackages: workspaceDependencies(),
   poweredByHeader: false,
-  // The former connect pages answer on the plugin page (src/site/redirects.ts).
-  redirects: async () => [...SITE_REDIRECTS],
+  // The former connect pages answer on the plugin page (src/site/redirects.ts); the
+  // desktop app's update manifest is the released version's (src/site/desktop-update.ts).
+  redirects: async () => [...SITE_REDIRECTS, desktopUpdateRedirect(releasedGateway())],
 
   // The site sets no cookie and loads nothing from a third party (website spec §1.1).
   async headers() {
