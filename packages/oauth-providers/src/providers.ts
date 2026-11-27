@@ -35,8 +35,10 @@ export type ProviderTable = ReadonlyMap<string, ProviderDefinition>;
  * Google: OAuth 2.0 for Web Server Applications. Offline access so the code
  * exchange answers a refresh token, and consent each time so it always does.
  * Scopes: the two the google-calendar plugin asks for (ADR
- * google-calendar-through-an-oauth-broker), both sensitive, none restricted;
- * `openid` and `email` so the answer can name the account.
+ * google-calendar-through-an-oauth-broker), both sensitive; `drive`, the
+ * google-drive plugin's, restricted (a client serves it only after Google's
+ * review, or shows an unverified app); `openid` and `email` so the answer
+ * can name the account.
  */
 export const GOOGLE: ProviderDefinition = {
   id: 'google',
@@ -48,6 +50,7 @@ export const GOOGLE: ProviderDefinition = {
     'email',
     'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
     'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/drive',
   ]),
   authorizeParams: { access_type: 'offline', prompt: 'consent' },
 };
@@ -59,7 +62,8 @@ export const GOOGLE: ProviderDefinition = {
  * scope that makes the code exchange answer a refresh token; `response_mode`
  * `query` brings the code back as a query parameter of the redirect.
  * Scopes: the delegated Graph permissions the outlook plugin asks for (ADR
- * outlook-through-the-oauth-broker-microsoft-provider), plus `openid`,
+ * outlook-through-the-oauth-broker-microsoft-provider) and the onedrive
+ * plugin's `Files.ReadWrite`, plus `openid`,
  * `email` and `profile` so the ID token can name the account. Microsoft
  * offers no endpoint that revokes one refresh token: no `revokeEndpoint`.
  */
@@ -76,6 +80,7 @@ export const MICROSOFT: ProviderDefinition = {
     'Mail.ReadWrite',
     'Mail.Send',
     'Calendars.ReadWrite',
+    'Files.ReadWrite',
   ]),
   authorizeParams: { response_mode: 'query' },
 };

@@ -34,15 +34,22 @@ describe('the OAuth providers a broker serves', () => {
     }
   });
 
-  it('allow the narrow scopes only, never a whole-account grant', () => {
+  it('allow the scopes the plugins need, never a whole-account or organisation-wide grant', () => {
     expect(GOOGLE.allowedScopes).not.toContain('https://www.googleapis.com/auth/calendar');
+    // `drive` is the google-drive plugin's (restricted at Google; approved 2026-11-27, ADR
+    // local-instance-carries-installed-oauth-clients): the person's own files, no admin scope.
     expect([...GOOGLE.allowedScopes].filter((s) => s.startsWith('https://'))).toEqual([
       'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
       'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/drive',
     ]);
     for (const scope of MICROSOFT.allowedScopes) {
-      expect(scope, scope).not.toMatch(/\.All$|^Directory\.|^Files\./);
+      expect(scope, scope).not.toMatch(/\.All$|^Directory\./);
     }
+    // The onedrive plugin's: the signed-in person's files only, never `Files.ReadWrite.All`.
+    expect([...MICROSOFT.allowedScopes].filter((s) => s.startsWith('Files.'))).toEqual([
+      'Files.ReadWrite',
+    ]);
   });
 
   it('ask for a refresh token the way each provider answers one', () => {

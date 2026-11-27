@@ -126,14 +126,16 @@ more: `broker: { provider, scopes }`, its scopes checked against the same provid
 - Per enrolled instance: base URL, key, the recorded return URLs (one per plugin using the broker).
 - For `google`: a Google Cloud project with the Calendar API enabled; a **Web application** OAuth client whose one redirect
   URI is the broker's callback; an external consent screen with the plugin's scopes and Google's
-  app verification for sensitive scopes (no CASA: restricted scopes only).
+  app verification for sensitive scopes. The table also admits `drive` (Google Drive), a
+  restricted scope: a client serves it only after Google's review with a CASA assessment, and shows
+  an unverified app until then.
 - For `microsoft`: an Entra app registration, supported account types "Accounts in any
   organizational directory and personal Microsoft accounts", platform **Web**, one redirect URI
   `https://<public host>/oauth/callback/microsoft`; a client secret, pasted into
   `OAUTH_BROKER_SECRET_MICROSOFT_CLIENT_SECRET` (unattested) or stored in Secret Manager as
   `microsoft-client-secret` (enclave); the delegated Microsoft Graph permissions `User.Read`,
-  `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite` (with `openid`, `email`, `profile`,
-  `offline_access`); the publisher domain `vaubaan.com`, verified by Microsoft through `https://vaubaan.com/.well-known/microsoft-identity-association.json`, which the site answers from `MICROSOFT_IDENTITY_APP_IDS` ([website](website.md)); publisher verification, so people of other tenants may consent. A tenant whose
+  `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, and `Files.ReadWrite` for OneDrive (with
+  `openid`, `email`, `profile`, `offline_access`); the publisher domain `vaubaan.com`, verified by Microsoft through `https://vaubaan.com/.well-known/microsoft-identity-association.json`, which the site answers from `MICROSOFT_IDENTITY_APP_IDS` ([website](website.md)); publisher verification, so people of other tenants may consent. A tenant whose
   consent policy blocks user consent needs one administrator's consent for the app. Microsoft has
   no endpoint that revokes one refresh token: `/revoke` answers 204 and sends nothing (logged
   `reason: no_revoke_endpoint`); the gateway erases its copy and the person removes the app from

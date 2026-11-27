@@ -175,6 +175,7 @@ describe('the microsoft provider', () => {
     expect([...MICROSOFT.allowedScopes].sort()).toEqual(
       [
         'Calendars.ReadWrite',
+        'Files.ReadWrite',
         'Mail.ReadWrite',
         'Mail.Send',
         'User.Read',
