@@ -109,6 +109,12 @@ export interface ConnectableService {
    * takes no broker or none is configured.
    */
   readonly brokerAttested: boolean | null;
+  /**
+   * The service's client is Vaubaan's installed-app client on this computer (local mode;
+   * ADR local-instance-carries-installed-oauth-clients): its consent opens in the default
+   * browser of the desktop app, and the page finishes the connection by itself.
+   */
+  readonly viaInstalledClient: boolean;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** The shapes the key comes in, one chosen at connect (`api-key`); empty when it has one. */
@@ -211,7 +217,12 @@ export interface AccountView {
    * oauth-broker-stateless-in-an-attested-enclave D4). `null` for any other
    * account, or when the broker is no longer configured (`attested` unknown).
    */
-  readonly oauth_broker: { readonly name: string; readonly attested: boolean | null } | null;
+  readonly oauth_broker: {
+    readonly name: string;
+    readonly attested: boolean | null;
+    /** Vaubaan's installed-app client on this computer, not a broker (local mode). */
+    readonly installed: boolean;
+  } | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
   readonly token_expires_at: string | null;
   /**

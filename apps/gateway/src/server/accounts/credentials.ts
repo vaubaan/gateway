@@ -382,8 +382,11 @@ export class CredentialBroker {
     const current = await this.load(accountId);
     const { plugin } = current;
     let next: CredentialSecret;
+    // A provider that rotates refresh tokens (Microsoft) hands a new one back with the
+    // access token: the grant is sealed with it, the former one no longer works.
+    const rotated: { refreshToken?: string } = {};
     try {
-      next = await this.obtain(current);
+      next = await this.obtain(current, rotated);
     } catch (err) {
       // Only a rejection by the service ends the account; an unreachable service,
       // a missing app configuration or a bug leaves its status alone for the next attempt.
@@ -421,7 +424,12 @@ export class CredentialBroker {
     const expiresAt = next.kind === 'oauth2' ? next.expiresAt : null;
     const written = await this.deps.accounts.refreshCredential(
       accountId,
-      serializeSecret(next, current.brokerGrant),
+      serializeSecret(
+        next,
+        current.brokerGrant && rotated.refreshToken
+          ? { ...current.brokerGrant, refreshToken: rotated.refreshToken }
+          : current.brokerGrant,
+      ),
       expiresAt,
     );
     if (!written) {
@@ -441,12 +449,16 @@ export class CredentialBroker {
     plugin: ServicePlugin,
     credential: OAuth2Secret,
     grant: BrokerGrant | null,
+    rotated: { refreshToken?: string },
   ): Promise<OAuth2Secret> {
-    return refreshAtBroker(this.deps.brokers, plugin, credential, grant);
+    return refreshAtBroker(this.deps.brokers, plugin, credential, grant, rotated);
   }
 
   /** A fresh secret, or `UpstreamAuthError` (rejected) / `ServiceUnreachableError` (transient). */
-  private async obtain(current: ResolvedCredential): Promise<CredentialSecret> {
+  private async obtain(
+    current: ResolvedCredential,
+    rotated: { refreshToken?: string },
+  ): Promise<CredentialSecret> {
     const { plugin, credential } = current;
     if (plugin.refresh && ownRefreshApplies(plugin, credential)) {
       const refreshed = await plugin.refresh(
@@ -459,7 +471,7 @@ export class CredentialBroker {
     }
     const spec = plugin.credential;
     if (spec.kind === 'oauth2' && isBrokeredSpec(spec) && credential.kind === 'oauth2') {
-      return this.obtainFromBroker(plugin, credential, current.brokerGrant);
+      return this.obtainFromBroker(plugin, credential, current.brokerGrant, rotated);
     }
     if (
       spec.kind !== 'oauth2' ||
@@ -510,6 +522,7 @@ async function refreshAtBroker(
   plugin: ServicePlugin,
   credential: OAuth2Secret,
   grant: BrokerGrant | null,
+  rotated: { refreshToken?: string },
 ): Promise<OAuth2Secret> {
   if (grant === null) {
     throw new UpstreamAuthError(
@@ -530,6 +543,7 @@ async function refreshAtBroker(
   }
   try {
     const fresh = await broker.token(spec.broker.provider, grant.refreshToken);
+    if (fresh.refreshToken) rotated.refreshToken = fresh.refreshToken;
     return {
       kind: 'oauth2',
       accessToken: fresh.accessToken,

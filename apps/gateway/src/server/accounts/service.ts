@@ -23,6 +23,7 @@
  * plugin at connect time and merged by `syncDiscoveredResources`, which
  * never overwrites an owner edit and never deletes a row.
  */
+import { INSTALLED_BROKER } from './installed-broker';
 import { isUpstreamAuthError } from '@vaubaan/shared';
 import {
   type ApiKeyCredentialSpec,
@@ -72,11 +73,7 @@ import {
   type OAuth2Client,
 } from './oauth2';
 import { OAuth2ClientMissing } from './oauth2-clients';
-import {
-  brokerNotConfiguredReason,
-  OAuthBrokerError,
-  type OAuthBrokerClient,
-} from './oauth-broker';
+import { brokerNotConfiguredReason, OAuthBrokerError, type BrokerSource } from './oauth-broker';
 import type { BrokerGrant } from './credential-codec';
 import {
   accountCredentialKind,
@@ -311,6 +308,10 @@ export class AccountService {
         spec.kind === 'oauth2' && isBrokeredSpec(spec)
           ? (this.deps.brokers.forProvider(spec.broker.provider)?.attested ?? null)
           : null,
+      viaInstalledClient:
+        spec.kind === 'oauth2' &&
+        isBrokeredSpec(spec) &&
+        this.deps.brokers.forProvider(spec.broker.provider)?.name === INSTALLED_BROKER,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
       alternatives:
         spec.kind === 'api-key'
@@ -479,6 +480,7 @@ export class AccountService {
         returnUrl: pending.redirectUri,
         state,
         verifier: pending.codeVerifier ?? '',
+        userId: flow.actor.user.id,
       });
       return { kind: 'redirect', url: url.href };
     } catch (err) {
@@ -487,7 +489,7 @@ export class AccountService {
   }
 
   /** The broker that serves a brokered plugin, or `broker-not-configured`. */
-  private brokerOrThrow(plugin: ServicePlugin, spec: OAuth2BrokeredSpec): OAuthBrokerClient {
+  private brokerOrThrow(plugin: ServicePlugin, spec: OAuth2BrokeredSpec): BrokerSource {
     const broker = this.deps.brokers.forProvider(spec.broker.provider);
     if (!broker) {
       throw new ConnectError(
@@ -1427,7 +1429,12 @@ export class AccountService {
   private oauthBrokerOf(metadata: Record<string, unknown>): AccountView['oauth_broker'] {
     const name = metadata.oauth_broker;
     if (typeof name !== 'string') return null;
-    return { name, attested: this.deps.brokers.byName(name)?.attested ?? null };
+    const source = this.deps.brokers.byName(name);
+    return {
+      name,
+      attested: source?.attested ?? null,
+      installed: name === INSTALLED_BROKER,
+    };
   }
 
   private async ownerLabel(account: AccountRecord): Promise<string> {

@@ -2,6 +2,7 @@
 title: OAuth broker contract — the calls between the gateway and a broker, and the attestation
 tracks:
   - apps/gateway/src/server/accounts/oauth-broker.ts
+  - apps/gateway/src/server/accounts/installed-broker.ts
   - apps/gateway/src/server/accounts/broker-channel.ts
   - apps/gateway/src/server/accounts/broker-attestation.ts
   - apps/gateway/src/server/accounts/attestation-gcp.ts
@@ -9,7 +10,7 @@ tracks:
   - apps/gateway/tests/support/accounts/fake-oauth-broker.ts
   - apps/gateway/src/server/config/oauth-brokers.ts
   - packages/oauth-providers/src/providers.ts
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-27
 ---
 
 # OAuth broker contract — handbook
@@ -107,6 +108,18 @@ JSON `{ "error": "<[a-z_]{1,40}>", "message"? }`; the message is never shown or 
 
 - **A broker failure is never an expiry**: only `invalid_grant` on `/token` ends an account.
   Once the access token expires, provider calls fail until the broker is back.
+
+## Vaubaan's installed-app clients speak the same contract
+
+On a local instance, a provider no configured broker serves is served by Vaubaan's installed-app
+client of that provider (`accounts/installed-broker.ts`; ADR
+[local-instance-carries-installed-oauth-clients](../decisions/local-instance-carries-installed-oauth-clients.md)):
+the same `startFlow`, `redeem`, `token`, `revoke`, run in the instance against the provider, under the
+broker name `@installed` (no configured broker can take it). The flow comes back on
+`http://127.0.0.1:<port>/oauth/loopback`, its code waits under a one-time grant, and the code is
+exchanged at redeem with the pending flow's verifier. `token` may hand back a rotated refresh token
+(Microsoft): `CredentialBroker` seals it in place of the former one. A plugin declares nothing
+more: `broker: { provider, scopes }`, its scopes checked against the same provider table.
 
 ## Outside the repo — what a broker operator provides
 

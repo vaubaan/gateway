@@ -34,6 +34,7 @@ import {
   challengeOf,
   OAuthBrokerClient,
   OAuthBrokerError,
+  type BrokerSource,
   type OAuthBrokerIo,
 } from './oauth-broker';
 import { AttestedChannel, FetchChannel, MAX_ANSWER_BYTES } from './broker-channel';
@@ -185,7 +186,7 @@ describe('a plugin whose client is an OAuth broker', () => {
     expect(JSON.stringify(seenByPlugin[0])).not.toContain('brokerGrant');
     const view = (await h.service.listFor(await h.actor('alice@example.com')))[0];
     expect(view?.token_account).toBe('alice@acme.example');
-    expect(view?.oauth_broker).toEqual({ name: 'main', attested: true });
+    expect(view?.oauth_broker).toEqual({ name: 'main', attested: true, installed: false });
   });
 
   it('checks the state as for any flow: replayed or opened by another user, it is refused', async () => {
@@ -286,7 +287,7 @@ describe('the contract’s refusals, at the client', () => {
   }
 
   /** The client of the configured broker, as the gateway holds it. */
-  function mainClient(h: AccountsHarness): OAuthBrokerClient {
+  function mainClient(h: AccountsHarness): BrokerSource {
     const client = h.brokers.byName('main');
     if (!client) throw new Error('no broker');
     return client;
@@ -541,6 +542,7 @@ describe('a broker declared attestation: none', () => {
     ).toEqual({
       name: 'main',
       attested: false,
+      installed: false,
     });
     expect(h.brokers.byName('main')?.admitted).toBeNull();
   });

@@ -50,6 +50,7 @@ import type { RateLimiter } from '../compose/ports';
 import type { ConnectFile } from '../plugins';
 import { VAUBAAN_SERVICE } from '../vaubaan/acts';
 import type { AccountRefresher } from './account-refresh';
+import type { InstalledClientBroker } from './installed-broker';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
@@ -63,6 +64,12 @@ import {
 } from './service';
 
 export const NEW_ACCOUNT_PATH = `${ACCOUNTS_PATH}/new`;
+/** Where the loopback sends the browser after a connect through Vaubaan's installed client. */
+export const LOOPBACK_CONNECT_DONE_PATH = '/connections/loopback/done';
+/** What the window of a connect through Vaubaan's installed client polls. */
+export const LOOPBACK_CONNECT_STATUS_PATH = '/connections/loopback/status';
+/** The page that tells a browser to go back to Vaubaan (the sign-in's, shared). */
+const SIGNED_IN_ELSEWHERE_PAGE = '/login/elsewhere';
 /** The connect page of a service: where a person connects it. */
 export function connectPagePath(serviceId: string): string {
   return `${NEW_ACCOUNT_PATH}/${encodeURIComponent(serviceId)}`;
@@ -106,13 +113,37 @@ export interface AccountHandlerDeps {
   readonly reachOf: (actor: Actor) => Promise<ReadonlySet<string>>;
   /** A screenshot of a plugin's connect guide, or `null` (`readConnectFile` of `../plugins`). */
   readonly connectFile: (serviceId: string, file: string) => Promise<ConnectFile | null>;
+  /** Vaubaan's installed-app clients, in local mode (`installed-broker.ts`); `null` elsewhere. */
+  readonly installed?: InstalledClientBroker | null;
   /** Whether the person has created a mission, ever: until then, a new account leads to its starter mission. */
   readonly hasCreatedMission: (actor: Actor) => Promise<boolean>;
 }
 
 export interface AccountHandlers {
+  /**
+   * Starts a flow or submits a form. With the field `respond=json`, a redirect is answered
+   * `{ location }` instead: the page sends its window there itself (the desktop app opens
+   * a provider's page in the default browser and keeps the window).
+   */
   connect(request: Request, serviceId: string): Promise<Response>;
   callback(request: Request, serviceId: string): Promise<Response>;
+  /**
+   * `GET /oauth/loopback` when its `state` names a connect through Vaubaan's installed
+   * client (ADR local-instance-carries-installed-oauth-clients): keeps the provider's
+   * answer and sends the browser on to the public URL. `null` when the state is not a
+   * connect's (a sign-in's, handled by the auth module).
+   */
+  loopbackConnect(request: Request): Promise<Response | null>;
+  /**
+   * `GET /connections/loopback/done?state=`: the person's own browser goes on to the
+   * service's callback; any other browser is told to go back to Vaubaan.
+   */
+  loopbackConnectDone(request: Request): Promise<Response>;
+  /**
+   * `POST /connections/loopback/status`: the window that started a connect polls it,
+   * with the person's session: `pending`, `none`, or `done` with the callback to open.
+   */
+  loopbackConnectStatus(request: Request): Promise<Response>;
   discover(request: Request, accountId: string): Promise<Response>;
   revoke(request: Request, accountId: string): Promise<Response>;
   transfer(request: Request, accountId: string): Promise<Response>;
@@ -319,6 +350,11 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
       if (!form) return notAFormResponse();
       const reconnectId = stringField(form, 'account_id') || null;
       const typed = prefixedFields(form, FIELD_PREFIX);
+      const asJson = stringField(form, 'respond') === 'json';
+      const answer = async (response: Promise<Response>): Promise<Response> => {
+        const res = await response;
+        return asJson ? json(200, { location: res.headers.get('Location') ?? ACCOUNTS_PATH }) : res;
+      };
       try {
         const result = await deps.accounts.start(who.actor, serviceId, {
           displayName: stringField(form, 'name'),
@@ -327,11 +363,15 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
           fields: typed,
           alternative: stringField(form, ALTERNATIVE_FIELD) || null,
         });
-        if (result.kind === 'redirect') return redirect(result.url);
-        return await redirectWithNotice(
-          who.principal,
-          await landingOf(who.actor, result),
-          connectedNotice(result),
+        if (result.kind === 'redirect') {
+          return asJson ? json(200, { location: result.url }) : redirect(result.url);
+        }
+        return await answer(
+          redirectWithNotice(
+            who.principal,
+            await landingOf(who.actor, result),
+            connectedNotice(result),
+          ),
         );
       } catch (err) {
         const unknownService = err instanceof ConnectError && err.code === 'service-unknown';
@@ -350,22 +390,53 @@ export function createAccountHandlers(deps: AccountHandlerDeps): AccountHandlers
         // name and the non-secret values only — a key is never kept.
         const service = unknownService ? null : await deps.accounts.service(serviceId);
         const notice = failureNotice(err, 'Not connected');
-        return redirectWithNotice(
-          who.principal,
-          back,
-          service
-            ? {
-                ...notice,
-                form: echoOfForm(
-                  service,
-                  typed,
-                  stringField(form, 'name'),
-                  stringField(form, ALTERNATIVE_FIELD) || null,
-                ),
-              }
-            : notice,
+        return answer(
+          redirectWithNotice(
+            who.principal,
+            back,
+            service
+              ? {
+                  ...notice,
+                  form: echoOfForm(
+                    service,
+                    typed,
+                    stringField(form, 'name'),
+                    stringField(form, ALTERNATIVE_FIELD) || null,
+                  ),
+                }
+              : notice,
+          ),
         );
       }
+    },
+
+    async loopbackConnect(request) {
+      if (!deps.installed) return null;
+      const query = new URL(request.url).searchParams;
+      if (!(await deps.installed.owns(query.get('state')))) return null;
+      const outcome = await deps.installed.callback(query);
+      const done = new URL(LOOPBACK_CONNECT_DONE_PATH, deps.publicUrl);
+      if (outcome.kind === 'back') done.searchParams.set('state', outcome.state);
+      // On to the public URL, where the person's session is.
+      return redirect(done.href);
+    },
+
+    async loopbackConnectDone(request) {
+      const state = new URL(request.url).searchParams.get('state') ?? '';
+      const guard = await guardSession(request, deps, 'user');
+      if (guard.ok && deps.installed) {
+        const callback = await deps.installed.callbackUrlOf(state, guard.principal.user.id);
+        if (callback) return redirect(callback);
+      }
+      // The desktop app's default browser: the app's window finishes the connection.
+      return redirect(`${SIGNED_IN_ELSEWHERE_PAGE}?outcome=${state ? 'done' : 'expired'}`);
+    },
+
+    async loopbackConnectStatus(request) {
+      const who = await userOf(request);
+      if ('response' in who) return who.response;
+      if (!deps.installed) return json(200, { status: 'none' });
+      return json(200, await deps.installed.statusOf(who.actor.user.id));
     },
 
     async connectFile(request, serviceId, file) {

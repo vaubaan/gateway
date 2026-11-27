@@ -5,6 +5,8 @@
  * HTTP handlers. Built once by the composition root as `root.accounts`.
  * Handbook: docs/handbook/accounts.md.
  */
+import { loopbackRedirectUri } from '../auth/loopback-uri';
+import { InstalledClientBroker } from './installed-broker';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth/authenticator';
@@ -103,10 +105,27 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
     clock,
     logger,
   });
-  const brokers = new OAuthBrokers(deps.config.oauthBrokers, {
-    fetch: deps.fetch ?? plain,
-    attestation: productionAttestationKit({ fetch: deps.fetch ?? plain }),
-  });
+  // In local mode, Vaubaan's installed-app clients serve the providers no configured
+  // broker serves (ADR local-instance-carries-installed-oauth-clients).
+  const installedClients = deps.config.local ? (deps.config.installedClients ?? []) : [];
+  const installed =
+    installedClients.length > 0
+      ? new InstalledClientBroker({
+          clients: installedClients,
+          redirectUri: loopbackRedirectUri(deps.config.publicUrl),
+          store: deps.sessions,
+          fetch: deps.fetch ?? plain,
+          now: () => clock.now(),
+        })
+      : null;
+  const brokers = new OAuthBrokers(
+    deps.config.oauthBrokers,
+    {
+      fetch: deps.fetch ?? plain,
+      attestation: productionAttestationKit({ fetch: deps.fetch ?? plain }),
+    },
+    installed,
+  );
   const credentials = new CredentialBroker({
     accounts: deps.store.accounts,
     registry: deps.registry,
@@ -153,6 +172,7 @@ export function createAccountsModule(deps: AccountsModuleDeps): AccountsModule {
   });
   const handlers = createAccountHandlers({
     publicUrl: deps.config.publicUrl,
+    installed,
     authenticator: deps.authenticator,
     accounts: service,
     notices,

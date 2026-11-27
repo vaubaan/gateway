@@ -4,7 +4,7 @@ tracks:
   - plugins/outlook/src/
   - plugins/outlook/tests/unit/
   - plugins/outlook/package.json
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-27
 ---
 
 # Outlook plugin — handbook
@@ -186,6 +186,14 @@ The first two lines are the plugin's `excludedTools` (`identity.ts`), shown on i
 
 ## Outside the repo
 
+- **On a local instance there is no broker**: Vaubaan's installed-app Microsoft client (Entra
+  application `0f3f084a-…`, a public client without secret) serves `microsoft` unless a configured
+  broker does
+  ([local-instance-carries-installed-oauth-clients](../../decisions/local-instance-carries-installed-oauth-clients.md)).
+  The consent asks `offline_access` and the plugin's scopes, back on
+  `http://127.0.0.1:<port>/oauth/loopback`; each refresh returns a new refresh token, which the
+  instance seals in place of the former one (it would stop working otherwise). Disconnecting erases
+  the instance's copy only, as with the broker.
 - The instance is enrolled with a broker whose `providers` include `microsoft`
   (`oauth_brokers.<name>`, [configuration](../configuration.md)); without one, Outlook is listed as
   not configured.

@@ -673,6 +673,12 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  // A connect through Vaubaan's installed client: the window polls with its session.
+  'accounts.handlers.loopbackConnectStatus': form('user', 200, (rig, headers) =>
+    rig.root.accounts.handlers.loopbackConnectStatus(
+      post('/connections/loopback/status', headers, {}),
+    ),
+  ),
   // The flows of the installed-app clients (ADR local-instance-carries-installed-oauth-clients):
   // the rig is no local instance, so it carries none (404); the status binds nothing.
   'auth.handlers.loopbackStart': form('origin-only', 404, (rig, headers) =>
@@ -729,6 +735,10 @@ const READS: Readonly<Record<string, string>> = {
     'GET; completes only the flow the binding cookie of this browser names (a secret only the starting window holds)',
   'accounts.handlers.callback':
     'GET from the sign-in provider; protected by the single-use state bound to the user (guardSession)',
+  'accounts.handlers.loopbackConnect':
+    'GET from the provider on the loopback; keeps the provider’s answer under the single-use state, takes nothing',
+  'accounts.handlers.loopbackConnectDone':
+    'GET; hands the callback only to the session of the person who started the flow (guardSession)',
   'accounts.handlers.connectFile':
     'GET; a screenshot of a connect guide, read from the plugin folder (guardSession)',
   'missions.handlers.claudeDesktopBundle':

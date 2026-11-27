@@ -1229,6 +1229,9 @@ function agoWords(iso: string, now: Date): string {
 
 /** Which broker a brokered account renews through, and whether the gateway checks the code it runs. */
 function oauthBrokerFact(broker: NonNullable<AccountDetail['oauth_broker']>): string {
+  if (broker.installed) {
+    return 'through Vaubaan’s client on this computer: no broker, the tokens stay here';
+  }
   if (broker.attested === null) return `${broker.name} · no longer configured`;
   return broker.attested
     ? `${broker.name} · attested: the gateway checks the code it runs before each use`

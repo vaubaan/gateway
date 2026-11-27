@@ -1232,6 +1232,21 @@ const RULES: Readonly<Record<string, Rule>> = {
   'InstalledOidcSignIn.finish': exempt(
     'reads the identity from the provider’s ID token; what the sign-in writes is completeLogin’s, audited there',
   ),
+  'InstalledClientBroker.serves': READ,
+  'InstalledClientBroker.startFlow': exempt(SESSION_STATE),
+  'InstalledClientBroker.owns': READ,
+  'InstalledClientBroker.callback': exempt(SESSION_STATE),
+  'InstalledClientBroker.callbackUrlOf': READ,
+  'InstalledClientBroker.statusOf': exempt(SESSION_STATE),
+  'InstalledClientBroker.redeem': exempt(
+    'exchanges a code at the provider; what the connect writes is the account service’s, audited there',
+  ),
+  'InstalledClientBroker.token': exempt(
+    'a refresh at the provider; the credential it renews is written by CredentialBroker, as for a broker',
+  ),
+  'InstalledClientBroker.revoke': exempt(
+    'relays a revocation to the provider; the account’s revocation is audited by the account service',
+  ),
   'LoopbackService.start': exempt(SESSION_STATE),
   'LoopbackService.callback': exempt(SESSION_STATE),
   'LoopbackService.take': exempt(SESSION_STATE),

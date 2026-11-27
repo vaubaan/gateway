@@ -32,6 +32,7 @@ import { createHash } from 'node:crypto';
 
 import type { OAuthBrokerConfig } from '../config/types';
 import { brokerFor } from '../config/oauth-brokers';
+import type { InstalledClientBroker } from './installed-broker';
 import {
   AttestationVerifier,
   type AdmittedBroker,
@@ -87,6 +88,28 @@ export interface FlowRequest {
   readonly state: string;
   /** The PKCE verifier the gateway keeps; only its S256 challenge is sent. */
   readonly verifier: string;
+  /**
+   * The person who starts it. A broker never receives it; Vaubaan's installed client
+   * keeps it, so that only that person's window takes the flow (`installed-broker.ts`).
+   */
+  readonly userId?: string;
+}
+
+/** A fresh token; a provider that rotates refresh tokens (Microsoft) hands the new one back. */
+export type RotatedToken = FreshToken & { readonly refreshToken?: string };
+
+/**
+ * What serves a broker provider: a configured broker, or, in local mode, Vaubaan's
+ * installed-app client (`InstalledClientBroker`).
+ */
+export interface BrokerSource {
+  readonly name: string;
+  readonly attested: boolean;
+  readonly admitted: AdmittedBroker | null;
+  startFlow(request: FlowRequest): Promise<URL>;
+  redeem(grant: string, verifier: string): Promise<RedeemedGrant>;
+  token(provider: string, refreshToken: string): Promise<RotatedToken>;
+  revoke(provider: string, refreshToken: string): Promise<void>;
 }
 
 export interface RedeemedGrant {
@@ -280,6 +303,12 @@ export class OAuthBrokers {
   constructor(
     private readonly configs: readonly OAuthBrokerConfig[],
     io: OAuthBrokerIo,
+    /**
+     * Vaubaan's installed-app clients (local mode; ADR
+     * local-instance-carries-installed-oauth-clients): the source of a provider no
+     * configured broker serves.
+     */
+    readonly installed: InstalledClientBroker | null = null,
   ) {
     // One verifier for every broker: Google's keys are fetched once.
     const verifier = new AttestationVerifier(io.attestation);
@@ -289,13 +318,15 @@ export class OAuthBrokers {
   }
 
   /** The broker that serves a broker provider, or `null` when none is configured for it. */
-  forProvider(provider: string): OAuthBrokerClient | null {
+  forProvider(provider: string): BrokerSource | null {
     const config = brokerFor(this.configs, provider);
-    return config ? (this.clients.get(config.name) ?? null) : null;
+    if (config) return this.clients.get(config.name) ?? null;
+    return this.installed?.serves(provider) ? this.installed : null;
   }
 
   /** A broker by name: the one a stored refresh token was obtained through. */
-  byName(name: string): OAuthBrokerClient | null {
+  byName(name: string): BrokerSource | null {
+    if (this.installed && name === this.installed.name) return this.installed;
     return this.clients.get(name) ?? null;
   }
 

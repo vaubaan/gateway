@@ -3,7 +3,7 @@ title: Google Calendar plugin
 tracks:
   - plugins/google-calendar/src/
   - plugins/google-calendar/package.json
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-27
 ---
 
 # Google Calendar plugin — handbook
@@ -60,6 +60,14 @@ common to every plugin: [services README](README.md).
 
 - No Google Cloud project per instance: the broker serving `google` ([configuration](../configuration.md))
   holds the client, whose project must have the **Calendar API** enabled.
+- **On a local instance there is no broker**: Vaubaan's installed-app Google client (project
+  `vaubaan-desktop`, brand vaubaan.com) serves `google` unless a configured broker does
+  ([local-instance-carries-installed-oauth-clients](../../decisions/local-instance-carries-installed-oauth-clients.md)).
+  Its project must have the Calendar API enabled; the consent asks the plugin's two scopes with
+  `include_granted_scopes`, back on `http://127.0.0.1:<port>/oauth/loopback`. The account page says
+  "through Vaubaan's client on this computer"; the refresh token is sealed in the instance and
+  revoked at Google's revocation endpoint on disconnect. Until Google verifies the project's
+  sensitive scopes, the consent warns of an unverified app.
 - No Google Workspace Developer Preview membership and no "Use this client for an AI-powered
   agent" flag on the client: both were for the hosted MCP server (0.3.0), no longer prerequisites.
 - Two scopes, never the full `calendar` scope: `calendar.calendarlist.readonly` and

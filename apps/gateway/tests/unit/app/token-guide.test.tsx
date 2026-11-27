@@ -59,6 +59,7 @@ function service(
     redirects: false,
     viaBroker: false,
     brokerAttested: null,
+    viaInstalledClient: false,
     fields: [],
     alternatives,
     createUrl: 'https://service.example.com/tokens',

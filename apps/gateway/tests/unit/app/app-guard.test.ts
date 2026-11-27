@@ -74,6 +74,10 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'pluginInstall.handlers.installForConnection',
   'accounts.handlers.connect',
   'accounts.handlers.callback',
+  // `POST /connections/loopback/status`: `guardMutation` with the role `user` first. Its
+  // sibling `/connections/loopback/done` lives outside the surface: a browser without a
+  // session (the desktop app's default one) is told to go back to Vaubaan.
+  'accounts.handlers.loopbackConnectStatus',
   // `GET /reference/<id>/connect/<file>`: `guardSession` with the role `user` first.
   'accounts.handlers.connectFile',
   // `GET /missions/<id>/claude-desktop.mcpb`: `guardSession` with the role `user` first.

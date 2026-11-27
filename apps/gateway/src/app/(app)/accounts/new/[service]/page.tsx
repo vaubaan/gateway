@@ -24,6 +24,7 @@
  * non-secret values, never a key — with the field in error marked and the
  * shape said again under it (`Notice.form`).
  */
+import { InstalledConnect } from '@/components/accounts/InstalledConnect';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -112,7 +113,14 @@ function HowTo({ service, reconnect }: { service: ConnectableService; reconnect:
           here with a credential, which is encrypted and kept under your name.
         </p>
       )}
-      {service.kind === 'oauth2' && service.viaBroker && (
+      {service.kind === 'oauth2' && service.viaInstalledClient && (
+        <p>
+          “Continue” opens {name} in your browser. You sign in there and allow Vaubaan, then come
+          back to this window, which finishes the connection by itself. No broker is involved: the
+          authorization is encrypted and kept on this computer, under your name.
+        </p>
+      )}
+      {service.kind === 'oauth2' && service.viaBroker && !service.viaInstalledClient && (
         <p>
           “Continue” sends you to {name}. You sign in there and allow the app of the OAuth broker
           this gateway is enrolled with; the broker sends you back here with the authorization,
@@ -354,6 +362,9 @@ export default async function ConnectOneAccountPage({
               </Disclosure>
             )}
           </form>
+          {service.viaInstalledClient && (
+            <InstalledConnect formId={CONNECT_FORM_ID} serviceName={name} />
+          )}
         </Guided>
       )}
 
