@@ -71,13 +71,9 @@ test('connect Vaubaan in one click, create the platform mission, and its key rea
   }
 });
 
-test('Settings has no Connected apps any more; the old address leads to Settings', async ({
-  page,
-}) => {
+test('Settings has no Connected apps any more', async ({ page }) => {
   await page.goto('/auth/login?return_to=/settings');
+  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
   const local = page.getByRole('navigation', { name: 'Settings' });
   await expect(local.getByRole('link', { name: 'Connected apps' })).toHaveCount(0);
-  await page.goto('/settings/connected-apps');
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
 });

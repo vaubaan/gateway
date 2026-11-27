@@ -188,9 +188,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await snap(ines, 'account-shares');
 
   // ── The beneficiary reads what she received ─────────────────────────────
-  // The page that listed what was received is a region of Accounts: its old path leads there.
-  const joan = await browserOf(browser, request, E2E_SHARE_TARGET, '/shares');
-  await expect(joan).toHaveURL(/\/accounts$/);
+  // What she received is a region of Accounts.
+  const joan = await browserOf(browser, request, E2E_SHARE_TARGET, '/accounts');
   await expect(joan.getByRole('heading', { name: /^Shared with you/ })).toBeVisible();
   const shared = joan.getByTestId('shared-with-you');
   const received = shared.getByRole('row').filter({ hasText: accountName });
@@ -476,10 +475,8 @@ test('transfer to a group; the group empties; the operator reassigns the account
   await ops.getByLabel(/^Email/).fill(E2E_SHARE_OWNER.email);
   await ops.getByRole('button', { name: 'Name an owner' }).click();
   await expect(ops.getByText(`${accountName} has a new owner`)).toBeVisible();
-  // Every account has an owner again: the region is gone, the old address lands on Accounts.
+  // Every account has an owner again: the region is gone.
   await expect(ops.getByTestId('ownerless-accounts-section')).toHaveCount(0);
-  await ops.goto('/admin/connections');
-  await expect(ops).toHaveURL(/\/accounts#without-owner$/);
 
   await ines.goto(`/accounts/${accountId}`);
   await expect(ines.getByRole('heading', { name: accountName, level: 1 })).toBeVisible();

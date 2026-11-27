@@ -102,7 +102,6 @@ describe('the side navigation', () => {
     expect(sectionOf('/missions/abc/activity')).toBe('missions');
     expect(sectionOf('/missions-archive')).toBeNull();
     expect(sectionOf('/accounts/new/github')).toBe('accounts');
-    expect(sectionOf('/shares')).toBe('accounts');
     expect(sectionOf('/activity')).toBe('activity');
     expect(sectionOf('/reference/github')).toBe('reference');
     for (const path of ['/settings', '/admin', '/admin/users', '/design']) {

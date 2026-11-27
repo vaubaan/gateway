@@ -25,7 +25,6 @@ export const PHONE_BAR: readonly NavKey[] = ['now', 'waiting', 'missions', 'acco
 
 /** The paths of a section besides the entry's own. */
 const ALSO_UNDER: Readonly<Partial<Record<NavKey, readonly string[]>>> = {
-  accounts: ['/shares'],
   settings: ['/admin', '/design'],
 };
 

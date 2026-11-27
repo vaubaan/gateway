@@ -356,10 +356,6 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await snap(page, 'not-administrator');
   await refused.getByRole('link', { name: 'Go to Now' }).click();
   await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
-  await page.goto('/settings/connected-apps');
-  await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
-  await expect(page.getByRole('main')).not.toContainText('Connected apps');
 
   // An administrator: the same shell, the global navigation stays, Administration is listed.
   await signInAs(request, E2E_OPERATOR);
