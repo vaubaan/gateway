@@ -180,6 +180,13 @@ What an operator or a plugin author reads first; every point is detailed below.
 
 ### Fixed
 
+- **The plugin kit installs from npm.** `publish-plugin-kit.yml` staged a package with
+  `npm stage publish --workspace`, which sent the registry the repository's manifest, read before
+  `prepack` rewrites it: `npm install @vaubaan/plugin-cli` (0.2.0, 0.3.0) or
+  `@vaubaan/plugin-sdk` (1.0.0, 1.1.0) failed on `@vaubaan/shared`, which is not published. The
+  job now packs the tarball, refuses one that still names a workspace dependency, and stages it.
+  The tarballs themselves were right; the next version of each package installs.
+
 - **The account connected in place of a disconnected one takes the repository's calls.** In a
   mission that still carries the disconnected account, both held the same repository and every
   call naming it, git included, was refused `account-ambiguous`; the account that still serves

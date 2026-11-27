@@ -79,12 +79,22 @@ jobs:
       # ("Allow npm publish" left unchecked on npmjs.com). The version waits,
       # hidden, until a maintainer approves it with their second factor, on
       # npmjs.com or with `npm stage approve <id>` (npm 11.15 or later).
+      # The tarball is packed first, then staged: `npm stage publish --workspace`
+      # sent the registry the manifest of the repository (workspace dependencies,
+      # TypeScript entry points), read before `prepack` rewrites it, and an
+      # install from npm failed on @vaubaan/shared. A tarball's manifest is the
+      # published one, the same the smoke test installed.
       - name: Stage
         # `shell: bash` runs with pipefail: a failed stage is not hidden by `tee`.
         shell: bash
         env:
           NAME: ${{ steps.package.outputs.name }}
-        run: npm stage publish --workspace "$NAME" --access public | tee "${RUNNER_TEMP}/stage.txt"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/pack"
+          tarball=$(npm pack --workspace "$NAME" --pack-destination "${RUNNER_TEMP}/pack" --silent | tail -n 1)
+          tar -xzOf "${RUNNER_TEMP}/pack/$tarball" package/package.json \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s).dependencies??{};const w=Object.keys(d).filter(k=>d[k]==="*");if(w.length){console.error("::error::workspace dependencies in the packed manifest: "+w.join(", "));process.exit(1)}})'
+          npm stage publish "${RUNNER_TEMP}/pack/$tarball" --access public | tee "${RUNNER_TEMP}/stage.txt"
       - name: What a maintainer approves
         env:
           NAME: ${{ steps.package.outputs.name }}
