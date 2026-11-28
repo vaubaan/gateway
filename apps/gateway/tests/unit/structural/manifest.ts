@@ -1078,6 +1078,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'file-size-budget',
+    statement:
+      'A source file stays at or under 800 lines; a file over it on 2026-11-28 is listed with its count, which may only go down until the entry is removed.',
+    source: 'docs/quality/code-quality.md, rule 1; quality audit 2026-11-27',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/file-size-budget.test.ts`,
+        tests: [
+          'no source file outside the baseline goes over',
+          'a file of the baseline never grows, and its entry follows it down',
+        ],
+      },
+    ],
+  },
+  {
     id: 'client-imports-no-server-value',
     statement:
       'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, services, shares) import no value from src/server.',

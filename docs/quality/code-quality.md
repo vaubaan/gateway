@@ -60,10 +60,10 @@ request: the agent that writes the change checks these rules itself, then merges
 ## Project rules
 
 1. **A source file stays at or under 800 lines; a file already over it only shrinks.**
-   28 files are over 800 today (`lib/vocabulary.ts` 2158, `store/repositories/missions.ts` 2134,
+   30 files are over 800 on 2026-11-28 (`lib/vocabulary.ts` 2158, `store/repositories/missions.ts` 2134,
    `missions/mission-service.ts` 1771). Check: `wc -l` on every touched file.
-   `apps/gateway/tests/unit/structural/file-size-budget.test.ts` (to be created) will enforce it
-   against a baseline that may only lose entries or lines.
+   `apps/gateway/tests/unit/structural/file-size-budget.test.ts` enforces it against a baseline
+   that may only lose entries or lines.
 2. **A service class exposes at most 30 public methods; past that, it splits by use case.**
    `missions/mission-service.ts` was split on 2026-11-20 and regrew to ≈59 methods;
    `accounts/service.ts` holds ≈70. Check: a diff that adds a public method to a class over the
@@ -93,7 +93,7 @@ request: the agent that writes the change checks these rules itself, then merges
 
 ## Accepted deviations
 
-- **The 28 files over 800 lines** — listed in the baseline of the file-size budget, each one may
+- **The files over 800 lines on 2026-11-28** — listed in the baseline of the file-size budget, each one may
   only shrink (rule 1).
 - **The two mutual module dependencies** `accounts`↔`auth` and `execution`↔`git` — existing, not
   to be copied (rule 7).
