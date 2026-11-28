@@ -116,6 +116,13 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
   generated files). One branch per intent; a conversation that moves to another intent starts
   another branch. A branch lives hours, not days: rebased on `origin/main` before every push,
   deleted once on `main`.
+- A conversation's worktree starts on a provisional branch (`conv/<yymmdd-6hex>`, or
+  `feat/<intent-slug>` when launched on a story). The agent renames it before its first push:
+  `git branch -m <type>/<slug>`, suffixed `-2`, `-3` when the name exists locally or on `origin`.
+  A branch already pushed under another name: push the new one, then
+  `git push origin --delete <old>`. The next intent of the same conversation, once the first is
+  on `main`: `git switch -c <type>/<slug> origin/main` in the same worktree. The platform reads
+  the worktree's HEAD; ADR `the-agent-names-its-branch-after-the-intent` in `vaubaan/code`.
 - These protections, the release tags' and the catalog's: `.github/settings/`, checked and
   reapplied by `scripts/github-settings.sh` (handbook [github-settings](../handbook/github-settings.md)).
 
