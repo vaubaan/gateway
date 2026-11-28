@@ -39,7 +39,7 @@ import {
   type SignInAccountsRepo,
 } from './repositories/sign-in-accounts.ts';
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
-import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
+import { createMissionsRepo, type MissionsRepo } from './repositories/missions/index.ts';
 import {
   createMissionVersionsRepo,
   type MissionVersionsRepo,
@@ -272,7 +272,7 @@ export { SqliteAuditWriter } from './audit-writer.ts';
 export type { AuditAppender, AuditEntry, AuditWriter } from './audit-writer.ts';
 export * from './types.ts';
 export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resource-env.ts';
-export type { MissionTokenKey } from './repositories/missions.ts';
+export type { MissionTokenKey } from './repositories/missions/index.ts';
 export type { ShareKey } from './repositories/shares.ts';
 export type { RequestKey } from './repositories/requests.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
@@ -326,7 +326,7 @@ export type {
   ResourceChange,
   ResourceMove,
   ResourceMoveReason,
-} from './repositories/missions.ts';
+} from './repositories/missions/index.ts';
 export type {
   DecideContext,
   DecideInput,

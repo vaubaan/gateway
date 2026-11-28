@@ -46,7 +46,7 @@ describe('lookups keyed by their parent', () => {
   it('the repositories name the parent in every statement that reads or changes one by its id', () => {
     const source = (file: string) => readFileSync(resolve(REPOSITORIES, file), 'utf8');
     const statements: Record<string, readonly RegExp[]> = {
-      'missions.ts': [
+      'missions/holders.ts': [
         /SELECT \$\{TOKEN_COLUMNS\} FROM mission_tokens WHERE mission_id = \? AND id = \?/,
         /UPDATE mission_tokens SET status = 'revoked', retired_at = \?\s+WHERE mission_id = \? AND id = \? AND status = 'active'/,
         /UPDATE mission_tokens SET last_used_at = \?\s+WHERE mission_id = \? AND id = \?/,

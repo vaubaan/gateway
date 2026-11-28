@@ -40,7 +40,6 @@ const FILE_SIZE_BASELINE: Readonly<Record<string, number>> = {
   'apps/gateway/src/server/requests/request-service.ts': 1398,
   'apps/gateway/src/server/store/repositories/audit.ts': 1186,
   'apps/gateway/src/server/store/repositories/mission-logs.ts': 865,
-  'apps/gateway/src/server/store/repositories/missions.ts': 2134,
   'apps/gateway/src/server/vaubaan/acts.ts': 843,
   'packages/gateway-core/src/pipeline.ts': 1079,
   'packages/plugin-page/src/ServicePage.tsx': 1261,

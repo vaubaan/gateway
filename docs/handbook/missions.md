@@ -6,7 +6,7 @@ tracks:
   - apps/gateway/src/lib/missions/
   - apps/gateway/src/server/store/membership.ts
   - apps/gateway/src/server/store/mission-reach.ts
-  - apps/gateway/src/server/store/repositories/missions.ts
+  - apps/gateway/src/server/store/repositories/missions/
   - apps/gateway/src/server/store/repositories/mission-versions.ts
   - apps/gateway/src/server/execution/created-resources.ts
   - apps/gateway/src/app/(app)/missions/
