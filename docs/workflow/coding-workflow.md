@@ -27,6 +27,8 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 - The [workflows](../../.github/workflows/) state their triggers and steps in their header comments.
   `scorecard.yml` publishes the OpenSSF Scorecard of the repository weekly and on every push to
   `main` (the README's badge).
+  The weekly run adds the job `coverage`: the test report (lines covered per area, slowest test
+  files) in the run's summary, information only.
   `desktop.yml` builds the macOS app on macOS runners when `apps/desktop/` changes, or by hand
   ([desktop-app](../handbook/desktop-app.md)).
   Required check: the job `audit`. Locally, `npm run check:changed` checks only what a change can

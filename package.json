@@ -60,6 +60,7 @@
     "@sigstore/tuf": "5.0.1",
     "@types/node": "26.6.6",
     "@vaubaan/harness": "^3.0.1",
+    "@vitest/coverage-v8": "5.0.5",
     "esbuild": "0.28.2",
     "eslint": "10.13.0",
     "eslint-config-prettier": "10.1.8",

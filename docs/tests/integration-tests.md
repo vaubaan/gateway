@@ -17,7 +17,8 @@ tracks:
   - apps/gateway/tests/fixtures/sigstore/
   - apps/gateway/tests/unit/structural/manifest.ts
   - apps/gateway/tests/unit/structural/index.test.ts
-last_reviewed: 2026-11-20
+  - scripts/test-report.mjs
+last_reviewed: 2026-11-28
 ---
 
 # Integration test plan
@@ -49,6 +50,8 @@ last_reviewed: 2026-11-20
 - Every plugin directory carries an identifier suite running hostile literals through classifier and executor (`assertIdentifiersRefused` of the testing kit), enforced structurally.
 - Demo mode stays out of the application: its IdP, fake services and seed live in `apps/gateway/tests/demo/` only; `demo-safety.test.ts` checks that no route, no file under `src/` and nothing in the standalone build names `/__demo`, and that `assertDemoAllowed` refuses a production configuration. Tests of `tests/integration/demo/` that spawn the demo need a build.
 - Structural invariants are indexed in `apps/gateway/tests/unit/structural/manifest.ts` (id, statement, source, proofs: file + test titles). `index.test.ts` fails when an invariant has no proof, a proof file or title is gone or would not run (`it.skip`, a comment), a test file of the folder belongs to no invariant, a spec §10 "Structural" bullet has no invariant or the reverse, or [threat-model](../handbook/threat-model.md) cites a missing invariant or file. A new structural test is added to the manifest in the same change.
+- Coverage is measured, never gated: the weekly run's job `coverage` (`npx vitest run --coverage`, every source file counted, an unloaded one at 0 %) writes the lines covered per area and the 20 slowest test files to its summary (`scripts/test-report.mjs`), and keeps the HTML report a week. A number is a lead for the next test, not a target.
+- A heavy file that times out on a loaded machine gets a timeout of its own in the file, with the measured duration in the commit; the slow list of the weekly report is where to look first.
 - Tests that read docs parse exact shapes: the configuration keys table, the refusal table of the `vaubaan` plugin's handbook, spec §10 bullets, threat-model `[inv: id]` markers, the base-image refresh procedure. Restructure those docs with their tests running.
 
 ## Known gaps

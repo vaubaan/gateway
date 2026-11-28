@@ -75,10 +75,17 @@ export default defineConfig({
         },
       },
     ],
+    // `--coverage`: the weekly report (ci.yml, job `coverage`; scripts/test-report.mjs).
+    // Every source file counts, a file no test loads at 0 %. Information, no threshold.
     coverage: {
-      service: 'v8',
-      reporter: ['text', 'html'],
-      exclude: ['**/*.d.ts', '**/tests/**', '**/*.config.*', '**/dist/**'],
+      provider: 'v8',
+      include: [
+        'apps/*/src/**/*.{ts,tsx}',
+        'packages/*/src/**/*.{ts,tsx}',
+        'plugins/*/src/**/*.ts',
+      ],
+      exclude: ['**/*.d.ts', '**/*.test.*', '**/tests/**', '**/*.config.*', '**/dist/**'],
+      reporter: ['text-summary', 'json-summary', 'html'],
     },
   },
 });
