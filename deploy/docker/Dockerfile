@@ -84,7 +84,13 @@ ENV NODE_ENV=production \
 # base image (npm, npx, corepack, yarn) are removed. They are never run in the
 # container, and they carried most of what the image scan reported
 # (scripts/image-scan.sh): a vulnerable dependency of npm is not shipped.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+# Debian's security updates are installed at the build: the base image is rebuilt by its
+# maintainers days after them, and the image scan refuses a release that ships a HIGH or
+# CRITICAL vulnerability Debian has already fixed.
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
  && groupadd --system --gid 10001 vaubaan \
  && useradd --system --uid 10001 --gid vaubaan --home-dir /app --shell /usr/sbin/nologin vaubaan \
