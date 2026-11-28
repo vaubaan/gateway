@@ -19,7 +19,7 @@ were mocked up; their synthesis (D, at its balanced density) was chosen. The pro
 Every page is built from one design system: tokens in `apps/gateway/src/styles/tokens.css` as the
 one layer of visual decisions, shared components in `apps/gateway/src/components/ui`, a gallery at
 `/design`. People read one vocabulary (account, permission, key, Waiting for you…), mapped from the
-protocol's names by `apps/gateway/src/lib/vocabulary.ts`; the rename covers the interface, the
+protocol's names by `apps/gateway/src/lib/vocabulary/`; the rename covers the interface, the
 documentation for people and the bootstrap kit's prose, nothing else.
 
 ## Consequences
@@ -62,14 +62,14 @@ The words of the risk model — `WHY_LABELS`, `WHY_ORDER`, `WHY_VALUES`/`whyValu
 `gateWordOf`/`GATE_WORDS`, `ALLOW_WORDS`, `TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`,
 `SEVERITY_LABEL` — live in `@vaubaan/policy-engine` (`risk-words.ts`), beside the severity and the
 tier they name. (Since 2026-11-13: `ROW_LABEL`, `ROW_WORDS`, `REASON_WORDS`, `ROW_GATE_SENTENCES`,
-`TREE_LEGEND`, beside the row and the reason; see the amendment below.) `lib/vocabulary.ts` re-exports them: it stays the one file a gateway page imports
+`TREE_LEGEND`, beside the row and the reason; see the amendment below.) `lib/vocabulary/` re-exports them: it stays the one module a gateway page imports
 its words from; the site imports the same values from the package.
 
 ### Consequences
 
 - Changing one of those words changes the gateway and the site together; `sources-agree.test.ts`
   (website) fails when either holds a copy.
-- Every other word stays in `lib/vocabulary.ts`. A word the site needs is moved to the package
+- Every other word stays in `lib/vocabulary/`. A word the site needs is moved to the package
   only when it belongs to the risk model.
 
 ### Rejected alternatives

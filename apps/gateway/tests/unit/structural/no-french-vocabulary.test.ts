@@ -74,7 +74,8 @@ describe('structural: no French vocabulary left in the repository', () => {
         'docs/spec/gateway-risk-model.md',
         'packages/policy-engine/src/trust-level.ts',
         'plugins/github/src/risk-catalog.yaml',
-        'apps/gateway/src/lib/vocabulary.ts',
+        'apps/gateway/src/lib/vocabulary/index.ts',
+        'apps/gateway/src/lib/vocabulary/missions.ts',
       ]),
     );
   });

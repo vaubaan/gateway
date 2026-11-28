@@ -1,7 +1,7 @@
 /**
  * The words a person reads for the risk model — the four rows and the reason
  * of a permission, the five facts and their values, the gate, a mission's Can / Asks first / Cannot, the trust levels.
- * Pure and browser-safe. The gateway's interface (`lib/vocabulary.ts`
+ * Pure and browser-safe. The gateway's interface (`lib/vocabulary`
  * re-exports them) and the public site (`apps/website`) print these, never a
  * copy (ADR interface-redesign-vocabulary-and-design-system, amendment
  * 2026-11-05; website spec §1.1, no second source of truth).

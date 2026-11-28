@@ -54,7 +54,7 @@ Checked by tests or review; the reasons are in the linked documents.
 - **Never an "everything"**: accepted risks, share restrictions and presets are explicit `RiskId`
   lists; nothing stored holds a wildcard, a sentinel or a preset reference.
 - **Two sets of words**: the protocol (spec, code, API, catalogs, store) and the interface
-  ([spec](spec/vaubaan-gateway.md) §0 bis). `apps/gateway/src/lib/vocabulary.ts` is the one bridge;
+  ([spec](spec/vaubaan-gateway.md) §0 bis). `apps/gateway/src/lib/vocabulary/` is the one bridge;
   never rename a protocol name or print one as prose on a page.
 - **Nothing hard-coded**: configuration comes through the configuration module; a missing key stops
   startup, naming it ([configuration](handbook/configuration.md)).

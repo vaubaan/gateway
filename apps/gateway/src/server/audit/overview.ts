@@ -26,7 +26,7 @@
  *     mission page and its mission log page read: `used = quota - remaining`;
  *   - the accounts' names, states and expiries — one read per distinct account.
  *
- * Nothing here is a sentence: the page words it (`vocabulary.ts`).
+ * Nothing here is a sentence: the page words it (`lib/vocabulary`).
  */
 import {
   policyLineKey,

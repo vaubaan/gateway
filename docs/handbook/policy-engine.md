@@ -39,7 +39,7 @@ last_reviewed: 2026-11-13
   pre-filled gates of shipped catalogs: list the moved lines in the CHANGELOG.
 - The words a person reads of the risk model live in `risk-words.ts` (`ROW_WORDS`, `REASON_WORDS`,
   `ROW_LABEL`, `ROW_GATE_SENTENCES`, `TREE_LEGEND`, the five facts and their values, the gate
-  words, Can / Asks first / Cannot, the trust levels): the gateway's `lib/vocabulary.ts`
+  words, Can / Asks first / Cannot, the trust levels): the gateway's `lib/vocabulary/`
   re-exports them, the public site imports them; `sources-agree.test.ts` (website) fails when
   either holds a copy. `ROW_GATE_SENTENCES` is literal: a test checks it against
   `TRUST_LEVEL_GATES`. `macroActionsOf` adds "Anything else" for the creation form, the

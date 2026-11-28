@@ -19,7 +19,7 @@
  * only follows the pointer or the focus it is a `tooltip`; pinned, it is a
  * non-modal `dialog` named by its title.
  *
- * The target is an entry of `DOC_PAGES` or `serviceDoc` (`lib/vocabulary.ts`),
+ * The target is an entry of `DOC_PAGES` or `serviceDoc` (`lib/vocabulary/`),
  * never a text or a path written in a page. The docs root comes from the
  * instance's configuration (`docs.url`) through `DocsProvider`, which the shell
  * renders; outside it (a test, the gallery's previews) the hint shows its text

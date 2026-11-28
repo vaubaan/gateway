@@ -1,7 +1,7 @@
 /**
  * Structural test (ADR one-word-per-thing-account-service-plugin): what a person or an
  * agent reads says **account**, **service** and **plugin**, each in its one sense, never the
- * words they replaced. The scan covers the interface's words (`lib/vocabulary.ts`), the
+ * words they replaced. The scan covers the interface's words (`lib/vocabulary/`), the
  * agent's bootstrap text, the public site (its documentation, its landing and trust
  * pages), the handbooks, and every plugin's README, risk catalog, tool schemas, data model
  * and the declarations the site and the connect page show (credential guide, summary,
@@ -37,7 +37,7 @@ interface Allowance {
 
 /** The human-facing files, as git tracks them. */
 const SCOPE: readonly RegExp[] = [
-  /^apps\/gateway\/src\/lib\/vocabulary\.ts$/,
+  /^apps\/gateway\/src\/lib\/vocabulary\/[^/]+\.ts$/,
   /^apps\/gateway\/src\/app\/agent-bootstrap\.md\/content\.md$/,
   /^apps\/website\/content\/.+\.mdx?$/,
   /^apps\/website\/src\/site\/landing\.ts$/,
@@ -194,7 +194,8 @@ describe('structural: one word per thing — account, service, plugin', () => {
     expect(files.length).toBeGreaterThan(80);
     expect(files).toEqual(
       expect.arrayContaining([
-        'apps/gateway/src/lib/vocabulary.ts',
+        'apps/gateway/src/lib/vocabulary/index.ts',
+        'apps/gateway/src/lib/vocabulary/missions.ts',
         'apps/website/content/docs/concepts/index.mdx',
         'apps/website/content/docs/services/index.mdx',
         'apps/website/src/site/landing.ts',

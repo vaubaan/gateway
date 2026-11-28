@@ -1,6 +1,6 @@
 /**
  * The address of a doc link (docs/handbook/web-app.md, "doc links"): a target
- * of `DOC_PAGES` or `serviceDoc` (`lib/vocabulary.ts`, the one table) under
+ * of `DOC_PAGES` or `serviceDoc` (`lib/vocabulary/`, the one table) under
  * the docs root the instance is configured with (`docs.url`). Pure and
  * browser-safe.
  */
