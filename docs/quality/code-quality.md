@@ -89,8 +89,8 @@ request: the agent that writes the change checks these rules itself, then merges
    `plugins/*/src` never grow in a diff.
 7. **Server modules depend in one direction: a diff adds no new mutual import between two
    modules of `apps/gateway/src/server/`.**
-   Two cycles exist (`accounts`↔`auth`, `execution`↔`git`); `compose/root.ts` already imports 31
-   of 35 modules and `RootDeps` has ≈260 members. Check: a new `from '../<module>/'` import, and
+   Two cycles exist (`accounts`↔`auth`, `execution`↔`git`); `compose/` (`root.ts` and its
+   `wire-*.ts`) already imports 31 of 35 modules and `RootDeps` has ≈260 members. Check: a new `from '../<module>/'` import, and
    whether `<module>` already imports back; shared code moves down, not sideways.
 
 ## Accepted deviations

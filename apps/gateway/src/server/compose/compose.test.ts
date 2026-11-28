@@ -8,14 +8,11 @@ import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { DeferredCatalogIndex } from './registry';
 import {
-  buildRoot,
-  getRoot,
-  NO_TRUSTED_PROXY_WARNING,
-  resetRoot,
   DEPRECATED_KEY_WARNING,
+  NO_TRUSTED_PROXY_WARNING,
   RETIRED_MANAGEMENT_KEYS_WARNING,
-  type RootDeps,
-} from './root';
+} from './boot-checks';
+import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
 import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
 import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 

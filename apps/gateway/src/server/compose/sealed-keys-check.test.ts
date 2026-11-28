@@ -10,7 +10,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
 import { validEnv } from '../../../tests/support/config/testing';
-import { buildRoot, SEALED_KEY_MISMATCH } from './root';
+import { SEALED_KEY_MISMATCH } from './boot-checks';
+import { buildRoot } from './root';
 import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 
 const KEY_A = randomBytes(32).toString('base64');

@@ -56,7 +56,7 @@ messaging addresses (a service's incoming webhook) and mail. Spec: [vaubaan-gate
 - **The service worker must never cache** nor listen to `fetch`: every page carries authorization (`tests/unit/app/service-worker.test.ts`).
 - **Push needs an https public URL** (a secure context in the browser; `sub` of the VAPID token is the public origin): the boot logs `public_url is not https` otherwise.
 - **An air-gapped instance cannot reach the push services**: every delivery fails and is only logged; open the hosts of [configuration](configuration.md) in an egress allowlist.
-- `auth` and `instance` are built after this module in `compose/root.ts`; the dispatch reads them through closures, at send time only.
+- `auth` and `instance` are built after this module in `compose/wire-modules.ts`; the dispatch reads them through closures, at send time only.
 - `PushOffer` needs the shell's `ToastProvider`: the home renders it only when it has a key.
 - **Teams: Workflows, not the Office connectors.** Microsoft retired the Office 365 connectors (`*.webhook.office.com`); a Workflows trigger ("When a Teams webhook request is received", `*.logic.azure.com` or `*.environment.api.powerplatform.com`) takes the `{ type: "message", attachments: [Adaptive Card] }` body and answers 202. An old connector URL is still accepted and may answer an error: the test message says so at once.
 - **ntfy self-hosted on a private network is refused** (that is the point of the private-range check): only a server on the public internet, or ntfy.sh, is reachable. A protected topic needs a token, which an address cannot carry (no credentials in the URL).

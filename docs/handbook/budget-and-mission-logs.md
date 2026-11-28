@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/store/repositories/approvals.ts
   - packages/gateway-core/src/fingerprint.ts
   - packages/shared/src/mission-log-events.ts
-  - apps/gateway/src/server/compose/root.ts
+  - apps/gateway/src/server/compose/wire-modules.ts
 last_reviewed: 2026-11-25
 ---
 

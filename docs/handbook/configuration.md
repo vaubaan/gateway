@@ -23,7 +23,8 @@ How the process starts from configuration alone and wires its modules. Spec:
 ## Start here
 
 - [`config/sources.ts`](../../apps/gateway/src/server/config/sources.ts) — `KEYS`, the table below.
-- [`compose/root.ts`](../../apps/gateway/src/server/compose/root.ts) — wiring order, closers, boot checks.
+- [`compose/root.ts`](../../apps/gateway/src/server/compose/root.ts) — wiring order, closers; the wiring itself in `compose/wire-plugins.ts` and `compose/wire-modules.ts`.
+- [`compose/boot-checks.ts`](../../apps/gateway/src/server/compose/boot-checks.ts) — boot checks and warnings: configuration summary, trusted proxies, key beside the store, retired keys, sealed keys.
 - [`compose/boot-config.ts`](../../apps/gateway/src/server/compose/boot-config.ts) — key generation, setup mode.
 - [`src/proxy.ts`](../../apps/gateway/src/proxy.ts) — security headers, CSP nonce, setup redirect.
 

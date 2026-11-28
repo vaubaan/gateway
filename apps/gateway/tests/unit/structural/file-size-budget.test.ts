@@ -30,7 +30,6 @@ const FILE_SIZE_BASELINE: Readonly<Record<string, number>> = {
   'apps/gateway/src/server/auth/handlers.ts': 856,
   'apps/gateway/src/server/auth/local-handlers.ts': 839,
   'apps/gateway/src/server/auth/sign-in-providers.ts': 900,
-  'apps/gateway/src/server/compose/root.ts': 1448,
   'apps/gateway/src/server/config/load.ts': 1406,
   'apps/gateway/src/server/config/sources.ts': 1063,
   'apps/gateway/src/server/import-v4/importer.ts': 1095,

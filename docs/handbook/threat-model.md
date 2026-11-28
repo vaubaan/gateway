@@ -20,6 +20,7 @@ tracks:
   - apps/gateway/src/server/git/
   - apps/gateway/src/server/import-v4/
   - apps/gateway/src/server/compose/root.ts
+  - apps/gateway/src/server/compose/boot-checks.ts
   - apps/gateway/src/server/compose/key-placement.ts
   - apps/gateway/src/server/requests/handlers.ts
   - apps/gateway/src/server/setup/

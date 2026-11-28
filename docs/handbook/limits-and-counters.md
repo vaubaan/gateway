@@ -5,7 +5,7 @@ tracks:
   - apps/gateway/src/server/http/ops-stats.ts
   - apps/gateway/src/app/ops/stats/route.ts
   - apps/gateway/src/server/setup/state.ts
-  - apps/gateway/src/server/compose/root.ts
+  - apps/gateway/src/server/compose/wire-modules.ts
 last_reviewed: 2026-11-20
 ---
 
@@ -24,7 +24,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.3 bis.
 ## Invariants
 
 - One count per item: the ceilings, the settings ("This gateway"), `/ops/stats` and the
-  telemetry profile (`compose/root.ts`) all read `root.limits.counts`. Never count a list again.
+  telemetry profile (`compose/wire-modules.ts`) all read `root.limits.counts`. Never count a list again.
 - Every adding path asks `CeilingCheck.refusal(...)` before it writes; the services take it as
   an optional `ceilings` dep, and only the root passes it. A module built without it enforces
   nothing — tests rely on that.

@@ -50,7 +50,7 @@ acceptance:
 
 status: implemented
 requires: plugin
-anchors: packages/plugin-cli/src/archive.ts, packages/shared/src/catalog-index.ts, apps/gateway/src/server/updates/compare.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/src/components/accounts/ServicePicker.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, scripts/release-lib.mjs, packages/plugin-cli/tests/unit/archive.test.ts, packages/shared/src/catalog-index.test.ts, apps/gateway/tests/unit/components/service-picker-catalog.test.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
+anchors: packages/plugin-cli/src/archive.ts, packages/shared/src/catalog-index.ts, apps/gateway/src/server/updates/compare.ts, apps/gateway/src/server/compose/wire-plugins.ts, apps/gateway/src/components/accounts/ServicePicker.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, scripts/release-lib.mjs, packages/plugin-cli/tests/unit/archive.test.ts, packages/shared/src/catalog-index.test.ts, apps/gateway/tests/unit/components/service-picker-catalog.test.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
 spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Browse the catalog apart from what runs
@@ -81,7 +81,7 @@ spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 status: implemented
 requires: plugin, administrator
-anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/plugins/call-gate.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/integration/plugins/swap-during-call.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts
+anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/plugins/call-gate.ts, apps/gateway/src/server/compose/wire-plugins.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/integration/plugins/swap-during-call.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts
 spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Update my installed plugins in a few clicks
