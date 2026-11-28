@@ -22,8 +22,14 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 
 ## Start here
 
-- [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`.
-  The edit, its preview, the versions and a restore are written in [`mission-edits.ts`](../../apps/gateway/src/server/missions/mission-edits.ts), which the service holds in a private `#edits` (a plain field would put a cycle into every deep comparison of the root); the types it takes and returns are in `mission-views.ts`, re-exported by the service.
+- [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — the one API of every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`. It only delegates, each act to its use-case module, held in a private `#` field (a plain field would put the use cases into every deep comparison of the root); the types it takes and returns are in `mission-views.ts`, re-exported by the service.
+  - [`mission-issuance.ts`](../../apps/gateway/src/server/missions/mission-issuance.ts) — preview, issue, `draftFrom`, duplicate.
+  - [`mission-tokens.ts`](../../apps/gateway/src/server/missions/mission-tokens.ts) — the creator's `rotate`, `verifyToken` and `standingOf`.
+  - [`mission-closing.ts`](../../apps/gateway/src/server/missions/mission-closing.ts) — `revoke` and who may close (`closableBy`), `orphanedOn`, `onAccount`.
+  - [`mission-policy-changes.ts`](../../apps/gateway/src/server/missions/mission-policy-changes.ts) — `setGate`, `setLimits`, `permissionOptions`, `changePermissions`.
+  - [`mission-edits.ts`](../../apps/gateway/src/server/missions/mission-edits.ts) — the edit, its preview, the versions and a restore.
+  - [`mission-reads.ts`](../../apps/gateway/src/server/missions/mission-reads.ts) and [`mission-trust-raises.ts`](../../apps/gateway/src/server/missions/mission-trust-raises.ts) — the Missions pages' `list`, `get`, `standing`, and the trust-raise offers.
+  - [`mission-lookups.ts`](../../apps/gateway/src/server/missions/mission-lookups.ts) — the reads they all share, and the leaf they import: the issuance context and catalogs, `ownMission` / `access` / `membershipOf`, `stateOf`, the reached accounts and `kitOf`.
 - [`preview.ts`](../../apps/gateway/src/lib/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the `vaubaan__preview_policy` tool, `issue` and `edit`.
 - [`macro-actions.ts`](../../apps/gateway/src/lib/missions/macro-actions.ts) — the account's macro-actions ("Anything else" added for the fallback) and the lines a trust level writes (risk model §4.6); the mission screen draws them through `missions/cards/` (below).
 - [`everything-i-hold.ts`](../../apps/gateway/src/lib/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by row for a risk in no macro-action (spec §3.2; `RATE_BY_ROW`, `QUOTA_BY_ROW`: rows 1 to 4 keep the values of the retired low to critical).

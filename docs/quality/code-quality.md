@@ -65,9 +65,10 @@ request: the agent that writes the change checks these rules itself, then merges
    `apps/gateway/tests/unit/structural/file-size-budget.test.ts`, which enforces the rule and may
    only lose entries or lines. Check: `wc -l` on every touched file.
 2. **A service class exposes at most 30 public methods; past that, it splits by use case.**
-   `missions/mission-service.ts` was split on 2026-11-20 and regrew to ≈59 methods;
-   `accounts/service.ts` holds ≈70. Check: a diff that adds a public method to a class over the
-   budget moves at least as many out to a use-case module.
+   `missions/mission-service.ts` was split on 2026-11-20, regrew to ≈59 methods, and was split
+   again on 2026-11-28: 29 public methods that delegate to use-case modules over a shared
+   `mission-lookups.ts`; `accounts/service.ts` holds ≈70. Check: a diff that adds a public
+   method to a class over the budget moves at least as many out to a use-case module.
 3. **A `catch` without binding rethrows, logs, or carries a `// expected: <why>` comment.**
    123 bare `catch {` in `apps/gateway`, ≈42 of them return `null`/`undefined`/`false` with no
    trace: a failure becomes an empty result. Check: every new or moved bare `catch` in the diff.

@@ -1,7 +1,7 @@
 /**
  * A mission's creator edits it, previews the edit, reads its versions and restores one
  * (spec §4.3, versions: ADR mission-versions-kept-with-the-mission). The mission service
- * delegates these five acts here and lends the lookups they share (`MissionEditHost`).
+ * delegates these five acts here; the lookups they share are `MissionLookups` (`MissionEditHost`).
  */
 import { parseRiskId, type RiskId } from '@vaubaan/shared';
 import type { Subject } from '../authority';
@@ -27,12 +27,18 @@ import {
   type MissionHistoryView,
   type RestoreResult,
 } from './history';
-import type { IssueOptions, MissionEditView, EditPreviewResult, EditResult } from './mission-views';
+import type {
+  IssueOptions,
+  MissionEditView,
+  EditPreviewResult,
+  EditResult,
+  MissionServiceDeps,
+} from './mission-views';
 import { parseMissionDraft } from './draft-schema';
 import type { MissionDraft } from '../../lib/missions/model';
 import { revisionOf } from '../../lib/missions/mission-edit';
 import { gateEditBlockedBy } from './gate-edit';
-import type { MissionService, MissionServiceDeps } from './mission-service';
+import type { MissionLookups } from './mission-lookups';
 
 /** The body of an edit: the edited draft and the revision it was made from. */
 function parseEditBody(
@@ -80,9 +86,9 @@ function revisionOfRecord(mission: MissionRecord): string {
   });
 }
 
-/** What the edits read of the mission service: the lookups every act of a creator shares. */
+/** What the edits read of the mission lookups: the lookups every act of a creator shares. */
 export type MissionEditHost = Pick<
-  MissionService,
+  MissionLookups,
   'issuanceContext' | 'ownMission' | 'ownInspected' | 'access' | 'activeMissionCeiling' | 'risksOf'
 >;
 

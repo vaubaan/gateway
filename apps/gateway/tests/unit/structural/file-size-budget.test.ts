@@ -35,7 +35,6 @@ const FILE_SIZE_BASELINE: Readonly<Record<string, number>> = {
   'apps/gateway/src/server/config/load.ts': 1406,
   'apps/gateway/src/server/config/sources.ts': 1063,
   'apps/gateway/src/server/import-v4/importer.ts': 1095,
-  'apps/gateway/src/server/missions/mission-service.ts': 1771,
   'apps/gateway/src/server/requests/request-service.ts': 1398,
   'apps/gateway/src/server/store/repositories/audit.ts': 1186,
   'apps/gateway/src/server/store/repositories/mission-logs.ts': 865,

@@ -18,7 +18,7 @@ so that it works without me until it reaches what I kept for myself.
 status: implemented
 requires: account, resource, macro-action
 creates: mission, mission-token
-anchors: apps/gateway/src/server/missions/mission-service.ts, apps/gateway/tests/integration/missions/mission-lifecycle.test.ts, apps/gateway/tests/integration/missions/permissions.test.ts
+anchors: apps/gateway/src/server/missions/mission-issuance.ts, apps/gateway/tests/integration/missions/mission-lifecycle.test.ts, apps/gateway/tests/integration/missions/permissions.test.ts
 relieves: a-token-that-can-do-anything
 delivers: never-handing-over-a-credential
 spec: ../spec/vaubaan-gateway-07-workflows.md#74-create-a-mission

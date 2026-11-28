@@ -12,7 +12,7 @@
  *
  * Pure, and in the store on purpose: three decisions read it — who may READ the
  * mission (`MissionService.access`), whose Bearer AUTHENTICATES at the execution door
- * (`MissionService.standingOf`), and for whom a token may be INSERTED
+ * (`MissionTokens.standingOf`), and for whom a token may be INSERTED
  * (`MissionsRepo.issueToken`, inside its transaction, which no service can reach
  * into). One function, so a change to what a member is cannot be made in one of the
  * three and forgotten in another.

@@ -48,7 +48,7 @@ spec: ../spec/vaubaan-gateway-07-workflows.md#73-give-access
 
 status: implemented
 requires: account
-anchors: apps/gateway/src/server/missions/mission-service.ts, apps/gateway/tests/integration/authority/missions-on-account.test.ts
+anchors: apps/gateway/src/server/missions/mission-closing.ts, apps/gateway/tests/integration/authority/missions-on-account.test.ts
 relieves: a-mission-on-production-i-know-nothing-about
 delivers: every-mission-on-my-account-named
 spec: ../spec/vaubaan-gateway-02-domain.md#22-definitions

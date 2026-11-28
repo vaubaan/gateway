@@ -161,7 +161,6 @@ export {
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,
-  tokenHolderOf,
   type EditPreviewResult,
   type EditResult,
   type IssueOptions,
@@ -188,8 +187,9 @@ export {
   type TokenRetirement,
   type TokenVerification,
   type VerifiedToken,
-  withAssumedEnvs,
 } from './mission-service';
+export { withAssumedEnvs } from './mission-issuance';
+export { tokenHolderOf } from './mission-tokens';
 export { createTeamHandlers, type TeamHandlers } from './team-handlers';
 export { nextTrustLevel, trustRaiseOffers, type TrustRaiseOffer } from './trust-raise';
 export {

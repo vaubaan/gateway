@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { withAssumedEnvs } from './mission-service';
+import { withAssumedEnvs } from './mission-issuance';
 import { acmeAccount } from '../../../tests/support/missions/testing';
 
 describe('withAssumedEnvs', () => {
