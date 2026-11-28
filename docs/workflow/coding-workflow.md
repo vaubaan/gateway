@@ -4,19 +4,21 @@ tracks:
   - .github/
   - scripts/
   - package.json
-  - .husky/pre-commit
+  - .husky/
   - CONTRIBUTING.md
   - CHANGELOG.md
   - deploy/docker/Dockerfile
   - deploy/compose.yaml
   - .gitattributes
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-28
 ---
 
 # Coding workflow
 
-Trunk-based on `main`, squash-merged pull requests, releases by a tag a maintainer pushes; the only
-artefact is an image on GHCR. Decision:
+Trunk-based on `main`. One developer and the agents of several parallel conversations work on short
+branches named after their intent; the agent checks its own work, waits for a green CI on its
+branch, then moves `main` forward itself. Nobody reviews a pull request, and none is opened.
+Releases are tags a maintainer pushes on `main`. Decision:
 [repository-layout-and-contribution-workflow](../decisions/repository-layout-and-contribution-workflow.md).
 v4 documents are deleted; git and the tag `v4-final` are the archive.
 
@@ -31,9 +33,14 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
   break (type-check of the touched workspaces and their dependents, ESLint and Prettier on the
   changed files, the related Vitest tests, the harness linters, the Next build and its standalone tests when the build's inputs changed, and, with Docker, Semgrep as CI runs it); `npm run ci` is the full run (lint
   only through the script: it needs the script's heap), about 30 minutes on a small machine.
-- **A push to `main` runs the full check** (`audit`, then `e2e`): maintainers push their changes
-  to `main` directly, checked locally by `npm run check:changed`, and read the run's verdict after
-  the push. Nothing runs on a draft pull request.
+- **Every branch push runs the gate** (`audit`, then `e2e`), and so does a push to `main`. A branch
+  reaches `main` only once its run is green: `git fetch`, rebase on `origin/main`, push the branch,
+  read the run's verdict, then `git push origin HEAD:main` (fast-forward). A rebase after the run
+  that pulls in new commits from `main` needs no second run when it touched none of the branch's
+  files; otherwise push the rebased branch and wait again. `main` turns red only from a conflict
+  between two branches that were both green: the next commit fixes it before anything else.
+- **Before each commit**: `npm run check:changed`. A test that times out under load (several
+  worktrees testing on one machine) is rerun alone before concluding.
 - **Label `e2e`** a change to pages, components, styles, e2e tests or any plugin (the mission form
   is drawn from catalogs), or run `npm run test:e2e` locally.
 - Service facts in handbooks, catalogs and plugins come from Context7 through the gateway's
@@ -82,20 +89,31 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 
 ## PR process
 
-- One feature or fix per pull request, squash merged, its title a Conventional Commit.
-- Every commit signed off (`git commit -s`, Developer Certificate of Origin, no CLA);
-  `scripts/dco-check.mjs` in the job `audit` refuses a pull request with an unsigned commit, merges
-  excepted.
-- Before opening: `npm run ci` green, the [template](../../.github/PULL_REQUEST_TEMPLATE.md)
-  answered, a bullet under `## [Unreleased]` of `CHANGELOG.md` for a user-visible change.
+- No pull request for the developer and the agents: the gate runs on the branch, the agent merges
+  it (above). A contributor from outside opens a pull request; it gets the same gate and a
+  maintainer merges it.
+- One intent or fix per commit on `main`, squashed, its message a Conventional Commit
+  (`feat`, `fix`, `docs`, `refactor`, `test`, `ci`, `build`, `chore`, and `harn` for the harness's
+  pillars and generated files).
+- Every commit signed off (`git commit -s`, Developer Certificate of Origin, no CLA):
+  `.husky/commit-msg` refuses a message without its `Signed-off-by:` trailer, and
+  `scripts/dco-check.mjs` in the job `audit` refuses an unsigned commit, merges excepted.
+- A bullet under `## [Unreleased]` of `CHANGELOG.md` for a user-visible change.
+- A mass change (a split, a rename across folders, a formatting pass) is announced first to the
+  conversations working on the repository (`vaubaan-msg`), lands as one mechanical commit per
+  file or folder, and no push carries 300 files or more.
 
 ## Branch model
 
-- `main` is the trunk. Its protection refuses a force-push, a deletion and a merge commit
-  (linear history), and asks for no pull request: maintainers push a squashed, signed-off commit
-  per feature directly to `main`; contributors work on `feature/*` or `fix/*` from
-  `origin/main`, rebased right before the push, and open a pull request. Every release, the
-  pre-releases included, is tagged on `main`.
+- `main` is the trunk. Its protection refuses a force-push, a deletion and a merge commit (linear
+  history), and asks for no pull request. Every release, the pre-releases included, is tagged on
+  `main`; there is no release branch.
+- A work branch is named after what it delivers, with the commit type as prefix:
+  `feat/<intent-slug>` (the slug of its intent in `docs/intents/`), `fix/<what>`, `docs/<what>`,
+  `refactor/<what>`, `test/<what>`, `ci/<what>`, `chore/<what>`, `harn/<what>` (harness pillars and
+  generated files). One branch per intent; a conversation that moves to another intent starts
+  another branch. A branch lives hours, not days: rebased on `origin/main` before every push,
+  deleted once on `main`.
 - These protections, the release tags' and the catalog's: `.github/settings/`, checked and
   reapplied by `scripts/github-settings.sh` (handbook [github-settings](../handbook/github-settings.md)).
 
