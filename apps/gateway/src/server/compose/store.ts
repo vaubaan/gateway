@@ -48,6 +48,13 @@ export async function openEmbeddedStore(ctx: StoreContext): Promise<Store> {
       { cause: err },
     );
   }
+  if (store.preMigrationCopy) {
+    ctx.logger.info('store copied before migrating', {
+      copy: store.preMigrationCopy.path,
+      from_version: store.preMigrationCopy.from,
+      to_version: store.preMigrationCopy.to,
+    });
+  }
   ctx.logger.info('store opened', {
     kind: store.kind,
     path,

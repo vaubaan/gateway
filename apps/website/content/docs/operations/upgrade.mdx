@@ -1,6 +1,6 @@
 ---
 title: Upgrade
-description: Back up, take the new version, restart; migrations run at start and there is no downgrade.
+description: Back up, take the new version, restart; migrations run at start, after a copy of the database the former version can go back to.
 ---
 
 Upgrading an instance means backing it up, running the image of the new version, and letting it migrate its database at start; migrations only go forward, and an older image refuses a newer database.
@@ -8,7 +8,7 @@ Upgrading an instance means backing it up, running the image of the new version,
 ## Steps
 
 1. **Read the release notes.** A patch or a minor release needs nothing else; a major one says what to change first ([versioning policy](https://github.com/vaubaan/gateway/blob/main/docs/workflow/coding-workflow.md#versioning-policy)).
-2. **Back up** the database and keep the master key with the copy ([backup](/docs/operations/backup-and-restore)).
+2. **Back up** the database and keep the master key with the copy ([backup](/docs/operations/backup-and-restore)). The start that migrates makes a copy of its own too (below), but on the same volume: a backup is what survives losing the volume.
 3. **Take the new version.** Every release publishes an image at `ghcr.io/vaubaan/gateway:<version>` (the 2.0.0 pre-releases too, for example `2.0.0-alpha.15`). If the `gateway` service runs a released image, change its `image:` line to the new version, pinned by digest (`ghcr.io/vaubaan/gateway@sha256:<digest>`; `docker buildx imagetools inspect ghcr.io/vaubaan/gateway:<version>` prints it), verify it where the release offers an attestation, and restart:
 
    ```bash
@@ -19,7 +19,18 @@ Upgrading an instance means backing it up, running the image of the new version,
 
 4. **Check** `/healthz`: it answers the new version and commit.
 
-Schema migrations run at start, forward-only and checksummed. There is no downgrade: keep the backup of step 2 until you are sure.
+Schema migrations run at start, forward-only and checksummed. Before it migrates, the start writes a copy of the database beside it, in `pre-migration/` next to the database file (`/data/pre-migration/` in the image), named after the time and the schema versions (`gateway.db.20261128T101500Z.0042-to-0043.sqlite`), and keeps the three most recent. If it cannot write that copy (a full disk, no write access), it stops before migrating anything and says so.
+
+## Go back to the former version
+
+There is no downgrade in place: an older image refuses a newer database. To go back, stop the gateway, start the former version's image with the copy the upgrade left, and restart:
+
+```bash
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml run --rm gateway \
+  node apps/gateway/restore.mjs /data/pre-migration/<copy>.sqlite --force
+```
+
+The copy opens with the same master key, and the database it replaces is kept beside it as `<name>.replaced-<time>` ([restore](/docs/operations/backup-and-restore)). What changed after the upgrade is lost: the copy is the database as it was when the new version started.
 
 ## Changing the identity provider
 

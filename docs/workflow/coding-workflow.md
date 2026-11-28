@@ -154,8 +154,9 @@ owner doing anything:
    `Vaubaan-<version>-arm64.dmg` and `-x64.dmg` to the release once it exists, signed and notarized
    only; without the Apple secrets they stay artifacts of the run. A failed app build never holds
    the image's release back: run `desktop.yml` by hand, then `gh release upload`.
-4. Rollback: no downgrade (an older image refuses a newer database): fix forward, or restore a
-   pre-upgrade backup with the previous image.
+4. Rollback: no downgrade (an older image refuses a newer database): fix forward, or start the
+   previous image on the copy the upgrade left in `pre-migration/` beside the store
+   (`restore.mjs <copy> --force`, handbook [store](../handbook/store.md)).
 
 #### On a private repository
 

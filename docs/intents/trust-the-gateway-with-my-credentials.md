@@ -47,8 +47,9 @@ acceptance:
 
 ## Go back to the former version after an update
 
-status: proposed
+status: implemented
 requires: instance
+anchors: apps/gateway/src/server/store/pre-migration-copy.ts, apps/gateway/src/server/store/pre-migration-copy.test.ts, apps/gateway/tests/integration/store/pre-migration-copy.test.ts, apps/website/content/docs/operations/upgrade.mdx
 relieves: an-update-that-breaks-on-a-monday
 spec: ../spec/vaubaan-gateway.md#6-security
 acceptance:

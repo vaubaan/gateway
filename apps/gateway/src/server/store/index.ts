@@ -22,6 +22,7 @@ import {
 import type { Encryptor } from './encryptor.ts';
 import { newId, type IdGenerator } from './ids.ts';
 import { DEFAULT_MIGRATIONS_DIR, loadMigrations, runMigrations } from './migrate.ts';
+import { copyBeforeMigrating, type PreMigrationCopy } from './pre-migration-copy.ts';
 import {
   createAdministratorsRepo,
   type AdministratorsRepo,
@@ -124,6 +125,8 @@ export interface Store {
   readonly auditWriter: AuditWriter;
   /** Highest migration version applied. */
   readonly schemaVersion: number;
+  /** The copy this start left before migrating (ADR store-copied-before-a-migration), or null. */
+  readonly preMigrationCopy: PreMigrationCopy | null;
   /** Raw handle, for structural tests and diagnostics only. */
   readonly db: StoreDb;
   /** Cheap liveness probe (`SELECT 1`); rejects when the handle is unusable. */
@@ -139,8 +142,10 @@ export function openStore(options: StoreOptions): Store {
   const db = openDb({ path: options.path, busyTimeoutMs: options.busyTimeoutMs });
   const clock = options.clock ?? systemClock;
   let currentVersion: number;
+  let preMigrationCopy: PreMigrationCopy | null;
   try {
     const migrations = loadMigrations(options.migrationsDir ?? DEFAULT_MIGRATIONS_DIR);
+    preMigrationCopy = copyBeforeMigrating(db, options.path, migrations, clock);
     currentVersion = runMigrations(db, migrations, clock).currentVersion;
   } catch (err) {
     // A refused boot must not leave the file (and its -wal) locked by this process.
@@ -185,6 +190,7 @@ export function openStore(options: StoreOptions): Store {
     pluginSigners: createPluginSignersRepo(ctx),
     auditWriter: new SqliteAuditWriter(audit),
     schemaVersion: currentVersion,
+    preMigrationCopy,
     db,
     async ping() {
       ping.get();

@@ -11,6 +11,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **An upgrade leaves a copy of the database the former version can go back to.** Before a start
+  migrates the store, it writes `pre-migration/<store>.<time>.<from>-to-<to>.sqlite` beside it and
+  keeps the three most recent; going back is the former image and `restore.mjs <copy> --force`. A
+  copy that cannot be written stops the start before any migration (ADR
+  store-copied-before-a-migration).
 - **Google Drive (plugin 0.1.0) and OneDrive (plugin 0.1.0): an agent reads and adds files.**
   Five tools each: list a folder, search by name and content, read a file as text (Google Docs as
   Markdown, Sheets as CSV, Slides as plain text; OneDrive text files), upload a text file and

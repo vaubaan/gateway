@@ -15,7 +15,8 @@ last_reviewed: 2026-11-25
 The gateway's only persistence: one SQLite file on the volume, migrated at boot, reached through
 repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6, §8. ADRs:
 [embedded-store-sqlite-and-migrations](../decisions/embedded-store-sqlite-and-migrations.md),
-[scheduled-encrypted-backup-to-object-storage](../decisions/scheduled-encrypted-backup-to-object-storage.md).
+[scheduled-encrypted-backup-to-object-storage](../decisions/scheduled-encrypted-backup-to-object-storage.md),
+[store-copied-before-a-migration](../decisions/store-copied-before-a-migration.md).
 
 ## Start here
 
@@ -32,7 +33,9 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   recording a migration the image does not ship (downgrade). A fix is a new file.
 - Migrations go forward only: there is no down migration. Going back to an older image is a
   restore of a backup made by that image or before the upgrade (`restore`), never a rollback of
-  the schema in place; back up before an upgrade.
+  the schema in place. A start that migrates first writes `pre-migration/<store name>.<time>.<from>-to-<to>.sqlite`
+  beside the store (`store/pre-migration-copy.ts`), keeps three, and stops before migrating when
+  it cannot.
 - Every closed-set column is read through `parseEnum`: an unknown value throws `InvariantError`
   (`corrupt-rows.test.ts`). Some columns have no schema `CHECK` (`audit.act`…): the list is their
   only guard.
@@ -110,6 +113,12 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   [backup and restore](https://vaubaan.com/docs/operations/backup-and-restore#make-a-copy).
 - Scheduled (`backup.s3.*`, [configuration](configuration.md#configuration-keys)): each run
   encrypts, dry-runs a restore of the result and uploads nothing if it fails.
+
+### Go back after an upgrade
+
+- Former image, then `restore.mjs <store dir>/pre-migration/<copy>.sqlite --force`: the copy is
+  the store as the upgrading start found it, under the same master key; it holds the same sealed
+  secrets as the store, on the same volume (no off-site value).
 
 ### Restore
 
