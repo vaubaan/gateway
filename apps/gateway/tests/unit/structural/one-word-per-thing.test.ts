@@ -98,7 +98,7 @@ const CONNECTION_ALLOWED: readonly Allowance[] = [
   },
   {
     pattern: /limits\.connections|VAUBAAN_LIMITS_CONNECTIONS/,
-    why: 'a renamed configuration key, named so that an operator recognises the one they set',
+    why: 'a retired configuration key, refused by name so that an operator recognises the one they set',
   },
   {
     pattern: /connection → account/,

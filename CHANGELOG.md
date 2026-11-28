@@ -9,6 +9,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **`limits.connections` is refused**: the old name of the accounts ceiling (and its variable
+  `VAUBAAN_LIMITS_CONNECTIONS`) is no longer read in its place. An instance that still sets it
+  stops at start with exit 78 and asks for `limits.accounts` / `VAUBAAN_LIMITS_ACCOUNTS`.
+
 ## [2.0.0-alpha.33] - 2026-11-28
 
 ### Highlights

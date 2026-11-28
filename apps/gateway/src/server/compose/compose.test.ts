@@ -7,11 +7,7 @@ import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { DeferredCatalogIndex } from './registry';
-import {
-  DEPRECATED_KEY_WARNING,
-  NO_TRUSTED_PROXY_WARNING,
-  RETIRED_MANAGEMENT_KEYS_WARNING,
-} from './boot-checks';
+import { NO_TRUSTED_PROXY_WARNING, RETIRED_MANAGEMENT_KEYS_WARNING } from './boot-checks';
 import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
 import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
 import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
@@ -121,22 +117,6 @@ describe('buildRoot', () => {
     expect(retired).toHaveLength(1);
     expect(retired[0]).toContain('VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY');
     expect(retired[0]).not.toContain('"open"');
-    await root.close();
-  });
-
-  it('starts with a renamed key under its old name, reads it, and warns once naming the new one', async () => {
-    // ADR one-word-per-thing-account-service-plugin: `limits.connections` is `limits.accounts`.
-    const lines: string[] = [];
-    const root = await buildRoot({
-      ...quiet,
-      loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '12' }) }),
-      logWrite: (_lvl, line) => lines.push(line),
-    });
-    expect(root.config.limits.accounts).toBe(12);
-    const renamed = lines.filter((l) => l.includes(DEPRECATED_KEY_WARNING));
-    expect(renamed).toHaveLength(1);
-    expect(renamed[0]).toContain('VAUBAAN_LIMITS_CONNECTIONS');
-    expect(renamed[0]).toContain('VAUBAAN_LIMITS_ACCOUNTS');
     await root.close();
   });
 

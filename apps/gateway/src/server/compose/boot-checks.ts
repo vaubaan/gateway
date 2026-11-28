@@ -153,12 +153,9 @@ export function warnKeyBesideStore(
  * starts; the value is never logged.
  */
 export function logRetiredKeys(
-  config: Pick<InstanceConfig, 'retiredKeys' | 'retiredManagementKeys' | 'deprecatedKeys'>,
+  config: Pick<InstanceConfig, 'retiredKeys' | 'retiredManagementKeys'>,
   logger: Logger,
 ): void {
-  for (const { old, current } of config.deprecatedKeys) {
-    logger.warn(DEPRECATED_KEY_WARNING, { key: old, write_instead: current });
-  }
   for (const key of config.retiredKeys) {
     logger.warn(
       'configuration key no longer read: the gateway takes no OAuth client declared by an administrator (Gmail connects with an app password); remove it',
@@ -170,10 +167,6 @@ export function logRetiredKeys(
     logger.warn(RETIRED_MANAGEMENT_KEYS_WARNING, { keys: [...config.retiredManagementKeys] });
   }
 }
-
-/** Said once per renamed key or variable the configuration still uses under its old name. */
-export const DEPRECATED_KEY_WARNING =
-  'configuration key renamed: it is still read under its old name, for now; write the new one';
 
 /** Said once at boot when the configuration still sets keys of the retired authorization server. */
 export const RETIRED_MANAGEMENT_KEYS_WARNING =

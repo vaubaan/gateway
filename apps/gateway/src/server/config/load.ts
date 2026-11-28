@@ -15,7 +15,6 @@
  */
 import { installedClients } from './installed-clients';
 
-import { applyDeprecatedAliases } from './deprecated-aliases';
 import { readEnvSource } from './env-source';
 import { ConfigError, IssueList } from './errors';
 import { readFileSource } from './file-source';
@@ -39,6 +38,7 @@ import {
   readDocs,
   readLogLevel,
   readLimits,
+  refuseRetiredLimitKeys,
   readOpsToken,
   readRefreshInterval,
   readTelemetryLevel,
@@ -123,16 +123,10 @@ export function loadInstanceConfigOrSetup(options: LoadOptions = {}): ConfigLoad
   const local = localModeAsked(env, fromFile?.tree ?? null);
   const effectiveEnv = local ? withLocalPresets(env, fromFile?.tree ?? null) : env;
   const fromEnv = readEnvSource(effectiveEnv, issues, readFile, envTrace);
-  const deprecatedKeys = applyDeprecatedAliases(
-    fromEnv,
-    fromFile?.tree ?? null,
-    effectiveEnv,
-    issues,
-  );
   const raw = fromFile ? mergeTrees(fromEnv, fromFile.tree) : fromEnv;
   const masterKey = masterKeySource(raw, fromFile?.tree ?? null, envTrace, fileTrace, issues);
   const validated = validate(raw, issues, effectiveEnv, masterKey);
-  const config = validated ? { ...validated, deprecatedKeys } : null;
+  const config = validated;
   issues.throwIfAny();
   if (!config) throw new ConfigError(issues.items); // unreachable: validate() reports every failure
   const secretEnvNames = [
@@ -220,6 +214,7 @@ function validate(
   const signInProviders = checkSignInProviders(r, signIn);
   const admin = readAdmin(r, signInProviders);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0, local);
+  refuseRetiredLimitKeys(r, raw, env);
   const limits = readLimits(r);
   const opsToken = readOpsToken(r);
   const plugins = readPlugins(r);
@@ -270,7 +265,6 @@ function validate(
     admin,
     retiredKeys: retiredConfigKeys(raw, env),
     retiredManagementKeys: retiredManagementKeys(raw, env),
-    deprecatedKeys: [],
     bootstrapToken,
     telemetry: {
       enabled: telemetryEnabled,

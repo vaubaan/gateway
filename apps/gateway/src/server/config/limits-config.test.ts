@@ -52,27 +52,21 @@ describe('limits.* — the ceilings', () => {
     expect(config.limits).toEqual({ users: null, accounts: null, activeMissions: 1 });
   });
 
-  it('read the accounts ceiling under its old name, the new one winning, and say so (ADR one-word-per-thing-account-service-plugin)', () => {
-    const fromEnv = loadInstanceConfig({ env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7' }) });
-    expect(fromEnv.config.limits.accounts).toBe(7);
-    expect(fromEnv.config.deprecatedKeys).toEqual([
-      { old: 'VAUBAAN_LIMITS_CONNECTIONS', current: 'VAUBAAN_LIMITS_ACCOUNTS' },
-    ]);
-    const both = loadInstanceConfig({
-      env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7', VAUBAAN_LIMITS_ACCOUNTS: '9' }),
-    });
-    expect(both.config.limits.accounts).toBe(9);
+  it('refuse the retired name of the accounts ceiling, file or variable, naming limits.accounts (ADR one-word-per-thing-account-service-plugin)', () => {
+    expect(issuesOf(validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7' }))).toEqual(['limits.connections']);
+    expect(
+      issuesOf(validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7', VAUBAAN_LIMITS_ACCOUNTS: '9' })),
+    ).toEqual(['limits.connections']);
     const path = '/config/gateway.yaml';
-    const fromFile = loadInstanceConfig({
-      env: validEnv({ [CONFIG_FILE_ENV]: path }),
-      readFile: fakeFiles({ [path]: 'limits:\n  connections: 4\n' }),
-    });
-    expect(fromFile.config.limits.accounts).toBe(4);
-    expect(fromFile.config.deprecatedKeys).toEqual([
-      { old: 'limits.connections', current: 'limits.accounts' },
-    ]);
-    expect(loadInstanceConfig({ env: validEnv() }).config.deprecatedKeys).toEqual([]);
-    expect(issuesOf(validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '0' }))).toEqual(['limits.accounts']);
+    expect(
+      issuesOf(validEnv({ [CONFIG_FILE_ENV]: path }), { [path]: 'limits:\n  connections: 4\n' }),
+    ).toEqual(['limits.connections']);
+    try {
+      loadInstanceConfig({ env: validEnv({ VAUBAAN_LIMITS_CONNECTIONS: '7' }) });
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      expect((err as ConfigError).issues[0]?.message).toContain('limits.accounts');
+    }
   });
 
   it.each([

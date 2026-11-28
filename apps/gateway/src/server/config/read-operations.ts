@@ -5,6 +5,8 @@
 import { isTelemetryLevel, TELEMETRY_LEVELS, type TelemetryLevel } from '@vaubaan/telemetry';
 
 import type { Reader } from './reader';
+import type { EnvSource } from './secret-refs';
+import { RETIRED_LIMITS_CONNECTIONS_ENV, RETIRED_LIMITS_CONNECTIONS_KEY } from './retired-keys';
 import { envNamesFor, keySpec } from './sources';
 import { getPath, type RawTree } from './tree';
 import {
@@ -52,6 +54,21 @@ export function readLimits(r: Reader): LimitsConfig {
     accounts: r.optionalInt(keySpec('limits.accounts')),
     activeMissions: r.optionalInt(keySpec('limits.active_missions')),
   };
+}
+
+/**
+ * The old name of the accounts ceiling (`limits.connections`,
+ * `VAUBAAN_LIMITS_CONNECTIONS`) is refused: ignored, it would lift the ceiling.
+ */
+export function refuseRetiredLimitKeys(r: Reader, raw: RawTree, env: EnvSource): void {
+  const variables =
+    env[RETIRED_LIMITS_CONNECTIONS_ENV] !== undefined ? [RETIRED_LIMITS_CONNECTIONS_ENV] : [];
+  if (getPath(raw, RETIRED_LIMITS_CONNECTIONS_KEY) === undefined && variables.length === 0) return;
+  r.issues.add(
+    RETIRED_LIMITS_CONNECTIONS_KEY,
+    'is retired: write the same ceiling as limits.accounts (VAUBAAN_LIMITS_ACCOUNTS)',
+    variables,
+  );
 }
 
 /** `updates.*`: the versions check, on by default, and its https feed. */

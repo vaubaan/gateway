@@ -21,6 +21,15 @@ export const RETIRED_PROVIDER_ENV_PREFIX = 'VAUBAAN_PROVIDER_';
 export const RETIRED_IDP_KEY = 'idp';
 export const RETIRED_IDP_ENV_PREFIX = 'VAUBAAN_IDP_';
 
+/**
+ * The old name of the ceiling of connected accounts (`limits.connections`,
+ * `VAUBAAN_LIMITS_CONNECTIONS`; ADR one-word-per-thing-account-service-plugin):
+ * retired, and refused rather than ignored — ignoring it would lift the ceiling.
+ * It is written `limits.accounts` now.
+ */
+export const RETIRED_LIMITS_CONNECTIONS_KEY = 'limits.connections';
+export const RETIRED_LIMITS_CONNECTIONS_ENV = 'VAUBAAN_LIMITS_CONNECTIONS';
+
 /** The top-level key of the retired per-provider OAuth clients (`providers.<id>.<field>`). */
 export const RETIRED_PROVIDERS_KEY = 'providers';
 

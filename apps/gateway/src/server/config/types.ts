@@ -341,13 +341,6 @@ export interface InstanceConfig {
    * says once that they are ignored, and the instance starts.
    */
   readonly retiredManagementKeys: readonly string[];
-  /**
-   * Old names of renamed keys and variables the configuration still uses
-   * (`limits.connections`, `VAUBAAN_LIMITS_CONNECTIONS`; ADR
-   * one-word-per-thing-account-service-plugin): read under their new name, the
-   * root warns once for each.
-   */
-  readonly deprecatedKeys: readonly { readonly old: string; readonly current: string }[];
   readonly bootstrapToken: string | null;
   readonly telemetry: TelemetryConfig;
   /** Mail delivery, or `null` when no relay is configured. */
