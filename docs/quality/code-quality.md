@@ -71,8 +71,12 @@ request: the agent that writes the change checks these rules itself, then merges
    modules of their own the same day. Check: a diff that adds a public method to a class over the
    budget moves at least as many out to a use-case module.
 3. **A `catch` without binding rethrows, logs, or carries a `// expected: <why>` comment.**
-   123 bare `catch {` in `apps/gateway`, ≈42 of them return `null`/`undefined`/`false` with no
-   trace: a failure becomes an empty result. Check: every new or moved bare `catch` in the diff.
+   On 2026-11-28, 95 catches ignored their error in `apps/gateway/src` outside four folders:
+   81 now say why (`// expected: …`, 16 of them an older comment reworded), 3 lost a real failure
+   and now log it (telemetry ×2, the pinned catalog of a plugin activation), 11 already rethrew,
+   logged or said why. `server/accounts`, `auth`, `execution` and `git` are listed as not yet
+   under the rule. Check: `apps/gateway/tests/unit/structural/no-silent-catch.test.ts`, which
+   enforces it; its exception set may only lose folders.
 4. **No backward-compatible code: no redirect, alias, tolerated old key or "legacy" branch.**
    Only the team runs the gateway (owner decision 2026-11-26); a throwaway script migrates existing
    data instead, and is not kept. Check: grep the diff for `legacy`, `old`, `before migration`,

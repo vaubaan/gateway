@@ -67,7 +67,7 @@ export function createWebSessionsRepo(ctx: RepoContext): WebSessionsRepo {
         const value: unknown = JSON.parse(row.value_json);
         return value;
       } catch {
-        // A record that cannot be read is no session; it is not kept around.
+        // expected: a record that cannot be read is no session; it is not kept around.
         remove.run(key);
         return null;
       }

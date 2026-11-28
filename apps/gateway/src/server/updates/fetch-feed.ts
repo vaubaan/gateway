@@ -115,6 +115,7 @@ async function readDocument<T>(
   try {
     parsed = JSON.parse(text);
   } catch {
+    // expected: the feed answered something that is not JSON: reported as not-json
     return { ok: false, failure: 'not-json' };
   }
   return guard(parsed) ? { ok: true, value: parsed } : { ok: false, failure: 'not-a-feed' };

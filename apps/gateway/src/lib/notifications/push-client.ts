@@ -118,6 +118,7 @@ async function deliveredTo(knownDigests: readonly string[]): Promise<boolean> {
     if (!subscription) return false;
     return knownDigests.includes(await endpointDigestOf(subscription.endpoint));
   } catch {
+    // expected: no service worker or push manager here: this browser is not one of the devices
     return false;
   }
 }
@@ -170,6 +171,7 @@ async function subscriptionFor(
     });
     return { subscription, createdNow: true };
   } catch {
+    // expected: the browser refused the subscription: the caller reports it failed
     return null;
   }
 }
@@ -181,6 +183,7 @@ export async function subscribeThisDevice(publicKey: string): Promise<SubscribeO
     if ((await Notification.requestPermission()) !== 'granted')
       return { ok: false, reason: 'denied' };
   } catch {
+    // expected: the permission prompt is unavailable in this browser: reported as failed
     return failed;
   }
   const held = await subscriptionFor(publicKey);
@@ -205,6 +208,7 @@ export function proposalPutOff(): boolean {
   try {
     return window.localStorage.getItem(NOT_NOW_KEY) !== null;
   } catch {
+    // expected: storage refused: the proposal counts as not put off
     return false;
   }
 }
@@ -213,6 +217,6 @@ export function putProposalOff(): void {
   try {
     window.localStorage.setItem(NOT_NOW_KEY, new Date().toISOString());
   } catch {
-    // A browser that keeps nothing asks again next time: that is all.
+    // expected: a browser that keeps nothing asks again next time: that is all.
   }
 }

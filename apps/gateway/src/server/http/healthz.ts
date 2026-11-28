@@ -101,6 +101,7 @@ export function healthHandler(getDeps: () => Promise<HealthDeps>): () => Promise
     try {
       deps = await getDeps();
     } catch {
+      // expected: the root did not build; the boot path reports why, the probe answers unavailable
       return unavailableResponse();
     }
     return healthResponse(deps);

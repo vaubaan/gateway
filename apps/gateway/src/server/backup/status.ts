@@ -67,7 +67,7 @@ export function backupStatusStore(config: Pick<ConfigRepo, 'get' | 'set'>): Back
       try {
         return { ...EMPTY_BACKUP_STATUS, ...(JSON.parse(raw) as Partial<BackupStatus>) };
       } catch {
-        // A record that does not parse is no record: the next run writes a good one.
+        // expected: a record that does not parse is no record: the next run writes a good one.
         return EMPTY_BACKUP_STATUS;
       }
     },

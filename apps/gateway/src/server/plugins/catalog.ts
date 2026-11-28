@@ -125,6 +125,7 @@ export async function fetchCatalogArchive(
       signal: AbortSignal.timeout(options.timeoutMs ?? CATALOG_TIMEOUT_MS),
     });
   } catch {
+    // expected: the catalog did not answer (network, timeout): the result says so
     return {
       ok: false,
       code: 'catalog-unreachable',

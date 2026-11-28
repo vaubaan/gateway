@@ -83,6 +83,7 @@ export function checkAddressUrl(
   try {
     url = new URL(raw.trim());
   } catch {
+    // expected: the address typed is not a URL: refused
     return refuse('invalid-address');
   }
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') {

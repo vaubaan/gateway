@@ -32,6 +32,7 @@ export function parseRestoreSource(raw: string): ParsedRestoreSource {
     try {
       url = new URL(text);
     } catch {
+      // expected: the restore source is not a URL: said as a problem
       return { ok: false, problem: RESTORE_SOURCE_PROBLEMS.url };
     }
     if (url.username !== '' || url.password !== '') {

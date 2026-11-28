@@ -21,6 +21,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     root = await getRoot();
   } catch {
+    // expected: the root did not build; the boot path reports why, this route only answers unavailable
     return opsStatsUnavailableResponse();
   }
   return opsStatsResponse(request, root.opsStats);

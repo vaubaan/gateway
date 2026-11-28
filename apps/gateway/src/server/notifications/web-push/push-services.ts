@@ -31,6 +31,7 @@ export function isPushServiceEndpoint(endpoint: string): boolean {
   try {
     url = new URL(endpoint);
   } catch {
+    // expected: an endpoint that is not a URL is no push service
     return false;
   }
   if (url.protocol !== 'https:' || url.username !== '' || url.password !== '') return false;

@@ -38,7 +38,7 @@ export function riskIdsOf(riskId: RiskId, json: string | null): readonly RiskId[
       return parsed;
     }
   } catch {
-    // Falls through to the narrow reading.
+    // expected: a list that cannot be read falls through to the narrow reading (see the doc comment)
   }
   return [riskId];
 }

@@ -251,6 +251,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
       try {
         raw = form ? fieldsOf(await request.formData()) : await request.json();
       } catch {
+        // expected: a decision body that is neither a form nor JSON: answered 400
         return json(400, { error: 'invalid-decision', message: 'The body is not a decision.' });
       }
       return decided(

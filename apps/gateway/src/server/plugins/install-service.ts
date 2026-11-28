@@ -16,7 +16,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { CatalogMark } from '@vaubaan/shared';
 import { parseCatalogYaml } from '@vaubaan/plugin-sdk';
 
-import type { Logger } from '../logging';
+import { errorFields, type Logger } from '../logging';
 import type { Clock } from '../store/clock.ts';
 import { toIso } from '../store/clock.ts';
 import type {
@@ -517,7 +517,8 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
           deprecated = parseCatalogYaml(text)
             .catalog.risks.filter((risk) => risk.deprecated === true)
             .map((risk) => risk.id);
-        } catch {
+        } catch (err) {
+          deps.logger.warn('pinned catalog unreadable', { digest, ...errorFields(err) });
           deprecated = [];
         }
       }
@@ -642,6 +643,7 @@ export function createPluginInstallService(deps: PluginInstallDeps): PluginInsta
       try {
         keyId = keyIdOf(input.publicKeyPem);
       } catch {
+        // expected: the pasted key is not an ed25519 PEM: said to the person
         return {
           ok: false,
           code: 'not-a-key',

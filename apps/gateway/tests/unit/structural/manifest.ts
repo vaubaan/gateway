@@ -1093,6 +1093,22 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'no-silent-catch',
+    statement:
+      'A catch in the gateway source that ignores its error (unbound, or bound to a _-prefixed name) starts its block with a `// expected: <why>` comment, rethrows, or logs; four folders being edited in parallel on 2026-11-28 are listed by name until they are brought under the rule.',
+    source: 'docs/quality/code-quality.md, rule 3',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/no-silent-catch.test.ts`,
+        tests: [
+          'tells a silent catch from one that says why, rethrows or logs',
+          'scans the gateway source and finds catches that ignore their error',
+          'every catch that ignores its error carries an expected comment, rethrows, or logs',
+        ],
+      },
+    ],
+  },
+  {
     id: 'client-imports-no-server-value',
     statement:
       'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, services, shares) import no value from src/server.',

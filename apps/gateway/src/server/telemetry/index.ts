@@ -28,7 +28,7 @@ import {
 import type { Authenticator } from '../auth/authenticator';
 import type { BuildInfo, InstanceConfig } from '../config';
 import type { TelemetrySink } from '../execution/telemetry-sink';
-import type { Logger } from '../logging';
+import { errorFields, type Logger } from '../logging';
 import { systemClock, type Clock } from '../store/clock';
 import type { ConfigRepo } from '../store/repositories/config';
 import { createTelemetryHandlers, type TelemetryHandlers } from './handlers';
@@ -206,8 +206,9 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         if (client.state === 'disabled') return;
         const report = reportOf(execution, deps.build.version);
         if (report) client.record({ kind: 'plugin-health', report });
-      } catch {
-        // Telemetry never fails a call, and an error here may carry service text: not logged.
+      } catch (err) {
+        // Telemetry never fails a call; the class and frames only, never the message (it may carry service text).
+        logger.warn('telemetry report not recorded', errorFields(err));
       }
     },
     callDecided(decision) {
@@ -216,8 +217,9 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         profiler.countCall();
         const report = decisionReportOf(decision, deps.registry, deps.build.version);
         if (report) client.record({ kind: 'decision', report });
-      } catch {
+      } catch (err) {
         // Telemetry never fails a call.
+        logger.warn('telemetry decision not recorded', errorFields(err));
       }
     },
   };

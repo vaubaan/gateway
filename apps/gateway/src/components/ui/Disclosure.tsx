@@ -38,7 +38,7 @@ function readRemembered(id: string): boolean {
   try {
     return window.localStorage.getItem(`${STORAGE_PREFIX}${id}`) === '1';
   } catch {
-    // Storage refused (private mode, policy): the disclosure simply starts closed.
+    // expected: storage refused (private mode, policy): the disclosure simply starts closed.
     return false;
   }
 }
@@ -48,7 +48,7 @@ function writeRemembered(id: string, open: boolean): void {
     if (open) window.localStorage.setItem(`${STORAGE_PREFIX}${id}`, '1');
     else window.localStorage.removeItem(`${STORAGE_PREFIX}${id}`);
   } catch {
-    // Not remembered; nothing else changes.
+    // expected: storage refused: not remembered, nothing else changes.
   }
 }
 

@@ -160,6 +160,7 @@ export async function runRestoreCli(
   try {
     return await run(argv, io, deps);
   } catch {
+    // expected: any other failure ends as UNEXPECTED_FAILURE; its message is withheld (it may quote a secret)
     io.stderr(UNEXPECTED_FAILURE);
     return EXIT_FAILED;
   }

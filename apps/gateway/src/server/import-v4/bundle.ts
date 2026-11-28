@@ -209,6 +209,7 @@ export function parseBundle(text: string): ParsedBundle {
   try {
     raw = JSON.parse(text);
   } catch {
+    // expected: the operator's bundle is not JSON; the parser's message is withheld (it quotes the input)
     return { ok: false, problems: ['the bundle is not valid JSON'] };
   }
   const result = bundleSchema.safeParse(raw);

@@ -78,6 +78,7 @@ export async function verifyPassword(hash: string, password: string): Promise<bo
   try {
     return await argon2.verify(hash, password);
   } catch {
+    // expected: argon2 throws on a malformed hash, which verifies nothing
     return false;
   }
 }

@@ -41,6 +41,7 @@ export function CopyButton({
       await navigator.clipboard.writeText(text);
       setState('copied');
     } catch {
+      // expected: the browser refused the clipboard (permission, insecure context): shown as refused
       setState('refused');
     }
   }

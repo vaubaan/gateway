@@ -190,6 +190,7 @@ async function readManifest(path: string): Promise<PinManifest> {
   try {
     raw = JSON.parse(await readFile(file, 'utf8'));
   } catch {
+    // expected: a manifest that is not JSON refuses the plugin, with that reason
     refuse(path, `${MANIFEST_FILE} is not valid JSON`);
   }
   const read = readPinManifest(raw);

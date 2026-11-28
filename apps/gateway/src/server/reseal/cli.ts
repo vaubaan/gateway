@@ -98,6 +98,7 @@ export async function runResealCli(
   try {
     return await run(argv, io, deps);
   } catch {
+    // expected: any other failure ends as UNEXPECTED_FAILURE; its message is withheld (it may quote a secret)
     io.stderr(UNEXPECTED_FAILURE);
     return EXIT_INCOMPLETE;
   }
@@ -201,6 +202,7 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
     try {
       await store.close();
     } catch {
+      // expected: a store that does not close is said on stderr, details withheld
       io.stderr('reseal: the store did not close cleanly (details withheld).\n');
     }
   }

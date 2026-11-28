@@ -17,6 +17,7 @@ export function tokenFromSetupLink(href: string): string | null {
   try {
     url = new URL(href);
   } catch {
+    // expected: a pasted link that is not a URL carries no token
     return null;
   }
   const fragment = new URLSearchParams(url.hash.replace(/^#/, '')).get(SETUP_LINK_TOKEN_PARAM);

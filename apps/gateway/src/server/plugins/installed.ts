@@ -112,6 +112,7 @@ export async function storeArchive(
   try {
     pkg = JSON.parse(text(files.get(MANIFEST_FILE)) ?? 'null');
   } catch {
+    // expected: a package.json that does not parse reads as none: refused as archive-invalid below
     pkg = null;
   }
   const read = readPinManifest(pkg);
@@ -225,6 +226,7 @@ export async function installedFolderProblem(path: string): Promise<string | nul
   try {
     present = await filesUnder(path);
   } catch {
+    // expected: the pinned folder is gone: that is the problem reported
     return 'the folder is missing';
   }
   for (const [file, digest] of Object.entries(manifest.files)) {

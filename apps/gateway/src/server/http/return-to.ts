@@ -30,6 +30,7 @@ export function resolveReturnTo(raw: string | null | undefined, publicUrl: URL):
   try {
     url = new URL(raw, publicUrl);
   } catch {
+    // expected: a return_to that is not a URL is ignored
     return null;
   }
   if (url.origin !== publicUrl.origin) return null;

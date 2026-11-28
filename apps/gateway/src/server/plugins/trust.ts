@@ -95,6 +95,7 @@ export function certificateExtension(der: Buffer, oid: string): string | null {
   try {
     value = X509Certificate.parse(Buffer.from(der)).extension(oid)?.value;
   } catch {
+    // expected: bytes that are not a certificate carry no extension
     return null;
   }
   if (value === undefined) return null;
@@ -102,6 +103,7 @@ export function certificateExtension(der: Buffer, oid: string): string | null {
   try {
     return ASN1Obj.parseBuffer(Buffer.from(value)).value.toString('utf8');
   } catch {
+    // expected: an extension value that is not DER carries no text
     return null;
   }
 }
@@ -119,6 +121,7 @@ function sigstoreVerdict(
   try {
     parsed = bundleFromJSON(JSON.parse(Buffer.from(bundleBytes).toString('utf8')));
   } catch {
+    // expected: a Sigstore bundle that does not parse is an invalid verdict
     return { level: 'invalid', reason: 'the Sigstore bundle is not one this gateway reads' };
   }
   // The catalog signs the manifest itself (`cosign sign-blob`). A DSSE envelope carries its
@@ -183,6 +186,7 @@ export function trustOf(files: ReadonlyMap<string, Uint8Array>, inputs: TrustInp
   try {
     signature = parseSignature(JSON.parse(Buffer.from(raw).toString('utf8')));
   } catch {
+    // expected: a signature file that does not parse is an invalid verdict below
     signature = null;
   }
   if (signature === null)

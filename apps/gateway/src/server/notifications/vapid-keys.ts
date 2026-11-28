@@ -55,6 +55,7 @@ export function createVapidKeyStore(
       try {
         return vapidPublicKey(await keys());
       } catch {
+        // expected: the key pair could not be read or made: the pages offer no push (no logger reaches this store)
         return null;
       }
     },

@@ -67,6 +67,7 @@ export function parseBrokerUrl(raw: string): BrokerUrl {
   try {
     url = new URL(raw.trim());
   } catch {
+    // expected: the configured broker URL is not a URL: said as a problem
     return { ok: false, problem: OAUTH_BROKER_PROBLEMS.url };
   }
   const loopback = LOOPBACK_HOSTS.has(url.hostname);

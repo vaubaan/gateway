@@ -10,6 +10,7 @@ export async function readForm(request: Request): Promise<FormData | null> {
   try {
     return await request.formData();
   } catch {
+    // expected: the body is not a form: the caller answers 400
     return null;
   }
 }

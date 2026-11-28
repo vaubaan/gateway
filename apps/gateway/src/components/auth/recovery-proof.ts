@@ -19,6 +19,7 @@ export function keyBytes(text: string): Uint8Array | null {
     for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
     return bytes.length === 32 ? bytes : null;
   } catch {
+    // expected: the pasted proof is not base64: it is no proof
     return null;
   }
 }

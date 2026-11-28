@@ -296,6 +296,7 @@ export async function runImportCli(
   try {
     return await run(argv, io, deps);
   } catch {
+    // expected: any other failure ends as UNEXPECTED_FAILURE; its message is withheld (it may quote a secret)
     io.stderr(UNEXPECTED_FAILURE);
     return EXIT_PARTIAL;
   }
@@ -425,6 +426,7 @@ async function run(argv: readonly string[], io: CliIo, deps: CliDeps): Promise<n
     try {
       await root.close();
     } catch {
+      // expected: a store that does not close is said on stderr, details withheld
       io.stderr('import-v4: the store did not close cleanly (details withheld).\n');
     }
   }

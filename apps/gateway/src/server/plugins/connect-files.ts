@@ -86,6 +86,7 @@ export async function readConnectFile(
     );
     return { body, contentType: CONTENT_TYPES[match[1] ?? ''] ?? 'application/octet-stream' };
   } catch {
+    // expected: no such screenshot in the plugin's folder: the route answers 404
     return null;
   }
 }

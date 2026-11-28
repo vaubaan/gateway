@@ -68,6 +68,7 @@ function baseOf(riskId: RiskId): RiskId | null {
   try {
     return baseRiskId(riskId);
   } catch {
+    // expected: a malformed risk id has no base, so no offer
     return null;
   }
 }

@@ -251,6 +251,7 @@ export function describePattern(pattern: string): string {
   try {
     slice = parseSlice(pattern);
   } catch {
+    // expected: a pattern that does not parse is shown as written (see the doc comment)
     return pattern;
   }
   const action = slice.action === 'R' ? 'Read' : 'Write';

@@ -100,6 +100,7 @@ async function forward(line) {
   try {
     request = JSON.parse(line);
   } catch {
+    // expected: a line that is not JSON has no id to answer: dropped
     return;
   }
   const id = request && request.id !== undefined ? request.id : null;
@@ -118,6 +119,7 @@ async function forward(line) {
     try {
       write(JSON.parse(text));
     } catch {
+      // expected: the instance answered without JSON: told to the assistant as an error
       write({ jsonrpc: '2.0', id, error: { code: -32000, message: 'Vaubaan answered ' + response.status + ' with no JSON.' } });
     }
   } catch (err) {

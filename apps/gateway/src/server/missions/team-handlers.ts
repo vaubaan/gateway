@@ -89,6 +89,7 @@ async function fieldOf(request: Request, name: string): Promise<string | null> {
   try {
     raw = await request.json();
   } catch {
+    // expected: a body that is not JSON: the caller answers 400
     return null;
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;

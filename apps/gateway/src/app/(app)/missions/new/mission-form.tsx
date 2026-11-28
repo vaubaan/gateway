@@ -13,12 +13,11 @@
  *     are edited one by one (`MissionCard`, `CustomModal`, `AccountPicker`).
  *   - A sticky bar says what changed (or what the mission holds) and saves.
  *
- * "Create mission" creates at once, with no confirmation (spec §4.2: only an
- * irreversible act is asked first): the draft carries the explicit lines, which are
- * what is created — the trust levels are kept only to redraw this screen. The decision
- * shown is `previewDraft`, which the server runs again on arrival; a 422 shows its
- * issues beside the cards. Once created, the screen becomes the key, shown once, with
- * the kit (`KeyReveal`); the mission page shows the explicit list read-only.
+ * "Create mission" creates at once, with no confirmation (spec §4.2: only an irreversible act is
+ * asked first): the draft carries the explicit lines, which are what is created — the trust levels
+ * are kept only to redraw this screen. The decision shown is `previewDraft`, which the server runs
+ * again on arrival; a 422 shows its issues beside the cards. Once created, the screen becomes the
+ * key, shown once, with the kit (`KeyReveal`); the mission page shows the explicit list read-only.
  *
  * With `edit`, the same screen edits a mission after issuance (ADR
  * mission-editable-after-issuance): prefilled, its period fixed, its end date "as it
@@ -303,6 +302,7 @@ export function MissionForm({
     try {
       parsed = JSON.parse(proposalText);
     } catch {
+      // expected: the pasted proposal is the person's text; not JSON is said to them
       setError('The proposal is not valid JSON.');
       return;
     }

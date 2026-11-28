@@ -25,6 +25,7 @@ export function parseBackupEndpoint(raw: string): BackupEndpoint {
   try {
     url = new URL(raw.trim());
   } catch {
+    // expected: the configured endpoint is not a URL: said as a problem
     return { ok: false, problem: BACKUP_ENDPOINT_PROBLEMS.url };
   }
   const loopback = LOOPBACK_HOSTS.has(url.hostname);

@@ -57,6 +57,7 @@ function planeOfPattern(pattern: string, owners: ReadonlyMap<string, string>): s
       segment.kind === 'name' ? [segment.value] : [],
     );
   } catch {
+    // expected: a pattern that does not parse names no plane
     return null;
   }
   for (const name of names) {

@@ -76,6 +76,7 @@ async function trustRaiseTargetOf(
   try {
     raw = await request.json();
   } catch {
+    // expected: a "Not now" body that is not JSON: the caller answers 400
     return null;
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
@@ -132,6 +133,7 @@ async function limitsEditOf(request: Request): Promise<LimitEdit[] | null> {
   try {
     raw = await request.json();
   } catch {
+    // expected: a limits body that is not JSON: the caller answers 400
     return null;
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
@@ -160,6 +162,7 @@ async function gateEditOf(
   try {
     raw = await request.json();
   } catch {
+    // expected: a gate body that is not JSON: the caller answers 400
     return null;
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
@@ -201,6 +204,7 @@ async function bodyOf(request: Request): Promise<unknown> {
   try {
     return (await request.json()) as unknown;
   } catch {
+    // expected: a body that is not JSON is `undefined`, which the parsers refuse
     return undefined;
   }
 }
@@ -217,6 +221,7 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
     try {
       raw = await request.json();
     } catch {
+      // expected: a draft that is not JSON: answered 400
       return json(400, { error: 'invalid-draft', problems: ['the body is not JSON'] });
     }
     const parsed = parseMissionDraft(raw);

@@ -27,6 +27,7 @@ export async function destinationOf(url: URL, resolve: Resolver): Promise<Destin
   try {
     addresses = await resolve(host);
   } catch {
+    // expected: a host that does not resolve (no such name, no network) is unresolved
     return 'unresolved';
   }
   if (addresses.length === 0) return 'unresolved';

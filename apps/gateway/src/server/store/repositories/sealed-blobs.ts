@@ -321,6 +321,7 @@ async function opens(
     await encryptor.decrypt(associatedData, { keyVersion: row.key_version, blob: row.blob });
     return true;
   } catch {
+    // expected: a blob that does not open with its key answers false; never the message
     return false;
   }
 }
@@ -338,7 +339,7 @@ async function resealOne(
       blob: row.blob,
     });
   } catch {
-    // Never the message: it says nothing useful about a blob and must quote nothing.
+    // expected: a blob that does not open is null; never the message, it must quote nothing.
     return null;
   }
   const sealed = await encryptor.encrypt(associatedData, plain);

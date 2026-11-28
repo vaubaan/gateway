@@ -74,7 +74,7 @@ export function InstalledSignIn({
     try {
       body = await post('/auth/loopback/status');
     } catch {
-      // The gateway restarting: the next poll tries again.
+      // expected: the gateway restarting: the next poll tries again.
     }
     const status = field(body, 'status');
     if (status === 'done') {
@@ -98,7 +98,7 @@ export function InstalledSignIn({
         return_to: returnTo,
       });
     } catch {
-      // reported below
+      // expected: an unreachable gateway leaves no authorizeUrl, reported below
     }
     const authorizeUrl = field(body, 'authorizeUrl');
     if (!authorizeUrl) {

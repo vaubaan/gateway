@@ -402,7 +402,7 @@ export async function resetRoot(): Promise<void> {
     try {
       await (await pending).close();
     } catch {
-      // a root that failed to build has nothing to close
+      // expected: a root that failed to build has nothing to close
     }
   }
 }

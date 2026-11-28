@@ -57,7 +57,7 @@ export function sizeOnDisk(db: StoreDb, path: string): number {
     try {
       bytes += statSync(/* turbopackIgnore: true */ `${path}-wal`).size;
     } catch {
-      // No write-ahead log at this instant (checkpointed, or never written).
+      // expected: no write-ahead log at this instant (checkpointed, or never written).
     }
   }
   return bytes;
@@ -167,6 +167,7 @@ export function schemaVersionOf(db: StoreDb): number {
       .get();
     return row?.v ?? 0;
   } catch {
+    // expected: before the first migration there is no schema_migrations table: version 0
     return 0;
   }
 }

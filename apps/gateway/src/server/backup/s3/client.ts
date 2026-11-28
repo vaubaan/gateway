@@ -319,7 +319,7 @@ async function readCapped(response: Response): Promise<string> {
       size += value.byteLength;
     }
   } catch {
-    // An error body that breaks off says nothing more.
+    // expected: an error body that breaks off says nothing more.
   } finally {
     await reader.cancel().catch(() => undefined);
   }

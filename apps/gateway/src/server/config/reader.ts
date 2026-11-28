@@ -132,6 +132,7 @@ export class Reader {
     try {
       url = new URL(text);
     } catch {
+      // expected: the configured value is not a URL: recorded as a config issue
       this.issues.add(path, `is not a valid URL: "${text}"`, envNamesFor(path));
       return undefined;
     }

@@ -132,6 +132,7 @@ async function formField(request: Request, name: string): Promise<string | null>
     const value = (await request.formData()).get(name);
     return typeof value === 'string' ? value : null;
   } catch {
+    // expected: the body is not a form: no field
     return null;
   }
 }
@@ -147,6 +148,7 @@ export function createDeviceHandlers(deps: DeviceHandlerDeps): DeviceHandlers {
       try {
         body = JSON.parse(text) as unknown;
       } catch {
+        // expected: a device body that is not JSON: answered 400
         return json(400, { error: 'invalid-request' });
       }
       const { subscription, label } = (typeof body === 'object' && body !== null ? body : {}) as {

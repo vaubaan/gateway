@@ -33,6 +33,7 @@ export const PROCESS_MOUNT_FACTS: MountFacts = {
     try {
       return readFileSync('/proc/self/mountinfo', 'utf8');
     } catch {
+      // expected: no readable /proc/self/mountinfo (not Linux, or hidden): the mounts are unknown
       return null;
     }
   },
@@ -40,6 +41,7 @@ export const PROCESS_MOUNT_FACTS: MountFacts = {
     try {
       return realpathSync(path);
     } catch {
+      // expected: the path does not resolve (missing, unreadable): no real directory
       return null;
     }
   },
@@ -47,6 +49,7 @@ export const PROCESS_MOUNT_FACTS: MountFacts = {
     try {
       return statSync(path).dev;
     } catch {
+      // expected: the path cannot be stat-ed (missing, unreadable): no device
       return null;
     }
   },

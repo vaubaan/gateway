@@ -154,6 +154,7 @@ export function storeHasContent(path: string): boolean {
   try {
     return statSync(/* turbopackIgnore: true */ path).size > 0;
   } catch {
+    // expected: the file vanished or is unreadable since the existence check: no content
     return false;
   }
 }
@@ -549,7 +550,7 @@ function syncDirectory(dir: string): void {
     fd = openSync(/* turbopackIgnore: true */ dir, 'r');
     fsyncSync(fd);
   } catch {
-    // Some file systems refuse to fsync a directory; the rename is done either way.
+    // expected: some file systems refuse to fsync a directory; the rename is done either way.
   } finally {
     if (fd !== null) closeSync(fd);
   }

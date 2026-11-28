@@ -37,6 +37,7 @@ export async function postJson(
         : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),
     });
   } catch {
+    // expected: the network failed before any answer: reported as unreachable
     return { ok: false, status: 0, body: null, message: UNREACHABLE };
   }
   const body: unknown = await response.json().catch(() => null);

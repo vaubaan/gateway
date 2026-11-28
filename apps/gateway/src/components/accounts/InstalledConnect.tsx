@@ -50,7 +50,7 @@ export function InstalledConnect({
       try {
         body = await postJson('/connections/loopback/status');
       } catch {
-        // The gateway restarting: the next poll tries again.
+        // expected: the gateway restarting: the next poll tries again.
       }
       const status = statusOf(body);
       const location = locationOf(body);
@@ -78,7 +78,7 @@ export function InstalledConnect({
       try {
         location = locationOf(await postJson(form.action, data));
       } catch {
-        // reported below
+        // expected: an unreachable gateway leaves no location, reported as failed below
       }
       if (!location) {
         setState('failed');

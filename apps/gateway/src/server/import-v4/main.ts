@@ -14,6 +14,7 @@ try {
     uid: typeof process.getuid === 'function' ? process.getuid() : null,
   });
 } catch {
+  // expected: runImportCli already answers its own failures; this is the last guard, message withheld
   process.stderr.write(UNEXPECTED_FAILURE);
   process.exitCode = 1;
 }

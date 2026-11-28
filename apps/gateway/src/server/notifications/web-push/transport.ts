@@ -82,7 +82,7 @@ export function createWebPushTransport(deps: WebPushTransportDeps): PushTranspor
           signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
         };
       } catch {
-        // A subscription whose keys do not encrypt: no push service will ever take it.
+        // expected: the subscription's keys do not encrypt (or the VAPID keys are unreadable): a failed delivery
         return { kind: 'failed', status: null };
       }
       try {
@@ -90,6 +90,7 @@ export function createWebPushTransport(deps: WebPushTransportDeps): PushTranspor
         await response.body?.cancel().catch(() => undefined);
         return outcomeOfStatus(response.status);
       } catch {
+        // expected: the push service did not answer (network, timeout): a failed delivery, recorded on the device
         return { kind: 'failed', status: null };
       }
     },
