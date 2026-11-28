@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Secret scan of the whole git history with gitleaks (CI job `secrets` of
-# ci.yml and of secrets.yml; locally the same command, from a full clone).
+# Secret scan of the whole git history with gitleaks (job `audit` of
+# ci.yml, on every branch push; locally the same command, from a full clone).
 #
 #   scripts/secret-scan.sh [tool directory]
 #

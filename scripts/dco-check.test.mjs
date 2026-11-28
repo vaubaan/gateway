@@ -115,11 +115,12 @@ describe('the script', () => {
 });
 
 describe('the CI job', () => {
-  it('runs the check on every pull request against its base, and on every push to main', () => {
+  it('runs the check against the base the run computed: a pull request, a work branch, main', () => {
     const workflow = readFileSync(join(dirname(SCRIPT), '../.github/workflows/ci.yml'), 'utf8');
     expect(workflow).toContain('node scripts/dco-check.mjs "$BASE" HEAD');
-    expect(workflow).toContain(
-      "BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
-    );
+    expect(workflow).toContain('BASE: ${{ steps.base.outputs.sha }}');
+    expect(workflow).toContain('pull_request/*) sha="$PR_BASE" ;;');
+    expect(workflow).toContain('push/refs/heads/main) sha="$BEFORE" ;;');
+    expect(workflow).toContain('push/*) sha=$(git merge-base origin/main HEAD) ;;');
   });
 });

@@ -47,6 +47,7 @@ compare() {
 # A ruleset as the files write it: rules sorted, the fields GitHub adds dropped.
 # GitHub answers every parameter of a rule, defaulted ones included: only those the file
 # writes are compared.
+# shellcheck disable=SC2016 # a jq program: $r, $k and $want are jq's variables, not the shell's
 FILE_PARAMETERS_ONLY='.rules |= map(. as $r | if .parameters then .parameters |= with_entries(select(.key as $k | [$want.rules[] | select(.type == $r.type) | .parameters // {} | has($k)] | any)) else . end)'
 NORMALISE_RULESET='{name, target, enforcement, bypass_actors: (.bypass_actors // [] | map({actor_id, actor_type, bypass_mode})), conditions, rules: (.rules | sort_by(.type))}'
 

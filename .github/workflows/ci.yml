@@ -8,16 +8,20 @@ name: ci
 #   pull request (ready)   job `audit`: every gate but the browser
 #   pull request (draft)   nothing: a draft is work in progress
 #   label `e2e` on a PR    job `e2e` too (the browser tests), on demand
-#   push to main           `audit` and `e2e`: changes are pushed to main
-#                          directly, checked locally only by what they touch
-#                          (`npm run check:changed`); this run is the full
-#                          check (the repository is public: minutes are free)
+#   push to a branch       `audit` and `e2e`: a work branch (feat/…, fix/…,
+#                          harn/…) is checked in full before the agent moves
+#                          main forward to it (docs/workflow/coding-workflow.md);
+#                          a newer push cancels the branch's older run
+#   push to main           `audit` and `e2e` again: each commit of main gets
+#                          its own verdict (the repository is public: minutes
+#                          are free)
 #   schedule (weekly)      everything: `audit`, `e2e`, `docker` with its scan
 #   release (workflow_call)
 #   manual run             everything
 on:
   push:
-    branches: [main]
+    # Every branch; Dependabot's are checked through their pull request.
+    branches: ['**', '!dependabot/**']
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, labeled]
@@ -37,8 +41,9 @@ on:
 # group, so it does not cancel the run of the last push.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && 'e2e' || 'gate' }}
-  # A push to main is never cancelled: each commit gets its verdict.
-  cancel-in-progress: ${{ github.event_name != 'push' }}
+  # A push to main is never cancelled: each commit gets its verdict. A push to a
+  # work branch replaces the branch's older run.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
 # Dependencies are installed with `npm ci`: exactly the lockfile, or a failure.
 #
@@ -78,9 +83,26 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # What the run compares with: the pull request's base; for a work branch,
+      # where it left main (its first push has no `before`); for main, the
+      # commit before the push; nothing for a schedule or a manual run.
+      - id: base
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT/$REF" in
+            pull_request/*) sha="$PR_BASE" ;;
+            push/refs/heads/main) sha="$BEFORE" ;;
+            push/*) sha=$(git merge-base origin/main HEAD) ;;
+            *) sha='' ;;
+          esac
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
       - id: scope
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+          BASE: ${{ steps.base.outputs.sha }}
         run: scripts/ci-scope.sh "$BASE" HEAD | tee -a "$GITHUB_OUTPUT"
       # A change the browser can show, without the label that runs the browser
       # tests: said on the run, never a failure (the weekly run and the release
@@ -97,13 +119,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
-      # Every commit of a pull request, or of a push to main, carries a
+      # Every commit of a pull request, of a work branch, or of a push to main, carries a
       # `Signed-off-by:` line, the Developer Certificate of Origin
       # (CONTRIBUTING.md). Merges are skipped.
       - name: Commits are signed off
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         env:
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ steps.base.outputs.sha }}
         run: node scripts/dco-check.mjs "$BASE" HEAD
       - run: node scripts/audit-gate.mjs
       # Every lockfile entry downloads from the npm registry, with a sha512
@@ -115,9 +137,14 @@ jobs:
         run: |
           actionlint=$(scripts/fetch-tool.sh actionlint "${RUNNER_TEMP}/security-tools")
           "$actionlint" -color
+      # The shell scripts and git hooks, with the runner's shellcheck (actionlint
+      # covers only the `run:` blocks).
+      - name: Shell scripts are valid
+        run: |
+          git ls-files -z '*.sh' | xargs -0 shellcheck
+          shellcheck -s sh .husky/pre-commit .husky/commit-msg
       # Secret scan of the whole history with gitleaks, pinned by checksum
-      # (reviewed exceptions in .gitleaks.toml). Work branches are scanned on
-      # every push by secrets.yml.
+      # (reviewed exceptions in .gitleaks.toml), on every branch push.
       - run: scripts/secret-scan.sh
 
       - uses: ./.github/actions/setup

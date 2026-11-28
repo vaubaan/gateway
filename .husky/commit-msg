@@ -1,0 +1,8 @@
+# Every commit carries the Developer Certificate of Origin sign-off
+# (docs/workflow/coding-workflow.md, "PR process"); CI's scripts/dco-check.mjs
+# refuses the push otherwise, after the fact.
+if ! grep -qE '^Signed-off-by: .+ <[^>]+>$' "$1"; then
+  echo "commit-msg: the message has no 'Signed-off-by: Name <email>' line." >&2
+  echo "Commit with git commit -s, or add it: git commit --amend -s --no-edit" >&2
+  exit 1
+fi

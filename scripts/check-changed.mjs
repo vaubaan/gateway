@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * `npm run check:changed`: the local check of a change, before it is pushed to
- * main. Only what the change can break, against the merge base with
- * `origin/main` (or the commit given as the first argument), working tree
- * included; the full suite runs on GitHub on every push to main
- * (.github/workflows/ci.yml).
+ * `npm run check:changed`: the local check of a change, before each commit. Only
+ * what the change can break, against the merge base with `origin/main` (or the
+ * commit given as the first argument), working tree included; the full suite runs
+ * on GitHub on every branch push (.github/workflows/ci.yml).
  *
  *   1. type-check of the workspaces a changed file belongs to, and of every
  *      workspace that depends on them, transitively (scripts/type-check.mjs);
@@ -13,8 +12,9 @@
  *      structural tests, which read the whole tree and no import ties to a change;
  *   4. when the Next config, the gateway's dependencies or the Dockerfile changed, the
  *      Next build and the tests that read its standalone output (skipped without it);
- *   5. the harness linters on the docs, and the workflows (actionlint with shellcheck,
- *      the version CI fetches, from its Docker image) when one changed;
+ *   5. the harness linters on the docs, the workflows (actionlint with shellcheck, the
+ *      version CI fetches, from its Docker image) when one changed, and shellcheck on
+ *      the changed shell scripts and git hooks;
  *   6. when Docker is here, the static analysis exactly as CI runs it (scripts/sast.sh:
  *      the Semgrep image and the semgrep/semgrep-rules commit ci.yml pins, cloned once
  *      into the ignored .semgrep-rules/), over the whole tree: a rule finds what a
@@ -195,6 +195,37 @@ if (workflowsChanged && docker && actionlint !== null) {
     '/repo',
     `rhysd/actionlint:${actionlint}`,
     '-color',
+  ]);
+}
+// The changed shell scripts and git hooks, with the shellcheck of the same image (CI uses the
+// runner's). A hook has no shebang: it runs under sh.
+const present = (path) => existsSync(join(ROOT, path));
+const shellGroups = [
+  {
+    label: 'shell scripts',
+    args: [],
+    files: changed.filter((p) => p.endsWith('.sh') && present(p)),
+  },
+  {
+    label: 'git hooks',
+    args: ['-s', 'sh'],
+    files: changed.filter((p) => /^\.husky\/[^/_][^/]*$/.test(p) && present(p)),
+  },
+];
+for (const group of shellGroups) {
+  if (group.files.length === 0 || !docker || actionlint === null) continue;
+  step(`shellcheck on ${group.files.length} ${group.label}`, 'docker', [
+    'run',
+    '--rm',
+    '-v',
+    `${ROOT}:/repo`,
+    '-w',
+    '/repo',
+    '--entrypoint',
+    'shellcheck',
+    `rhysd/actionlint:${actionlint}`,
+    ...group.args,
+    ...group.files,
   ]);
 }
 const pins = sastPins();

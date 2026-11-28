@@ -13,11 +13,12 @@ esac
 cd "$(dirname "$0")/../../.." || exit 1
 base="${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}"
 git cat-file -e "$base^{commit}" 2>/dev/null || exit 1
-git diff --quiet "$base" HEAD -- \
+if git diff --quiet "$base" HEAD -- \
   apps/website \
   apps/gateway/src/app/agent-bootstrap.md \
   packages/telemetry packages/shared packages/gateway-core packages/policy-engine \
   packages/design-tokens packages/plugin-page \
-  plugins docs deploy package-lock.json
-[ $? -eq 0 ] && exit 0
+  plugins docs deploy package-lock.json; then
+  exit 0
+fi
 exit 1
