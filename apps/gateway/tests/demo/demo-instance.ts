@@ -37,7 +37,7 @@ import type { RateLimiter } from '../../src/server/compose/ports';
 import { getRoot, resetRoot, type GatewayRoot } from '../../src/server/compose/root';
 import { REPOSITORY_PLUGINS } from '../support/plugins/repository';
 import { loadInstanceConfig, type LoadedConfig } from '../../src/server/config';
-import { MASTER_KEY_BYTES } from '../../src/server/config/load';
+import { MASTER_KEY_BYTES } from '../../src/server/config/master-key';
 import { SlidingWindowRateLimiter } from '../../src/server/rate-limit';
 import { DEMO_IDP_PATH, DemoIdp } from './demo-idp';
 import { ALICE } from './people';

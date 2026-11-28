@@ -4,7 +4,7 @@
  */
 import { randomBytes } from 'node:crypto';
 
-import { MASTER_KEY_BYTES } from '../../../src/server/config/load';
+import { MASTER_KEY_BYTES } from '../../../src/server/config/master-key';
 
 export const TEST_MASTER_KEY = randomBytes(MASTER_KEY_BYTES).toString('base64');
 export const TEST_BOOTSTRAP_TOKEN = 'bootstrap-' + randomBytes(24).toString('hex');

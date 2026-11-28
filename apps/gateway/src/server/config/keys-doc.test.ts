@@ -24,14 +24,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
-  KEYS,
   OAUTH_BROKER_ENV_PREFIX,
   OAUTH_BROKER_FIELDS,
   SIGN_IN_ENV_PREFIX,
   SIGN_IN_FIELDS,
-  envNamesFor,
-  type KeySpec,
-} from './sources';
+} from './named-blocks';
+import { KEYS, envNamesFor, type KeySpec } from './sources';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const HANDBOOK = 'docs/handbook/configuration.md';

@@ -16,7 +16,7 @@ import {
   entraIssuer,
   entraTenantOf,
 } from './sign-in';
-import { parseSignInEnvName } from './sources';
+import { parseSignInEnvName } from './named-blocks';
 import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../tests/support/config/testing';
 
 /** The company's directory, as the sign-in provider `idp` (what the single-provider keys described). */

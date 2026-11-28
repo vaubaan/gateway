@@ -2,13 +2,13 @@ export {
   loadInstanceConfig,
   loadInstanceConfigOrSetup,
   loadProcessConfig,
-  MASTER_KEY_BYTES,
   scrubSecretEnv,
   type ConfigLoadOutcome,
   type LoadOptions,
   type LoadedConfig,
   type SetupOutcome,
 } from './load';
+export { MASTER_KEY_BYTES } from './master-key';
 export { ConfigError, errorMessage, formatIssue, type ConfigIssue } from './errors';
 export { parseDuration } from './duration';
 export { RAILWAY_PROJECT_ENV, isSelfResource } from './self-resources';
@@ -22,20 +22,18 @@ export {
   INSTANCE_NAME_PROBLEMS,
   type InstanceNameCheck,
 } from './instance-name';
+export { CONFIG_FILE_ENV, KEYS, envNamesFor, isSecretKeyPath, secretEnvVariables } from './sources';
 export {
-  CONFIG_FILE_ENV,
-  KEYS,
-  RETIRED_PROVIDER_ENV_PREFIX,
-  RETIRED_PROVIDERS_KEY,
   SIGN_IN_ENV_PREFIX,
   SIGN_IN_FIELDS,
-  envNamesFor,
-  isSecretKeyPath,
   parseSignInEnvName,
-  retiredConfigKeys,
-  secretEnvVariables,
   signInEnvName,
-} from './sources';
+} from './named-blocks';
+export {
+  RETIRED_PROVIDER_ENV_PREFIX,
+  RETIRED_PROVIDERS_KEY,
+  retiredConfigKeys,
+} from './retired-keys';
 export * from './sign-in';
 export {
   isBackupPeriod,

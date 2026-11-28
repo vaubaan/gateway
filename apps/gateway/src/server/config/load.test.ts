@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { ConfigError, formatIssue } from './errors';
 import { createRedactor } from '../logging/redact';
-import { loadInstanceConfig, MASTER_KEY_BYTES } from './load';
+import { loadInstanceConfig } from './load';
+import { MASTER_KEY_BYTES } from './master-key';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import { KEYS, secretEnvVariables } from './sources';

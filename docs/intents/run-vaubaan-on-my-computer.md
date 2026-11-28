@@ -14,7 +14,7 @@ sign-in provider, so that I give my agents missions today and bring my team late
 ## Run a local instance with one docker command
 
 status: implemented
-anchors: apps/gateway/src/server/config/sources.ts, apps/gateway/src/server/compose/boot.ts, apps/gateway/tests/integration/compose/local-mode.test.ts
+anchors: apps/gateway/src/server/config/local-mode.ts, apps/gateway/src/server/compose/boot.ts, apps/gateway/tests/integration/compose/local-mode.test.ts
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
 creates: instance
