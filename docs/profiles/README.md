@@ -89,7 +89,7 @@ Pains, most severe first:
 
 - **A dozen gestures before any value** (`a-dozen-gestures-before-any-value`) — *no intent relieves it yet*
 - **Losing the master key** (`losing-the-master-key`) — *no intent relieves it yet*
-- **An update that breaks on a Monday** (`an-update-that-breaks-on-a-monday`) — [Activate a pending plugin version](../intents/install-a-plugin-on-my-gateway.md), [Roll back a plugin to a kept version](../intents/install-a-plugin-on-my-gateway.md)
+- **An update that breaks on a Monday** (`an-update-that-breaks-on-a-monday`) — [Activate a pending plugin version](../intents/install-a-plugin-on-my-gateway.md), [Roll back a plugin to a kept version](../intents/install-a-plugin-on-my-gateway.md), [Go back to the former version after an update](../intents/trust-the-gateway-with-my-credentials.md)
 - **A mission on production I know nothing about** (`a-mission-on-production-i-know-nothing-about`) — [See every mission that carries my account](../intents/bring-my-team-onto-vaubaan.md)
 - **My security reviewer says no** (`my-security-reviewer-says-no`) — [Hand my security reviewer one document](../intents/believe-what-the-site-says.md), [Read a third-party security review](../intents/trust-the-gateway-with-my-credentials.md)
 - **Someone who left stays active** (`someone-who-left-stays-active`) — [Stop whoever leaves the company's directory](../intents/bring-my-team-onto-vaubaan.md)

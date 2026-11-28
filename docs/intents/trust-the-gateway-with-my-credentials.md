@@ -44,3 +44,15 @@ acceptance:
 
 - A review by a named firm outside the project is published on the trust center, with its date, scope and the version reviewed
 - Every finding is listed with what was done about it, and the site stops saying no third-party audit exists
+
+## Go back to the former version after an update
+
+status: proposed
+requires: instance
+relieves: an-update-that-breaks-on-a-monday
+spec: ../spec/vaubaan-gateway.md#6-security
+acceptance:
+
+- A start that migrates the store first leaves a copy of it beside the store, and keeps the three most recent
+- The former image, given that copy with `restore.mjs --force`, starts on the data as it was before the update
+- A copy that cannot be written stops the start before any migration runs, and says why
