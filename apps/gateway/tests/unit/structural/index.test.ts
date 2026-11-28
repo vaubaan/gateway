@@ -20,7 +20,7 @@ import { INVARIANTS } from './manifest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../../../..');
 const FOLDER = 'apps/gateway/tests/unit/structural';
-const SPEC = 'docs/spec/vaubaan-gateway.md';
+const SPEC = 'docs/spec/vaubaan-gateway-10-tests.md';
 
 /** One line: bullets of the spec wrap, titles in a test file do not. */
 const flat = (text: string): string => text.replace(/\s+/g, ' ');

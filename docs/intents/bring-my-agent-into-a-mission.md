@@ -21,7 +21,7 @@ Each agent is added by its own mechanism, and Vaubaan writes into no file of ano
 status: proposed
 relieves: four-copy-pastes-per-project
 requires: mission, mission-token
-spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
+spec: ../spec/vaubaan-gateway-04-surfaces.md#44-bootstrap-kit-after-issuance
 acceptance:
 
 - The page that shows the key gives one line for Claude Code and one for Codex; after it, the agent lists the mission's tools, with no file edited and no variable exported
@@ -35,7 +35,7 @@ acceptance:
 status: proposed
 relieves: a-configuration-file-to-edit
 requires: mission, mission-token
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - From the page that shows the key, I open a file Claude Desktop installs, and paste the key once where it asks: no file to edit, no terminal
@@ -50,14 +50,14 @@ status: implemented
 relieves: four-copy-pastes-per-project
 requires: mission, mission-token
 anchors: apps/gateway/src/server/missions/bootstrap-kit.ts, apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/missions/bootstrap-kit.test.ts, apps/gateway/tests/integration/accounts/token-connect.test.ts
-spec: ../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance
+spec: ../spec/vaubaan-gateway-04-surfaces.md#44-bootstrap-kit-after-issuance
 
 ## Let my agent know my answer
 
 status: proposed
 relieves: relaying-my-yes-by-hand
 requires: request, approval
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - After I approve or refuse a request, the agent learns the answer at its next call, without a person relaying it
@@ -68,7 +68,7 @@ acceptance:
 status: proposed
 relieves: an-agent-that-keeps-hitting-walls
 requires: mission
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - Every refusal carries a stable link to the user docs, at the anchor of its code
@@ -79,7 +79,7 @@ acceptance:
 status: proposed
 relieves: an-agent-that-keeps-hitting-walls
 requires: mission
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - The tool list a mission's agent receives leaves out the tools no permission of the mission allows
@@ -90,7 +90,7 @@ acceptance:
 status: proposed
 relieves: an-agent-that-keeps-hitting-walls
 requires: mission
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - A service's list tool answers the mission's resources of that account, at least id and name, and says the others are left out

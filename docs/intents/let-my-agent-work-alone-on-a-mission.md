@@ -21,14 +21,14 @@ creates: mission, mission-token
 anchors: apps/gateway/src/server/missions/mission-service.ts, apps/gateway/tests/integration/missions/mission-lifecycle.test.ts, apps/gateway/tests/integration/missions/permissions.test.ts
 relieves: a-token-that-can-do-anything
 delivers: never-handing-over-a-credential
-spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+spec: ../spec/vaubaan-gateway-07-workflows.md#74-create-a-mission
 
 ### See which environment a permission needs while I create the mission
 
 status: proposed
 requires: mission, resource
 relieves: a-permission-that-silently-needs-a-label
-spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+spec: ../spec/vaubaan-gateway-07-workflows.md#74-create-a-mission
 acceptance:
 
 - When a ticked permission is bound to an environment no chosen resource carries, the mission page says so next to it and names the resources to label
@@ -39,7 +39,7 @@ acceptance:
 status: implemented
 requires: mission
 anchors: apps/gateway/src/server/missions/history.ts, apps/gateway/tests/integration/missions/versions.test.ts
-spec: ../spec/vaubaan-gateway.md#74-ter-restore-a-version
+spec: ../spec/vaubaan-gateway-07-workflows.md#74-ter-restore-a-version
 
 ## Let it work while I am away
 
@@ -51,7 +51,7 @@ creates: event, mission-log
 anchors: apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/budget/decide.ts, apps/gateway/tests/integration/execution/pipeline.test.ts, apps/gateway/tests/integration/budget/mission-log-service.test.ts
 relieves: interrupted-all-the-time-or-not-when-it-mattered
 delivers: my-agent-works-alone-on-real-things, the-recap-prepared-while-i-do-something-else
-spec: ../spec/vaubaan-gateway.md#75-execute
+spec: ../spec/vaubaan-gateway-07-workflows.md#75-execute
 
 ### Read what my agent did
 
@@ -59,7 +59,7 @@ status: implemented
 requires: mission-log
 anchors: apps/gateway/src/server/audit/mission-log-view.ts, apps/gateway/tests/integration/audit/mission-log.test.ts
 delivers: my-agent-works-alone-on-real-things
-spec: ../spec/vaubaan-gateway.md#8-audit
+spec: ../spec/vaubaan-gateway-08-audit.md#8-audit
 
 ## Answer when it reaches what I kept
 
@@ -70,7 +70,7 @@ requires: channel
 creates: notification
 anchors: apps/gateway/src/server/notifications/dispatch.ts, apps/gateway/tests/integration/notifications/notifications.test.ts
 relieves: interrupted-all-the-time-or-not-when-it-mattered
-spec: ../spec/vaubaan-gateway.md#42-bis-notifications
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-bis-notifications
 
 ### Approve or refuse the exact call
 
@@ -80,11 +80,11 @@ creates: approval
 anchors: apps/gateway/src/server/requests/approval.ts, apps/gateway/tests/integration/requests/approval.test.ts, apps/gateway/tests/integration/execution/approval-door.test.ts
 relieves: a-mail-sent-to-a-client-without-me
 delivers: stopped-at-the-right-place, the-client-mail-stopped-and-shown-before-it-leaves
-spec: ../spec/vaubaan-gateway.md#35-requests-to-the-creator--the-approval
+spec: ../spec/vaubaan-gateway-03-authority.md#35-requests-to-the-creator--the-approval
 
 ### Reset or extend a limit my agent reached
 
 status: implemented
 requires: request
 anchors: apps/gateway/src/server/requests/claim.ts, apps/gateway/src/server/requests/claim.test.ts
-spec: ../spec/vaubaan-gateway.md#76-exhaust-and-claim
+spec: ../spec/vaubaan-gateway-07-workflows.md#76-exhaust-and-claim

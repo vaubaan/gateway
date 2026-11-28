@@ -21,14 +21,14 @@ delivers: my-agent-works-alone-on-real-things
 requires: mission
 creates: mission
 anchors: apps/gateway/src/server/vaubaan/acts.ts, apps/gateway/src/server/vaubaan/acts.test.ts, apps/gateway/src/server/vaubaan/hard-deny.test.ts
-spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-bis-management-surface-the-vaubaan-plugin
 
 ### Keep a prepared mission within the life of the mission that prepared it
 
 status: implemented
 requires: mission
 anchors: apps/gateway/src/server/vaubaan/acts.ts, apps/gateway/src/server/vaubaan/acts.test.ts
-spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-bis-management-surface-the-vaubaan-plugin
 
 ## Take back what an agent prepared
 
@@ -36,7 +36,7 @@ spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
 
 status: proposed
 requires: mission
-spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-bis-management-surface-the-vaubaan-plugin
 acceptance:
 
 - Revoking a mission that issued missions offers, on the same screen, to revoke them too, and says how many are still active
@@ -47,7 +47,7 @@ acceptance:
 
 status: proposed
 requires: mission
-spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-bis-management-surface-the-vaubaan-plugin
 acceptance:
 
 - `vaubaan__edit_mission` and `vaubaan__revoke_mission` refuse a mission the calling mission did not issue, as rotation already does

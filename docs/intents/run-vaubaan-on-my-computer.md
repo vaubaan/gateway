@@ -18,7 +18,7 @@ anchors: apps/gateway/src/server/config/sources.ts, apps/gateway/src/server/comp
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
 creates: instance
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 acceptance:
 
 - `docker run -p 127.0.0.1:3000:3000 -v vaubaan:/data -e VAUBAAN_LOCAL=true` with the image starts an instance on `http://localhost:3000`, on amd64 and arm64
@@ -38,7 +38,7 @@ status: proposed
 relieves: a-lost-evening-on-pre-release-software, no-way-to-try-without-a-terminal
 delivers: installed-like-any-other-app, my-first-governed-call-in-minutes
 creates: instance
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 acceptance:
 
 - A signed, notarized `.dmg` opens without a Gatekeeper warning, on Apple silicon and on Intel
@@ -53,7 +53,7 @@ status: proposed
 relieves: a-lost-evening-on-pre-release-software, no-way-to-try-without-a-terminal
 delivers: installed-like-any-other-app, my-first-governed-call-in-minutes
 creates: instance
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 acceptance:
 
 - A signed installer runs without a SmartScreen warning, with no administrator rights
@@ -66,7 +66,7 @@ acceptance:
 
 status: proposed
 requires: instance
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 acceptance:
 
 - The app says when a release is out, with its notes, and installs it only when I accept
@@ -83,14 +83,14 @@ status: implemented
 requires: instance, sign-in-account
 creates: web-session
 anchors: apps/gateway/src/app/(public)/sign-in-account/forgot/page.tsx, apps/gateway/src/components/auth/RecoverWithKey.tsx, apps/gateway/src/server/auth/local-handlers.ts, apps/gateway/src/server/auth/recovery.ts, apps/gateway/tests/integration/auth/recovery-password.test.ts
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 
 ### Choose a new password with Touch ID in the desktop app
 
 status: proposed
 requires: instance, sign-in-account
 creates: web-session
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 acceptance:
 
 - In the app, "Forgot your password?" asks Touch ID or my Mac's password, then the new password, with no key file to find
@@ -108,7 +108,7 @@ requires: instance
 creates: web-session
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 acceptance:
 
 - The setup and the sign-in page offer Google, Microsoft, GitHub and email with a password; the setup's second screen creates the first administrator with whichever I choose
@@ -124,7 +124,7 @@ requires: instance
 creates: account
 relieves: my-own-google-client-to-create
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - With no broker and nothing in Settings, Connect an account connects Google Calendar and Outlook, and my agent lists that account's events and mail
@@ -138,7 +138,7 @@ status: proposed
 requires: instance
 creates: account
 relieves: my-own-google-client-to-create
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - A `google-drive` plugin connects with Vaubaan's Google client; its agent lists a folder, searches, reads a file (a Google Doc, Sheet or Slides as text), uploads a file and creates a folder
@@ -150,7 +150,7 @@ acceptance:
 status: proposed
 requires: instance
 creates: account
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - A `onedrive` plugin connects with Vaubaan's Microsoft client, personal or work account; its agent lists a folder, searches, reads a file, uploads a file and creates a folder
@@ -180,7 +180,7 @@ requires: account
 creates: mission, mission-token
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+spec: ../spec/vaubaan-gateway-07-workflows.md#74-create-a-mission
 anchors: apps/gateway/src/app/(app)/missions/new/form-state.ts, apps/gateway/src/app/(app)/missions/new/page.tsx, apps/gateway/tests/integration/missions/starter-mission.test.ts
 
 ### Be led from my first account to my first mission
@@ -189,7 +189,7 @@ status: implemented
 requires: instance, account
 relieves: a-lost-evening-on-pre-release-software
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#72-connect-an-account
+spec: ../spec/vaubaan-gateway-07-workflows.md#72-connect-an-account
 anchors: apps/gateway/src/server/accounts/handlers.ts, apps/gateway/src/app/(app)/_now/first-run.tsx, apps/gateway/tests/integration/accounts/token-connect.test.ts
 
 ### See my agent's first call arrive
@@ -197,7 +197,7 @@ anchors: apps/gateway/src/server/accounts/handlers.ts, apps/gateway/src/app/(app
 status: implemented
 requires: mission, mission-token
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#74-create-a-mission
+spec: ../spec/vaubaan-gateway-07-workflows.md#74-create-a-mission
 anchors: apps/gateway/src/app/(app)/missions/first-call-wait.tsx, apps/gateway/src/server/missions/team-handlers.ts, apps/gateway/tests/integration/accounts/token-connect.test.ts
 
 ### Count four actions from a first account to the first call
@@ -207,7 +207,7 @@ requires: instance
 relieves: a-lost-evening-on-pre-release-software, four-copy-pastes-per-project
 delivers: my-first-governed-call-in-minutes
 anchors: apps/gateway/tests/e2e/first-call-path.spec.ts
-spec: ../spec/vaubaan-gateway.md#7-workflows
+spec: ../spec/vaubaan-gateway-07-workflows.md#7-workflows
 
 ### Count six actions from the download to the first call
 
@@ -215,7 +215,7 @@ status: proposed
 requires: instance
 relieves: a-lost-evening-on-pre-release-software, four-copy-pastes-per-project
 delivers: my-first-governed-call-in-minutes
-spec: ../spec/vaubaan-gateway.md#7-workflows
+spec: ../spec/vaubaan-gateway-07-workflows.md#7-workflows
 acceptance:
 
 - On a Mac, from the download to my agent's first governed call takes six actions of mine: install, first access, connect an account, create the mission, add it to my agent, first call
@@ -226,7 +226,7 @@ acceptance:
 
 status: proposed
 requires: instance, mission
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - An agent on the same computer calls the execution surface on `localhost` with its mission token

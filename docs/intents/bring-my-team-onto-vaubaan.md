@@ -19,14 +19,14 @@ status: implemented
 requires: instance
 anchors: apps/gateway/src/server/master-key/service.ts, apps/gateway/src/server/setup/handlers.ts, apps/gateway/tests/integration/instance/master-key-handover.test.ts, apps/gateway/tests/integration/compose/master-key-generation.test.ts
 delivers: the-instance-is-mine
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 
 ### Move my missions from my computer to a team server
 
 status: proposed
 requires: instance, mission, account
 delivers: moving-from-my-computer-to-the-team-server, bringing-my-team-later-without-starting-over
-spec: ../spec/vaubaan-gateway.md#71-install-an-instance
+spec: ../spec/vaubaan-gateway-07-workflows.md#71-install-an-instance
 acceptance:
 
 - One export from the desktop app and one import on the server carry my missions, their versions and their history
@@ -42,7 +42,7 @@ requires: account
 creates: share, restriction
 anchors: apps/gateway/src/server/shares/service.ts, apps/gateway/tests/integration/authority/share-and-orphan.test.ts
 delivers: each-hand-gives-less, nobody-holds-a-token
-spec: ../spec/vaubaan-gateway.md#73-give-access
+spec: ../spec/vaubaan-gateway-07-workflows.md#73-give-access
 
 ### See every mission that carries my account
 
@@ -51,7 +51,7 @@ requires: account
 anchors: apps/gateway/src/server/missions/mission-service.ts, apps/gateway/tests/integration/authority/missions-on-account.test.ts
 relieves: a-mission-on-production-i-know-nothing-about
 delivers: every-mission-on-my-account-named
-spec: ../spec/vaubaan-gateway.md#22-definitions
+spec: ../spec/vaubaan-gateway-02-domain.md#22-definitions
 
 ## Welcome my teammates
 
@@ -60,7 +60,7 @@ spec: ../spec/vaubaan-gateway.md#22-definitions
 status: proposed
 requires: invitation
 relieves: teammates-who-land-on-a-mute-page, i-don-t-know-what-this-is
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - The sign-in page reached from an invitation says what Vaubaan is and who invited me
@@ -74,14 +74,14 @@ creates: mission-token
 anchors: apps/gateway/src/server/missions/member-token.ts, apps/gateway/src/server/missions/team-service.ts, apps/gateway/tests/integration/missions/team.test.ts
 relieves: asking-someone-for-a-token
 delivers: my-key-in-one-click, every-call-under-my-own-name, nothing-to-configure
-spec: ../spec/vaubaan-gateway.md#79-bis-work-on-a-mission-as-a-team
+spec: ../spec/vaubaan-gateway-07-workflows.md#79-bis-work-on-a-mission-as-a-team
 
 ### Name a stand-in who answers when I'm away
 
 status: proposed
 requires: mission, request
 relieves: stuck-when-the-creator-is-away
-spec: ../spec/vaubaan-gateway.md#34-requests-to-the-creator--the-claim
+spec: ../spec/vaubaan-gateway-03-authority.md#34-requests-to-the-creator--the-claim
 acceptance:
 
 - The owner has settled whether anyone but the creator may answer (open question in spec §11.2), and §3.4 says who
@@ -95,7 +95,7 @@ acceptance:
 status: proposed
 requires: audit
 relieves: the-record-cannot-leave
-spec: ../spec/vaubaan-gateway.md#8-audit
+spec: ../spec/vaubaan-gateway-08-audit.md#8-audit
 acceptance:
 
 - An administrator downloads the activity of a period as CSV and JSON, from the Activity page
@@ -106,7 +106,7 @@ acceptance:
 status: proposed
 requires: user, sign-in-provider-idp
 relieves: someone-who-left-stays-active
-spec: ../spec/vaubaan-gateway.md#23-states
+spec: ../spec/vaubaan-gateway-02-domain.md#23-states
 acceptance:
 
 - A user the sign-in provider no longer admits can neither sign in nor call with their keys, without an administrator acting

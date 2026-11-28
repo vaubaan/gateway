@@ -19,7 +19,7 @@ status: implemented
 requires: archive
 creates: plugin
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/upload/route.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts, apps/gateway/tests/integration/plugins/signatures.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Hand over a plugin from an agent
 
@@ -27,20 +27,20 @@ status: implemented
 requires: mission, archive
 creates: plugin
 anchors: apps/gateway/src/server/vaubaan/plugin-acts.ts, apps/gateway/tests/integration/plugins/deploy-from-cli.test.ts
-spec: ../spec/vaubaan-gateway.md#41-bis-management-surface-the-vaubaan-plugin
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-bis-management-surface-the-vaubaan-plugin
 
 ### Install a plugin when I first connect its service
 
 status: implemented
 requires: plugin
 anchors: apps/gateway/src/app/(app)/accounts/new/[service]/install/route.ts, apps/gateway/src/app/(app)/accounts/new/[service]/install-first.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### See every catalog service in the connect picker
 
 status: proposed
 requires: plugin
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - A plugin the catalog published after this release is offered by its service's name, never its id
@@ -51,21 +51,21 @@ acceptance:
 status: implemented
 requires: plugin
 anchors: packages/plugin-cli/src/archive.ts, packages/shared/src/catalog-index.ts, apps/gateway/src/server/updates/compare.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/src/components/accounts/ServicePicker.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, scripts/release-lib.mjs, packages/plugin-cli/tests/unit/archive.test.ts, packages/shared/src/catalog-index.test.ts, apps/gateway/tests/unit/components/service-picker-catalog.test.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-when-first-connected.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Browse the catalog apart from what runs
 
 status: implemented
 requires: plugin
 anchors: apps/gateway/src/app/admin/(guarded)/plugins/catalog/page.tsx, apps/gateway/src/app/admin/(guarded)/plugins/catalog/catalog-view.tsx, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/e2e/admin-plugins.spec.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Install a catalog plugin in one click
 
 status: implemented
 requires: plugin
 anchors: apps/gateway/src/server/plugins/catalog.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-catalog/route.ts, apps/gateway/tests/integration/plugins/install-from-catalog.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ## Run a version I chose
 
@@ -75,21 +75,21 @@ status: implemented
 relieves: an-update-that-breaks-on-a-monday
 requires: plugin, administrator
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/app/admin/(guarded)/plugins/install-view.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Update a plugin without restarting the gateway
 
 status: implemented
 requires: plugin, administrator
 anchors: apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/plugins/call-gate.ts, apps/gateway/src/server/compose/root.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/integration/plugins/swap-during-call.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Update my installed plugins in a few clicks
 
 status: implemented
 requires: plugin, administrator
 anchors: apps/gateway/src/app/admin/(guarded)/plugins/plugins-view.tsx, apps/gateway/src/app/admin/(guarded)/plugins/update/route.ts, apps/gateway/src/server/plugins/install-service.ts, apps/gateway/tests/integration/plugins/install-from-catalog.test.ts, apps/gateway/tests/integration/plugins/install-over-http.test.ts, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Roll back a plugin to a kept version
 
@@ -97,14 +97,14 @@ status: implemented
 relieves: an-update-that-breaks-on-a-monday
 requires: plugin, mission
 anchors: apps/gateway/src/app/admin/(guarded)/plugins/plugins-view.tsx, apps/gateway/src/server/plugins/install-service.ts, apps/gateway/src/server/compose/registry.ts, apps/gateway/tests/unit/app/admin-plugins.test.tsx, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/server/compose/kept-catalog-index.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Receive security patches automatically
 
 status: proposed
 delivers: one-command-then-forget
 requires: plugin, administrator
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - An administrator opts a plugin into automatic security patches; nothing updates by itself otherwise
@@ -116,11 +116,11 @@ acceptance:
 status: implemented
 requires: signer
 anchors: apps/gateway/src/app/admin/(guarded)/plugins/signers/add/route.ts, apps/gateway/tests/integration/plugins/signatures.test.ts
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 
 ### Start without what was installed here
 
 status: implemented
 requires: plugin
 anchors: apps/gateway/src/server/compose/installed-plugins.ts, apps/gateway/tests/integration/plugins/install-on-trial.test.ts, apps/gateway/tests/unit/app/admin-plugins-install.test.tsx
-spec: ../spec/vaubaan-gateway.md#43-instance-configuration
+spec: ../spec/vaubaan-gateway-04-surfaces.md#43-instance-configuration

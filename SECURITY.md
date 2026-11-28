@@ -173,7 +173,7 @@ finding, so that a reader finds why a guard exists:
    is terminated by a proxy you run.
 
 The full statement is section 6 of the specification,
-[`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md#6-security);
+[`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway-06-security.md#6-security);
 the reasoning behind the first line is the ADR
 [trust-model-clear-at-rest-idp-style](docs/decisions/trust-model-clear-at-rest-idp-style.md).
 How each of these is implemented is described in the handbooks under

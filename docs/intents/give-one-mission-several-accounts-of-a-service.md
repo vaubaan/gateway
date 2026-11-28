@@ -17,21 +17,21 @@ while each key still reaches one resource.
 status: implemented
 requires: mission, account, service
 anchors: apps/gateway/src/lib/missions/preview.ts, apps/gateway/src/app/(app)/missions/cards/account-picker.tsx, apps/gateway/tests/integration/execution/several-accounts.test.ts
-spec: ../spec/vaubaan-gateway.md#31-the-chain
+spec: ../spec/vaubaan-gateway-03-authority.md#31-the-chain
 
 ## Let my agent call the right account by the resource it names
 
 status: implemented
 requires: mission, account, resource
 anchors: apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/src/server/git/scope.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 
 ## Name the account of a call that names no resource
 
 status: implemented
 requires: mission, account
 anchors: packages/gateway-core/src/pipeline.ts, apps/gateway/src/server/execution/door.ts, apps/gateway/src/server/execution/resource-stage.ts, apps/gateway/src/server/execution/tools.ts, apps/gateway/tests/integration/execution/several-accounts.test.ts
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 
 ## Rename an account to tell it apart
 
@@ -47,7 +47,7 @@ acceptance:
 
 status: proposed
 requires: mission, account, resource
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 acceptance:
 
 - A tool that names no resource, in a mission with two accounts of its service, runs on each account and answers one merged result

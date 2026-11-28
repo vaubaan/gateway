@@ -53,7 +53,7 @@ export interface Invariant {
   readonly source: string;
   /**
    * For an invariant of the spec's §10 "Structural" list: a fragment of that
-   * bullet, as written in `docs/spec/vaubaan-gateway.md`.
+   * bullet, as written in `docs/spec/vaubaan-gateway-10-tests.md`.
    */
   readonly specBullet?: string;
   readonly proofs: readonly Proof[];

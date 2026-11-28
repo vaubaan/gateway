@@ -26,7 +26,7 @@ spec: ../spec/website.md#25-trust-center--trust
 status: proposed
 requires: plugin, account
 relieves: third-party-code-beside-decrypted-credentials
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 acceptance:
 
 - A plugin runs in a process of its own and receives only the credential of the account its call uses
@@ -39,7 +39,7 @@ status: proposed
 requires: gateway
 relieves: no-outside-proof, my-security-reviewer-says-no
 delivers: my-security-said-yes
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 acceptance:
 
 - A review by a named firm outside the project is published on the trust center, with its date, scope and the version reviewed
@@ -51,7 +51,7 @@ status: implemented
 requires: instance
 anchors: apps/gateway/src/server/store/pre-migration-copy.ts, apps/gateway/src/server/store/pre-migration-copy.test.ts, apps/gateway/tests/integration/store/pre-migration-copy.test.ts, apps/website/content/docs/operations/upgrade.mdx
 relieves: an-update-that-breaks-on-a-monday
-spec: ../spec/vaubaan-gateway.md#6-security
+spec: ../spec/vaubaan-gateway-06-security.md#6-security
 acceptance:
 
 - A start that migrates the store first leaves a copy of it beside the store, and keeps the three most recent

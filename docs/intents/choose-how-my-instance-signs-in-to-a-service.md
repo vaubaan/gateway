@@ -16,7 +16,7 @@ configuration file or a restart.
 
 status: proposed
 requires: administrator
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - Settings › Administration › OAuth brokers adds a broker by URL, enrolment key and attestation, its key never shown back
@@ -28,7 +28,7 @@ acceptance:
 
 status: proposed
 requires: administrator, service
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - The page shows the redirect to register at the service, ready to copy, and takes the client id and secret, the secret never shown back
@@ -38,7 +38,7 @@ acceptance:
 
 status: proposed
 requires: administrator, service, account
-spec: ../spec/vaubaan-gateway.md#42-human-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#42-human-surface
 acceptance:
 
 - The page lists each service shipped plugins sign in to through a broker, with the one source serving it and whether it is attested

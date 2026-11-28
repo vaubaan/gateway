@@ -29,7 +29,7 @@ status: implemented
 requires: mission, resource
 anchors: plugins/supabase/src/classify.ts, plugins/supabase/tests/unit/classify.test.ts
 relieves: an-agent-that-keeps-hitting-walls
-spec: ../spec/vaubaan-gateway.md#31-the-chain
+spec: ../spec/vaubaan-gateway-03-authority.md#31-the-chain
 
 ## Manage the branches of a mission's project
 
@@ -39,7 +39,7 @@ status: implemented
 requires: mission, resource
 anchors: plugins/supabase/src/execute.ts, apps/gateway/src/server/accounts/discovery-after-call.ts, plugins/supabase/tests/unit/execute.test.ts, apps/gateway/src/server/accounts/discovery-after-call.test.ts
 relieves: an-agent-that-keeps-hitting-walls
-spec: ../spec/vaubaan-gateway.md#41-execution-surface
+spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 
 ### Read a preview branch's database settings
 
@@ -47,7 +47,7 @@ status: implemented
 requires: mission, resource
 anchors: plugins/supabase/src/redact.ts, plugins/supabase/tests/unit/redact.test.ts
 relieves: an-agent-that-keeps-hitting-walls
-spec: ../spec/vaubaan-gateway.md#24-the-cross-cutting-invariant--the-executor-never-sees-a-service-credential
+spec: ../spec/vaubaan-gateway-02-domain.md#24-the-cross-cutting-invariant--the-executor-never-sees-a-service-credential
 
 ### Delete or reset a preview branch
 
@@ -56,4 +56,4 @@ requires: mission, resource
 creates: event
 anchors: plugins/supabase/src/risk-catalog.yaml, plugins/supabase/src/execute.ts, plugins/supabase/tests/unit/execute.test.ts, plugins/supabase/tests/unit/risk-catalog.test.ts
 relieves: an-agent-that-keeps-hitting-walls
-spec: ../spec/vaubaan-gateway.md#32-the-budget
+spec: ../spec/vaubaan-gateway-03-authority.md#32-the-budget
