@@ -47,8 +47,10 @@ import {
   WHY_ORDER,
   WHY_VALUES,
   whyValue,
+  riskKindOf,
   type GateWord,
   type Reason,
+  type RiskKind,
   type Row,
   type TrustLevel,
   type WhyAxis,
@@ -111,8 +113,6 @@ export interface ToolInfo {
   /** What it usually touches: the permissions its classified examples touch, catalog order. */
   readonly touches: readonly RiskId[];
 }
-
-export type RiskKind = 'read' | 'write' | 'destructive';
 
 /**
  * One of the five facts of a permission, in the gateway interface's words
@@ -411,11 +411,6 @@ function patternsOf(entry: Pick<RiskEntry, 'matches'>): readonly string[] {
   return typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
 }
 
-function kindOf(entry: RiskEntry): RiskKind {
-  if (patternsOf(entry).every((pattern) => pattern.endsWith('.R'))) return 'read';
-  return entry.vector.reversibility === 'irreversible' ? 'destructive' : 'write';
-}
-
 /** The environments a catalog entry names: its acceptable ones, then those it overrides. */
 function envsNamedBy(entry: RiskEntry): string[] {
   return [
@@ -454,7 +449,7 @@ function riskInfo(entry: RiskEntry): RiskInfo {
     patterns: [...patternsOf(entry)],
     replacedBy: entry.replaced_by ?? null,
     envVariants: envsNamedBy(entry).map((env) => envVariant(entry, env)),
-    kind: kindOf(entry),
+    kind: riskKindOf(entry, entry.vector),
     rowByEnv,
     acceptableInEnvs: entry.acceptable_in_envs ? [...entry.acceptable_in_envs] : null,
     fallback: entry.fallback === true,

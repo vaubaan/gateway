@@ -9,7 +9,7 @@
  * client component.
  */
 import type { ResourceNoun } from '@vaubaan/plugin-sdk';
-import type { Reason, Row, TrustLevel } from '@vaubaan/policy-engine';
+import type { Reason, RiskKind, Row, TrustLevel } from '@vaubaan/policy-engine';
 import type {
   Gate,
   MacroAction,
@@ -168,15 +168,6 @@ export interface MissionDraft {
 
 // The four rows and the reasons are the policy engine's (one tree for the gateway and the site).
 export type { Reason, Row } from '@vaubaan/policy-engine';
-
-/**
- * What an entry does, in three words a creator sorts by: it only reads, it
- * writes, or it writes something that cannot be undone. Derived from the
- * entry's patterns (all end in `.R`) and from the `reversibility` axis of its
- * vector; a way to group a long catalog, never a decision.
- */
-export const RISK_KINDS = ['read', 'write', 'destructive'] as const;
-export type RiskKind = (typeof RISK_KINDS)[number];
 
 /** One explicit `RiskId` of a service's catalog, with what the interface shows. */
 export interface CatalogRisk {

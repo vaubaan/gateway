@@ -12,36 +12,22 @@ import {
   isFallbackEntry,
   reasonOf,
   resolveVector,
+  RISK_KINDS,
+  riskKindOf,
   rowOf,
+  type RiskKind,
 } from '@vaubaan/policy-engine';
-import type { RiskCatalog, RiskEntry, RiskId, RiskVector } from '@vaubaan/shared';
+import type { RiskCatalog, RiskEntry, RiskId } from '@vaubaan/shared';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
 import { explicitRiskIdsOf } from '../authority/catalog-authority';
-import {
-  RISK_KINDS,
-  type CatalogRisk,
-  type IssuanceAccount,
-  type IssuanceResource,
-  type RiskKind,
-} from './model';
+import { type CatalogRisk, type IssuanceAccount, type IssuanceResource } from './model';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** The patterns of an entry, as a list (the catalog allows one string or several). */
 export function patternsOf(entry: Pick<RiskEntry, 'matches'>): readonly string[] {
   return typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
-}
-
-/**
- * Read, write or destructive (`RiskKind`). An entry is a read when every one
- * of its patterns ends with the read action; a write that the vector calls
- * irreversible is destructive. A grouping aid for long catalogs: nothing is
- * decided from it.
- */
-export function riskKindOf(entry: Pick<RiskEntry, 'matches'>, vector: RiskVector): RiskKind {
-  if (patternsOf(entry).every((pattern) => pattern.endsWith('.R'))) return 'read';
-  return vector.reversibility === 'irreversible' ? 'destructive' : 'write';
 }
 
 /** The display row of one explicit id of `entry` (an id `explicitRiskIdsOf(entry)` returned). */

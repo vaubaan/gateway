@@ -41,7 +41,9 @@ import {
   type Row,
   type TrustLevel,
 } from '../missions/macro-actions';
-import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
+import { RISK_KINDS, type RiskKind } from '@vaubaan/policy-engine';
+
+import { type CatalogRisk } from '../missions/model';
 import { macroActionAnchor, riskAnchor } from './links';
 import { hasSeveralPlanes, OTHER_PLANE, planesOfPatterns, planesOfToolName } from './planes';
 

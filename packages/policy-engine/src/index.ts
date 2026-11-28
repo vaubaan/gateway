@@ -21,6 +21,7 @@ export {
 } from './risk-evaluator.ts';
 export type { IndexedRiskCatalog } from './risk-evaluator.ts';
 export { prepareCatalog } from './risk-policy.ts';
+export { RISK_KINDS, riskKindOf, type RiskKind } from './risk-kind.ts';
 export { budgetIssues, exceedsRateCeiling, isValidBudget, ratePerMinute } from './budget.ts';
 export type { BudgetField } from './budget.ts';
 export {

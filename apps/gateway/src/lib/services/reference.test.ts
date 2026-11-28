@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { REPOSITORY_PLUGINS } from '../../../tests/support/plugins/repository';
 import { enumerateCatalog } from '../missions/catalog-view';
-import { RISK_KINDS } from '../missions/model';
+import { RISK_KINDS } from '@vaubaan/policy-engine';
 import {
   macroActionAnchor,
   macroActionReferencePath,

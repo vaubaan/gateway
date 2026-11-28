@@ -1,3 +1,4 @@
+import { riskKindOf } from '@vaubaan/policy-engine';
 import type { RiskCatalog } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -11,7 +12,6 @@ import {
   isResolvable,
   patternsOf,
   hardestToRepair,
-  riskKindOf,
   noteBody,
   FALLBACK_NOTE,
   DEPRECATED_NOTE,
