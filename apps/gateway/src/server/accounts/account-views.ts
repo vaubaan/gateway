@@ -311,6 +311,15 @@ export interface ImportSshInput {
   readonly importedFrom: ImportedFrom;
 }
 
+/** How a failed first discovery is treated when a credential has just been obtained. */
+export type DiscoveryPolicy =
+  /** Any failure refuses the account: the user can simply retry (api-key form). */
+  | 'required'
+  /** The credential is kept whatever happens: the authorization code is spent. */
+  | 'best-effort'
+  /** Not attempted: the public key is not installed yet (ssh-key). */
+  | 'deferred';
+
 /** Who the operator hands an ownerless account to: a user by email, or a group. */
 export type NewOwner =
   | { readonly kind: 'user'; readonly email: string }

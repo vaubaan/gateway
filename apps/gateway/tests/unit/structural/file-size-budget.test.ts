@@ -27,7 +27,6 @@ const FILE_SIZE_BASELINE: Readonly<Record<string, number>> = {
   'apps/gateway/src/app/(app)/waiting/request-view.tsx': 1049,
   'apps/gateway/src/lib/missions/mission-edit.ts': 1001,
   'apps/gateway/src/lib/missions/preview.ts': 1247,
-  'apps/gateway/src/server/accounts/service.ts': 1579,
   'apps/gateway/src/server/auth/handlers.ts': 856,
   'apps/gateway/src/server/auth/local-handlers.ts': 839,
   'apps/gateway/src/server/auth/sign-in-providers.ts': 900,

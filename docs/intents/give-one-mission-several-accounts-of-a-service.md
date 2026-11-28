@@ -37,7 +37,7 @@ spec: ../spec/vaubaan-gateway-04-surfaces.md#41-execution-surface
 
 status: implemented
 requires: account
-anchors: apps/gateway/src/server/accounts/service.ts, apps/gateway/src/app/(app)/accounts/[id]/account-view.tsx, apps/gateway/src/app/(app)/accounts/[id]/rename/route.ts, apps/gateway/src/server/accounts/service.test.ts
+anchors: apps/gateway/src/server/accounts/account-settings.ts, apps/gateway/src/app/(app)/accounts/[id]/account-view.tsx, apps/gateway/src/app/(app)/accounts/[id]/rename/route.ts, apps/gateway/src/server/accounts/service.test.ts
 acceptance:
 
 - An owner renames an account from its page; the new name reads in the lists, the mission cards and the activity

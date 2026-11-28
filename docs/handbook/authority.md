@@ -6,7 +6,7 @@ tracks:
   - apps/gateway/src/lib/shares/
   - apps/gateway/src/lib/authority/
   - apps/gateway/src/server/groups/
-  - apps/gateway/src/server/accounts/service.ts
+  - apps/gateway/src/server/accounts/ownership.ts
   - apps/gateway/src/server/execution/admission.ts
   - apps/gateway/src/server/auth/login.ts
   - apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts
@@ -31,7 +31,7 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
 - [`catalog-authority.ts`](../../apps/gateway/src/lib/authority/catalog-authority.ts) — the
   enumeration and monotonicity rules everything reuses (browser-safe).
 - [`shares/service.ts`](../../apps/gateway/src/server/shares/service.ts),
-  [`accounts/service.ts`](../../apps/gateway/src/server/accounts/service.ts) — shares,
+  [`accounts/ownership.ts`](../../apps/gateway/src/server/accounts/ownership.ts) — shares,
   transfer, ownerless, reassign.
 
 ## Invariants

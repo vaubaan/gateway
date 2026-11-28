@@ -28,12 +28,13 @@ import type {
   AutomaticRefreshCause,
   AutomaticRefresh,
   MissionResourceCheck,
+  DiscoveryPolicy,
 } from './account-views';
 import type { MissionResourceMoves } from './account-views';
 import { cleanName } from './input';
 import { grantedNames } from './token-permissions';
 import { isHostAccount } from './host-account';
-import type { AccountService, AccountServiceDeps, DiscoveryPolicy } from './service';
+import type { AccountService, AccountServiceDeps } from './service';
 
 /** The outcome of the discovery attempted before the account is written. */
 export interface FirstDiscovery {

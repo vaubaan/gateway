@@ -25,8 +25,12 @@ discovering and curating its resources. Spec:
 
 ## Start here
 
-- [`service.ts`](../../apps/gateway/src/server/accounts/service.ts) — `AccountService`: the connect driver per credential kind, owner edits, revoke, transfer, reassign; its inputs and views are in `account-views.ts`, re-exported.
-- [`discovery.ts`](../../apps/gateway/src/server/accounts/discovery.ts) — `AccountDiscovery`: the first discovery at connect, "Refresh", "check now", the automatic refresh and the one after a creating call. The service holds it in a private `#discovery` and delegates; a plain field would put a cycle into deep comparisons of the root.
+- [`service.ts`](../../apps/gateway/src/server/accounts/service.ts) — `AccountService`: the accounts' one entry point, who owns an account (`owns`, `requireOwned`) and the callback URL; every use case is delegated to a module of its own, held in a private `#` field: a plain field would put a cycle into deep comparisons of the root. Its inputs and views are in `account-views.ts`, re-exported.
+- [`connect.ts`](../../apps/gateway/src/server/accounts/connect.ts) — `AccountConnect`: the connect driver per credential kind (`start`, `complete`, the v4 imports), the ceiling, the stored and audited account.
+- [`discovery.ts`](../../apps/gateway/src/server/accounts/discovery.ts) — `AccountDiscovery`: the first discovery at connect, "Refresh", "check now", the automatic refresh and the one after a creating call.
+- [`account-settings.ts`](../../apps/gateway/src/server/accounts/account-settings.ts) — `AccountSettings`: the owner's edits of a resource, the default environment, the account's name.
+- [`ownership.ts`](../../apps/gateway/src/server/accounts/ownership.ts) — `AccountOwnership`: revoke, transfer, reassign; `ownerActRefusal`. The entry these acts and the connect write is `account-audit.ts`.
+- [`account-reads.ts`](../../apps/gateway/src/server/accounts/account-reads.ts) — `AccountReads`: the connectable services, the account views, the ownerless list, `serviceGrantOf`.
 - [`credentials.ts`](../../apps/gateway/src/server/accounts/credentials.ts) — `CredentialBroker`: the one place a stored credential is decrypted, refreshed, or withdrawn at the service.
 - [`oauth2-clients.ts`](../../apps/gateway/src/server/accounts/oauth2-clients.ts), [`oauth-broker.ts`](../../apps/gateway/src/server/accounts/oauth-broker.ts) — the two client sources of an `oauth2` plugin (registered by the gateway, or a broker's: [oauth-broker-contract](oauth-broker-contract.md)).
 - [`shipped-plugins.ts`](../../apps/gateway/src/server/compose/shipped-plugins.ts) — the plugins compiled into the server (`vaubaan`, `ssh`); the others are installed from the catalog. Picker, catalog index and tool list derive from the running registry.

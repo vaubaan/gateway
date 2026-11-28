@@ -517,6 +517,47 @@ const RULES: Readonly<Record<string, Rule>> = {
   'AccountDiscovery.recordDiscovery': exempt(
     'records a discovery on the account, part of the acts of AccountService that run one, classified there',
   ),
+  // The bodies of AccountService's connect flows (connect.ts), each classified on the service.
+  'AccountConnect.start': exempt('the body of AccountService.start, classified there'),
+  'AccountConnect.complete': exempt('the body of AccountService.complete, classified there'),
+  'AccountConnect.importPastedKey': exempt(
+    'the body of AccountService.importPastedKey, classified there',
+  ),
+  'AccountConnect.importSshKey': exempt(
+    'the body of AccountService.importSshKey, classified there',
+  ),
+  // The bodies of AccountService's reads (account-reads.ts), each classified on the service.
+  'AccountReads.services': exempt('the body of AccountService.services, classified there'),
+  'AccountReads.service': exempt('the body of AccountService.service, classified there'),
+  'AccountReads.listFor': exempt('the body of AccountService.listFor, classified there'),
+  'AccountReads.get': exempt('the body of AccountService.get, classified there'),
+  'AccountReads.defaultEnvChoices': exempt(
+    'the body of AccountService.defaultEnvChoices, classified there',
+  ),
+  'AccountReads.listOwnerless': exempt(
+    'the body of AccountService.listOwnerless, classified there',
+  ),
+  'AccountReads.serviceGrantOf': exempt(
+    'the body of AccountService.serviceGrantOf, classified there',
+  ),
+  // The bodies of AccountService's owner's edits (account-settings.ts), each classified on the service.
+  'AccountSettings.updateResource': exempt(
+    'the body of AccountService.updateResource, classified there',
+  ),
+  'AccountSettings.setDefaultEnv': exempt(
+    'the body of AccountService.setDefaultEnv, classified there',
+  ),
+  'AccountSettings.rename': exempt('the body of AccountService.rename, classified there'),
+  // The bodies of AccountService's ownership acts (ownership.ts), each classified on the service.
+  'AccountOwnership.revoke': exempt('the body of AccountService.revoke, classified there'),
+  'AccountOwnership.transferTargets': exempt(
+    'the body of AccountService.transferTargets, classified there',
+  ),
+  'AccountOwnership.transfer': exempt('the body of AccountService.transfer, classified there'),
+  'AccountOwnership.reassign': exempt('the body of AccountService.reassign, classified there'),
+  'AccountOwnership.reassignTargets': exempt(
+    'the body of AccountService.reassignTargets, classified there',
+  ),
   'AccountService.discover': {
     kind: 'mutation',
     target: accounts,

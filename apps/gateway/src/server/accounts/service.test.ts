@@ -12,7 +12,8 @@ import { makeUnowned } from '../../../tests/support/store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
 import { codeChallengeS256 } from './oauth2';
-import { CONNECT_RATE_LIMIT, CONNECT_RATE_WINDOW_MS, type StartResult } from './service';
+import { CONNECT_RATE_LIMIT, CONNECT_RATE_WINDOW_MS } from './connect';
+import type { StartResult } from './service';
 import {
   API_KEY_SPEC,
   accountsHarness,

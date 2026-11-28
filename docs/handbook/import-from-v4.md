@@ -5,7 +5,7 @@ tracks:
   - scripts/export-v4-lib.mjs
   - scripts/build-commands.mjs
   - apps/gateway/src/server/import-v4/
-  - apps/gateway/src/server/accounts/service.ts
+  - apps/gateway/src/server/accounts/connect.ts
 last_reviewed: 2026-11-04
 ---
 

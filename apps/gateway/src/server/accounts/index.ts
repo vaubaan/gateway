@@ -337,12 +337,11 @@ export {
   type NoticeTone,
   type PendingConnect,
 } from './pending';
+export { CONNECT_RATE_LIMIT, CONNECT_RATE_WINDOW_MS } from './connect';
+export { ownerActRefusal } from './ownership';
 export {
-  CONNECT_RATE_LIMIT,
-  CONNECT_RATE_WINDOW_MS,
   ACCOUNTS_PATH,
   AccountService,
-  ownerActRefusal,
   toPluginResource,
   type Actor,
   type ConnectableService,
