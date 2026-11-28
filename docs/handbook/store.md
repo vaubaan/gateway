@@ -81,8 +81,9 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   column, and the stored acts, refusal codes and JSON fields of the audit, the mission log events and
   the decisions of requests. Ids, associated data and the KDF context `vaubaan/connection-key/v1:`
   (`crypto/aead.ts`) never move: change one byte and no stored credential opens. A test that
-  seeds an older version writes the old names and stops before 0036; `SEALED_COLUMNS` reads a
-  restored copy's accounts table under its pre-0036 name (`pre-rename-backup.test.ts`).
+  seeds an older version writes the old names and stops before 0036. A copy made before 0036 is
+  no longer restored by this image: restore it with 2.0.0-alpha.33 or older, start it once (the
+  boot migrates it), and back it up again.
 - **Migration 0037 renamed provider in place** (same ADR, rename R2): `accounts.service`,
   `accounts.service_grant`, and `sign_in_provider` on `groups`, `administrators`,
   `sign_in_accounts` and `local_links`. Its rewrite of the audit's JSON goes by the sense of the

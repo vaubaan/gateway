@@ -37,8 +37,6 @@ import { addressUrlAd } from './notification-addresses.ts';
 export const SEALED_COLUMNS = [
   {
     table: 'accounts',
-    /** Its name before migration 0036 (ADR one-word-per-thing-account-service-plugin). */
-    legacyTable: 'connections',
     idColumn: 'id',
     blobColumn: 'credential_blob',
     /** The account id itself, byte for byte: never prefixed, never renamed. */
@@ -162,27 +160,12 @@ export function sealedVersionsOf(db: StoreDb): SealedVersionCount[] {
   return SEALED_COLUMNS.flatMap((column) =>
     db
       .prepare<[], { key_version: number; count: number }>(
-        `SELECT key_version, COUNT(*) AS count FROM ${tableOf(db, column)}
+        `SELECT key_version, COUNT(*) AS count FROM ${column.table}
          WHERE ${column.blobColumn} IS NOT NULL GROUP BY key_version ORDER BY key_version`,
       )
       .all()
       .map((row) => ({ table: column.table, keyVersion: row.key_version, count: row.count })),
   );
-}
-
-/**
- * The name a sealed table has in this database: a copy written before migration 0036
- * (a backup being restored) still names the accounts' table `connections`. Its rows,
- * ids and blobs are the same; the boot's migration renames it once restored.
- */
-function tableOf(db: StoreDb, column: (typeof SEALED_COLUMNS)[number]): string {
-  if (!('legacyTable' in column)) return column.table;
-  const found = db
-    .prepare<[string], { n: number }>(
-      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = ?",
-    )
-    .get(column.table);
-  return (found?.n ?? 0) > 0 ? column.table : column.legacyTable;
 }
 
 /** What opening every blob of one table and key version found. */
@@ -208,7 +191,7 @@ export async function openEverySealedBlobOf(
     const rows = db
       .prepare<[], SealedRow>(
         `SELECT ${column.idColumn} AS id, ${column.blobColumn} AS blob, key_version
-         FROM ${tableOf(db, column)} WHERE ${column.blobColumn} IS NOT NULL
+         FROM ${column.table} WHERE ${column.blobColumn} IS NOT NULL
          ORDER BY key_version, ${column.idColumn}`,
       )
       .all();
