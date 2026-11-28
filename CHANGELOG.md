@@ -9,6 +9,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.33] - 2026-11-28
+
+### Highlights
+
+- **The first published release with Vaubaan for macOS**: 2.0.0-alpha.32 was tagged but not
+  published, so all of its changes ship here: the Mac app that updates itself, the setup in two
+  screens, sign-in with Google, Microsoft or GitHub on your computer, and the path from a first
+  account to the agent's first call (the 2.0.0-alpha.32 section of CHANGELOG.md).
+- **Google Drive and OneDrive**: an agent lists, searches, reads and adds files.
+
+### Security
+
+- **The image installs Debian's security updates at its build.** The base image
+  `node:26.13.1-bookworm-slim` shipped `libpam` and `libzstd1` with HIGH vulnerabilities Debian had
+  already fixed (CVE-2025-6020, CVE-2026-124851); 2.0.0-alpha.31's image carries them. Upgrade
+  to this image.
+
 ### Added
 
 - **An upgrade leaves a copy of the database the former version can go back to.** Before a start
@@ -27,6 +44,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   unverified app. The OAuth provider table admits `drive` and `Files.ReadWrite`.
 
 ## [2.0.0-alpha.32] - 2026-11-27
+
+**Tagged, not published.** Its release run stopped at the image scan (the two HIGH vulnerabilities
+fixed in 2.0.0-alpha.33): no image, no GitHub release, no app. Everything below ships in
+2.0.0-alpha.33.
 
 ### Highlights
 
@@ -3536,7 +3557,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.32...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.33...HEAD
+[2.0.0-alpha.33]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.32...v2.0.0-alpha.33
 [2.0.0-alpha.32]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.31...v2.0.0-alpha.32
 [2.0.0-alpha.31]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.30...v2.0.0-alpha.31
 [2.0.0-alpha.30]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.29...v2.0.0-alpha.30
